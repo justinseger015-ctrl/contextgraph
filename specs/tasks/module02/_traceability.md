@@ -26,7 +26,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 |------|-------------|---------|-----------|----------|
 | NodeMetadata | Memory node metadata container | TASK-M02-003 | `crates/context-graph-core/src/types/memory_node.rs` | ✅ |
 | MemoryNode | Core knowledge node struct | TASK-M02-005 | `crates/context-graph-core/src/types/memory_node.rs` | ✅ |
-| NeurotransmitterWeights | Marblestone NT weight struct | TASK-M02-008 | `crates/context-graph-core/src/marblestone.rs` | ☐ |
+| NeurotransmitterWeights | Marblestone NT weight struct | TASK-M02-008 | `crates/context-graph-core/src/marblestone.rs` | ✅ |
 | GraphEdge | Graph edge with Marblestone fields | TASK-M02-010 | `crates/context-graph-core/src/marblestone.rs` | ☐ |
 | CognitivePulse | System cognitive state struct | TASK-M02-021 | `crates/context-graph-core/src/pulse.rs` | ☐ |
 | JohariTransition | Quadrant transition record | TASK-M02-012 | `crates/context-graph-core/src/johari.rs` | ☐ |
@@ -50,8 +50,8 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | MemoryNode::compute_decay() | Compute Ebbinghaus decay | TASK-M02-006 | ✅ |
 | MemoryNode::should_consolidate() | Check consolidation threshold | TASK-M02-006 | ✅ |
 | MemoryNode::validate() | Validate node constraints | TASK-M02-006 | ✅ |
-| NeurotransmitterWeights::for_domain() | Get domain-specific NT weights | TASK-M02-008 | ☐ |
-| NeurotransmitterWeights::compute_effective_weight() | Calculate effective weight | TASK-M02-008 | ☐ |
+| NeurotransmitterWeights::for_domain() | Get domain-specific NT weights | TASK-M02-008 | ✅ |
+| NeurotransmitterWeights::compute_effective_weight() | Calculate effective weight | TASK-M02-008 | ✅ |
 | GraphEdge::new() | Create new graph edge | TASK-M02-011 | ☐ |
 | GraphEdge::get_modulated_weight() | Get NT-modulated weight | TASK-M02-011 | ☐ |
 | GraphEdge::apply_steering_reward() | Apply steering reward | TASK-M02-011 | ☐ |
@@ -116,7 +116,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Default for JohariQuadrant | Default implementation | TASK-M02-001 | ☐ |
 | Default for Modality | Default implementation | TASK-M02-002 | ☐ |
 | Default for MemoryNode | Default implementation | TASK-M02-006 | ✅ |
-| Default for NeurotransmitterWeights | Default implementation | TASK-M02-008 | ☐ |
+| Default for NeurotransmitterWeights | Default implementation | TASK-M02-008 | ✅ |
 | Default for Domain | Default implementation | TASK-M02-007 | ✅ |
 | Default for EmotionalState | Default implementation | TASK-M02-019 | ☐ |
 | Default for SuggestedAction | Default implementation | TASK-M02-020 | ☐ |
@@ -131,7 +131,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Emotional valence range | [-1.0, 1.0] | TASK-M02-006 | ☐ |
 | Content size limit | ≤1MB | TASK-M02-006 | ☐ |
 | Embedding normalization | Must be normalized | TASK-M02-006 | ☐ |
-| NT weights range | [0.0, 1.0] each | TASK-M02-008 | ☐ |
+| NT weights range | [0.0, 1.0] each | TASK-M02-008 | ✅ |
 | Steering reward range | [-1.0, 1.0] | TASK-M02-011 | ☐ |
 | Pulse metrics range | [0.0, 1.0] | TASK-M02-022 | ☐ |
 
@@ -139,12 +139,12 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 
 | Feature | Description | Task ID | Verified |
 |---------|-------------|---------|----------|
-| Domain-aware NT weights | Context-specific neurotransmitter profiles | TASK-M02-008 | ☐ |
-| Excitatory/Inhibitory/Modulatory | Three-weight NT system | TASK-M02-008 | ☐ |
+| Domain-aware NT weights | Context-specific neurotransmitter profiles | TASK-M02-008 | ✅ |
+| Excitatory/Inhibitory/Modulatory | Three-weight NT system | TASK-M02-008 | ✅ |
 | Amortized shortcuts | Learned shortcut edges | TASK-M02-010, TASK-M02-011 | ☐ |
 | Steering reward | [-1,1] reward signal | TASK-M02-010, TASK-M02-011 | ☐ |
 | Modulated weight calculation | NT-adjusted edge weights | TASK-M02-011 | ☐ |
-| Domain enum | Code/Legal/Medical/Creative/Research/General | TASK-M02-007 | ☐ |
+| Domain enum | Code/Legal/Medical/Creative/Research/General | TASK-M02-007 | ✅ |
 
 ### Error States
 
@@ -172,7 +172,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | NodeMetadata unit tests | Tag and lifecycle operations | TASK-M02-003 | ✅ |
 | ValidationError unit tests | Error display and context | TASK-M02-004 | ✅ |
 | MemoryNode unit tests | All struct methods | TASK-M02-006 | ✅ |
-| NeurotransmitterWeights unit tests | Domain profiles and calculations | TASK-M02-008 | ☐ |
+| NeurotransmitterWeights unit tests | Domain profiles and calculations | TASK-M02-008 | ✅ |
 | GraphEdge unit tests | Edge operations and Marblestone | TASK-M02-011 | ☐ |
 | Johari transition tests | Valid transition logic | TASK-M02-012 | ☐ |
 | Serialization tests | Round-trip serialization | TASK-M02-014 | ☐ |
