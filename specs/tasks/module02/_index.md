@@ -7,7 +7,7 @@
 - **Foundation:** 12 tasks
 - **Logic:** 6 tasks
 - **Surface:** 10 tasks
-- **Current Progress:** 6/28 (21%) - Tasks 001-006 VERIFIED
+- **Current Progress:** 7/28 (25%) - Tasks 001-007 VERIFIED
 - **Version:** 1.0.0
 - **Created:** 2025-12-31
 - **Dependencies:** module-01-ghost-system
@@ -105,8 +105,8 @@ graph TD
 | 4 | TASK-M02-004 | Define ValidationError Enum | foundation | — | 1.0 | ✅ Complete |
 | 5 | TASK-M02-005 | Define MemoryNode Struct | foundation | 001, 003, 004 | 2.0 | ✅ Complete |
 | 6 | TASK-M02-006 | Implement MemoryNode Methods | foundation | 005 | 3.0 | ✅ Complete |
-| 7 | TASK-M02-007 | Define Domain Enum (Marblestone) | foundation | — | 1.0 | ⏳ Ready (Updated 2025-12-31) |
-| 8 | TASK-M02-008 | Define NeurotransmitterWeights Struct | foundation | 007 | 2.0 | ⛔ Blocked |
+| 7 | TASK-M02-007 | Define Domain Enum (Marblestone) | foundation | — | 1.0 | ✅ Complete |
+| 8 | TASK-M02-008 | Define NeurotransmitterWeights Struct | foundation | 007 | 2.0 | ⏳ Ready |
 | 9 | TASK-M02-009 | Define EdgeType Enum | foundation | — | 0.5 | ⏳ Ready |
 | 10 | TASK-M02-010 | Define GraphEdge Struct | foundation | 007, 008, 009 | 2.0 | ⛔ Blocked |
 | 11 | TASK-M02-011 | Implement GraphEdge Methods | foundation | 010 | 2.5 | ⛔ Blocked |
@@ -145,8 +145,8 @@ graph TD
 | TASK-M02-004 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 10/10 tests pass, 0 clippy warnings |
 | TASK-M02-005 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 60/60 tests pass, 0 clippy warnings |
 | TASK-M02-006 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 86/86 tests pass, 0 clippy warnings |
-| TASK-M02-007 | — | — | — | No dependencies |
-| TASK-M02-008 | — | — | — | Depends on 007 |
+| TASK-M02-007 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 29/29 tests pass, 0 clippy warnings |
+| TASK-M02-008 | — | — | — | Ready (007 complete) |
 | TASK-M02-009 | — | — | — | No dependencies |
 | TASK-M02-010 | — | — | — | Depends on 007, 008, 009 |
 | TASK-M02-011 | — | — | — | Depends on 010 |
