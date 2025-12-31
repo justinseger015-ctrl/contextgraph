@@ -45,11 +45,11 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | NodeMetadata::remove_tag() | Remove tag from metadata | TASK-M02-003 | ✅ |
 | NodeMetadata::mark_consolidated() | Mark node as consolidated | TASK-M02-003 | ✅ |
 | NodeMetadata::mark_deleted() | Soft delete node | TASK-M02-003 | ✅ |
-| MemoryNode::new() | Create new memory node | TASK-M02-006 | ☐ |
-| MemoryNode::record_access() | Record node access | TASK-M02-006 | ☐ |
-| MemoryNode::compute_decay() | Compute Ebbinghaus decay | TASK-M02-006 | ☐ |
-| MemoryNode::should_consolidate() | Check consolidation threshold | TASK-M02-006 | ☐ |
-| MemoryNode::validate() | Validate node constraints | TASK-M02-006 | ☐ |
+| MemoryNode::new() | Create new memory node | TASK-M02-006 | ✅ |
+| MemoryNode::record_access() | Record node access | TASK-M02-006 | ✅ |
+| MemoryNode::compute_decay() | Compute Ebbinghaus decay | TASK-M02-006 | ✅ |
+| MemoryNode::should_consolidate() | Check consolidation threshold | TASK-M02-006 | ✅ |
+| MemoryNode::validate() | Validate node constraints | TASK-M02-006 | ✅ |
 | NeurotransmitterWeights::for_domain() | Get domain-specific NT weights | TASK-M02-008 | ☐ |
 | NeurotransmitterWeights::compute_effective_weight() | Calculate effective weight | TASK-M02-008 | ☐ |
 | GraphEdge::new() | Create new graph edge | TASK-M02-011 | ☐ |
@@ -115,7 +115,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Memex | Storage abstraction trait | TASK-M02-026 | ☐ |
 | Default for JohariQuadrant | Default implementation | TASK-M02-001 | ☐ |
 | Default for Modality | Default implementation | TASK-M02-002 | ☐ |
-| Default for MemoryNode | Default implementation | TASK-M02-006 | ☐ |
+| Default for MemoryNode | Default implementation | TASK-M02-006 | ✅ |
 | Default for NeurotransmitterWeights | Default implementation | TASK-M02-008 | ☐ |
 | Default for Domain | Default implementation | TASK-M02-007 | ☐ |
 | Default for EmotionalState | Default implementation | TASK-M02-019 | ☐ |
@@ -171,7 +171,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Modality unit tests | Detection and extensions | TASK-M02-002 | ☐ |
 | NodeMetadata unit tests | Tag and lifecycle operations | TASK-M02-003 | ✅ |
 | ValidationError unit tests | Error display and context | TASK-M02-004 | ✅ |
-| MemoryNode unit tests | All struct methods | TASK-M02-006 | ☐ |
+| MemoryNode unit tests | All struct methods | TASK-M02-006 | ✅ |
 | NeurotransmitterWeights unit tests | Domain profiles and calculations | TASK-M02-008 | ☐ |
 | GraphEdge unit tests | Edge operations and Marblestone | TASK-M02-011 | ☐ |
 | Johari transition tests | Valid transition logic | TASK-M02-012 | ☐ |

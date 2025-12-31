@@ -144,6 +144,12 @@ pub struct MemoryNode {
 }
 
 impl MemoryNode {
+    /// Tolerance for embedding normalization check (magnitude must be in [0.99, 1.01])
+    const NORMALIZATION_TOLERANCE: f64 = 0.01;
+
+    /// Consolidation threshold score (weighted score >= 0.7 triggers consolidation)
+    const CONSOLIDATION_THRESHOLD: f32 = 0.7;
+
     /// Create a new memory node with the given content and embedding.
     ///
     /// # Arguments
@@ -171,10 +177,168 @@ impl MemoryNode {
         }
     }
 
-    /// Mark this node as accessed, updating access count and timestamp.
-    pub fn mark_accessed(&mut self) {
-        self.access_count += 1;
+    /// Create a new MemoryNode with a specific ID.
+    ///
+    /// # Arguments
+    /// * `id` - The specific NodeId (UUID) to use
+    /// * `content` - The content to store
+    /// * `embedding` - The embedding vector (should be 1536 dimensions)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use uuid::Uuid;
+    /// let id = Uuid::new_v4();
+    /// let node = MemoryNode::with_id(id, "content".to_string(), vec![0.0; 1536]);
+    /// assert_eq!(node.id, id);
+    /// ```
+    pub fn with_id(id: NodeId, content: String, embedding: EmbeddingVector) -> Self {
+        let mut node = Self::new(content, embedding);
+        node.id = id;
+        node
+    }
+
+    /// Record an access to this node, updating accessed_at and incrementing access_count.
+    ///
+    /// Uses saturating_add to prevent overflow (will stay at u64::MAX if at limit).
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let mut node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+    /// node.record_access();
+    /// assert_eq!(node.access_count, 1);
+    /// ```
+    pub fn record_access(&mut self) {
         self.accessed_at = Utc::now();
+        self.access_count = self.access_count.saturating_add(1);
+    }
+
+    /// Get the age of this node in seconds since creation.
+    ///
+    /// # Returns
+    /// Number of seconds since node creation (always >= 0).
+    pub fn age_seconds(&self) -> i64 {
+        (Utc::now() - self.created_at).num_seconds()
+    }
+
+    /// Get the time since last access in seconds.
+    ///
+    /// # Returns
+    /// Number of seconds since last access (always >= 0).
+    pub fn time_since_access_seconds(&self) -> i64 {
+        (Utc::now() - self.accessed_at).num_seconds()
+    }
+
+    /// Compute memory decay using modified Ebbinghaus forgetting curve.
+    ///
+    /// Formula: R = e^(-t / (S * k * 24))
+    /// Where:
+    /// - R = retention (0.0 to 1.0)
+    /// - t = time since access in hours
+    /// - S = memory strength: 1 + ln(access_count + 1)
+    /// - k = importance factor: 1 + importance
+    /// - 24 = baseline decay period in hours
+    ///
+    /// # Returns
+    /// Retention value between 0.0 (forgotten) and 1.0 (fully retained).
+    ///
+    /// # Constitution Compliance
+    /// - AP-009: Result is clamped to [0.0, 1.0] to prevent NaN/Infinity
+    pub fn compute_decay(&self) -> f32 {
+        let t_hours = self.time_since_access_seconds() as f64 / 3600.0;
+        let strength = 1.0 + ((self.access_count as f64) + 1.0).ln().max(0.0);
+        let k = 1.0 + self.importance as f64;
+        let decay = (-t_hours / (strength * k * 24.0)).exp();
+        decay.clamp(0.0, 1.0) as f32
+    }
+
+    /// Determine if this node should be consolidated based on weighted score.
+    ///
+    /// Score = 0.4 * importance + 0.3 * (1 - decay) + 0.3 * access_frequency
+    /// Where access_frequency = accesses per hour, clamped to [0, 1]
+    ///
+    /// # Returns
+    /// `true` if score >= CONSOLIDATION_THRESHOLD (0.7)
+    pub fn should_consolidate(&self) -> bool {
+        let decay = self.compute_decay();
+        let age_hours = (self.age_seconds().max(1) as f32) / 3600.0;
+        let access_freq = ((self.access_count as f32) / age_hours).min(1.0);
+        let score = 0.4 * self.importance + 0.3 * (1.0 - decay) + 0.3 * access_freq;
+        score >= Self::CONSOLIDATION_THRESHOLD
+    }
+
+    /// Validate all node constraints.
+    ///
+    /// # Checks (in order)
+    /// 1. Embedding dimension is 1536
+    /// 2. Importance is in [0.0, 1.0]
+    /// 3. Emotional valence is in [-1.0, 1.0]
+    /// 4. Content size is <= 1MB (1,048,576 bytes)
+    /// 5. Embedding is normalized (magnitude within +/-0.01 of 1.0)
+    ///
+    /// # Returns
+    /// `Ok(())` if all validations pass, `Err(ValidationError)` on first failure.
+    ///
+    /// # Constitution Compliance
+    /// - AP-009: Validates numeric values to prevent NaN/Infinity propagation
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        // 1. Check embedding dimension
+        if self.embedding.len() != DEFAULT_EMBEDDING_DIM {
+            return Err(ValidationError::InvalidEmbeddingDimension {
+                expected: DEFAULT_EMBEDDING_DIM,
+                actual: self.embedding.len(),
+            });
+        }
+
+        // 2. Check importance range [0.0, 1.0]
+        if self.importance < 0.0 || self.importance > 1.0 || self.importance.is_nan() {
+            return Err(ValidationError::OutOfBounds {
+                field: "importance".to_string(),
+                value: self.importance as f64,
+                min: 0.0,
+                max: 1.0,
+            });
+        }
+
+        // 3. Check emotional valence range [-1.0, 1.0]
+        if self.emotional_valence < -1.0 || self.emotional_valence > 1.0 || self.emotional_valence.is_nan() {
+            return Err(ValidationError::OutOfBounds {
+                field: "emotional_valence".to_string(),
+                value: self.emotional_valence as f64,
+                min: -1.0,
+                max: 1.0,
+            });
+        }
+
+        // 4. Check content size <= 1MB
+        if self.content.len() > MAX_CONTENT_SIZE {
+            return Err(ValidationError::ContentTooLarge {
+                size: self.content.len(),
+                max_size: MAX_CONTENT_SIZE,
+            });
+        }
+
+        // 5. Check embedding normalization (magnitude ~= 1.0)
+        let magnitude: f64 = self.embedding
+            .iter()
+            .map(|x| (*x as f64).powi(2))
+            .sum::<f64>()
+            .sqrt();
+
+        if (magnitude - 1.0).abs() > Self::NORMALIZATION_TOLERANCE {
+            return Err(ValidationError::EmbeddingNotNormalized { magnitude });
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for MemoryNode {
+    /// Create a default MemoryNode with empty content and zero-filled embedding.
+    ///
+    /// NOTE: Default creates a node that will FAIL validation because
+    /// zero-filled embedding is not normalized. Use for testing only.
+    fn default() -> Self {
+        Self::new(String::new(), vec![0.0; DEFAULT_EMBEDDING_DIM])
     }
 }
 
@@ -401,13 +565,13 @@ mod tests {
     }
 
     #[test]
-    fn test_mark_accessed() {
+    fn test_record_access() {
         let embedding = vec![0.1; 1536];
         let mut node = MemoryNode::new("test".to_string(), embedding);
         let initial_accessed = node.accessed_at;
 
         std::thread::sleep(std::time::Duration::from_millis(10));
-        node.mark_accessed();
+        node.record_access();
 
         assert_eq!(node.access_count, 1);
         assert!(node.accessed_at > initial_accessed);
@@ -1264,13 +1428,13 @@ newlines, plus unicode: 日本語 🎉 émojis"#;
     }
 
     #[test]
-    fn test_memory_node_mark_accessed_updates_timestamp() {
+    fn test_memory_node_record_access_updates_timestamp() {
         let embedding = vec![0.1; 10];
         let mut node = MemoryNode::new("test".to_string(), embedding);
         let initial = node.accessed_at;
 
         std::thread::sleep(std::time::Duration::from_millis(10));
-        node.mark_accessed();
+        node.record_access();
 
         assert_eq!(node.access_count, 1);
         assert!(node.accessed_at > initial);
@@ -1306,5 +1470,230 @@ newlines, plus unicode: 日本語 🎉 émojis"#;
         let mut node = MemoryNode::new("test".to_string(), embedding);
         node.metadata.modality = Modality::Code;
         assert_eq!(node.metadata.modality, Modality::Code);
+    }
+
+    // =========================================================================
+    // TASK-M02-006: MemoryNode Methods Tests
+    // =========================================================================
+
+    #[test]
+    fn test_with_id_creates_node_with_specific_id() {
+        let specific_id = Uuid::new_v4();
+        let embedding = vec![0.0; DEFAULT_EMBEDDING_DIM];
+        let node = MemoryNode::with_id(specific_id, "test".to_string(), embedding);
+        assert_eq!(node.id, specific_id);
+    }
+
+    #[test]
+    fn test_with_id_preserves_other_defaults() {
+        let id = Uuid::new_v4();
+        let node = MemoryNode::with_id(id, "content".to_string(), vec![0.1; 1536]);
+        assert_eq!(node.importance, 0.5);
+        assert_eq!(node.emotional_valence, 0.0);
+        assert_eq!(node.access_count, 0);
+        assert_eq!(node.quadrant, JohariQuadrant::Open);
+    }
+
+    #[test]
+    fn test_record_access_uses_saturating_add() {
+        let mut node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        node.access_count = u64::MAX;
+        node.record_access();
+        assert_eq!(node.access_count, u64::MAX); // Should NOT wrap to 0
+    }
+
+    #[test]
+    fn test_age_seconds_positive() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(node.age_seconds() >= 0);
+    }
+
+    #[test]
+    fn test_time_since_access_seconds() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(node.time_since_access_seconds() >= 0);
+    }
+
+    #[test]
+    fn test_compute_decay_recent_access() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        let decay = node.compute_decay();
+        // Just created, decay should be very close to 1.0
+        assert!(decay >= 0.99, "Recent node decay should be ~1.0, got {}", decay);
+    }
+
+    #[test]
+    fn test_compute_decay_in_valid_range() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        let decay = node.compute_decay();
+        assert!(decay >= 0.0 && decay <= 1.0, "Decay {} must be in [0,1]", decay);
+    }
+
+    #[test]
+    fn test_compute_decay_handles_high_importance() {
+        let mut node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        node.importance = 1.0;
+        let decay = node.compute_decay();
+        assert!(decay >= 0.0 && decay <= 1.0);
+    }
+
+    #[test]
+    fn test_should_consolidate_high_importance() {
+        let mut node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        node.importance = 1.0; // High importance should push toward consolidation
+        // Even with just importance=1.0, score = 0.4*1.0 + 0.3*~0 + 0.3*0 = 0.4
+        // Not enough alone, but reasonable behavior
+        let _should = node.should_consolidate(); // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_should_consolidate_returns_bool() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 1536]);
+        let result: bool = node.should_consolidate();
+        let _ = result; // Type check
+    }
+
+    #[test]
+    fn test_validate_valid_node() {
+        // Create a normalized embedding
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let embedding: Vec<f32> = vec![val; dim];
+
+        let node = MemoryNode::new("valid content".to_string(), embedding);
+        assert!(node.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_wrong_embedding_dim() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 100]); // Wrong dimension
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::InvalidEmbeddingDimension { .. })));
+    }
+
+    #[test]
+    fn test_validate_importance_too_low() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.importance = -0.1;
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::OutOfBounds { field, .. }) if field == "importance"));
+    }
+
+    #[test]
+    fn test_validate_importance_too_high() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.importance = 1.1;
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::OutOfBounds { field, .. }) if field == "importance"));
+    }
+
+    #[test]
+    fn test_validate_valence_too_low() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.emotional_valence = -1.5;
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::OutOfBounds { field, .. }) if field == "emotional_valence"));
+    }
+
+    #[test]
+    fn test_validate_valence_too_high() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.emotional_valence = 1.5;
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::OutOfBounds { field, .. }) if field == "emotional_valence"));
+    }
+
+    #[test]
+    fn test_validate_content_too_large() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let big_content = "x".repeat(MAX_CONTENT_SIZE + 1);
+        let node = MemoryNode::new(big_content, vec![val; dim]);
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::ContentTooLarge { .. })));
+    }
+
+    #[test]
+    fn test_validate_embedding_not_normalized() {
+        let node = MemoryNode::new("test".to_string(), vec![0.5; 1536]); // Not normalized
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::EmbeddingNotNormalized { .. })));
+    }
+
+    #[test]
+    fn test_validate_zero_embedding_fails() {
+        let node = MemoryNode::new("test".to_string(), vec![0.0; 1536]); // Magnitude = 0
+        let result = node.validate();
+        assert!(matches!(result, Err(ValidationError::EmbeddingNotNormalized { .. })));
+    }
+
+    #[test]
+    fn test_default_creates_node() {
+        let node = MemoryNode::default();
+        assert!(node.content.is_empty());
+        assert_eq!(node.embedding.len(), DEFAULT_EMBEDDING_DIM);
+        assert_eq!(node.importance, 0.5);
+    }
+
+    #[test]
+    fn test_default_embedding_fails_validation() {
+        // Default creates zero-filled embedding which is NOT normalized
+        let node = MemoryNode::default();
+        assert!(node.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_boundary_importance_zero() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.importance = 0.0; // Boundary
+        assert!(node.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_boundary_importance_one() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.importance = 1.0; // Boundary
+        assert!(node.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_boundary_valence_negative_one() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.emotional_valence = -1.0; // Boundary
+        assert!(node.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_boundary_valence_positive_one() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let mut node = MemoryNode::new("test".to_string(), vec![val; dim]);
+        node.emotional_valence = 1.0; // Boundary
+        assert!(node.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_content_exactly_max_size() {
+        let dim = DEFAULT_EMBEDDING_DIM;
+        let val = 1.0 / (dim as f32).sqrt();
+        let max_content = "x".repeat(MAX_CONTENT_SIZE); // Exactly at limit
+        let node = MemoryNode::new(max_content, vec![val; dim]);
+        assert!(node.validate().is_ok());
     }
 }

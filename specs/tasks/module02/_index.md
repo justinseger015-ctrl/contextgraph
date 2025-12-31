@@ -7,7 +7,7 @@
 - **Foundation:** 12 tasks
 - **Logic:** 6 tasks
 - **Surface:** 10 tasks
-- **Current Progress:** 5/28 (18%) - Tasks 001-005 VERIFIED
+- **Current Progress:** 6/28 (21%) - Tasks 001-006 VERIFIED
 - **Version:** 1.0.0
 - **Created:** 2025-12-31
 - **Dependencies:** module-01-ghost-system
@@ -104,14 +104,14 @@ graph TD
 | 3 | TASK-M02-003 | Define NodeMetadata Struct | foundation | 002 | 3.0 | ✅ Complete |
 | 4 | TASK-M02-004 | Define ValidationError Enum | foundation | — | 1.0 | ✅ Complete |
 | 5 | TASK-M02-005 | Define MemoryNode Struct | foundation | 001, 003, 004 | 2.0 | ✅ Complete |
-| 6 | TASK-M02-006 | Implement MemoryNode Methods | foundation | 005 | 3.0 | ⏳ **READY** (spec updated) |
-| 7 | TASK-M02-007 | Define Domain Enum (Marblestone) | foundation | — | 1.0 | ⏳ Ready |
+| 6 | TASK-M02-006 | Implement MemoryNode Methods | foundation | 005 | 3.0 | ✅ Complete |
+| 7 | TASK-M02-007 | Define Domain Enum (Marblestone) | foundation | — | 1.0 | ⏳ Ready (Updated 2025-12-31) |
 | 8 | TASK-M02-008 | Define NeurotransmitterWeights Struct | foundation | 007 | 2.0 | ⛔ Blocked |
 | 9 | TASK-M02-009 | Define EdgeType Enum | foundation | — | 0.5 | ⏳ Ready |
 | 10 | TASK-M02-010 | Define GraphEdge Struct | foundation | 007, 008, 009 | 2.0 | ⛔ Blocked |
 | 11 | TASK-M02-011 | Implement GraphEdge Methods | foundation | 010 | 2.5 | ⛔ Blocked |
 | 12 | TASK-M02-012 | Implement Johari Transition Logic | foundation | 001 | 2.0 | ⛔ Blocked |
-| 13 | TASK-M02-013 | Create Storage Crate Structure | logic | 006 | 1.5 | ⛔ Blocked |
+| 13 | TASK-M02-013 | Create Storage Crate Structure | logic | 006 | 1.5 | ⏳ Ready |
 | 14 | TASK-M02-014 | Implement Bincode Serialization | logic | 013 | 2.5 | ⛔ Blocked |
 | 15 | TASK-M02-015 | Define Column Family Descriptors | logic | 013 | 3.0 | ⛔ Blocked |
 | 16 | TASK-M02-016 | Implement RocksDB Backend Open/Close | logic | 014, 015 | 3.0 | ⛔ Blocked |
@@ -144,7 +144,7 @@ graph TD
 | TASK-M02-003 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 39/39 tests pass, 0 clippy warnings, SEC-06 + AP-010 compliant |
 | TASK-M02-004 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 10/10 tests pass, 0 clippy warnings |
 | TASK-M02-005 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 60/60 tests pass, 0 clippy warnings |
-| TASK-M02-006 | — | — | — | Depends on 005 |
+| TASK-M02-006 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 86/86 tests pass, 0 clippy warnings |
 | TASK-M02-007 | — | — | — | No dependencies |
 | TASK-M02-008 | — | — | — | Depends on 007 |
 | TASK-M02-009 | — | — | — | No dependencies |
