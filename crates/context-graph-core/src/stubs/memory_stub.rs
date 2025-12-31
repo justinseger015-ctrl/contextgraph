@@ -1,0 +1,444 @@
+//! In-memory stub implementation of MemoryStore.
+
+use async_trait::async_trait;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+use crate::error::CoreResult;
+use crate::traits::{MemoryStore, SearchOptions};
+use crate::types::{MemoryNode, NodeId};
+
+/// In-memory store for Ghost System phase.
+///
+/// Uses a simple HashMap for storage with RwLock for concurrent access.
+#[derive(Debug, Default)]
+pub struct InMemoryStore {
+    nodes: Arc<RwLock<HashMap<NodeId, MemoryNode>>>,
+}
+
+impl InMemoryStore {
+    /// Create a new in-memory store.
+    pub fn new() -> Self {
+        Self {
+            nodes: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Compute cosine similarity between two vectors.
+    fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+        if a.len() != b.len() {
+            return 0.0;
+        }
+
+        let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        if norm_a == 0.0 || norm_b == 0.0 {
+            return 0.0;
+        }
+
+        dot / (norm_a * norm_b)
+    }
+}
+
+#[async_trait]
+impl MemoryStore for InMemoryStore {
+    async fn store(&self, node: MemoryNode) -> CoreResult<NodeId> {
+        let id = node.id;
+        let mut nodes = self.nodes.write().await;
+        nodes.insert(id, node);
+        Ok(id)
+    }
+
+    async fn retrieve(&self, id: NodeId) -> CoreResult<Option<MemoryNode>> {
+        let nodes = self.nodes.read().await;
+        Ok(nodes.get(&id).cloned())
+    }
+
+    async fn search(
+        &self,
+        query_embedding: &[f32],
+        options: SearchOptions,
+    ) -> CoreResult<Vec<(MemoryNode, f32)>> {
+        let nodes = self.nodes.read().await;
+        let mut results: Vec<(MemoryNode, f32)> = nodes
+            .values()
+            .filter(|n| {
+                // Apply filters
+                if !options.include_deleted && n.deleted {
+                    return false;
+                }
+                if let Some(ref quadrant) = options.johari_filter {
+                    if &n.johari_quadrant != quadrant {
+                        return false;
+                    }
+                }
+                if let Some(ref modality) = options.modality_filter {
+                    if &n.modality != modality {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|n| {
+                let similarity = Self::cosine_similarity(query_embedding, &n.embedding);
+                (n.clone(), similarity)
+            })
+            .filter(|(_, sim)| {
+                if let Some(min_sim) = options.min_similarity {
+                    *sim >= min_sim
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        // Sort by similarity descending
+        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Take top_k
+        results.truncate(options.top_k);
+        Ok(results)
+    }
+
+    async fn search_text(
+        &self,
+        _query: &str,
+        options: SearchOptions,
+    ) -> CoreResult<Vec<(MemoryNode, f32)>> {
+        // In stub, just return random nodes since we don't have real embeddings
+        let nodes = self.nodes.read().await;
+        let mut results: Vec<(MemoryNode, f32)> = nodes
+            .values()
+            .filter(|n| !n.deleted || options.include_deleted)
+            .take(options.top_k)
+            .map(|n| (n.clone(), 0.5)) // Mock similarity
+            .collect();
+        results.truncate(options.top_k);
+        Ok(results)
+    }
+
+    async fn delete(&self, id: NodeId, soft: bool) -> CoreResult<bool> {
+        let mut nodes = self.nodes.write().await;
+        if soft {
+            if let Some(node) = nodes.get_mut(&id) {
+                node.deleted = true;
+                return Ok(true);
+            }
+        } else if nodes.remove(&id).is_some() {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    async fn update(&self, node: MemoryNode) -> CoreResult<bool> {
+        use std::collections::hash_map::Entry;
+        let mut nodes = self.nodes.write().await;
+        if let Entry::Occupied(mut e) = nodes.entry(node.id) {
+            e.insert(node);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    async fn count(&self) -> CoreResult<usize> {
+        let nodes = self.nodes.read().await;
+        Ok(nodes.values().filter(|n| !n.deleted).count())
+    }
+
+    async fn compact(&self) -> CoreResult<()> {
+        let mut nodes = self.nodes.write().await;
+        nodes.retain(|_, n| !n.deleted);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_store_and_retrieve() {
+        let store = InMemoryStore::new();
+        let embedding = vec![0.1; 1536];
+        let node = MemoryNode::new("test content".to_string(), embedding);
+        let id = node.id;
+
+        store.store(node.clone()).await.unwrap();
+        let retrieved = store.retrieve(id).await.unwrap();
+
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().content, "test content");
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_not_found() {
+        let store = InMemoryStore::new();
+        let result = store.retrieve(NodeId::new_v4()).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_soft_delete() {
+        let store = InMemoryStore::new();
+        let embedding = vec![0.1; 1536];
+        let node = MemoryNode::new("test".to_string(), embedding);
+        let id = node.id;
+
+        store.store(node).await.unwrap();
+        assert_eq!(store.count().await.unwrap(), 1);
+
+        store.delete(id, true).await.unwrap();
+        assert_eq!(store.count().await.unwrap(), 0);
+
+        // Node still exists but is marked deleted
+        let retrieved = store.retrieve(id).await.unwrap();
+        assert!(retrieved.is_some());
+        assert!(retrieved.unwrap().deleted);
+    }
+
+    #[tokio::test]
+    async fn test_hard_delete() {
+        let store = InMemoryStore::new();
+        let embedding = vec![0.1; 1536];
+        let node = MemoryNode::new("test".to_string(), embedding);
+        let id = node.id;
+
+        store.store(node).await.unwrap();
+        store.delete(id, false).await.unwrap();
+
+        let retrieved = store.retrieve(id).await.unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_search() {
+        let store = InMemoryStore::new();
+
+        // Store some nodes
+        for i in 0..5 {
+            let mut embedding = vec![0.0; 1536];
+            embedding[0] = i as f32;
+            let node = MemoryNode::new(format!("content {}", i), embedding);
+            store.store(node).await.unwrap();
+        }
+
+        let query = vec![1.0; 1536];
+        let options = SearchOptions::new(3);
+        let results = store.search(&query, options).await.unwrap();
+
+        assert_eq!(results.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_cosine_similarity() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        assert!((InMemoryStore::cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
+
+        let c = vec![0.0, 1.0, 0.0];
+        assert!(InMemoryStore::cosine_similarity(&a, &c).abs() < 0.001);
+    }
+
+    // =========================================================================
+    // TC-GHOST-005: Memory Round-Trip Exact Match Tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_memory_round_trip_exact_match() {
+        // TC-GHOST-005: Store and retrieve MemoryNode by UUID - exact match
+        let store = InMemoryStore::new();
+        let embedding = vec![0.5; 1536];
+
+        let mut node = MemoryNode::new("Test content for round-trip".to_string(), embedding.clone());
+        node.importance = 0.8;
+        let original_id = node.id;
+        let original_content = node.content.clone();
+        let original_importance = node.importance;
+
+        // Store
+        let stored_id = store.store(node).await.unwrap();
+        assert_eq!(stored_id, original_id, "Stored ID must match original");
+
+        // Retrieve
+        let retrieved = store.retrieve(original_id).await.unwrap().expect("Node must exist");
+
+        // Verify exact match
+        assert_eq!(retrieved.id, original_id, "ID must match");
+        assert_eq!(retrieved.content, original_content, "Content must match");
+        assert_eq!(retrieved.importance, original_importance, "Importance must match");
+        assert_eq!(retrieved.embedding.len(), 1536, "Embedding dimension must be preserved");
+    }
+
+    #[tokio::test]
+    async fn test_memory_round_trip_embedding_integrity() {
+        // TC-GHOST-005: Embedding data must be preserved exactly
+        let store = InMemoryStore::new();
+
+        // Create embedding with specific values to test precision
+        let mut embedding = vec![0.0; 1536];
+        for i in 0..1536 {
+            embedding[i] = (i as f32 / 1536.0) * 2.0 - 1.0; // Range [-1.0, 1.0]
+        }
+
+        let node = MemoryNode::new("Embedding integrity test".to_string(), embedding.clone());
+        let id = node.id;
+
+        store.store(node).await.unwrap();
+        let retrieved = store.retrieve(id).await.unwrap().expect("Node must exist");
+
+        // Verify embedding is exactly preserved
+        assert_eq!(
+            retrieved.embedding.len(),
+            embedding.len(),
+            "Embedding length must be preserved"
+        );
+
+        for (i, (&original, &stored)) in embedding.iter().zip(retrieved.embedding.iter()).enumerate() {
+            assert_eq!(
+                original, stored,
+                "Embedding value at index {} must be exactly preserved: {} != {}",
+                i, original, stored
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_memory_round_trip_metadata_integrity() {
+        // TC-GHOST-005: All metadata fields must be preserved
+        let store = InMemoryStore::new();
+        let embedding = vec![0.1; 1536];
+
+        let mut node = MemoryNode::new("Metadata integrity test".to_string(), embedding);
+        node.importance = 0.95;
+        node.access_count = 42;
+        node.deleted = false;
+        node.metadata.source = Some("test-source".to_string());
+        node.metadata.language = Some("en".to_string());
+        node.metadata.tags = vec!["tag1".to_string(), "tag2".to_string()];
+        node.metadata.utl_score = Some(0.75);
+        node.metadata.consolidated = true;
+        node.metadata.rationale = Some("Test rationale".to_string());
+
+        let id = node.id;
+        let original_created_at = node.created_at;
+        let original_last_accessed = node.last_accessed;
+
+        store.store(node).await.unwrap();
+        let retrieved = store.retrieve(id).await.unwrap().expect("Node must exist");
+
+        // Verify all fields
+        assert_eq!(retrieved.importance, 0.95, "Importance must match");
+        assert_eq!(retrieved.access_count, 42, "Access count must match");
+        assert_eq!(retrieved.deleted, false, "Deleted flag must match");
+        assert_eq!(retrieved.created_at, original_created_at, "Created timestamp must match");
+        assert_eq!(retrieved.last_accessed, original_last_accessed, "Last accessed must match");
+
+        // Verify metadata
+        assert_eq!(retrieved.metadata.source, Some("test-source".to_string()));
+        assert_eq!(retrieved.metadata.language, Some("en".to_string()));
+        assert_eq!(retrieved.metadata.tags, vec!["tag1".to_string(), "tag2".to_string()]);
+        assert_eq!(retrieved.metadata.utl_score, Some(0.75));
+        assert_eq!(retrieved.metadata.consolidated, true);
+        assert_eq!(retrieved.metadata.rationale, Some("Test rationale".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_memory_multiple_nodes_independent() {
+        // TC-GHOST-005: Multiple nodes must be stored and retrieved independently
+        let store = InMemoryStore::new();
+
+        let mut nodes = Vec::new();
+        for i in 0..10 {
+            let embedding = vec![i as f32 / 10.0; 1536];
+            let mut node = MemoryNode::new(format!("Node content {}", i), embedding);
+            node.importance = i as f32 / 10.0;
+            nodes.push(node);
+        }
+
+        // Store all nodes
+        let mut ids = Vec::new();
+        for node in &nodes {
+            let id = store.store(node.clone()).await.unwrap();
+            ids.push(id);
+        }
+
+        // Verify each node independently
+        for (i, id) in ids.iter().enumerate() {
+            let retrieved = store.retrieve(*id).await.unwrap().expect("Node must exist");
+            assert_eq!(retrieved.content, format!("Node content {}", i));
+            assert_eq!(retrieved.importance, i as f32 / 10.0);
+        }
+
+        // Verify count
+        assert_eq!(store.count().await.unwrap(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_memory_update_preserves_unmodified_fields() {
+        // TC-GHOST-005: Update must preserve unmodified fields
+        let store = InMemoryStore::new();
+        let embedding = vec![0.5; 1536];
+
+        let mut node = MemoryNode::new("Original content".to_string(), embedding.clone());
+        node.importance = 0.5;
+        node.metadata.source = Some("original-source".to_string());
+        let id = node.id;
+        let original_created_at = node.created_at;
+
+        store.store(node).await.unwrap();
+
+        // Retrieve and modify only specific fields
+        let mut modified = store.retrieve(id).await.unwrap().unwrap();
+        modified.content = "Modified content".to_string();
+        modified.importance = 0.9;
+
+        store.update(modified).await.unwrap();
+
+        // Verify modifications and preserved fields
+        let final_node = store.retrieve(id).await.unwrap().unwrap();
+        assert_eq!(final_node.content, "Modified content");
+        assert_eq!(final_node.importance, 0.9);
+        assert_eq!(final_node.metadata.source, Some("original-source".to_string()));
+        assert_eq!(final_node.created_at, original_created_at);
+        assert_eq!(final_node.embedding, embedding);
+    }
+
+    #[tokio::test]
+    async fn test_memory_search_returns_correct_nodes() {
+        // TC-GHOST-005: Search must return nodes with correct similarity ordering
+        let store = InMemoryStore::new();
+
+        // Create nodes with specific embeddings for predictable similarity
+        let query = vec![1.0; 1536];
+
+        // Node 1: Perfect match with query
+        let mut node1 = MemoryNode::new("Perfect match".to_string(), vec![1.0; 1536]);
+        node1.importance = 0.8;
+
+        // Node 2: Orthogonal (zero similarity)
+        let mut node2_emb = vec![0.0; 1536];
+        node2_emb[0] = 1.0; // Only first dimension non-zero
+        let node2 = MemoryNode::new("Partial match".to_string(), node2_emb);
+
+        store.store(node1).await.unwrap();
+        store.store(node2).await.unwrap();
+
+        let options = SearchOptions::new(10);
+        let results = store.search(&query, options).await.unwrap();
+
+        // Perfect match should be first
+        assert!(!results.is_empty());
+        assert_eq!(results[0].0.content, "Perfect match");
+
+        // Similarity should be close to 1.0 for perfect match
+        assert!(
+            (results[0].1 - 1.0).abs() < 0.001,
+            "Perfect match similarity should be ~1.0, got {}",
+            results[0].1
+        );
+    }
+}

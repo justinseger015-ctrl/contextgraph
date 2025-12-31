@@ -15,7 +15,7 @@ This document provides a comprehensive module-by-module breakdown for implementi
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         MCP Interface Layer                          │
-│                    (JSON-RPC 2.0, 20+ Tools)                        │
+│                    (JSON-RPC 2.0, 25+ Tools)                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Module 1: Ghost System │ Module 2: Core Infrastructure              │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -23,19 +23,39 @@ This document provides a comprehensive module-by-module breakdown for implementi
 │        (Semantic, Temporal, Causal, Sparse, Code, Graph, etc.)      │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Module 4: Knowledge Graph │ Module 5: UTL Integration               │
+│  (+ Neurotransmitter Edges) │ (+ Lifecycle Lambda Weights)           │
 ├─────────────────────────────────────────────────────────────────────┤
 │              Module 6: Bio-Nervous System (5 Layers)                 │
 │      (Sensing → Reflex → Memory → Learning → Coherence)             │
+│                    (+ Formal Verification in L5)                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Module 7: CUDA Optimization │ Module 8: GPU Direct Storage          │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Module 9: Dream Layer │ Module 10: Neuromodulation                  │
+│  Module 9: Dream Layer         │ Module 10: Neuromodulation          │
+│  (+ Amortized Inference)       │ (+ Steering Dopamine Feedback)      │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Module 11: Immune System │ Module 12: Active Inference              │
+│                           │ (+ Omnidirectional Inference Engine)     │
+├─────────────────────────────────────────────────────────────────────┤
+│              Module 12.5: Steering Subsystem (NEW)                   │
+│     (Gardener + Curator + Thought Assessor → Dopamine Rewards)      │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Module 13: MCP Hardening │ Module 14: Testing & Production          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### Marblestone-Inspired Additions (v2.0)
+
+The following neuroscience-inspired features (from Adam Marblestone's research) have been integrated:
+
+| Feature | Module(s) | Description |
+|---------|-----------|-------------|
+| **Steering Subsystem** | 10, 12.5 | Gardener+Curator provide Dopamine reward signals to agents |
+| **Lifecycle Lambda Weights** | 5 | Dynamic λ_ΔS/λ_ΔC based on Infancy/Growth/Maturity stage |
+| **Neurotransmitter Edge Weights** | 2, 4 | Excitatory/inhibitory modulation per domain (Code, Legal, etc.) |
+| **Amortized Inference** | 9 | Dream Layer creates shortcut edges from multi-hop paths |
+| **Omnidirectional Inference** | 12 | Clamped variables with belief propagation (forward/backward/bridge) |
+| **Formal Verification** | 6 | Lean-inspired SMT verification in Coherence layer (L5) |
 
 ---
 
@@ -137,7 +157,47 @@ Core Infrastructure implements the foundational data types, memory management, a
    - Bloom filters for existence checks
    - LRU cache for hot data
 
-3. **Primary MCP Tools**
+3. **Edge Types with Neurotransmitter Weights (Marblestone)**
+   ```rust
+   pub struct GraphEdge {
+       pub source: Uuid,
+       pub target: Uuid,
+       pub edge_type: EdgeType,
+       pub weight: f32,
+       pub confidence: f32,
+       pub created_at: DateTime<Utc>,
+       // NEW: Molecularly-annotated neurotransmitter weights
+       pub neurotransmitter: Option<NeurotransmitterWeights>,
+       // NEW: Whether created by Dream Layer amortization
+       pub is_amortized_shortcut: bool,
+   }
+
+   pub enum EdgeType {
+       Semantic,     // Meaning similarity
+       Temporal,     // Time-based connection
+       Causal,       // Cause-effect relationship
+       Hierarchical, // Parent-child structure
+       Relational,   // Custom relationship
+   }
+
+   /// Domain-specific edge weight modulation
+   pub struct NeurotransmitterWeights {
+       pub excitatory: f32,  // Strengthens connection [0,1]
+       pub inhibitory: f32,  // Weakens connection [0,1]
+       pub domain: Domain,
+   }
+
+   pub enum Domain {
+       General,   // No modulation
+       Code,      // +excitatory for technical edges
+       Legal,     // +inhibitory for speculative edges
+       Medical,   // +inhibitory for unverified claims
+       Creative,  // +excitatory for metaphorical edges
+       Research,  // Balanced, prefers cited sources
+   }
+   ```
+
+4. **Primary MCP Tools**
    - `inject_context` - Store new memory with embedding
    - `store_memory` - Persist memory node
    - `recall_memory` - Retrieve by semantic similarity
@@ -168,10 +228,13 @@ Core Infrastructure implements the foundational data types, memory management, a
 - [ ] Persistence survives server restarts
 - [ ] `inject_context` tool fully operational
 - [ ] `store_memory` and `recall_memory` working (without embeddings)
+- [ ] **NEW**: `store_memory` response includes `steering_reward` field
 - [ ] Verbosity levels affect response format
 - [ ] Cognitive Pulse included in all responses
 - [ ] Basic metrics exposed via `get_memetic_status`
 - [ ] RocksDB storage benchmarked at >10K writes/sec
+- [ ] **NEW**: Edge types support optional NeurotransmitterWeights
+- [ ] **NEW**: `is_amortized_shortcut` flag available on edges
 
 ### Quality Gates
 
@@ -179,6 +242,7 @@ Core Infrastructure implements the foundational data types, memory management, a
 - Storage durability test (kill/restart)
 - Memory leak detection via Valgrind
 - API response schema validation
+- **NEW**: NeurotransmitterWeights modulation tested per domain
 
 ---
 
@@ -278,7 +342,34 @@ The Knowledge Graph module implements the graph storage layer using FAISS for GP
    - Bidirectional edge indexing
    - Graph partitioning for large-scale traversal
 
-3. **Hyperbolic Entailment Cones**
+3. **Neurotransmitter Edge Modulation (Marblestone)**
+   ```rust
+   impl GraphStorage {
+       /// Apply domain-specific modulation when retrieving edges
+       pub fn get_modulated_weight(&self, edge: &GraphEdge, domain: Domain) -> f32 {
+           match &edge.neurotransmitter {
+               Some(nt) if nt.domain == domain => {
+                   let modulation = 1.0 + nt.excitatory - nt.inhibitory;
+                   (edge.weight * modulation).clamp(0.0, 1.0)
+               }
+               _ => edge.weight
+           }
+       }
+
+       /// Query with domain context for automatic modulation
+       pub fn domain_aware_search(&self, query: &Query, domain: Domain) -> Vec<SearchResult> {
+           let results = self.raw_search(query);
+           results.into_iter()
+               .map(|r| {
+                   let modulated = self.get_modulated_weight(&r.edge, domain);
+                   SearchResult { weight: modulated, ..r }
+               })
+               .collect()
+       }
+   }
+   ```
+
+4. **Hyperbolic Entailment Cones**
    ```rust
    pub struct HyperbolicCone {
        pub apex: PoincareBallPoint,  // 64D hyperbolic point
@@ -340,7 +431,65 @@ UTL (Unified Theory of Learning) Integration implements the core learning equati
    - φ: Phase angle (memory consolidation state)
    ```
 
-2. **UTL Processor Implementation**
+2. **Lifecycle-Based Lambda Weights (Marblestone)**
+
+   Dynamic weighting of ΔS vs ΔC based on system maturity:
+
+   ```rust
+   pub enum LifecycleStage {
+       Infancy,   // 0-50 interactions
+       Growth,    // 50-500 interactions
+       Maturity,  // 500+ interactions
+   }
+
+   pub struct LifecycleLambdaWeights {
+       pub lambda_ds: f32,  // Weight for entropy/surprise
+       pub lambda_dc: f32,  // Weight for coherence/integration
+   }
+
+   impl LifecycleStage {
+       pub fn lambda_weights(&self) -> LifecycleLambdaWeights {
+           match self {
+               // Infancy: Reward exploration/novelty
+               Self::Infancy => LifecycleLambdaWeights {
+                   lambda_ds: 0.7,
+                   lambda_dc: 0.3,
+               },
+               // Growth: Balanced exploration + integration
+               Self::Growth => LifecycleLambdaWeights {
+                   lambda_ds: 0.5,
+                   lambda_dc: 0.5,
+               },
+               // Maturity: Reward coherence/quality
+               Self::Maturity => LifecycleLambdaWeights {
+                   lambda_ds: 0.3,
+                   lambda_dc: 0.7,
+               },
+           }
+       }
+   }
+
+   /// Modified UTL computation with lifecycle awareness
+   impl UTLProcessor {
+       pub fn compute_learning_with_lifecycle(
+           &self,
+           ds: f32,
+           dc: f32,
+           we: f32,
+           phi: f32,
+           lifecycle: &LifecycleStage,
+       ) -> f32 {
+           let lambdas = lifecycle.lambda_weights();
+           let weighted_ds = ds * lambdas.lambda_ds;
+           let weighted_dc = dc * lambdas.lambda_dc;
+           (weighted_ds * weighted_dc) * we * phi.cos()
+       }
+   }
+   ```
+
+   **Biological Rationale**: Infants babble freely (exploration), adults communicate precisely (integration).
+
+3. **UTL Processor Implementation**
    ```rust
    pub struct UTLProcessor {
        pub surprise_threshold: f32,
@@ -380,6 +529,9 @@ UTL (Unified Theory of Learning) Integration implements the core learning equati
 - [ ] Salience scores updated based on learning signals
 - [ ] Phase oscillator tracks consolidation state
 - [ ] UTL metrics exposed via `get_memetic_status`
+- [ ] **NEW**: Lifecycle stage (Infancy/Growth/Maturity) tracked automatically
+- [ ] **NEW**: Lambda weights (λ_ΔS, λ_ΔC) shift based on lifecycle stage
+- [ ] **NEW**: Infancy prioritizes exploration, Maturity prioritizes coherence
 
 ### Quality Gates
 
@@ -387,6 +539,7 @@ UTL (Unified Theory of Learning) Integration implements the core learning equati
 - Surprise detection catches novel information >90% of time
 - Coherence metric stable over time (low variance)
 - Emotional weighting benchmarked against sentiment datasets
+- **NEW**: Lambda weight transitions verified at lifecycle boundaries
 
 ---
 
@@ -436,12 +589,57 @@ The Bio-Nervous System implements the 5-layer architecture inspired by biologica
    - Consolidation scheduling
    - Salience updates
 
-6. **Coherence Layer**
+6. **Coherence Layer (L5)**
    - Global narrative construction
    - Contradiction resolution
    - Perspective management
+   - **NEW**: Formal Verification Integration (Marblestone/Lean-Inspired)
 
-7. **Inter-Layer Communication**
+7. **Formal Verification Layer (Coherence L5)**
+   ```rust
+   /// Lean-inspired formal verification for code nodes
+   pub struct FormalVerificationLayer {
+       pub enable_smt: bool,              // Z3-style SMT solving
+       pub verification_timeout_ms: u64, // Default: 5000ms
+       pub proof_cache: ProofCache,      // Avoid re-verification
+   }
+
+   pub struct VerificationCondition {
+       pub description: String,
+       pub precondition: Option<String>,   // e.g., "x > 0 ∧ y > 0"
+       pub postcondition: Option<String>,  // e.g., "result = x * y"
+       pub invariants: Vec<String>,        // Loop invariants
+       pub status: VerificationStatus,
+   }
+
+   pub enum VerificationStatus {
+       Pending,
+       Verified { proof_hash: String },
+       Failed { counterexample: Option<String> },
+       Timeout,
+       NotApplicable,
+   }
+
+   impl FormalVerificationLayer {
+       /// Called during store_memory for code nodes with specs
+       pub fn coherence_verified_store(
+           &mut self,
+           node: &KnowledgeNode,
+           graph: &mut KnowledgeGraph,
+       ) -> CoherenceVerifiedResult {
+           if let Some(spec) = node.metadata.get("verification_spec") {
+               let result = self.verify_node(node, spec);
+               // Verified: +0.2 coherence boost
+               // Failed: -0.3 coherence penalty
+               self.apply_coherence_adjustment(node, &result)
+           } else {
+               CoherenceVerifiedResult::NoSpec
+           }
+       }
+   }
+   ```
+
+8. **Inter-Layer Communication**
    ```rust
    pub struct LayerMessage {
        pub source: NervousLayer,
@@ -462,6 +660,10 @@ The Bio-Nervous System implements the 5-layer architecture inspired by biologica
 - [ ] Coherence layer maintains narrative consistency
 - [ ] Layer metrics exposed for monitoring
 - [ ] Graceful degradation when latency budgets exceeded
+- [ ] **NEW**: Coherence layer (L5) supports formal verification for code nodes
+- [ ] **NEW**: `verify_code_node` MCP tool available
+- [ ] **NEW**: Verified code nodes receive +0.2 coherence boost
+- [ ] **NEW**: Failed verification nodes receive -0.3 coherence penalty
 
 ### Quality Gates
 
@@ -469,6 +671,8 @@ The Bio-Nervous System implements the 5-layer architecture inspired by biologica
 - End-to-end processing in <3s for standard queries
 - Memory layer recall accuracy >90%
 - Coherence layer detects contradictions >85%
+- **NEW**: Formal verification completes within 5s timeout 95% of time
+- **NEW**: SMT solver correctly validates test specifications
 
 ---
 
@@ -624,7 +828,57 @@ The Dream Layer implements offline memory consolidation inspired by sleep neuros
    - Creative hypothesis formation
    - Edge weight adjustment
 
-4. **SRC Algorithm**
+4. **Amortized Inference Phase (Marblestone)**
+
+   When Dream Layer finds multi-hop causal paths (3+ hops), create direct "shortcut" edges so fast retrieval can find them instantly. This is neural "amortization" — precomputing inference results.
+
+   ```rust
+   impl SRCAlgorithm {
+       /// NEW: Amortized shortcut creation after REM phase
+       pub fn amortized_shortcut_creation(
+           &self,
+           graph: &mut KnowledgeGraph,
+           hop_threshold: usize,  // Default: 3 hops
+       ) -> Vec<AmortizedShortcut> {
+           let mut shortcuts = Vec::new();
+
+           // Find frequently-traversed multi-hop causal paths
+           let causal_paths = graph.find_frequent_causal_paths(hop_threshold);
+
+           for path in causal_paths {
+               let (start, end) = (path.first(), path.last());
+               if graph.has_edge(*start, *end) { continue; }
+
+               // Compute shortcut weight as product of path weights
+               let path_weight: f32 = path.edges.iter().map(|e| e.weight).product();
+               let shortcut_weight = (path_weight * 1.5).min(0.9);
+
+               graph.add_edge(GraphEdge {
+                   source: *start,
+                   target: *end,
+                   edge_type: EdgeType::Causal,
+                   weight: shortcut_weight,
+                   is_amortized_shortcut: true,  // Mark as amortized
+                   ..Default::default()
+               });
+
+               shortcuts.push(AmortizedShortcut {
+                   start: *start,
+                   end: *end,
+                   original_path_length: path.nodes.len(),
+               });
+           }
+           shortcuts
+       }
+   }
+   ```
+
+   **Benefits**:
+   - 4-hop path A→B→C→D becomes direct A→D edge
+   - Fast retrieval finds previously "hidden" connections
+   - Reduces token cost of multi-hop reasoning
+
+5. **SRC Algorithm**
    ```rust
    pub struct SRCAlgorithm {
        pub sparsity: f32,      // Fraction of nodes activated
@@ -647,6 +901,9 @@ The Dream Layer implements offline memory consolidation inspired by sleep neuros
 - [ ] Memory count reduced by 30% without information loss
 - [ ] Novel connections improve recall by 15%
 - [ ] Dream metrics exposed for monitoring
+- [ ] **NEW**: Amortized shortcuts created for 3+ hop causal paths
+- [ ] **NEW**: `is_amortized_shortcut` edges bypass multi-hop traversal
+- [ ] **NEW**: Shortcut creation logged for inspection
 
 ### Quality Gates
 
@@ -654,6 +911,8 @@ The Dream Layer implements offline memory consolidation inspired by sleep neuros
 - Recall quality maintained post-compression
 - Novel associations rated useful by human eval
 - Dream cycle completes within resource budget
+- **NEW**: Amortized shortcuts reduce average path length by >40%
+- **NEW**: Shortcut edges marked correctly with `is_amortized_shortcut=true`
 
 ---
 
@@ -700,6 +959,48 @@ The Neuromodulation module implements dynamic system parameter adjustment inspir
    - Hysteresis to prevent oscillation
    - Bounds checking for stability
 
+5. **Steering Dopamine Feedback Loop (Marblestone)**
+
+   The Steering Subsystem (Gardener + Curator + Thought Assessor) provides Dopamine reward signals that modulate the learning system:
+
+   ```rust
+   /// Dopamine reward from Steering Subsystem
+   pub struct SteeringDopamineFeedback {
+       /// Gardener coherence verdict (graph pruning quality)
+       pub gardener_reward: f32,      // [-1.0, 1.0]
+       /// Curator relevance verdict (context appropriateness)
+       pub curator_reward: f32,       // [-1.0, 1.0]
+       /// Thought Assessor quality verdict (reasoning soundness)
+       pub assessor_reward: f32,      // [-1.0, 1.0]
+   }
+
+   impl NeuromodulationController {
+       /// Integrate Steering feedback into Dopamine channel
+       pub fn apply_steering_feedback(&mut self, feedback: &SteeringDopamineFeedback) {
+           let combined_reward = (
+               feedback.gardener_reward * 0.3 +
+               feedback.curator_reward * 0.4 +
+               feedback.assessor_reward * 0.3
+           );
+
+           // Positive feedback → Dopamine surge → sharper patterns
+           // Negative feedback → Dopamine dip → broader exploration
+           self.dopamine = (self.dopamine + combined_reward * 0.2).clamp(0.0, 1.0);
+
+           // Log for feedback loop analysis
+           tracing::info!(
+               dopamine = self.dopamine,
+               gardener = feedback.gardener_reward,
+               curator = feedback.curator_reward,
+               assessor = feedback.assessor_reward,
+               "steering_dopamine_update"
+           );
+       }
+   }
+   ```
+
+   **Feedback Integration Point**: `store_memory` response includes `steering_reward` field that feeds into this Dopamine loop.
+
 ### Expected Capabilities After Module 10
 
 - [ ] All 4 neuromodulator channels operational
@@ -709,6 +1010,9 @@ The Neuromodulation module implements dynamic system parameter adjustment inspir
 - [ ] Neuromodulator levels visible in status
 - [ ] System behavior adapts to task demands
 - [ ] Manual override available for testing
+- [ ] **NEW**: Steering Subsystem Dopamine feedback integrated
+- [ ] **NEW**: Gardener/Curator/Assessor rewards modulate Dopamine channel
+- [ ] **NEW**: `get_steering_feedback` MCP tool returns current Steering state
 
 ### Quality Gates
 
@@ -716,6 +1020,8 @@ The Neuromodulation module implements dynamic system parameter adjustment inspir
 - Parameter changes are smooth (no jumps)
 - System remains stable under extreme modulation
 - Performance improves on adaptive tasks
+- **NEW**: Steering feedback correctly influences Dopamine levels
+- **NEW**: Positive Steering rewards increase pattern sharpness (higher beta)
 
 ---
 
@@ -826,6 +1132,77 @@ Active Inference implements epistemic action generation, enabling the system to 
    - Prioritized by expected information gain
    - Contextually appropriate
 
+5. **Omnidirectional Inference Engine (Marblestone)**
+
+   Unlike traditional forward-only inference, this engine supports bidirectional belief propagation with clamped variables:
+
+   ```rust
+   /// Inference direction modes
+   pub enum InferenceDirection {
+       Forward,     // Given cause, predict effect
+       Backward,    // Given effect, infer cause
+       Bridge,      // Connect two clamped nodes
+       Abduction,   // Best explanation for observation
+   }
+
+   /// A clamped variable is a known fact that constrains inference
+   pub enum ClampedValue {
+       Observation(String),   // "The server crashed at 3pm"
+       Constraint(String),    // "Response time must be < 100ms"
+       Goal(String),          // "Minimize memory usage"
+   }
+
+   pub struct OmniInferenceEngine {
+       pub max_iterations: u32,           // Belief propagation iterations
+       pub convergence_threshold: f32,    // Stop when change < threshold
+       pub enable_abduction: bool,        // Allow best-explanation inference
+   }
+
+   impl OmniInferenceEngine {
+       /// Run inference with clamped variables
+       pub fn infer(
+           &self,
+           graph: &KnowledgeGraph,
+           clamped: &[ClampedValue],
+           direction: InferenceDirection,
+       ) -> InferenceResult {
+           match direction {
+               // Forward: A→B→C, clamp A, propagate to C
+               InferenceDirection::Forward => self.forward_propagate(graph, clamped),
+               // Backward: A→B→C, clamp C, infer A
+               InferenceDirection::Backward => self.backward_propagate(graph, clamped),
+               // Bridge: clamp A and C, find path B
+               InferenceDirection::Bridge => self.bridge_inference(graph, clamped),
+               // Abduction: find best explanation for observations
+               InferenceDirection::Abduction => self.abductive_inference(graph, clamped),
+           }
+       }
+
+       fn backward_propagate(
+           &self,
+           graph: &KnowledgeGraph,
+           clamped: &[ClampedValue],
+       ) -> InferenceResult {
+           // Use inverse edge weights for backward propagation
+           // Iterate until beliefs converge
+           let mut beliefs = self.initialize_beliefs(graph, clamped);
+           for _ in 0..self.max_iterations {
+               let delta = self.propagate_step_backward(&mut beliefs, graph);
+               if delta < self.convergence_threshold {
+                   break;
+               }
+           }
+           InferenceResult { beliefs, converged: true }
+       }
+   }
+   ```
+
+   **Use Cases**:
+   - **Forward**: "Given this code change, what might break?"
+   - **Backward**: "Given this error, what caused it?"
+   - **Bridge**: "How does concept A relate to concept Z?"
+   - **Abduction**: "What's the best explanation for these symptoms?"
+
 ### Expected Capabilities After Module 12
 
 - [ ] System identifies knowledge gaps
@@ -834,6 +1211,10 @@ Active Inference implements epistemic action generation, enabling the system to 
 - [ ] Actions are contextually relevant
 - [ ] Uncertainty reduced through user interaction
 - [ ] Information gain tracked over time
+- [ ] **NEW**: Omnidirectional inference supports Forward/Backward/Bridge/Abduction
+- [ ] **NEW**: `omni_infer` MCP tool available with direction parameter
+- [ ] **NEW**: Clamped variables constrain belief propagation
+- [ ] **NEW**: Backward inference enables causal reasoning from effects
 
 ### Quality Gates
 
@@ -841,6 +1222,204 @@ Active Inference implements epistemic action generation, enabling the system to 
 - Uncertainty reduction measurable
 - Actions contextually appropriate >90%
 - No spam/excessive action suggestions
+- **NEW**: Omnidirectional inference converges within 100 iterations
+- **NEW**: Backward inference correctly identifies causes >80% on benchmark
+- **NEW**: Bridge inference finds valid paths between clamped nodes
+
+---
+
+## Module 12.5: Steering Subsystem (NEW - Marblestone)
+
+**Phase**: 11.5 (parallel with Module 12)
+**Duration**: 3 weeks
+**Dependencies**: Module 10 (Neuromodulation), Module 12 (Active Inference)
+
+### Description
+
+The Steering Subsystem implements Adam Marblestone's distinction between the **Learning Subsystem** (acquiring knowledge) and the **Steering Subsystem** (guiding behavior). While the Learning Subsystem handles memory consolidation and pattern formation, the Steering Subsystem evaluates, curates, and rewards good cognitive behavior through Dopamine feedback signals.
+
+This module implements the **Gardener**, **Curator**, and **Thought Assessor** components that together provide continuous quality assessment of the agent's memory operations.
+
+### Components
+
+1. **Steering Architecture**
+   ```
+   ┌──────────────────────────────────────────────────────────┐
+   │                   STEERING SUBSYSTEM                      │
+   │  ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐   │
+   │  │  Gardener   │ │   Curator   │ │ Thought Assessor │   │
+   │  │  (Prune)    │ │  (Curate)   │ │    (Judge)       │   │
+   │  └──────┬──────┘ └──────┬──────┘ └────────┬─────────┘   │
+   │         │               │                  │             │
+   │         └───────────────┴──────────────────┘             │
+   │                         │                                │
+   │                 SteeringReward                           │
+   │           (Dopamine feedback signal)                     │
+   └─────────────────────────┬────────────────────────────────┘
+                             │
+                             ▼
+                   Neuromodulation Controller
+                     (Module 10 Dopamine)
+   ```
+
+2. **Gardener Component**
+   ```rust
+   /// Gardener: Prunes the knowledge graph for coherence
+   pub struct Gardener {
+       pub coherence_threshold: f32,     // Min coherence for edges
+       pub pruning_interval: Duration,   // How often to prune
+       pub max_orphan_age: Duration,     // When to remove orphan nodes
+   }
+
+   impl Gardener {
+       /// Evaluate graph health and generate reward signal
+       pub fn evaluate(&self, graph: &KnowledgeGraph) -> GardenerVerdict {
+           let orphan_count = graph.count_orphans();
+           let low_coherence_edges = graph.edges_below_threshold(self.coherence_threshold);
+           let contradiction_count = graph.count_contradictions();
+
+           let health_score = 1.0 - (
+               orphan_count as f32 * 0.1 +
+               low_coherence_edges as f32 * 0.2 +
+               contradiction_count as f32 * 0.3
+           ).min(1.0);
+
+           GardenerVerdict {
+               health_score,
+               suggested_prunes: low_coherence_edges,
+               reward: (health_score - 0.5) * 2.0, // [-1, 1]
+           }
+       }
+   }
+   ```
+
+3. **Curator Component**
+   ```rust
+   /// Curator: Ensures retrieved context is relevant and appropriate
+   pub struct Curator {
+       pub relevance_threshold: f32,     // Min relevance for inclusion
+       pub diversity_weight: f32,        // Balance relevance vs diversity
+       pub recency_bias: f32,            // Preference for recent memories
+   }
+
+   impl Curator {
+       /// Evaluate retrieval quality and generate reward signal
+       pub fn evaluate(
+           &self,
+           query: &str,
+           retrieved: &[MemoryNode],
+           context: &Context,
+       ) -> CuratorVerdict {
+           let relevance = self.compute_relevance(query, retrieved);
+           let diversity = self.compute_diversity(retrieved);
+           let recency = self.compute_recency(retrieved);
+
+           let quality_score =
+               relevance * 0.6 +
+               diversity * 0.2 +
+               recency * self.recency_bias;
+
+           CuratorVerdict {
+               quality_score,
+               filtered_results: retrieved.iter()
+                   .filter(|n| n.relevance >= self.relevance_threshold)
+                   .collect(),
+               reward: (quality_score - 0.5) * 2.0, // [-1, 1]
+           }
+       }
+   }
+   ```
+
+4. **Thought Assessor Component**
+   ```rust
+   /// Thought Assessor: Judges reasoning quality and soundness
+   pub struct ThoughtAssessor {
+       pub enable_formal_verification: bool,  // Use Module 6 verifier
+       pub confidence_threshold: f32,         // Min confidence for claims
+       pub speculation_penalty: f32,          // Penalty for ungrounded claims
+   }
+
+   impl ThoughtAssessor {
+       /// Evaluate reasoning quality and generate reward signal
+       pub fn evaluate(
+           &self,
+           thought: &ThoughtChain,
+           supporting_evidence: &[MemoryNode],
+       ) -> AssessorVerdict {
+           let grounding = self.compute_grounding(thought, supporting_evidence);
+           let logical_soundness = self.check_logical_consistency(thought);
+           let speculation_level = self.detect_speculation(thought);
+
+           let quality_score =
+               grounding * 0.4 +
+               logical_soundness * 0.4 -
+               speculation_level * self.speculation_penalty;
+
+           AssessorVerdict {
+               quality_score: quality_score.max(0.0),
+               issues: self.identify_issues(thought),
+               reward: (quality_score - 0.5) * 2.0, // [-1, 1]
+           }
+       }
+   }
+   ```
+
+5. **Combined Steering Reward**
+   ```rust
+   /// Combined steering reward signal
+   pub struct SteeringReward {
+       pub gardener_reward: f32,    // Graph health [-1, 1]
+       pub curator_reward: f32,     // Retrieval quality [-1, 1]
+       pub assessor_reward: f32,    // Reasoning quality [-1, 1]
+       pub combined: f32,           // Weighted combination
+       pub timestamp: DateTime<Utc>,
+   }
+
+   impl SteeringReward {
+       pub fn compute(
+           gardener: &GardenerVerdict,
+           curator: &CuratorVerdict,
+           assessor: &AssessorVerdict,
+       ) -> Self {
+           let combined =
+               gardener.reward * 0.3 +
+               curator.reward * 0.4 +
+               assessor.reward * 0.3;
+
+           Self {
+               gardener_reward: gardener.reward,
+               curator_reward: curator.reward,
+               assessor_reward: assessor.reward,
+               combined,
+               timestamp: Utc::now(),
+           }
+       }
+   }
+   ```
+
+6. **MCP Integration**
+   - `store_memory` response includes `steering_reward` field
+   - `get_steering_feedback` tool returns current Steering state
+   - Dopamine feedback loop connects to Module 10 Neuromodulation
+
+### Expected Capabilities After Module 12.5
+
+- [ ] Gardener continuously monitors graph health
+- [ ] Curator filters and ranks retrieved memories
+- [ ] Thought Assessor evaluates reasoning quality
+- [ ] Combined SteeringReward computed for every operation
+- [ ] `store_memory` responses include steering_reward field
+- [ ] `get_steering_feedback` MCP tool operational
+- [ ] Dopamine feedback integrated with Module 10
+- [ ] Steering metrics visible in `get_memetic_status`
+
+### Quality Gates
+
+- Gardener correctly identifies low-coherence edges >90%
+- Curator relevance filtering improves retrieval precision by >20%
+- Thought Assessor detects logical inconsistencies >85%
+- Dopamine feedback correlates with external quality ratings (r > 0.6)
+- Steering overhead < 50ms per operation
 
 ---
 
@@ -848,7 +1427,7 @@ Active Inference implements epistemic action generation, enabling the system to 
 
 **Phase**: 12
 **Duration**: 4 weeks
-**Dependencies**: Module 12 (Active Inference)
+**Dependencies**: Module 12 (Active Inference), Module 12.5 (Steering Subsystem)
 
 ### Description
 
@@ -1109,7 +1688,7 @@ Module 14: Testing & Production
 
 ### Core Tools
 - `inject_context` - Store memory with embedding
-- `store_memory` - Persist memory node
+- `store_memory` - Persist memory node (includes `steering_reward` in response)
 - `recall_memory` - Retrieve by similarity
 - `get_memetic_status` - System health
 - `set_verbosity` - Response detail level
@@ -1121,6 +1700,11 @@ Module 14: Testing & Production
 - `critique_context` - Quality assessment
 - `priors_vibe_check` - Perspective alignment
 
+### Steering Subsystem Tools (NEW - Marblestone)
+- `get_steering_feedback` - Get current Steering state (Gardener/Curator/Assessor rewards)
+- `omni_infer` - Run omnidirectional inference (forward/backward/bridge/abduction)
+- `verify_code_node` - Formal verification for code nodes (Lean-inspired SMT)
+
 ### System Tools
 - `reload_manifest` - Hot reload config
 - `get_system_logs` - Debug information
@@ -1129,6 +1713,22 @@ Module 14: Testing & Production
 
 ---
 
-*Document Version: 1.0*
+## Appendix: Marblestone Features Cross-Reference
+
+| Feature | PRD Source | Implementation Module(s) |
+|---------|------------|--------------------------|
+| Steering Subsystem | vision_and_layers.md | Module 10, 12.5 |
+| Lifecycle Lambda Weights | vision_and_layers.md | Module 5 |
+| Neurotransmitter Edge Weights | vision_and_layers.md | Module 2, 4 |
+| Amortized Inference | technical_engine.md | Module 9 |
+| Omnidirectional Inference | technical_engine.md | Module 12 |
+| Formal Verification | technical_engine.md | Module 6 |
+| Dopamine Feedback Loop | execution_and_mcp.md | Module 10, 12.5 |
+| Steering MCP Tools | execution_and_mcp2.md | Module 12.5, 13 |
+
+---
+
+*Document Version: 2.0*
 *Generated: 2025-01-01*
 *Based on PRD files in /docs2/*
+*Updated with Marblestone neuroscience-inspired features*

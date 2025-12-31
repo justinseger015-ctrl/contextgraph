@@ -359,6 +359,233 @@
 
 **Multi-Agent Accountability**: Agent B sees "This node was merged by agent-python-coder at 2024-01-15. Original nodes: X, Y. Reason: 'Duplicate variable naming concepts.'"
 
+---
+
+### 1.2.5 Steering Subsystem Tools (Marblestone-Inspired)
+
+These tools expose the Steering Subsystem's feedback mechanisms, enabling agents to learn from reward signals and use advanced inference patterns.
+
+#### Tool: `get_steering_feedback`
+
+```json
+{
+  "name": "get_steering_feedback",
+  "description": "DOPAMINE LEARNING: Get cumulative steering rewards for recent storage operations. Use to understand if your storage strategy is being rewarded or penalized by the Steering Subsystem (Gardener + Curator).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "lookback_count": {
+        "type": "integer",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 100,
+        "description": "Number of recent storage operations to analyze"
+      },
+      "session_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Optional: Filter to specific session"
+      }
+    }
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "cumulative_dopamine": {
+        "type": "number",
+        "description": "Sum of all dopamine signals. Positive = mostly rewarded. Negative = mostly penalized."
+      },
+      "average_dopamine": {
+        "type": "number",
+        "description": "Average dopamine per operation. Target: > 0.2"
+      },
+      "reward_breakdown": {
+        "type": "object",
+        "properties": {
+          "novelty_rewards": { "type": "number" },
+          "coherence_rewards": { "type": "number" },
+          "duplication_penalties": { "type": "number" },
+          "low_priors_penalties": { "type": "number" }
+        }
+      },
+      "lifecycle_stage": {
+        "type": "string",
+        "enum": ["infancy", "growth", "maturity"],
+        "description": "Current system lifecycle affecting reward weights"
+      },
+      "behavioral_recommendations": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "Suggested adjustments based on reward patterns"
+      }
+    }
+  }
+}
+```
+
+**Use Case**: Agent notices low cumulative dopamine → Calls `get_steering_feedback` → Discovers "duplication_penalties: -3.2" → Realizes it's storing too many near-duplicates → Adjusts to check for existing similar nodes before storing.
+
+#### Tool: `omni_infer`
+
+```json
+{
+  "name": "omni_infer",
+  "description": "OMNIDIRECTIONAL INFERENCE: Predict unknown variables given known (clamped) ones. Unlike standard search (query→results), this supports bidirectional reasoning: forward (cause→effect), backward (effect→cause), bridge (A↔B path), and abduction (observations→explanation).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query_type": {
+        "type": "string",
+        "enum": ["forward", "backward", "bridge", "abduction"],
+        "description": "forward: clamp cause, predict effects. backward: clamp effect, predict causes. bridge: clamp both ends, predict connectors. abduction: clamp observations, predict latent explanation."
+      },
+      "clamped_nodes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "node_id": { "type": "string", "format": "uuid" },
+            "clamp_type": {
+              "type": "string",
+              "enum": ["binary", "scalar", "semantic"],
+              "default": "binary"
+            },
+            "clamp_value": {
+              "oneOf": [
+                { "type": "boolean" },
+                { "type": "number" },
+                { "type": "array", "items": { "type": "number" }, "minItems": 1536, "maxItems": 1536 }
+              ],
+              "description": "For binary: true/false. For scalar: 0-1. For semantic: 1536D embedding vector."
+            }
+          },
+          "required": ["node_id"]
+        },
+        "minItems": 1,
+        "description": "Known variables to clamp (fix their values)"
+      },
+      "predict_nodes": {
+        "type": "array",
+        "items": { "type": "string", "format": "uuid" },
+        "description": "Optional: specific nodes to predict. If omitted, system predicts connected unknown nodes."
+      },
+      "max_iterations": {
+        "type": "integer",
+        "default": 50,
+        "maximum": 200,
+        "description": "Max belief propagation iterations"
+      }
+    },
+    "required": ["query_type", "clamped_nodes"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "predictions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "node_id": { "type": "string", "format": "uuid" },
+            "node_content": { "type": "string" },
+            "predicted_value": { "type": "number" },
+            "confidence": { "type": "number" }
+          }
+        }
+      },
+      "inference_path": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "For bridge queries: the connecting path found"
+      },
+      "convergence_iterations": { "type": "integer" },
+      "overall_confidence": { "type": "number" }
+    }
+  }
+}
+```
+
+**Use Cases**:
+- **Forward**: "I'm calling API endpoint X. What might break?" → Clamp X, predict error nodes
+- **Backward**: "This test failed. Why?" → Clamp failure, predict cause nodes
+- **Bridge**: "How does authentication relate to logging?" → Clamp both, predict connection nodes
+- **Abduction**: "All these 5 files were modified. What task were they part of?" → Clamp files, predict task node
+
+#### Tool: `verify_code_node`
+
+```json
+{
+  "name": "verify_code_node",
+  "description": "FORMAL VERIFICATION: Mechanically verify that a code node's implementation satisfies its specification. Uses SMT solving (Z3-inspired). Returns verified/failed/timeout. Verified nodes get +0.2 coherence boost.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "node_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Node containing code to verify"
+      },
+      "verification_spec": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of what's being verified"
+          },
+          "precondition": {
+            "type": "string",
+            "description": "Formal precondition (e.g., 'x > 0 ∧ y > 0')"
+          },
+          "postcondition": {
+            "type": "string",
+            "description": "Formal postcondition (e.g., 'result = x * y')"
+          },
+          "invariants": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Loop invariants if applicable"
+          }
+        },
+        "required": ["description", "postcondition"]
+      },
+      "timeout_ms": {
+        "type": "integer",
+        "default": 5000,
+        "maximum": 30000,
+        "description": "Max time for SMT solving"
+      }
+    },
+    "required": ["node_id", "verification_spec"]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["verified", "failed", "timeout", "not_applicable"],
+        "description": "Verification result"
+      },
+      "proof_hash": {
+        "type": "string",
+        "description": "If verified: hash of proof for caching"
+      },
+      "counterexample": {
+        "type": "string",
+        "description": "If failed: example inputs that violate the spec"
+      },
+      "coherence_adjustment": {
+        "type": "number",
+        "description": "Adjustment applied to node's coherence score (+0.2 for verified, -0.3 for failed)"
+      }
+    }
+  }
+}
+```
+
+**Use Case**: Agent stores a sorting algorithm → Calls `verify_code_node` with spec "postcondition: sorted(arr)" → Gets "verified" → Node's coherence boosted → Future retrieval prioritizes verified implementations.
+
+---
+
 #### Tool: `get_system_instructions`
 
 ```json

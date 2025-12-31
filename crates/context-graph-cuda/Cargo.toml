@@ -1,0 +1,38 @@
+[package]
+name = "context-graph-cuda"
+version = "0.1.0"
+edition = "2021"
+authors = ["Context Graph Team"]
+description = "CUDA acceleration for Context Graph (RTX 5090 / Blackwell optimized)"
+license = "MIT"
+repository = "https://github.com/contextgraph/contextgraph"
+keywords = ["cuda", "gpu", "neural", "context-graph"]
+
+[dependencies]
+context-graph-core = { path = "../context-graph-core" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = ["stub"]
+stub = []
+cuda = []  # Future: cudarc bindings
+cudnn = []  # Future: cuDNN support
+
+[build-dependencies]
+# Future: cc = "1.0"
+# Future: bindgen = "0.69"

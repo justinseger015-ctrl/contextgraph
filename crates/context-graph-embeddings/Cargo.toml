@@ -1,0 +1,38 @@
+[package]
+name = "context-graph-embeddings"
+version = "0.1.0"
+edition = "2021"
+authors = ["Context Graph Team"]
+description = "Embedding pipeline for Context Graph with local model support"
+license = "MIT"
+repository = "https://github.com/contextgraph/contextgraph"
+keywords = ["embeddings", "ml", "nlp", "context-graph"]
+
+[dependencies]
+context-graph-core = { path = "../context-graph-core" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = "1.0"
+
+# Error handling
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# For stub implementations
+rand = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+default = ["stub"]
+stub = []
+onnx = []  # Future: ONNX Runtime support
+candle = []  # Future: Candle ML support

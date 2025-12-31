@@ -1,21 +1,22 @@
-# Ignore ALL existing directories and files
-# Only .gitignore, docs/, and docs2/ will be tracked
+# Rust build artifacts
+target/
+**/*.rs.bk
 
-# Hidden directories
+# Cargo local config
+.cargo/
+
+# Claude/AI tooling directories and files
 .claude/
 .claude-flow/
 .hive-mind/
 .serena/
 .swarm/
-
-# Project directories (NOT docs/ or docs2/)
-coordination/
-memory/
-
-# Root files
 CLAUDE.md
 claude-flow
-.mcp.json
+
+# Coordination/memory state (ephemeral)
+coordination/
+memory/
 
 # Database files
 *.db
@@ -25,9 +26,19 @@ claude-flow
 *.sqlite-journal
 *.sqlite-wal
 
-# Generated files
+# Generated/temporary files
 claude-flow.config.json
 hive-mind-prompt-*.txt
+.mcp.json
+
+# Backup and copy files
+*_backup*
+*_bak*
+* copy.*
+* copy *
+*.bak
+*.backup
+*.orig
 
 # Node modules (if added later)
 node_modules/
@@ -38,7 +49,25 @@ node_modules/
 *.swp
 *.swo
 *~
+.project
+.settings/
+*.iml
 
 # OS files
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Environment files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# Test coverage
+coverage/
+*.lcov

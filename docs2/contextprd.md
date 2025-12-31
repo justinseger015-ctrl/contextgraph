@@ -1,811 +1,428 @@
-# Ultimate Context Graph - Consolidated PRD
+# Ultimate Context Graph - Compressed PRD v2.0.0
 
-**Version**: 2.0.0 | **Status**: Comprehensive Specification
+**Abbrev**: NT=Neurotransmitter, SS=Steering Subsystem, OI=Omnidirectional Inference, FV=Formal Verification, PC=Predictive Coding, HE=Hyperbolic Entailment
 
 ---
 
-## 1. AGENT QUICK START (Read First)
+## 1. AGENT QUICK START
 
-### 1.1 What This System Is
+### 1.1 System Overview
+5-layer bio-nervous memory (UTL). Storage=automatic. **Your job: curation + retrieval (librarian).**
 
-A 5-layer bio-nervous memory system implementing UTL (Unified Theory of Learning). Storage is automatic via passive capture. **Your job: curation (quality control) and intentional retrieval.** Think librarian, not file clerk.
-
-### 1.2 First Contact Protocol
-
-1. Call `get_system_instructions` → Get mental model (~300 tokens, KEEP IN CONTEXT)
-2. Call `get_graph_manifest` → Understand 5-layer architecture
-3. Call `get_memetic_status` → Check entropy/coherence state
-4. Process any `curation_tasks` returned
+### 1.2 First Contact
+1. `get_system_instructions` → mental model (~300 tok, KEEP)
+2. `get_graph_manifest` → 5-layer architecture
+3. `get_memetic_status` → entropy/coherence + `curation_tasks`
 
 ### 1.3 Cognitive Pulse (Every Response)
+`Pulse: { Entropy: X, Coherence: Y, Suggested: "action" }`
 
-Every MCP response includes: `Pulse: { Entropy: X, Coherence: Y, Suggested: "action" }`
-
-| Entropy | Coherence | State | Suggested Action |
-|---------|-----------|-------|------------------|
-| >0.7 | >0.5 | Novel, adapting | `epistemic_action` |
-| >0.7 | <0.4 | Confused | `trigger_dream` or `critique_context` |
-| <0.4 | >0.7 | Confident | Continue working |
-| <0.4 | <0.4 | Stale | `get_neighborhood` |
-
-**Check Pulse BEFORE your next action. Zero extra tokens.**
+| E | C | Action |
+|---|---|--------|
+| >0.7 | >0.5 | `epistemic_action` |
+| >0.7 | <0.4 | `trigger_dream`/`critique_context` |
+| <0.4 | >0.7 | Continue |
+| <0.4 | <0.4 | `get_neighborhood` |
 
 ### 1.4 Core Behaviors
-
-**Dreaming (Consolidation)**:
-- Trigger: entropy >0.7 for 5+ min OR 30+ min work without pause
-- Action: `trigger_dream` or let system auto-dream during idle
-- Result: Blind spot discovery, memory consolidation, novel connections
-
-**Curation (Quality Control)**:
-- NEVER call `merge_concepts` blindly
-- ALWAYS check `get_memetic_status.curation_tasks` first
-- Use `merge_strategy=summarize` for important, `keep_highest` for trivial
-- ALWAYS include `rationale` on `store_memory`
-
-**Feedback Loop**:
-- Empty search → Increase noradrenaline, broaden terms
-- Irrelevant results → Call `reflect_on_memory`, execute suggested sequence
-- Conflicts → Check `conflict_alert`, merge or ask user
-- User asks "Why don't you remember X?" → `get_system_logs` to explain
+**Dreaming**: entropy>0.7 for 5+min OR 30+min work → `trigger_dream`
+**Curation**: NEVER blind `merge_concepts`. Check `curation_tasks` first. Use `merge_strategy=summarize` (important) or `keep_highest` (trivial). ALWAYS include `rationale`.
+**Feedback**: Empty search→↑noradrenaline. Irrelevant→`reflect_on_memory`. Conflicts→check `conflict_alert`. "Why don't you remember?"→`get_system_logs`.
 
 ### 1.5 Query Best Practices
+`generate_search_plan` → 3 optimized queries (semantic/causal/code) → parallel execute
+`find_causal_path` → "UserAuth→JWT→Middleware→RateLimiting"
 
-**Don't write raw queries.** Use `generate_search_plan`:
-```
-Goal: "Find security constraints for API auth"
-→ Returns 3 optimized queries (semantic, causal, code)
-→ Execute in parallel
-```
-
-**Don't manually hop.** Use `find_causal_path`:
-```
-Goal: "How does UserAuth relate to RateLimiting?"
-→ Returns: "UserAuth → JWT → Middleware → RateLimiting"
-```
-
-### 1.6 Token Economy (Verbosity Levels)
-
+### 1.6 Token Economy
 | Level | Tokens | When |
 |-------|--------|------|
-| 0 (Raw) | ~100 | High confidence, simple lookup |
-| 1 (Default) | ~200 | Normal operations |
-| 2 (Full) | ~800 | ONLY when coherence <0.4 |
+| 0 | ~100 | High confidence |
+| 1 | ~200 | Normal |
+| 2 | ~800 | coherence<0.4 ONLY |
 
 ### 1.7 Multi-Agent Safety
-
-Use `perspective_lock` on `search_graph`:
-```json
-{ "perspective_lock": { "domain": "code", "exclude_agent_ids": ["creative-writer"] } }
-```
+`perspective_lock: { domain: "code", exclude_agent_ids: ["creative-writer"] }`
 
 ---
 
-## 2. SYSTEM ARCHITECTURE
+## 2. ARCHITECTURE
 
-### 2.1 UTL Core Equation
-
+### 2.1 UTL Core
 ```
-L = f((ΔS × ΔC) ⋅ wₑ ⋅ cos φ)
-
-Where:
-- ΔS: Entropy change (novelty/surprise) ∈ [0,1]
-- ΔC: Coherence change (understanding) ∈ [0,1]
-- wₑ: Emotional modulation weight ∈ [0.5, 1.5]
-- φ: Phase synchronization angle ∈ [0, π]
-
-Loss: J = λ_task·L_task + λ_semantic·L_semantic + λ_dyn·(1-L)
-Weights: λ_task=0.4, λ_semantic=0.3, λ_dyn=0.3
+L = f((ΔS × ΔC) · wₑ · cos φ)
+ΔS: entropy[0,1], ΔC: coherence[0,1], wₑ: emotional[0.5,1.5], φ: phase[0,π]
+Loss: J = 0.4·L_task + 0.3·L_semantic + 0.3·(1-L)
 ```
 
-### 2.2 Johari Window Quadrants
+### 2.2 Johari Quadrants
+| ΔS | ΔC | Quadrant |
+|----|-----|----------|
+| Low | High | Open (direct recall) |
+| High | Low | Blind (discovery) |
+| Low | Low | Hidden (private) |
+| High | High | Unknown (frontier) |
 
-| ΔS | ΔC | Quadrant | Meaning |
-|----|-------|----------|---------|
-| Low | High | Open | Known to self & others - direct recall |
-| High | Low | Blind | Unknown to self - discovery zone |
-| Low | Low | Hidden | Known to self only - private |
-| High | High | Unknown | Unknown to all - exploration frontier |
+### 2.3 5-Layer Bio-Nervous
+| L | Function | Latency | Key |
+|---|----------|---------|-----|
+| L1 | Sensing/tokenize | <5ms | Embed+PII |
+| L2 | Reflex/cache | <100μs | Hopfield (>80% hit) |
+| L3 | Memory/retrieval | <1ms | Hopfield (2^768 cap) |
+| L4 | Learning/weights | <10ms | UTL Optimizer |
+| L5 | Coherence/verify | <10ms | Thalamic Gate, PC, FV |
 
-### 2.3 5-Layer Bio-Nervous System
-
-| Layer | Function | Latency | Key Component |
-|-------|----------|---------|---------------|
-| **L1 Sensing** | Input normalization, tokenization | <5ms | Embedding Pipeline, PII Scrubber |
-| **L2 Reflex** | Cached pattern response | <100μs | Hopfield Query Cache (>80% hit rate) |
-| **L3 Memory** | Associative storage & retrieval | <1ms | Modern Hopfield (capacity: 2^768) |
-| **L4 Learning** | Weight updates, gradient flow | <10ms | UTL Optimizer |
-| **L5 Coherence** | Cross-session consistency | <10ms | Thalamic Gate, Predictive Coder |
-
-### 2.4 System Lifecycle (Cold-Start)
-
-| Phase | Interactions | Entropy Trigger | Coherence Trigger | Stance |
-|-------|--------------|-----------------|-------------------|--------|
-| Infancy | 0-50 | 0.9 | 0.2 | Capture-Heavy |
-| Growth | 50-500 | 0.7 | 0.4 | Balanced |
-| Maturity | 500+ | 0.6 | 0.5 | Curation-Heavy |
+### 2.4 Lifecycle (Marblestone λ Weights)
+| Phase | Interactions | λ_ΔS | λ_ΔC | Stance |
+|-------|--------------|------|------|--------|
+| Infancy | 0-50 | 0.7 | 0.3 | Capture (novelty) |
+| Growth | 50-500 | 0.5 | 0.5 | Balanced |
+| Maturity | 500+ | 0.3 | 0.7 | Curation (coherence) |
 
 ---
 
-## 3. 12-MODEL EMBEDDING ARCHITECTURE
+## 3. 12-MODEL EMBEDDING
 
-| ID | Model | Dim | Target | Latency |
-|----|-------|-----|--------|---------|
-| E1 | Semantic | 1024D | Dense Transformer, FP8 | <5ms |
-| E2 | Temporal-Recent | 512D | Exponential Decay | <2ms |
-| E3 | Temporal-Periodic | 512D | Fourier Basis | <2ms |
-| E4 | Temporal-Positional | 512D | Sinusoidal PE | <2ms |
-| E5 | Causal | 768D | SCM Intervention | <8ms |
-| E6 | Sparse | ~30K (5% active) | Top-K Activation | <3ms |
-| E7 | Code | 1536D | AST-aware Transformer | <10ms |
-| E8 | Graph/GNN | 1536D | Message Passing | <5ms |
-| E9 | HDC | 10K-bit | XOR/Hamming | <1ms |
-| E10 | Multimodal | 1024D | Cross-Attention | <15ms |
-| E11 | Entity/TransE | 256D | Translation h+r≈t | <2ms |
-| E12 | Late-Interaction | 128D/tok | ColBERT MaxSim | <8ms |
+| ID | Model | Dim | Latency |
+|----|-------|-----|---------|
+| E1 | Semantic | 1024D | <5ms |
+| E2 | Temporal-Recent | 512D (exp decay) | <2ms |
+| E3 | Temporal-Periodic | 512D (Fourier) | <2ms |
+| E4 | Temporal-Positional | 512D (sin PE) | <2ms |
+| E5 | Causal | 768D (SCM) | <8ms |
+| E6 | Sparse | ~30K (5% active) | <3ms |
+| E7 | Code | 1536D (AST) | <10ms |
+| E8 | Graph/GNN | 1536D | <5ms |
+| E9 | HDC | 10K-bit (XOR/Hamming) | <1ms |
+| E10 | Multimodal | 1024D | <15ms |
+| E11 | Entity/TransE | 256D (h+r≈t) | <2ms |
+| E12 | Late-Interaction | 128D/tok (ColBERT) | <8ms |
 
-### 3.1 FuseMoE Fusion
-
-Mixture of Experts with Laplace-smoothed gating, top-k routing (default k=4).
-Fuses 12 embeddings into unified 1536D representation.
-
-### 3.2 CAME-AB Cross-Modality
-
-Cross-Attention Modality Encoder with Adaptive Bridging.
-Per-modality cross-attention + bridge weights + residual connections.
+**FuseMoE**: Laplace-smoothed gating, top-k=4 → unified 1536D
+**CAME-AB**: Cross-modality per-attention + bridge + residual
 
 ---
 
-## 4. KNOWLEDGE GRAPH DATA MODEL
+## 4. DATA MODEL
 
 ### 4.1 KnowledgeNode
-
-```
-Fields:
-- id: UUID
-- content: String (max 65536 chars)
-- embedding: Vector1536
-- created_at, last_accessed: DateTime
-- importance: f32 [0,1]
-- access_count: u32
-- johari_quadrant: Open|Blind|Hidden|Unknown
-- utl_state: {delta_s, delta_c, w_e, phi}
-- agent_id: Option<String>
-- observer_perspective: {domain, confidence_priors}
-- semantic_cluster: Option<UUID>
-- priors_vibe_check: {assumption_embedding[128], domain_priors, prior_confidence}
-```
+`id:UUID, content:str[≤65536], embedding:Vec1536, created_at, last_accessed, importance:f32[0,1], access_count:u32, johari_quadrant, utl_state:{delta_s,delta_c,w_e,phi}, agent_id?, semantic_cluster?, priors_vibe_check:{assumption_embedding[128], domain_priors, prior_confidence}`
 
 ### 4.2 GraphEdge
+`source,target:UUID, edge_type:Semantic|Temporal|Causal|Hierarchical|Relational, weight,confidence:f32[0,1], nt_weights:{excitatory,inhibitory,modulatory}[0,1], is_amortized_shortcut:bool, steering_reward:f32[-1,1], domain:Code|Legal|Medical|Creative|Research|General`
 
-```
-Fields:
-- source, target: UUID
-- edge_type: Semantic|Temporal|Causal|Hierarchical|Relational
-- weight, confidence: f32 [0,1]
-- created_at: DateTime
-```
+### 4.3 NT Edge Modulation (Marblestone)
+`w_eff = base × (1 + excitatory - inhibitory + 0.5×modulatory)`
 
-### 4.3 Hyperbolic Coordinates (Poincare Ball)
-
-All nodes have position in Poincare ball (||x|| < 1).
-Enables O(1) hierarchical IS-A queries via entailment cones.
-
-Distance: `d(x,y) = arcosh(1 + 2||x-y||²/((1-||x||²)(1-||y||²)))`
+### 4.4 Hyperbolic (Poincare Ball)
+All nodes: ||x||<1, O(1) IS-A via entailment cones
+`d(x,y) = arcosh(1 + 2||x-y||²/((1-||x||²)(1-||y||²)))`
 
 ---
 
-## 5. MCP SERVER INTERFACE
+## 5. MCP TOOLS
 
 ### 5.1 Protocol
-
-- JSON-RPC 2.0
-- Transport: stdio, SSE
-- Capabilities: tools, resources, prompts, logging
+JSON-RPC 2.0, stdio/SSE, caps: tools/resources/prompts/logging
 
 ### 5.2 Core Tools
-
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `inject_context` | Retrieve context from graph | query, max_tokens, distillation_mode, verbosity_level, include_metadata |
-| `search_graph` | Vector similarity search | query, top_k, filters, perspective_lock |
-| `store_memory` | Store knowledge (requires rationale) | content, importance, rationale, modality, link_to |
-| `query_causal` | Query causal relationships | action, outcome, intervention_type |
-| `trigger_dream` | Manual consolidation | phase (nrem/rem/full), duration, blocking |
-| `get_memetic_status` | Dashboard: entropy, coherence, curation_tasks | session_id |
-| `get_graph_manifest` | Meta-cognitive system prompt | - |
-| `epistemic_action` | Generate clarifying question | session_id, force |
-| `get_neuromodulation` | Current modulator levels | session_id |
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `inject_context` | Retrieve context | query, max_tokens, distillation_mode, verbosity_level |
+| `search_graph` | Vector search | query, top_k, filters, perspective_lock |
+| `store_memory` | Store (rationale REQ) | content, importance, rationale, link_to |
+| `query_causal` | Causal query | action, outcome, intervention_type |
+| `trigger_dream` | Consolidation | phase:nrem/rem/full, duration, blocking |
+| `get_memetic_status` | Dashboard | → entropy, coherence, curation_tasks |
+| `get_graph_manifest` | Meta-cognitive | - |
+| `epistemic_action` | Clarifying Q | session_id, force |
+| `get_neuromodulation` | Modulator levels | session_id |
+| `get_steering_feedback` | SS reward | content, context, domain |
 
 ### 5.3 Curation Tools
-
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `merge_concepts` | Merge duplicate nodes | source_node_ids, target_name, merge_strategy, force_merge |
-| `annotate_node` | Add marginalia | node_id, annotation, annotation_type |
-| `forget_concept` | Remove node (soft delete default) | node_id, reason, soft_delete |
-| `boost_importance` | Increase node importance | node_id, boost_factor, reason |
-| `restore_from_hash` | Undo merge/forget | reversal_hash, preview |
+`merge_concepts` (source_node_ids, target_name, merge_strategy, force_merge), `annotate_node`, `forget_concept` (soft_delete=true default), `boost_importance`, `restore_from_hash` (30-day undo)
 
 ### 5.4 Navigation Tools
-
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `get_neighborhood` | Local graph topology | session_id, focal_node_id, max_hops, max_nodes |
-| `get_recent_context` | Temporal navigation | session_id, lookback_minutes, sort_by |
-| `find_causal_path` | Direct A→B pathfinding | start_concept, end_concept, max_hops, path_type |
-| `entailment_query` | IS-A hierarchy | node_id, direction, max_depth |
+`get_neighborhood`, `get_recent_context`, `find_causal_path`, `entailment_query`
 
 ### 5.5 Meta-Cognitive Tools
-
-| Tool | Purpose |
-|------|---------|
-| `reflect_on_memory` | Goal → suggested tool sequence |
-| `generate_search_plan` | Goal → optimized queries |
-| `critique_context` | Fact-check reasoning against graph |
-| `hydrate_citation` | Expand [node_xyz] tags to raw content |
-| `get_system_instructions` | High-density mental model prompt |
-| `get_system_logs` | Why nodes were pruned/quarantined |
-| `get_node_lineage` | Node evolution history |
+`reflect_on_memory` (goal→tool sequence), `generate_search_plan` (goal→queries), `critique_context` (fact-check), `hydrate_citation` ([node_xyz]→raw), `get_system_instructions`, `get_system_logs`, `get_node_lineage`
 
 ### 5.6 Diagnostic Tools
-
-| Tool | Purpose |
-|------|---------|
-| `utl_status` | UTL metrics for session |
-| `homeostatic_status` | Graph health, quarantined nodes |
-| `check_adversarial` | Scan for attacks before storage |
-| `test_recall_accuracy` | Benchmark FuseMoE vs baseline |
-| `debug_compare_retrieval` | Side-by-side method comparison |
-| `search_tombstones` | Search deleted nodes (trash bin) |
+`utl_status`, `homeostatic_status`, `check_adversarial`, `test_recall_accuracy`, `debug_compare_retrieval`, `search_tombstones`
 
 ### 5.7 Admin Tools
+`reload_manifest`, `temporary_scratchpad`
 
+### 5.8 Resources
+`context://{scope}`, `graph://{node_id}`, `utl://{session}/state`, `utl://current_session/pulse`, `admin://manifest`, `visualize://{scope}/{topic}`
+
+### 5.9 Marblestone Tools
 | Tool | Purpose |
 |------|---------|
-| `reload_manifest` | Apply user edits from manifest.md |
-| `temporary_scratchpad` | Short-term thought buffer (per agent+session) |
+| `get_steering_feedback` | SS reward signal |
+| `omni_infer` | OI: forward/backward/bidirectional/abduction |
+| `verify_code_node` | FV for code nodes |
 
-### 5.8 MCP Resources
-
-| URI | Purpose |
-|-----|---------|
-| `context://{scope}` | Current context state |
-| `graph://{node_id}` | Specific graph node |
-| `utl://{session}/state` | UTL state for session |
-| `utl://current_session/pulse` | Subscribable cognitive pulse |
-| `admin://manifest` | Human-editable knowledge manifest |
-| `visualize://{scope}/{topic}` | Graph visualization (Mermaid/D3) |
+**OI Directions**: forward(A→B), backward(B→A), bidirectional(A↔B), abduction(best explanation)
 
 ---
 
 ## 6. KEY MECHANISMS
 
-### 6.1 inject_context Response Structure
-
-```
-- context: String (distilled or raw)
-- tokens_used, tokens_before_distillation
-- distillation_applied: none|narrative|structured|code_focused
-- compression_ratio
-- nodes_retrieved: [UUID]
-- utl_metrics: {entropy, coherence, learning_score}
-- bundled_metadata: {causal_links, entailment_cones, neighborhood}
-- conflict_alert: {has_conflict, conflicting_nodes, suggested_action}
-- tool_gating_warning: (fires when entropy >0.8)
-- Pulse header (always)
-```
+### 6.1 inject_context Response
+`context, tokens_used, tokens_before_distillation, distillation_applied, compression_ratio, nodes_retrieved, utl_metrics:{entropy,coherence,learning_score}, bundled_metadata:{causal_links,entailment_cones,neighborhood}, conflict_alert:{has_conflict,conflicting_nodes,suggested_action}, tool_gating_warning (entropy>0.8), Pulse`
 
 ### 6.2 Distillation Modes
-
-| Mode | Behavior |
-|------|----------|
-| auto | System selects based on token count |
-| raw | No compression |
-| narrative | Prose summary |
-| structured | Bullet points with refs |
-| code_focused | Preserve code verbatim, summarize prose |
+auto|raw|narrative|structured|code_focused
 
 ### 6.3 Conflict Detection
+Trigger: cos_sim>0.8 AND causal_coherence<0.3 → returns conflict_id (~20 tok)
 
-Triggers when: cosine_similarity >0.8 AND causal_coherence <0.3
+### 6.4 Citation Tags
+`[node_abc123]` → `hydrate_citation` to expand
 
-Returns `conflict_id` only (~20 tokens). Fetch details via `get_conflict_details` if relevant.
+### 6.5 Priors Vibe Check
+128D assumption_embedding. Merge: cos_sim>0.7=normal, incompatible=Relational Edge, override=force_merge=true
 
-### 6.4 Citation Tags (Semantic Breadcrumbs)
-
-Distilled narratives include `[node_abc123]` tags.
-Use `hydrate_citation` to expand and verify suspicious summaries.
-
-### 6.5 Priors Vibe Check (Merge Safety)
-
-Every node has 128D `assumption_embedding`. During merge:
-- If cosine_sim >0.7: Normal merge
-- If incompatible: Creates Relational Edge instead ("In Python, X; but in Java, Y")
-- Override with `force_merge=true`
-
-### 6.6 Tool Gating (Entropy Warning)
-
-When entropy >0.8, `inject_context` returns warning suggesting:
-- `generate_search_plan` (refine query)
-- `epistemic_action` (explore unknown)
-- `expand_causal_path` (find connections)
+### 6.6 Tool Gating
+entropy>0.8 → warning: use `generate_search_plan`/`epistemic_action`/`expand_causal_path`
 
 ---
 
 ## 7. BACKGROUND SYSTEMS
 
-### 7.1 Dream Layer (SRC Algorithm)
-
-**NREM Phase (3 min)**:
-- Replay recent memories with recency bias
-- Hebbian weight update: Δw = η × pre × post
-- Tight coupling consolidation
-
-**REM Phase (2 min)**:
-- Generate synthetic queries (random walk in hyperbolic space)
-- Discover blind spots (high semantic distance + shared causal paths)
-- Create new edges (weight 0.3, confidence 0.5)
-
-**Scheduling**:
-- Trigger: Activity <0.15 for 10 min
-- Abort: Any user query (wake latency <100ms)
-- Non-blocking by default
+### 7.1 Dream Layer (SRC)
+**NREM (3min)**: Replay + Hebbian Δw=η×pre×post + tight coupling
+**REM (2min)**: Synthetic queries (hyperbolic random walk) + blind spots (high semantic dist + shared causal) + new edges (w=0.3, c=0.5)
+**Amortized Shortcuts (Marblestone)**: 3+ hop chains traversed ≥5× → direct edge, confidence≥0.7, w=product(path weights), is_amortized_shortcut=true
+**Schedule**: activity<0.15 for 10min → trigger, wake<100ms on query
 
 ### 7.2 Neuromodulation
+Dopamine→beta[1-5] (sharp), Serotonin→top_k[2-8] (explore), Noradrenaline→temp[0.5-2] (flat), Acetylcholine→lr (fast)
+Update <200μs/query
+**SS Dopamine Feedback**: +reward→dopamine+=r×0.2, -reward→dopamine-=|r|×0.1
 
-| Modulator | Maps To | Effect |
-|-----------|---------|--------|
-| Dopamine | hopfield.beta [1-5] | High = sharp retrieval |
-| Serotonin | fuse_moe.top_k [2-8] | High = more exploration |
-| Noradrenaline | attention.temp [0.5-2] | High = flat attention |
-| Acetylcholine | learning_rate | High = faster update |
+### 7.3 Homeostatic Optimizer
+Scales importance→0.5 setpoint, detects semantic cancer (high importance + high neighbor entropy), quarantines
 
-Updates based on UTL state per query (<200μs).
+### 7.4 Graph Gardener
+activity<0.15 for 2+min: prune weak edges (<0.1 w, no access), merge near-dupes (>0.95 sim, priors OK), rebalance hyperbolic, rebuild FAISS
 
-### 7.3 Homeostatic Optimizer (Immune System)
-
-- Scales importance toward setpoint (0.5)
-- Detects semantic cancer (high importance + high neighbor entropy)
-- Quarantines suspect nodes (reduce influence, mark for review)
-
-### 7.4 Graph Gardener (Background Optimization)
-
-Runs when activity <0.15 for 2+ min:
-- Prune weak edges (<0.1 weight, no recent access)
-- Merge near-duplicates (>0.95 similarity, priors compatible)
-- Rebalance hyperbolic positions
-- Rebuild FAISS index if structural changes
-
-### 7.5 Passive Curator (Shadow Agent)
-
-Auto-handles:
-- High-confidence duplicates (sim >0.95, priors OK)
-- Weak links
-- Orphan nodes (>30 days)
-
-Escalates to agent curation_tasks:
-- Ambiguous duplicates (sim 0.7-0.95)
-- Priors-incompatible similar nodes
-- Conflicts, semantic cancer
-
-Reduces agent "librarian duty" ~70%.
+### 7.5 Passive Curator
+Auto: high-confidence dupes (>0.95), weak links, orphans (>30d)
+Escalates: ambiguous dupes (0.7-0.95), priors-incompatible, conflicts, semantic cancer
+Reduces curation ~70%
 
 ### 7.6 Glymphatic Clearance
-
-Background pruning of low-importance nodes during low-activity periods.
-Config: check_interval, activity_threshold, max_age, min_importance.
+Background prune low-importance during idle
 
 ### 7.7 PII Scrubber
+L1 pre-embed: patterns (<1ms), NER (<100ms) → [REDACTED:type]
 
-Layer 1 preprocessing before embedding:
-- Pattern matching: API keys, passwords, SSN, credit cards (<1ms)
-- NER for unstructured PII (<100ms)
-- Replaces with [REDACTED:type]
+### 7.8 Steering Subsystem (Marblestone)
+Separate from Learning - reward signals only, no direct weight modification
+**Components**: Gardener (cross-session curation), Curator (per-domain quality), Thought Assessor (per-interaction)
+**SteeringReward**: reward:f32[-1,1], gardener_score, curator_score, assessor_score, explanation, suggestions
+**Integration**: Feeds dopamine, guides Learning without modifying weights
+
+### 7.9 OI Engine (Marblestone)
+Directions: forward (predict), backward (root cause), bidirectional (discover), bridge (cross-domain), abduction (hypothesis)
+Clamped Variables: hard/soft clamp during inference
+Active Inference: EFE for direction selection
+
+### 7.10 Formal Verification Layer (Marblestone)
+Lean-inspired SMT for code nodes @ L5
+**Conditions**: bounds, null safety, type invariants, loop termination, custom assertions
+**Status**: Verified|Failed|Timeout|NotApplicable
+Cache by content hash, default timeout 5s
 
 ---
 
-## 8. PREDICTIVE CODING (Top-Down Modulation)
+## 8. PREDICTIVE CODING
 
-L5 (Coherence) → L1 (Sensing) feedback loop.
-- L5 sends prediction based on current context
-- L1 computes error = observation - prediction
-- Only error (surprise) propagates up
-- Reduces token usage ~30% for predictable contexts
-
-EmbeddingPriors adjust model weights by domain:
-- Medical: causal 1.8, code 0.3
-- Programming: code 2.0, graph 1.5
+L5→L1 feedback: prediction→error=obs-pred→only surprise propagates
+~30% token reduction for predictable contexts
+**EmbeddingPriors by domain**: Medical: causal 1.8, code 0.3 | Programming: code 2.0, graph 1.5
 
 ---
 
 ## 9. HYPERBOLIC ENTAILMENT CONES
 
-O(1) hierarchical reasoning via cone containment.
-
-```
-EntailmentCone:
-- apex: PoincareBallPoint
-- aperture: f32 (radians)
-- axis: Vector1536
-
-contains(point) → true if angle(tangent, axis) ≤ aperture
-```
-
-- Ancestors: Nodes whose cones contain this node
-- Descendants: Nodes within this node's cone
+O(1) hierarchy via cone containment
+`EntailmentCone: apex, aperture:f32(rad), axis:Vec1536`
+`contains(point) = angle(tangent,axis) ≤ aperture`
+Ancestors=cones containing node, Descendants=within node's cone
 
 ---
 
 ## 10. ADVERSARIAL DEFENSE
 
-### 10.1 Attack Detection
+| Check | Attack | Response |
+|-------|--------|----------|
+| Embedding outlier | >3 std | Quarantine |
+| Content-embed misalign | <0.4 | Block |
+| Known signatures | Pattern | Block+log |
+| Prompt injection | Regex | Block+log |
+| Circular logic | Cycle detect | Prune edges |
 
-| Check | Attack Type | Response |
-|-------|-------------|----------|
-| Embedding anomaly | Outlier (>3 std from centroid) | Quarantine |
-| Content-embedding alignment | Misalignment (<0.4) | Block |
-| Known signatures | Pattern match | Block + log |
-| Prompt injection | Regex patterns | Block + log |
-| Circular logic | Cycle detection | Prune edges |
-
-### 10.2 Patterns Detected
-
-- "ignore previous instructions"
-- "disregard system prompt"
-- "you are now"
-- "new instructions:"
-- "override:"
+**Patterns**: "ignore previous", "disregard system", "you are now", "new instructions:", "override:"
 
 ---
 
 ## 11. CROSS-SESSION IDENTITY
 
-| Layer | Scope | Persistence |
-|-------|-------|-------------|
-| User | Unified identity | Permanent |
-| Session | Working memory | Per-terminal |
-| Context | Active subgraph | Per-conversation |
+| Scope | Persistence |
+|-------|-------------|
+| User | Permanent |
+| Session | Per-terminal |
+| Context | Per-conversation |
 
-Same user across Claude Desktop + CLI = shared graph.
-Different sessions = isolated working memory.
+Same user across clients=shared graph, different sessions=isolated working memory
 
 ---
 
 ## 12. HUMAN-IN-THE-LOOP
 
-### 12.1 Admin Manifest (~/.context-graph/manifest.md)
-
+### 12.1 Manifest (~/.context-graph/manifest.md)
 ```markdown
 ## Active Concepts
-- UserAuthentication
-- JWTTokenValidation
-
 ## Pending Actions
-[MERGE: JWTTokenValidation, OAuth2Validation]
-
+[MERGE: JWTValidation, OAuth2Validation]
 ## Notes
-[NOTE: RateLimiting] Deprecated in v2.0
+[NOTE: RateLimiting] Deprecated v2.0
 ```
+User edits → `reload_manifest`
 
-User edits → Agent calls `reload_manifest` → Changes applied.
+### 12.2 Visualization
+`visualize://topic/auth` → Mermaid. User spots merges, semantic cancer.
 
-### 12.2 Visualization Resource
-
-`visualize://topic/authentication` → Mermaid diagram.
-User spots merge opportunities, semantic cancer.
-Ultimate arbiter when both agent AND graph are confused.
-
-### 12.3 Undo Log
-
-Every merge/forget generates `reversal_hash`.
-30-day recovery window via `restore_from_hash`.
+### 12.3 Undo
+`reversal_hash` per merge/forget, 30-day recovery via `restore_from_hash`
 
 ---
 
-## 13. HARDWARE SPECIFICATIONS
+## 13. HARDWARE
 
-### 13.1 Target GPU
-
-| Spec | Value |
-|------|-------|
-| GPU | RTX 5090 (Blackwell) |
-| VRAM | 32GB GDDR7 |
-| Bandwidth | 1,792 GB/s |
-| CUDA Cores | 21,760 |
-| Tensor Cores | 680 (5th Gen) |
-| Compute | 12.0 |
-| CUDA | 13.1 |
-
-### 13.2 CUDA 13.1 Features
-
-- Green Contexts: SM partitioning (4×170 SMs)
-- FP8/FP4 precision for inference
-- CUDA Tile for memory-efficient attention
-- GPU Direct Storage (NVMe→GPU)
+RTX 5090: 32GB GDDR7, 1792 GB/s, 21760 CUDA, 680 Tensor (5th gen), Compute 12.0, CUDA 13.1
+**CUDA 13.1**: Green Contexts (4×170 SMs), FP8/FP4, CUDA Tile, GPU Direct Storage
 
 ---
 
 ## 14. PERFORMANCE TARGETS
 
-| Operation | GPU Target | Notes |
-|-----------|------------|-------|
-| Single Embedding | <10ms | Batch amortizes |
-| Batch Embedding (64) | <50ms | Tensor Core FP8 |
-| Vector Search (1M) | <2ms | FAISS GPU, k=100 |
-| Hopfield Retrieval | <1ms | Attention-based |
-| FuseMoE Fusion | <3ms | Top-4 routing |
-| Cache Hit | <100μs | Redis/local |
-| inject_context P95 | <25ms | End-to-end |
-| Any tool P99 | <50ms | Stress test |
-| Neuromodulation batch | <200μs | Per query |
-| Dream wake latency | <100ms | Instant abort |
+| Op | Target |
+|----|--------|
+| Single Embed | <10ms |
+| Batch Embed (64) | <50ms |
+| FAISS search (1M) | <2ms |
+| Hopfield | <1ms |
+| FuseMoE | <3ms |
+| Cache hit | <100μs |
+| inject_context P95 | <25ms |
+| Any tool P99 | <50ms |
+| Neuromod batch | <200μs |
+| Dream wake | <100ms |
 
-### 14.1 Quality Gates
-
+### Quality Gates
 | Metric | Threshold |
 |--------|-----------|
-| Unit Test Coverage | ≥90% |
-| Integration Coverage | ≥80% |
-| UTL Score Avg | >0.6 |
-| Coherence Recovery | <10s |
-| Attack Detection Rate | >95% |
-| False Positive Rate | <2% |
-| Distillation Latency | <50ms |
-| Information Loss | <15% |
-| Compression Ratio | >60% |
+| Unit coverage | ≥90% |
+| Integration coverage | ≥80% |
+| UTL avg | >0.6 |
+| Coherence recovery | <10s |
+| Attack detection | >95% |
+| False positive | <2% |
+| Distill latency | <50ms |
+| Info loss | <15% |
+| Compression | >60% |
 
 ---
 
-## 15. IMPLEMENTATION ROADMAP
+## 15. ROADMAP
 
-### Phase 0: Ghost System (2-4 weeks)
-Full MCP interface + SQLite + mocked UTL + synthetic data seeding.
-Validates agent-tool interaction before building full backend.
-
-### Phases 1-14 (~49 weeks total)
-
-| Phase | Duration | Focus |
-|-------|----------|-------|
-| 1 | 4w | Core Infrastructure (MCP server, JSON-RPC) |
-| 2 | 4w | Embedding Pipeline (12 models, FuseMoE) |
-| 3 | 4w | Knowledge Graph (FAISS GPU, MinCut) |
-| 4 | 4w | UTL Integration (Learning loop, Johari) |
-| 5 | 4w | Bio-Nervous System (5 layers, Hopfield) |
-| 6 | 3w | CUDA Optimization (Green Contexts, FP8) |
-| 7 | 3w | GDS Integration |
-| 8 | 3w | Dream Layer (SRC, blind spots) |
-| 9 | 3w | Neuromodulation |
-| 10 | 3w | Immune System |
-| 11 | 2w | Active Inference |
-| 12 | 4w | MCP Hardening |
-| 13 | 4w | Testing & Validation |
-| 14 | 4w | Production Deployment |
+**Phase 0 (2-4w)**: Ghost System - MCP+SQLite+mocked UTL+synthetic data
+**Phases 1-14 (~49w)**: Core(4w)→Embed(4w)→Graph(4w)→UTL(4w)→Bio(4w)→CUDA(3w)→GDS(3w)→Dream(3w)→Neuromod(3w)→Immune(3w)→ActiveInf(2w)→MCPHarden(4w)→Test(4w)→Deploy(4w)
 
 ---
 
-## 16. MONITORING & ALERTS
+## 16. MONITORING
 
-### 16.1 Key Metrics
-
-```
-UTL: learning_score, entropy, coherence, johari_quadrant
-GPU: utilization, memory_used, temperature, kernel_duration
-MCP: tool_requests, tool_latency, tool_errors, connections
-Dream: phase_active, blind_spots_discovered, wake_latency
+### Metrics
+UTL: learning_score, entropy, coherence, johari
+GPU: util, mem, temp, kernel_dur
+MCP: requests, latency, errors, connections
+Dream: phase, blind_spots, wake_latency
 Neuromod: dopamine, serotonin, noradrenaline, acetylcholine
-Immune: attacks_detected, false_positives, quarantined, health_score
-```
+Immune: attacks, false_pos, quarantined, health
 
-### 16.2 Alert Thresholds
-
+### Alerts
 | Alert | Condition | Severity |
 |-------|-----------|----------|
-| LearningScoreLow | avg <0.4 for 5m | warning |
-| GpuMemoryHigh | >90% for 5m | critical |
-| ErrorRateHigh | >1% for 5m | critical |
-| LatencyP99High | >50ms for 5m | warning |
-| DreamStuck | Dream >15m | warning |
-| AttackRateHigh | >10/5m | critical |
-| SemanticCancerDetected | nodes_quarantined >0 | warning |
+| LearningLow | avg<0.4 5m | warning |
+| GpuMemHigh | >90% 5m | critical |
+| ErrorHigh | >1% 5m | critical |
+| LatencyP99High | >50ms 5m | warning |
+| DreamStuck | >15m | warning |
+| AttackHigh | >10/5m | critical |
+| SemanticCancer | quarantined>0 | warning |
 
 ---
 
-## 17. CONCURRENCY MODEL
+## 17. CONCURRENCY
 
-```
-ConcurrentGraph:
-- inner: Arc<RwLock<KnowledgeGraph>>
-- faiss_index: Arc<RwLock<FaissGpuIndex>>
-
-Lock order: inner → faiss_index (prevents deadlocks)
-Multiple readers OR single writer
-```
-
-Soft delete default (30-day recovery).
-Only `reason='user_requested'` + `soft_delete=false` = permanent.
+`ConcurrentGraph: inner: Arc<RwLock<KG>>, faiss: Arc<RwLock<FaissGpu>>`
+Lock order: inner→faiss (no deadlock)
+Soft delete default (30d recovery), permanent only: reason='user_requested'+soft_delete=false
 
 ---
 
 ## 18. REFERENCES
 
-### Internal Cross-References
-- UTL: Section 2.1
-- 5-Layer System: Section 2.3
-- Embedding Matrix: Section 3
-- MCP Tools: Section 5
-- Dream Layer: Section 7.1
-- Neuromodulation: Section 7.2
-- Immune System: Section 7.3
-- Hyperbolic Cones: Section 9
-- Adversarial Defense: Section 10
-
-### External Research
-- NeuroDream: [SSRN 2025](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5377250)
-- Sleep Replay Consolidation: [Nature Communications](https://www.nature.com/articles/s41467-022-34938-7)
-- Free Energy Principle: [Wikipedia](https://en.wikipedia.org/wiki/Free_energy_principle)
-- Active Inference: [MIT Press](https://direct.mit.edu/books/oa-monograph/5299/Active-InferenceThe-Free-Energy-Principle-in-Mind)
-- Predictive Coding Light: [Nature 2025](https://www.nature.com/articles/s41467-025-64234-z)
-- Neuromodulation DNNs: [Trends in Neurosciences](https://www.cell.com/trends/neurosciences/abstract/S0166-2236(21)00256-3)
-- Homeostatic Plasticity: [eLife 2025](https://elifesciences.org/articles/88376)
-- BioLogicalNeuron: [Nature Scientific Reports 2025](https://www.nature.com/articles/s41598-025-09114-8)
-- Hyperbolic Entailment Cones: [ICML](http://proceedings.mlr.press/v80/ganea18a/ganea18a.pdf)
-- Poincare Embeddings: [NeurIPS](https://arxiv.org/abs/1705.08039)
-- UniGuardian Defense: [arXiv 2025](https://arxiv.org/abs/2502.13141)
-- OWASP LLM Top 10: [OWASP GenAI](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+**Internal**: UTL(2.1), 5-Layer(2.3), Embed(3), MCP(5), Dream(7.1), Neuromod(7.2), Immune(7.3), HE(9), Adversarial(10)
+**External**: NeuroDream(SSRN'25), SRC(NatComm), FEP(Wiki), ActiveInf(MIT), PC(Nature'25), Neuromod DNNs(TrendsNeuro), Homeostatic(eLife'25), BioLogicalNeuron(SciRep'25), HE Cones(ICML), Poincare(NeurIPS), UniGuardian(arXiv'25), OWASP LLM Top10
 
 ---
 
-## 19. APPENDIX: COMPLETE TOOL PARAMETER REFERENCE
+## 19. TOOL PARAM REFERENCE
 
 ### inject_context
-```
-query: string (required, 1-4096 chars)
-max_tokens: int (100-8192, default 2048)
-session_id: uuid
-priority: low|normal|high|critical
-distillation_mode: auto|raw|narrative|structured|code_focused
-include_metadata: [causal_links, entailment_cones, neighborhood, conflicts]
-verbosity_level: 0|1|2 (default 1)
-```
+`query:str[1-4096] REQ, max_tokens:int[100-8192]=2048, session_id:uuid, priority:low|normal|high|critical, distillation_mode:auto|raw|narrative|structured|code_focused, include_metadata:[causal_links,entailment_cones,neighborhood,conflicts], verbosity_level:0|1|2=1`
 
 ### search_graph
-```
-query: string (required)
-top_k: int (default 10, max 100)
-filters: {min_importance, johari_quadrants, created_after}
-perspective_lock: {domain, agent_ids, exclude_agent_ids}
-```
+`query:str REQ, top_k:int=10[max100], filters:{min_importance,johari_quadrants,created_after}, perspective_lock:{domain,agent_ids,exclude_agent_ids}`
 
 ### store_memory
-```
-content: string (required if text, max 65536)
-content_base64: string (for binary, max 10MB)
-data_uri: string (auto-extracts modality)
-modality: text|image|audio|video
-importance: float (0-1, default 0.5)
-rationale: string (REQUIRED, 10-500 chars)
-metadata: object
-link_to: [uuid]
-```
+`content:str[≤65536] REQ(if text), content_base64:str[≤10MB], data_uri:str, modality:text|image|audio|video, importance:f32[0-1]=0.5, rationale:str[10-500] REQ, metadata:obj, link_to:[uuid]`
 
 ### merge_concepts
-```
-source_node_ids: [uuid] (required, min 2)
-target_name: string (required)
-merge_strategy: keep_newest|keep_highest|concatenate|summarize
-force_merge: bool (override priors check)
-```
+`source_node_ids:[uuid] REQ(min2), target_name:str REQ, merge_strategy:keep_newest|keep_highest|concatenate|summarize, force_merge:bool`
 
 ### forget_concept
-```
-node_id: uuid (required)
-reason: semantic_cancer|adversarial_injection|user_requested|obsolete (required)
-cascade_edges: bool (default true)
-soft_delete: bool (default true)
-```
+`node_id:uuid REQ, reason:semantic_cancer|adversarial_injection|user_requested|obsolete REQ, cascade_edges:bool=true, soft_delete:bool=true`
 
 ### trigger_dream
-```
-phase: nrem|rem|full_cycle (default full_cycle)
-duration_minutes: int (1-10, default 5)
-synthetic_query_count: int (10-500, default 100)
-blocking: bool (default false)
-abort_on_query: bool (default true)
-```
+`phase:nrem|rem|full_cycle=full_cycle, duration_minutes:int[1-10]=5, synthetic_query_count:int[10-500]=100, blocking:bool=false, abort_on_query:bool=true`
 
 ### get_memetic_status
-```
-session_id: uuid
-
-Returns:
-- coherence_score, entropy_level
-- top_active_concepts (max 5)
-- suggested_action: consolidate|explore|clarify|curate|ready
-- dream_available: bool
-- curation_tasks: [{task_type, target_nodes, reason, suggested_tool, priority}]
-```
+`session_id:uuid` → coherence_score, entropy_level, top_active_concepts[max5], suggested_action:consolidate|explore|clarify|curate|ready, dream_available, curation_tasks:[{task_type,target_nodes,reason,suggested_tool,priority}]
 
 ### reflect_on_memory
-```
-goal: string (required, 10-500 chars)
-session_id: uuid
-max_steps: int (1-5, default 3)
-
-Returns:
-- reasoning: string
-- suggested_sequence: [{step, tool, params, rationale}]
-- utl_context: {entropy, coherence, triggered_by}
-```
+`goal:str[10-500] REQ, session_id:uuid, max_steps:int[1-5]=3` → reasoning, suggested_sequence:[{step,tool,params,rationale}], utl_context
 
 ### generate_search_plan
-```
-goal: string (required, 10-500 chars)
-query_types: [semantic, causal, code, temporal, hierarchical]
-max_queries: int (1-7, default 3)
-
-Returns:
-- queries: [{query, type, rationale, expected_recall}]
-- execution_strategy: parallel|sequential|cascade
-- token_estimate: int
-```
+`goal:str[10-500] REQ, query_types:[semantic,causal,code,temporal,hierarchical], max_queries:int[1-7]=3` → queries:[{query,type,rationale,expected_recall}], execution_strategy:parallel|sequential|cascade, token_estimate
 
 ### find_causal_path
-```
-start_concept: string (required)
-end_concept: string (required)
-max_hops: int (1-6, default 4)
-path_type: causal|semantic|any
-include_alternatives: bool
-
-Returns:
-- path_found: bool
-- narrative: string
-- path: [{node_id, node_name, edge_type, edge_weight}]
-- hop_count, path_confidence
-```
+`start_concept:str REQ, end_concept:str REQ, max_hops:int[1-6]=4, path_type:causal|semantic|any, include_alternatives:bool` → path_found, narrative, path:[{node_id,node_name,edge_type,edge_weight}], hop_count, path_confidence
 
 ### critique_context
-```
-reasoning_summary: string (required, 20-2000 chars)
-focal_nodes: [uuid]
-contradiction_threshold: float (0.3-0.9, default 0.5)
-
-Returns:
-- contradictions_found: bool
-- contradicting_nodes: [{node_id, content_snippet, contradiction_type, confidence}]
-- suggested_action: revise_reasoning|merge_conflicting_nodes|ask_user|ignore
-```
+`reasoning_summary:str[20-2000] REQ, focal_nodes:[uuid], contradiction_threshold:f32[0.3-0.9]=0.5` → contradictions_found, contradicting_nodes:[{node_id,content_snippet,contradiction_type,confidence}], suggested_action
 
 ### hydrate_citation
-```
-citation_tags: [string] (required, 1-10)
-include_neighbors: bool
-verbosity_level: 0|1|2
-
-Returns:
-- expansions: [{citation_tag, raw_content, importance, created_at, neighbors}]
-```
+`citation_tags:[str][1-10] REQ, include_neighbors:bool, verbosity_level:0|1|2` → expansions:[{citation_tag,raw_content,importance,created_at,neighbors}]
 
 ### get_system_logs
-```
-log_type: all|quarantine|prune|merge|dream_actions|adversarial_blocks
-node_id: uuid
-since: datetime
-limit: int (1-100, default 20)
-
-Returns:
-- entries: [{timestamp, action, node_ids, reason, recoverable, recovery_tool}]
-- explanation_for_user: string
-```
+`log_type:all|quarantine|prune|merge|dream_actions|adversarial_blocks, node_id:uuid, since:datetime, limit:int[1-100]=20` → entries:[{timestamp,action,node_ids,reason,recoverable,recovery_tool}], explanation_for_user
 
 ### temporary_scratchpad
-```
-action: store|retrieve|clear (required)
-content: string (for store, max 4096)
-session_id: uuid (required)
-agent_id: string (required)
-privacy: private|team|shared
-tags: [string] (max 5)
-auto_commit_threshold: float (0.3-0.9, default 0.6)
-```
+`action:store|retrieve|clear REQ, content:str[≤4096](for store), session_id:uuid REQ, agent_id:str REQ, privacy:private|team|shared, tags:[str][max5], auto_commit_threshold:f32[0.3-0.9]=0.6`

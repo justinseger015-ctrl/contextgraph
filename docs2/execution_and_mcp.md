@@ -27,6 +27,43 @@ Search → Irrelevant? → Call reflect_on_memory → Get suggested sequence →
 Search → Conflicting? → Check conflict_alert → merge_concepts or ask_user
 ```
 
+**4. Dopamine Feedback Loop (Steering Subsystem → Agent):**
+
+The Steering Subsystem (Gardener + Curator + Thought Assessor) provides reward signals after every storage operation:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    DOPAMINE FEEDBACK LOOP                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Agent stores node → Steering assesses → Dopamine signal returned   │
+│       ↑                                              │              │
+│       │                                              │              │
+│       └──────────────────────────────────────────────┘              │
+│                     Agent adjusts behavior                          │
+│                                                                     │
+│  LIFECYCLE-AWARE REWARDS:                                           │
+│  ┌─────────────┬───────────────────────────────────────────────┐   │
+│  │ Infancy     │ +reward for high ΔS (novelty/exploration)      │   │
+│  │ Growth      │ +reward for balanced ΔS/ΔC (exploration+integ) │   │
+│  │ Maturity    │ +reward for high ΔC (coherence/integration)    │   │
+│  └─────────────┴───────────────────────────────────────────────┘   │
+│                                                                     │
+│  UNIVERSAL PENALTIES:                                               │
+│  - Near-duplicate storage: -0.4                                     │
+│  - Low priors confidence: -0.3                                      │
+│  - Missing rationale (semantic emptiness): -0.5                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**How Agents Should Use Dopamine Signals**:
+1. **Track cumulative reward**: If average dopamine < 0 over 10 stores → adjust strategy
+2. **Read behavioral hints**: System may suggest "increase rationale detail" or "reduce redundancy"
+3. **Lifecycle awareness**: In Infancy, explore broadly. In Maturity, focus on quality over quantity.
+
+This feedback mechanism (inspired by Adam Marblestone's neuroscience work) transforms storage from a "fire and forget" operation into a learning loop where agents discover what the system values.
+
 ### 🛡️ Tool Orchestrator Pattern (Prevents Decision Paralysis)
 - **NEW**: `reflect_on_memory` tool - Provide a goal, get suggested tool sequence
 - **NEW**: `rationale` field required on `store_memory` - Forces intentional storage
@@ -401,6 +438,33 @@ Search → Conflicting? → Check conflict_alert → merge_concepts or ask_user
 ```
 
 **Why Rationale?** Agents "spray and pray" with storage. Forcing rationale creates intentional memory with better retrieval cues.
+
+**Response includes Steering Reward Signal (Marblestone-Inspired)**:
+```json
+{
+  "success": true,
+  "node_id": "uuid-...",
+  "pulse": { "entropy": 0.6, "coherence": 0.7, "suggested": null },
+  "steering_reward": {
+    "dopamine_signal": 0.4,
+    "rationale": "Novel exploration (good for growth phase); Strong priors confidence",
+    "behavioral_hint": "Continue storing at this quality level"
+  }
+}
+```
+
+**Steering Reward Interpretation**:
+| Dopamine Signal | Meaning | Agent Action |
+|-----------------|---------|--------------|
+| > 0.5 | "Good thought" - continue this pattern | Store more like this |
+| 0 to 0.5 | Neutral - acceptable quality | No adjustment needed |
+| -0.5 to 0 | "Weak thought" - could improve | Add more rationale/context |
+| < -0.5 | "Bad thought" - penalized | Avoid this storage pattern |
+
+The Steering Subsystem (Gardener + Curator) evaluates each stored node and returns feedback. This teaches agents:
+1. What quality of storage is rewarded
+2. When they're creating redundant/duplicate nodes (penalized)
+3. Whether their storage aligns with the current lifecycle stage (Infancy rewards novelty, Maturity rewards coherence)
 
 #### Tool: `query_causal`
 

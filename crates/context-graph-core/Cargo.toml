@@ -1,0 +1,22 @@
+[package]
+name = "context-graph-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Core domain types, traits, and business logic for Context Graph"
+
+[dependencies]
+tokio.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+config.workspace = true
+toml.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rand.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

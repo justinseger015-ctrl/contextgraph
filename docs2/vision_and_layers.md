@@ -14,15 +14,22 @@ You have a 5-layer brain-inspired memory system. It handles storage automaticall
 
 ### 🌱 System Lifecycle (Bootstrap/Cold-Start)
 
-The graph starts empty. During early interactions, thresholds are relaxed:
+The graph starts empty. During early interactions, thresholds are relaxed AND **UTL lambda weights shift** to prioritize exploration vs integration:
 
-| Lifecycle | Interactions | UTL Thresholds | Stance |
-|-----------|--------------|----------------|--------|
-| **Infancy** | 0-50 | entropy_trigger: 0.9, coherence_trigger: 0.2 | Capture-Heavy (store everything) |
-| **Growth** | 50-500 | entropy_trigger: 0.7, coherence_trigger: 0.4 | Balanced (default thresholds) |
-| **Maturity** | 500+ | entropy_trigger: 0.6, coherence_trigger: 0.5 | Curation-Heavy (quality focus) |
+| Lifecycle | Interactions | UTL Thresholds | Lambda Weights | Stance |
+|-----------|--------------|----------------|----------------|--------|
+| **Infancy** | 0-50 | entropy_trigger: 0.9, coherence_trigger: 0.2 | λ_ΔS: 0.7, λ_ΔC: 0.3 | Capture-Heavy (reward novelty/surprise) |
+| **Growth** | 50-500 | entropy_trigger: 0.7, coherence_trigger: 0.4 | λ_ΔS: 0.5, λ_ΔC: 0.5 | Balanced (equal exploration/integration) |
+| **Maturity** | 500+ | entropy_trigger: 0.6, coherence_trigger: 0.5 | λ_ΔS: 0.3, λ_ΔC: 0.7 | Curation-Heavy (reward coherence/integration) |
 
-**Why**: Empty graphs return "Low Coherence" → agents spam `epistemic_action` before starting tasks. Seed Mode prevents this loop.
+**Dynamic Lambda Weights (Marblestone-Inspired)**:
+- **Infancy (λ_ΔS = 0.7)**: High reward for ΔS (entropy/surprise). System learns "what questions to ask" and explores broadly.
+- **Growth (λ_ΔS = λ_ΔC = 0.5)**: Balanced. Consolidate what was learned while still exploring.
+- **Maturity (λ_ΔC = 0.7)**: High reward for ΔC (coherence/integration). System optimizes for structured understanding.
+
+This mirrors biological development: infants babble freely (exploration), adults communicate precisely (integration).
+
+**Why**: Empty graphs return "Low Coherence" → agents spam `epistemic_action` before starting tasks. Seed Mode prevents this loop. Lambda weight dynamics ensure the system doesn't get stuck in permanent exploration mode.
 
 ### 📡 Cognitive Pulse (READ EVERY RESPONSE)
 
@@ -529,9 +536,15 @@ pub struct GraphEdge {
     pub source: Uuid,
     pub target: Uuid,
     pub edge_type: EdgeType,
-    pub weight: f32,              // [0, 1]
+    pub weight: f32,              // [0, 1] base weight
     pub confidence: f32,          // [0, 1]
     pub created_at: DateTime<Utc>,
+    /// NEW: Molecularly-annotated neurotransmitter weights
+    /// Domain-specific modulation of edge strength (Marblestone-inspired)
+    pub neurotransmitter: Option<NeurotransmitterWeights>,
+    /// NEW: Whether this edge was created by Dream Layer amortization
+    /// (shortcut from multi-hop causal path discovery)
+    pub is_amortized_shortcut: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -540,6 +553,56 @@ pub enum EdgeType {
     Temporal,    // Time-based connection
     Causal,      // Cause-effect relationship
     Hierarchical,// Parent-child structure
+    Relational,  // Custom relationship (from merge/priors incompatibility)
+}
+
+/// Molecularly-Annotated Edge Weights (Marblestone-Inspired)
+/// Domain-specific "neurotransmitter" modulation of edge strength
+/// Ref: Connectomics research on molecular edge annotations
+#[derive(Clone, Debug, Default)]
+pub struct NeurotransmitterWeights {
+    /// Excitatory weight: strengthens connection in this domain
+    /// Higher = "this edge is more relevant for this domain"
+    pub excitatory: f32,  // [0, 1]
+
+    /// Inhibitory weight: weakens connection in this domain
+    /// Higher = "this edge should be deprioritized for this domain"
+    pub inhibitory: f32,  // [0, 1]
+
+    /// Domain this modulation applies to
+    pub domain: Domain,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum Domain {
+    #[default]
+    General,     // No domain-specific modulation
+    Code,        // Programming/software - high excitatory for technical edges
+    Legal,       // Legal/compliance - high inhibitory for speculative edges
+    Medical,     // Healthcare - high inhibitory for unverified claims
+    Creative,    // Creative writing - high excitatory for metaphorical edges
+    Research,    // Scientific - balanced, prefers cited sources
+}
+
+impl NeurotransmitterWeights {
+    /// Compute effective edge weight with domain modulation
+    /// net_weight = base_weight * (1 + excitatory - inhibitory)
+    pub fn modulate(&self, base_weight: f32) -> f32 {
+        let modulation = 1.0 + self.excitatory - self.inhibitory;
+        (base_weight * modulation).clamp(0.0, 1.0)
+    }
+
+    /// Domain-specific presets
+    pub fn for_domain(domain: Domain) -> Self {
+        match domain {
+            Domain::Code => Self { excitatory: 0.3, inhibitory: 0.0, domain },
+            Domain::Legal => Self { excitatory: 0.0, inhibitory: 0.4, domain },
+            Domain::Medical => Self { excitatory: 0.0, inhibitory: 0.5, domain },
+            Domain::Creative => Self { excitatory: 0.5, inhibitory: 0.0, domain },
+            Domain::Research => Self { excitatory: 0.2, inhibitory: 0.1, domain },
+            Domain::General => Self::default(),
+        }
+    }
 }
 
 /// UTL State snapshot
@@ -1352,6 +1415,111 @@ impl NeighborhoodBrowser {
 - Optimizes graph structure for retrieval speed
 - Configurable via `gardener_interval` and `gardener_aggressiveness`
 - See [technical_engine.md#graph-gardener]
+
+### 🧠 NEW: Steering Subsystem vs Learning Subsystem (Marblestone Model)
+
+> How does the system evaluate "good" vs "bad" thoughts without explicit supervision?
+
+**Architecture**: Inspired by Adam Marblestone's neuroscience model of brain function:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     STEERING SUBSYSTEM                          │
+│        (Graph Gardener + Passive Curator + Thought Assessor)    │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │  Gardener    │  │   Curator    │  │   Thought Assessor   │  │
+│  │  (Pruning)   │  │  (Merging)   │  │  (Reward Signals)    │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│           │               │                    │                │
+│           └───────────────┴────────────────────┘                │
+│                           │                                     │
+│                    ┌──────▼──────┐                              │
+│                    │  Dopamine   │  ← Reward for "good" nodes   │
+│                    │  Feedback   │  ← Punishment for drift      │
+│                    └──────┬──────┘                              │
+└───────────────────────────┼─────────────────────────────────────┘
+                            │
+                     ┌──────▼──────┐
+                     │   AGENT     │
+                     │  (Learning  │  ← Learns what to store/retrieve
+                     │  Subsystem) │    based on Steering feedback
+                     └─────────────┘
+```
+
+**The Split**:
+- **Learning Subsystem (Agent)**: Generates thoughts, stores nodes, queries graph. Optimizes for task completion.
+- **Steering Subsystem (Gardener + Curator)**: Evaluates thought quality. Provides reward/punishment signals back to Agent.
+
+**Reward Signals (Dopamine Feedback)**:
+
+```rust
+/// Steering Subsystem sends reward signals to Agent after each operation
+pub struct SteeringReward {
+    /// Dopamine-like reward signal [-1.0, 1.0]
+    /// Positive = "good thought, store more like this"
+    /// Negative = "bad thought, avoid this pattern"
+    pub dopamine_signal: f32,
+
+    /// Explanation for the reward (helps agent learn)
+    pub rationale: String,
+
+    /// Suggested behavioral adjustment
+    pub behavioral_hint: Option<String>,
+}
+
+impl SteeringSubsystem {
+    /// Assess a stored node and return reward signal
+    pub fn assess_node(&self, node: &KnowledgeNode, lifecycle: &SystemLifeCycle) -> SteeringReward {
+        let mut reward = 0.0;
+        let mut rationale_parts = vec![];
+
+        // Reward based on lifecycle-appropriate behavior
+        match lifecycle.stage {
+            LifecycleStage::Infancy => {
+                // In infancy, reward high ΔS (exploration)
+                if node.utl_state.delta_s > 0.6 {
+                    reward += 0.5;
+                    rationale_parts.push("Novel exploration (good for infancy)");
+                }
+            }
+            LifecycleStage::Maturity => {
+                // In maturity, reward high ΔC (integration)
+                if node.utl_state.delta_c > 0.6 {
+                    reward += 0.5;
+                    rationale_parts.push("Strong coherence (good for maturity)");
+                }
+            }
+            _ => {} // Growth: balanced
+        }
+
+        // Penalize memetic drift (priors incompatibility)
+        if let Some(ref vibe) = node.priors_vibe_check {
+            if vibe.prior_confidence < 0.5 {
+                reward -= 0.3;
+                rationale_parts.push("Low confidence priors (memetic drift risk)");
+            }
+        }
+
+        // Penalize redundancy (near-duplicates waste storage)
+        if self.has_near_duplicate(node) {
+            reward -= 0.4;
+            rationale_parts.push("Near-duplicate detected (redundant)");
+        }
+
+        SteeringReward {
+            dopamine_signal: reward.clamp(-1.0, 1.0),
+            rationale: rationale_parts.join("; "),
+            behavioral_hint: self.generate_hint(reward),
+        }
+    }
+}
+```
+
+**Why This Matters**: Without a Steering Subsystem, agents store everything indiscriminately. The Dopamine feedback loop teaches agents:
+1. **What to store** (novel, high-quality, non-redundant)
+2. **What to retrieve** (contextually relevant, high coherence)
+3. **When to dream** (consolidate after exploration burst)
 
 ### ✅ NEW: Synthetic Data Seeding (Cold-Start Bootstrap)
 > How does an empty graph become useful?

@@ -1465,6 +1465,8 @@ impl SRCAlgorithm {
                         weight: 0.3,  // Low initial weight
                         confidence: 0.5,
                         created_at: Utc::now(),
+                        neurotransmitter: None,
+                        is_amortized_shortcut: false,
                     });
                     discoveries.push(DiscoveredConnection { node_a, node_b });
                 }
@@ -1473,6 +1475,69 @@ impl SRCAlgorithm {
 
         discoveries
     }
+
+    /// NEW: Amortized Inference Phase (Marblestone-Inspired)
+    /// When Dream Layer finds multi-hop causal paths (3+ hops), create direct
+    /// "shortcut" edges so fast retrieval can find them instantly.
+    /// This is neural "amortization" - precomputing inference results.
+    pub fn amortized_shortcut_creation(
+        &self,
+        graph: &mut KnowledgeGraph,
+        hop_threshold: usize,  // Default: 3 hops
+    ) -> Vec<AmortizedShortcut> {
+        let mut shortcuts = Vec::new();
+
+        // Find all frequently-traversed multi-hop causal paths
+        let causal_paths = graph.find_frequent_causal_paths(hop_threshold);
+
+        for path in causal_paths {
+            let start = path.nodes.first().unwrap();
+            let end = path.nodes.last().unwrap();
+
+            // Don't create shortcut if direct edge already exists
+            if graph.has_edge(*start, *end) {
+                continue;
+            }
+
+            // Compute shortcut weight as product of path weights (dampened)
+            let path_weight: f32 = path.edges.iter()
+                .map(|e| e.weight)
+                .product();
+            let shortcut_weight = (path_weight * 1.5).min(0.9);  // Boost but cap
+
+            // Create the amortized shortcut edge
+            let shortcut_edge = GraphEdge {
+                source: *start,
+                target: *end,
+                edge_type: EdgeType::Causal,  // Preserve causal semantics
+                weight: shortcut_weight,
+                confidence: 0.7,  // Lower confidence than explicit edges
+                created_at: Utc::now(),
+                neurotransmitter: None,
+                is_amortized_shortcut: true,  // Mark as amortized
+            };
+
+            graph.add_edge(shortcut_edge);
+            shortcuts.push(AmortizedShortcut {
+                start: *start,
+                end: *end,
+                original_path_length: path.nodes.len(),
+                original_path_weight: path_weight,
+                shortcut_weight,
+            });
+        }
+
+        shortcuts
+    }
+}
+
+#[derive(Debug)]
+pub struct AmortizedShortcut {
+    pub start: Uuid,
+    pub end: Uuid,
+    pub original_path_length: usize,
+    pub original_path_weight: f32,
+    pub shortcut_weight: f32,
 }
 
 #[derive(Debug)]
@@ -1485,18 +1550,276 @@ pub struct DiscoveredConnection {
 ### 8.2 Phase Timing
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  DREAM CYCLE                    │
-├──────────────────┬──────────────────────────────┤
-│   NREM (3 min)   │        REM (2 min)           │
-│                  │                              │
-│ • Replay recent  │ • Generate synthetic queries │
-│ • Hebbian update │ • Explore semantic space     │
-│ • Tight coupling │ • Find blind spots           │
-│ • Consolidate    │ • Create new edges           │
-└──────────────────┴──────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                         DREAM CYCLE (v2.0)                          │
+├──────────────────┬──────────────────────┬───────────────────────────┤
+│   NREM (3 min)   │     REM (2 min)      │   AMORTIZE (1 min)        │
+│                  │                      │                           │
+│ • Replay recent  │ • Synthetic queries  │ • Find 3+ hop paths       │
+│ • Hebbian update │ • Explore space      │ • Create shortcut edges   │
+│ • Tight coupling │ • Find blind spots   │ • Mark is_amortized=true  │
+│ • Consolidate    │ • Create new edges   │ • Precompute inference    │
+└──────────────────┴──────────────────────┴───────────────────────────┘
 Trigger: Activity < 15% for 10 minutes
 Abort: Any user query (instant wake)
+
+Amortization Benefits:
+- 4-hop causal path (A→B→C→D) becomes direct A→D edge
+- Fast retrieval can find previously "hidden" connections
+- Reduces token cost of multi-hop reasoning by agent
+```
+
+### 8.3 Omnidirectional Inference Engine (Marblestone-Inspired)
+
+**Problem**: Traditional retrieval is unidirectional: query → results. But agents often need bidirectional reasoning: "Given X and Y, what connects them?" or "Given Z, what could have caused it?"
+
+**Solution**: Omnidirectional inference with "clamped variables" — agent specifies known variables, system predicts unknowns by sampling the graph.
+
+```rust
+/// Omnidirectional Inference Engine
+/// Agent provides "clamped" (known) variables, system predicts unknowns
+/// Ref: Marblestone on "predicting any variable from any other"
+pub struct OmniInferenceEngine {
+    /// Maximum iterations for belief propagation
+    pub max_iterations: usize,
+    /// Convergence threshold
+    pub convergence_threshold: f32,
+}
+
+impl OmniInferenceEngine {
+    /// Predict unknown variables given clamped (known) ones
+    /// clamped_vars: Variables with known values (node IDs + values)
+    /// query_vars: Variables to predict (node IDs)
+    pub fn infer(
+        &self,
+        graph: &KnowledgeGraph,
+        clamped_vars: &[(Uuid, ClampedValue)],
+        query_vars: &[Uuid],
+    ) -> InferenceResult {
+        // Initialize beliefs for all query variables
+        let mut beliefs: HashMap<Uuid, BeliefDistribution> = query_vars
+            .iter()
+            .map(|id| (*id, BeliefDistribution::uniform()))
+            .collect();
+
+        // Loopy belief propagation with clamped evidence
+        for iteration in 0..self.max_iterations {
+            let mut max_change = 0.0_f32;
+
+            for query_var in query_vars {
+                let neighbors = graph.get_neighbors(*query_var);
+                let mut messages = Vec::new();
+
+                // Collect messages from neighbors
+                for neighbor in &neighbors {
+                    let message = if let Some((_, value)) = clamped_vars.iter()
+                        .find(|(id, _)| id == neighbor)
+                    {
+                        // Neighbor is clamped - send deterministic message
+                        Message::from_clamped(value)
+                    } else {
+                        // Neighbor is unclamped - send belief message
+                        let edge = graph.get_edge(*neighbor, *query_var).unwrap();
+                        Message::from_belief(&beliefs[neighbor], edge.weight)
+                    };
+                    messages.push(message);
+                }
+
+                // Update belief by combining all messages
+                let new_belief = BeliefDistribution::combine(&messages);
+                let change = beliefs[query_var].kl_divergence(&new_belief);
+                max_change = max_change.max(change);
+                beliefs.insert(*query_var, new_belief);
+            }
+
+            // Check convergence
+            if max_change < self.convergence_threshold {
+                break;
+            }
+        }
+
+        InferenceResult {
+            predictions: beliefs.into_iter()
+                .map(|(id, belief)| (id, belief.most_likely()))
+                .collect(),
+            confidence: beliefs.values().map(|b| b.entropy()).sum::<f32>()
+                / query_vars.len() as f32,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ClampedValue {
+    /// Binary: this node is relevant/not relevant
+    Binary(bool),
+    /// Scalar: this node has a specific activation level
+    Scalar(f32),
+    /// Semantic: this node's embedding should match this vector
+    Semantic(Vector1536),
+}
+
+/// Inference query types enabled by omnidirectional engine
+pub enum OmniQuery {
+    /// Forward: "What follows from X?" (clamp cause, predict effects)
+    Forward { cause: Uuid },
+    /// Backward: "What caused Y?" (clamp effect, predict causes)
+    Backward { effect: Uuid },
+    /// Bridge: "What connects X and Y?" (clamp both, predict path)
+    Bridge { start: Uuid, end: Uuid },
+    /// Abduction: "What explains all of these?" (clamp observations, predict latent)
+    Abduction { observations: Vec<Uuid> },
+}
+```
+
+**Use Cases**:
+- **Forward inference**: "Given this API call, what could break?" → Clamp API node, predict error nodes
+- **Backward inference**: "This test failed - why?" → Clamp failure node, predict cause nodes
+- **Bridge inference**: "How does auth relate to logging?" → Clamp both, predict connector nodes
+- **Abduction**: "These 5 nodes were all accessed - what task?" → Predict the latent goal
+
+---
+
+### 8.4 Formal Verification Layer (Lean-Inspired)
+
+**Problem**: For code-heavy domains, semantic similarity isn't enough. We need mechanical proof that implementations satisfy specifications.
+
+**Solution**: Integrate Lean-inspired formal verification into the Coherence check (L5). When storing code nodes, optionally include verification conditions.
+
+```rust
+/// Formal Verification Integration for Coherence Layer (L5)
+/// Inspired by Lean proof assistant for mechanical verification
+/// Ref: Lean Prover https://leanprover.github.io/
+pub struct FormalVerificationLayer {
+    /// Enable Z3-style SMT solving for verification conditions
+    pub enable_smt: bool,
+    /// Maximum time for verification attempts (ms)
+    pub verification_timeout_ms: u64,
+    /// Proof obligation cache (avoid re-verifying unchanged code)
+    pub proof_cache: ProofCache,
+}
+
+/// Verification condition attached to code nodes
+#[derive(Clone, Debug)]
+pub struct VerificationCondition {
+    /// Natural language description of what's being verified
+    pub description: String,
+    /// Formal precondition (in simplified Lean-like syntax)
+    pub precondition: Option<String>,
+    /// Formal postcondition
+    pub postcondition: Option<String>,
+    /// Loop invariants (if applicable)
+    pub invariants: Vec<String>,
+    /// Verification status
+    pub status: VerificationStatus,
+}
+
+#[derive(Clone, Debug)]
+pub enum VerificationStatus {
+    /// Not yet verified
+    Pending,
+    /// Verified successfully (with proof hash)
+    Verified { proof_hash: String },
+    /// Verification failed (with counterexample if available)
+    Failed { counterexample: Option<String> },
+    /// Verification timed out
+    Timeout,
+    /// Verification not applicable (non-code node)
+    NotApplicable,
+}
+
+impl FormalVerificationLayer {
+    /// Verify a code node's implementation matches its specification
+    pub fn verify_node(
+        &mut self,
+        node: &KnowledgeNode,
+        spec: &VerificationCondition,
+    ) -> VerificationResult {
+        // Check cache first
+        if let Some(cached) = self.proof_cache.get(&node.id, spec) {
+            return cached.clone();
+        }
+
+        // Extract code content
+        let code = match &node.content {
+            content if content.contains("```") => self.extract_code_block(content),
+            _ => return VerificationResult::not_applicable(),
+        };
+
+        // Generate verification conditions from spec
+        let vcs = self.generate_vcs(&code, spec);
+
+        // Attempt SMT solving with timeout
+        let result = timeout(
+            Duration::from_millis(self.verification_timeout_ms),
+            async { self.smt_solve(&vcs) }
+        ).await;
+
+        let verification_result = match result {
+            Ok(SolverResult::Sat) => VerificationResult::verified(vcs.hash()),
+            Ok(SolverResult::Unsat(cex)) => VerificationResult::failed(Some(cex)),
+            Err(_) => VerificationResult::timeout(),
+        };
+
+        // Cache result
+        self.proof_cache.insert(&node.id, spec, &verification_result);
+        verification_result
+    }
+
+    /// Coherence check (L5) integration
+    /// Called during store_memory for code nodes with verification specs
+    pub fn coherence_verified_store(
+        &mut self,
+        node: &KnowledgeNode,
+        graph: &mut KnowledgeGraph,
+    ) -> CoherenceVerifiedResult {
+        // Check if node has verification conditions in metadata
+        let spec = node.metadata.get("verification_spec")
+            .and_then(|v| serde_json::from_value::<VerificationCondition>(v.clone()).ok());
+
+        if let Some(spec) = spec {
+            let verification = self.verify_node(node, &spec);
+
+            // Store verification status with the node
+            let mut annotated_node = node.clone();
+            annotated_node.metadata.insert(
+                "verification_result".to_string(),
+                serde_json::to_value(&verification).unwrap()
+            );
+
+            // Adjust coherence score based on verification
+            let coherence_boost = match &verification.status {
+                VerificationStatus::Verified { .. } => 0.2,  // Boost verified code
+                VerificationStatus::Failed { .. } => -0.3,  // Penalize failed verification
+                _ => 0.0,
+            };
+            annotated_node.utl_state.delta_c += coherence_boost;
+
+            graph.store(annotated_node);
+            CoherenceVerifiedResult::Verified { verification }
+        } else {
+            // No spec - store without verification
+            graph.store(node.clone());
+            CoherenceVerifiedResult::NoSpec
+        }
+    }
+}
+```
+
+**Verification Workflow**:
+1. Agent stores code node with `verification_spec` in metadata
+2. Coherence layer (L5) triggers formal verification
+3. SMT solver attempts to prove postcondition given precondition
+4. Result (verified/failed/timeout) stored with node
+5. Verified nodes get coherence boost; failed nodes get penalized
+
+**Example Verification Spec**:
+```json
+{
+  "description": "Binary search returns correct index",
+  "precondition": "sorted(arr) ∧ 0 ≤ low ≤ high < len(arr)",
+  "postcondition": "result = -1 ∨ arr[result] = target",
+  "invariants": ["low ≤ high + 1", "target not in arr[..low]", "target not in arr[high+1..]"]
+}
 ```
 
 ---
