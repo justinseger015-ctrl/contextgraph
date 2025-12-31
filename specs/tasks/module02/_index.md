@@ -7,7 +7,7 @@
 - **Foundation:** 12 tasks
 - **Logic:** 6 tasks
 - **Surface:** 10 tasks
-- **Current Progress:** 12/28 (43%) - Tasks 001-012 VERIFIED (Foundation Layer COMPLETE)
+- **Current Progress:** 13/28 (46%) - Tasks 001-013 VERIFIED (Foundation Layer + Logic Start)
 - **Version:** 1.0.0
 - **Created:** 2025-12-31
 - **Dependencies:** module-01-ghost-system
@@ -111,9 +111,9 @@ graph TD
 | 10 | TASK-M02-010 | Define GraphEdge Struct (13-field Marblestone) | foundation | 007, 008, 009 | 2.0 | ✅ Complete |
 | 11 | TASK-M02-011 | Implement GraphEdge Methods | foundation | 010 | 2.5 | ✅ Complete |
 | 12 | TASK-M02-012 | Implement Johari Transition Logic | foundation | 001 | 2.0 | ✅ Complete |
-| 13 | TASK-M02-013 | Create Storage Crate Structure | logic | 006 | 1.5 | ⏳ Ready |
-| 14 | TASK-M02-014 | Implement Bincode Serialization | logic | 013 | 2.5 | ⛔ Blocked |
-| 15 | TASK-M02-015 | Define Column Family Descriptors | logic | 013 | 3.0 | ⛔ Blocked |
+| 13 | TASK-M02-013 | Create Storage Crate Structure | logic | 006 | 1.5 | ✅ Complete |
+| 14 | TASK-M02-014 | Implement Bincode Serialization | logic | 013 | 2.5 | ⏳ Ready |
+| 15 | TASK-M02-015 | Define Column Family Descriptors | logic | 013 | 3.0 | ⏳ Ready |
 | 16 | TASK-M02-016 | Implement RocksDB Backend Open/Close | logic | 014, 015 | 3.0 | ⛔ Blocked |
 | 17 | TASK-M02-017 | Implement Node CRUD Operations | logic | 014, 016 | 4.0 | ⛔ Blocked |
 | 18 | TASK-M02-018 | Implement Edge CRUD Operations | logic | 011, 017 | 3.0 | ⛔ Blocked |
@@ -123,7 +123,7 @@ graph TD
 | 22 | TASK-M02-022 | Implement CognitivePulse Methods | surface | 021 | 3.0 | ⛔ Blocked |
 | 23 | TASK-M02-023 | Implement Secondary Index Operations | surface | 017 | 3.0 | ⛔ Blocked |
 | 24 | TASK-M02-024 | Implement Embedding Storage Operations | surface | 014, 016 | 2.0 | ⛔ Blocked |
-| 25 | TASK-M02-025 | Implement StorageError Enum | surface | 013 | 1.5 | ⛔ Blocked |
+| 25 | TASK-M02-025 | Implement StorageError Enum | surface | 013 | 1.5 | ⏳ Ready |
 | 26 | TASK-M02-026 | Implement Memex Trait Abstraction | surface | 017, 018, 023 | 2.0 | ⛔ Blocked |
 | 27 | TASK-M02-027 | Create Module Integration Tests | surface | 017, 018, 022, 023 | 4.0 | ⛔ Blocked |
 | 28 | TASK-M02-028 | Document Public API with Examples | surface | 027 | 3.0 | ⛔ Blocked |
@@ -151,9 +151,9 @@ graph TD
 | TASK-M02-010 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 32 graph_edge tests pass, 0 clippy warnings, 13 fields confirmed |
 | TASK-M02-011 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 78/78 graph_edge tests pass, 0 clippy warnings, 9 methods + Default impl |
 | TASK-M02-012 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: 27+ transition tests pass, 0 clippy warnings, all transition rules match spec |
-| TASK-M02-013 | — | — | — | Depends on 006 |
-| TASK-M02-014 | — | — | — | Depends on 013 |
-| TASK-M02-015 | — | — | — | Depends on 013 |
+| TASK-M02-013 | 2025-12-31 | 2025-12-31 | 2025-12-31 | Sherlock-Holmes verified: build succeeded, 0 clippy warnings, all re-exports resolve |
+| TASK-M02-014 | — | — | — | **READY** (013 complete) - Bincode Serialization |
+| TASK-M02-015 | — | — | — | **READY** (013 complete) - Column Family Descriptors |
 | TASK-M02-016 | — | — | — | Depends on 014, 015 |
 | TASK-M02-017 | — | — | — | Depends on 014, 016 |
 | TASK-M02-018 | — | — | — | Depends on 011, 017 |
@@ -163,7 +163,7 @@ graph TD
 | TASK-M02-022 | — | — | — | Depends on 021 |
 | TASK-M02-023 | — | — | — | Depends on 017 |
 | TASK-M02-024 | — | — | — | Depends on 014, 016 |
-| TASK-M02-025 | — | — | — | Depends on 013 |
+| TASK-M02-025 | — | — | — | **READY** (013 complete) - StorageError Enum |
 | TASK-M02-026 | — | — | — | Depends on 017, 018, 023 |
 | TASK-M02-027 | — | — | — | Depends on 017, 018, 022, 023 |
 | TASK-M02-028 | — | — | — | Depends on 027 |
