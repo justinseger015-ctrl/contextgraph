@@ -194,8 +194,14 @@ mod tests {
 
         // Get individual components
         let surprise = processor.compute_surprise(input, &context).await.unwrap();
-        let coherence_change = processor.compute_coherence_change(input, &context).await.unwrap();
-        let emotional_weight = processor.compute_emotional_weight(input, &context).await.unwrap();
+        let coherence_change = processor
+            .compute_coherence_change(input, &context)
+            .await
+            .unwrap();
+        let emotional_weight = processor
+            .compute_emotional_weight(input, &context)
+            .await
+            .unwrap();
         let alignment = processor.compute_alignment(input, &context).await.unwrap();
 
         // Compute expected learning score using the formula
@@ -203,13 +209,21 @@ mod tests {
         let expected = expected_raw.clamp(0.0, 1.0);
 
         // Get actual learning score
-        let actual = processor.compute_learning_score(input, &context).await.unwrap();
+        let actual = processor
+            .compute_learning_score(input, &context)
+            .await
+            .unwrap();
 
         // Verify formula is correctly implemented
         assert!(
             (actual - expected).abs() < 0.0001,
             "UTL formula mismatch: expected {} = ({} * {}) * {} * {}, got {}",
-            expected, surprise, coherence_change, emotional_weight, alignment, actual
+            expected,
+            surprise,
+            coherence_change,
+            emotional_weight,
+            alignment,
+            actual
         );
     }
 
@@ -219,12 +233,21 @@ mod tests {
         let processor = StubUtlProcessor::new();
         let context = UtlContext::default();
 
-        for input in ["a", "test", "Neural Network", "complex input string with many words"] {
-            let score = processor.compute_learning_score(input, &context).await.unwrap();
+        for input in [
+            "a",
+            "test",
+            "Neural Network",
+            "complex input string with many words",
+        ] {
+            let score = processor
+                .compute_learning_score(input, &context)
+                .await
+                .unwrap();
             assert!(
                 score >= 0.0 && score <= 1.0,
                 "Learning score {} for '{}' must be in [0.0, 1.0]",
-                score, input
+                score,
+                input
             );
         }
     }
@@ -240,18 +263,33 @@ mod tests {
         let surprise1 = processor.compute_surprise(input, &context).await.unwrap();
         let surprise2 = processor.compute_surprise(input, &context).await.unwrap();
 
-        let coherence1 = processor.compute_coherence_change(input, &context).await.unwrap();
-        let coherence2 = processor.compute_coherence_change(input, &context).await.unwrap();
+        let coherence1 = processor
+            .compute_coherence_change(input, &context)
+            .await
+            .unwrap();
+        let coherence2 = processor
+            .compute_coherence_change(input, &context)
+            .await
+            .unwrap();
 
-        let weight1 = processor.compute_emotional_weight(input, &context).await.unwrap();
-        let weight2 = processor.compute_emotional_weight(input, &context).await.unwrap();
+        let weight1 = processor
+            .compute_emotional_weight(input, &context)
+            .await
+            .unwrap();
+        let weight2 = processor
+            .compute_emotional_weight(input, &context)
+            .await
+            .unwrap();
 
         let align1 = processor.compute_alignment(input, &context).await.unwrap();
         let align2 = processor.compute_alignment(input, &context).await.unwrap();
 
         // All must match
         assert_eq!(surprise1, surprise2, "Surprise must be deterministic");
-        assert_eq!(coherence1, coherence2, "Coherence change must be deterministic");
+        assert_eq!(
+            coherence1, coherence2,
+            "Coherence change must be deterministic"
+        );
         assert_eq!(weight1, weight2, "Emotional weight must be deterministic");
         assert_eq!(align1, align2, "Alignment must be deterministic");
     }
@@ -262,12 +300,18 @@ mod tests {
         let processor = StubUtlProcessor::new();
         let context = UtlContext::default();
 
-        for input in ["", "x", "test phrase", "A very long input string for testing boundaries"] {
+        for input in [
+            "",
+            "x",
+            "test phrase",
+            "A very long input string for testing boundaries",
+        ] {
             let surprise = processor.compute_surprise(input, &context).await.unwrap();
             assert!(
                 surprise >= 0.0 && surprise <= 1.0,
                 "Surprise {} for '{}' must be in [0.0, 1.0]",
-                surprise, input
+                surprise,
+                input
             );
         }
     }
@@ -278,12 +322,21 @@ mod tests {
         let processor = StubUtlProcessor::new();
         let context = UtlContext::default();
 
-        for input in ["", "x", "test phrase", "A very long input string for testing boundaries"] {
-            let coherence = processor.compute_coherence_change(input, &context).await.unwrap();
+        for input in [
+            "",
+            "x",
+            "test phrase",
+            "A very long input string for testing boundaries",
+        ] {
+            let coherence = processor
+                .compute_coherence_change(input, &context)
+                .await
+                .unwrap();
             assert!(
                 coherence >= 0.0 && coherence <= 1.0,
                 "Coherence change {} for '{}' must be in [0.0, 1.0]",
-                coherence, input
+                coherence,
+                input
             );
         }
     }
@@ -294,12 +347,18 @@ mod tests {
         let processor = StubUtlProcessor::new();
         let context = UtlContext::default();
 
-        for input in ["", "x", "test phrase", "A very long input string for testing boundaries"] {
+        for input in [
+            "",
+            "x",
+            "test phrase",
+            "A very long input string for testing boundaries",
+        ] {
             let alignment = processor.compute_alignment(input, &context).await.unwrap();
             assert!(
                 alignment >= -1.0 && alignment <= 1.0,
                 "Alignment {} for '{}' must be in [-1.0, 1.0]",
-                alignment, input
+                alignment,
+                input
             );
         }
     }
@@ -322,11 +381,15 @@ mod tests {
                 emotional_state: state,
                 ..Default::default()
             };
-            let weight = processor.compute_emotional_weight("test", &context).await.unwrap();
+            let weight = processor
+                .compute_emotional_weight("test", &context)
+                .await
+                .unwrap();
             assert!(
                 weight >= 0.5 && weight <= 1.5,
                 "Emotional weight {} for {:?} must be in [0.5, 1.5]",
-                weight, state
+                weight,
+                state
             );
         }
     }
@@ -341,18 +404,42 @@ mod tests {
             ..Default::default()
         };
 
-        let metrics = processor.compute_metrics("test input", &context).await.unwrap();
+        let metrics = processor
+            .compute_metrics("test input", &context)
+            .await
+            .unwrap();
 
         // Verify all fields are populated
-        assert_eq!(metrics.entropy, context.prior_entropy, "Entropy must match context");
-        assert_eq!(metrics.coherence, context.current_coherence, "Coherence must match context");
+        assert_eq!(
+            metrics.entropy, context.prior_entropy,
+            "Entropy must match context"
+        );
+        assert_eq!(
+            metrics.coherence, context.current_coherence,
+            "Coherence must match context"
+        );
 
         // Verify components match individual computations
-        let surprise = processor.compute_surprise("test input", &context).await.unwrap();
-        let coherence_change = processor.compute_coherence_change("test input", &context).await.unwrap();
-        let emotional_weight = processor.compute_emotional_weight("test input", &context).await.unwrap();
-        let alignment = processor.compute_alignment("test input", &context).await.unwrap();
-        let learning_score = processor.compute_learning_score("test input", &context).await.unwrap();
+        let surprise = processor
+            .compute_surprise("test input", &context)
+            .await
+            .unwrap();
+        let coherence_change = processor
+            .compute_coherence_change("test input", &context)
+            .await
+            .unwrap();
+        let emotional_weight = processor
+            .compute_emotional_weight("test input", &context)
+            .await
+            .unwrap();
+        let alignment = processor
+            .compute_alignment("test input", &context)
+            .await
+            .unwrap();
+        let learning_score = processor
+            .compute_learning_score("test input", &context)
+            .await
+            .unwrap();
 
         assert_eq!(metrics.surprise, surprise);
         assert_eq!(metrics.coherence_change, coherence_change);
@@ -368,7 +455,8 @@ mod tests {
         let embedding = vec![0.5; 1536];
 
         // Node below threshold
-        let mut low_importance = crate::types::MemoryNode::new("low".to_string(), embedding.clone());
+        let mut low_importance =
+            crate::types::MemoryNode::new("low".to_string(), embedding.clone());
         low_importance.importance = 0.5;
 
         // Node at threshold
@@ -388,7 +476,10 @@ mod tests {
             "Node at threshold should consolidate"
         );
         assert!(
-            processor.should_consolidate(&high_importance).await.unwrap(),
+            processor
+                .should_consolidate(&high_importance)
+                .await
+                .unwrap(),
             "Node above threshold should consolidate"
         );
     }
@@ -399,8 +490,14 @@ mod tests {
         let processor = StubUtlProcessor::new();
         let context = UtlContext::default();
 
-        let score1 = processor.compute_learning_score("input one", &context).await.unwrap();
-        let score2 = processor.compute_learning_score("input two", &context).await.unwrap();
+        let score1 = processor
+            .compute_learning_score("input one", &context)
+            .await
+            .unwrap();
+        let score2 = processor
+            .compute_learning_score("input two", &context)
+            .await
+            .unwrap();
 
         assert_ne!(
             score1, score2,

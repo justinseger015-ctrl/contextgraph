@@ -157,11 +157,14 @@ mod tests {
         let json_str = serde_json::to_string(&node).expect("MemoryNode must serialize to JSON");
 
         // Deserialize back
-        let restored: MemoryNode = serde_json::from_str(&json_str)
-            .expect("MemoryNode must deserialize from JSON");
+        let restored: MemoryNode =
+            serde_json::from_str(&json_str).expect("MemoryNode must deserialize from JSON");
 
         // Verify exact match using PartialEq
-        assert_eq!(restored, node, "Deserialized node must match original exactly");
+        assert_eq!(
+            restored, node,
+            "Deserialized node must match original exactly"
+        );
     }
 
     #[test]
@@ -181,20 +184,32 @@ mod tests {
         ];
         node.metadata.utl_score = Some(0.9876543);
         node.metadata.consolidated = true;
-        node.metadata.rationale = Some("This is a complex test case with special chars: @#$%^&*()".to_string());
+        node.metadata.rationale =
+            Some("This is a complex test case with special chars: @#$%^&*()".to_string());
 
         // Round-trip through JSON
         let json_str = serde_json::to_string(&node).unwrap();
         let restored: MemoryNode = serde_json::from_str(&json_str).unwrap();
 
         // Verify all metadata fields
-        assert_eq!(restored.metadata.source, Some("conversation:abc123".to_string()));
+        assert_eq!(
+            restored.metadata.source,
+            Some("conversation:abc123".to_string())
+        );
         assert_eq!(restored.metadata.language, Some("en-US".to_string()));
         assert_eq!(restored.metadata.tags.len(), 4);
-        assert!(restored.metadata.tags.contains(&"machine-learning".to_string()));
+        assert!(restored
+            .metadata
+            .tags
+            .contains(&"machine-learning".to_string()));
         assert_eq!(restored.metadata.utl_score, Some(0.9876543));
         assert!(restored.metadata.consolidated);
-        assert!(restored.metadata.rationale.as_ref().unwrap().contains("special chars"));
+        assert!(restored
+            .metadata
+            .rationale
+            .as_ref()
+            .unwrap()
+            .contains("special chars"));
     }
 
     #[test]
@@ -215,7 +230,9 @@ mod tests {
 
         // Verify embedding values are exactly preserved
         assert_eq!(restored.embedding.len(), 1536);
-        for (i, (original, restored_val)) in embedding.iter().zip(restored.embedding.iter()).enumerate() {
+        for (i, (original, restored_val)) in
+            embedding.iter().zip(restored.embedding.iter()).enumerate()
+        {
             assert_eq!(
                 original, restored_val,
                 "Embedding value at index {} must be exactly preserved: {} vs {}",
@@ -236,8 +253,14 @@ mod tests {
         let json_str = serde_json::to_string(&node).unwrap();
         let restored: MemoryNode = serde_json::from_str(&json_str).unwrap();
 
-        assert_eq!(restored.created_at, original_created_at, "created_at must be preserved");
-        assert_eq!(restored.last_accessed, original_last_accessed, "last_accessed must be preserved");
+        assert_eq!(
+            restored.created_at, original_created_at,
+            "created_at must be preserved"
+        );
+        assert_eq!(
+            restored.last_accessed, original_last_accessed,
+            "last_accessed must be preserved"
+        );
     }
 
     #[test]
@@ -270,10 +293,22 @@ mod tests {
         let json_str = serde_json::to_string(&node).unwrap();
         let restored: MemoryNode = serde_json::from_str(&json_str).unwrap();
 
-        assert!(restored.metadata.source.is_none(), "None source must remain None");
-        assert!(restored.metadata.language.is_none(), "None language must remain None");
-        assert!(restored.metadata.utl_score.is_none(), "None utl_score must remain None");
-        assert!(restored.metadata.rationale.is_none(), "None rationale must remain None");
+        assert!(
+            restored.metadata.source.is_none(),
+            "None source must remain None"
+        );
+        assert!(
+            restored.metadata.language.is_none(),
+            "None language must remain None"
+        );
+        assert!(
+            restored.metadata.utl_score.is_none(),
+            "None utl_score must remain None"
+        );
+        assert!(
+            restored.metadata.rationale.is_none(),
+            "None rationale must remain None"
+        );
     }
 
     #[test]
@@ -308,7 +343,10 @@ mod tests {
         let from_pretty: MemoryNode = serde_json::from_str(&pretty_json).unwrap();
 
         // Both must produce identical results
-        assert_eq!(from_compact, from_pretty, "Compact and pretty JSON must deserialize identically");
+        assert_eq!(
+            from_compact, from_pretty,
+            "Compact and pretty JSON must deserialize identically"
+        );
         assert_eq!(from_compact, node, "Both must match original");
     }
 
@@ -324,7 +362,10 @@ newlines, plus unicode: 日本語 🎉 émojis"#;
         let json_str = serde_json::to_string(&node).unwrap();
         let restored: MemoryNode = serde_json::from_str(&json_str).unwrap();
 
-        assert_eq!(restored.content, special_content, "Special characters must be preserved");
+        assert_eq!(
+            restored.content, special_content,
+            "Special characters must be preserved"
+        );
     }
 
     #[test]

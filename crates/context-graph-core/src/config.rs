@@ -319,17 +319,35 @@ mod tests {
         let toml_str = toml::to_string(&config).expect("Config must serialize to TOML");
 
         // Deserialize back
-        let deserialized: Config = toml::from_str(&toml_str)
-            .expect("Config must deserialize from TOML");
+        let deserialized: Config =
+            toml::from_str(&toml_str).expect("Config must deserialize from TOML");
 
         // Verify all fields match
         assert_eq!(deserialized.phase, config.phase, "Phase must match");
-        assert_eq!(deserialized.server.name, config.server.name, "Server name must match");
-        assert_eq!(deserialized.server.version, config.server.version, "Server version must match");
-        assert_eq!(deserialized.mcp.transport, config.mcp.transport, "MCP transport must match");
-        assert_eq!(deserialized.mcp.max_payload_size, config.mcp.max_payload_size, "MCP max_payload_size must match");
-        assert_eq!(deserialized.logging.level, config.logging.level, "Logging level must match");
-        assert_eq!(deserialized.embedding.dimension, config.embedding.dimension, "Embedding dimension must match");
+        assert_eq!(
+            deserialized.server.name, config.server.name,
+            "Server name must match"
+        );
+        assert_eq!(
+            deserialized.server.version, config.server.version,
+            "Server version must match"
+        );
+        assert_eq!(
+            deserialized.mcp.transport, config.mcp.transport,
+            "MCP transport must match"
+        );
+        assert_eq!(
+            deserialized.mcp.max_payload_size, config.mcp.max_payload_size,
+            "MCP max_payload_size must match"
+        );
+        assert_eq!(
+            deserialized.logging.level, config.logging.level,
+            "Logging level must match"
+        );
+        assert_eq!(
+            deserialized.embedding.dimension, config.embedding.dimension,
+            "Embedding dimension must match"
+        );
     }
 
     #[test]
@@ -341,13 +359,16 @@ mod tests {
         let json_str = serde_json::to_string(&config).expect("Config must serialize to JSON");
 
         // Deserialize back
-        let deserialized: Config = serde_json::from_str(&json_str)
-            .expect("Config must deserialize from JSON");
+        let deserialized: Config =
+            serde_json::from_str(&json_str).expect("Config must deserialize from JSON");
 
         // Verify critical fields
         assert_eq!(deserialized.phase, config.phase);
         assert_eq!(deserialized.embedding.dimension, config.embedding.dimension);
-        assert_eq!(deserialized.features.dream_enabled, config.features.dream_enabled);
+        assert_eq!(
+            deserialized.features.dream_enabled,
+            config.features.dream_enabled
+        );
     }
 
     #[test]
@@ -358,11 +379,15 @@ mod tests {
 
         for (phase, expected_str) in phases.iter().zip(expected.iter()) {
             let json = serde_json::to_string(phase).expect("Phase must serialize");
-            assert_eq!(json, format!("\"{}\"", expected_str),
-                "Phase {:?} must serialize as {}", phase, expected_str);
+            assert_eq!(
+                json,
+                format!("\"{}\"", expected_str),
+                "Phase {:?} must serialize as {}",
+                phase,
+                expected_str
+            );
 
-            let deserialized: Phase = serde_json::from_str(&json)
-                .expect("Phase must deserialize");
+            let deserialized: Phase = serde_json::from_str(&json).expect("Phase must deserialize");
             assert_eq!(&deserialized, phase, "Phase must round-trip correctly");
         }
     }
@@ -374,9 +399,15 @@ mod tests {
         config.embedding.dimension = 0;
 
         let result = config.validate();
-        assert!(result.is_err(), "Embedding dimension 0 must fail validation");
+        assert!(
+            result.is_err(),
+            "Embedding dimension 0 must fail validation"
+        );
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("embedding.dimension"), "Error must mention embedding.dimension");
+        assert!(
+            err_msg.contains("embedding.dimension"),
+            "Error must mention embedding.dimension"
+        );
     }
 
     #[test]
@@ -387,9 +418,18 @@ mod tests {
         // Ghost System phase: UTL enabled, everything else disabled
         assert!(features.utl_enabled, "UTL must be enabled by default");
         assert!(!features.dream_enabled, "Dream must be disabled by default");
-        assert!(!features.neuromodulation_enabled, "Neuromodulation must be disabled by default");
-        assert!(!features.active_inference_enabled, "Active inference must be disabled by default");
-        assert!(!features.immune_enabled, "Immune system must be disabled by default");
+        assert!(
+            !features.neuromodulation_enabled,
+            "Neuromodulation must be disabled by default"
+        );
+        assert!(
+            !features.active_inference_enabled,
+            "Active inference must be disabled by default"
+        );
+        assert!(
+            !features.immune_enabled,
+            "Immune system must be disabled by default"
+        );
     }
 
     #[test]
@@ -400,13 +440,19 @@ mod tests {
         features.neuromodulation_enabled = true;
 
         let json = serde_json::to_string(&features).expect("FeatureFlags must serialize");
-        let deserialized: FeatureFlags = serde_json::from_str(&json)
-            .expect("FeatureFlags must deserialize");
+        let deserialized: FeatureFlags =
+            serde_json::from_str(&json).expect("FeatureFlags must deserialize");
 
         assert_eq!(deserialized.utl_enabled, features.utl_enabled);
         assert_eq!(deserialized.dream_enabled, features.dream_enabled);
-        assert_eq!(deserialized.neuromodulation_enabled, features.neuromodulation_enabled);
-        assert_eq!(deserialized.active_inference_enabled, features.active_inference_enabled);
+        assert_eq!(
+            deserialized.neuromodulation_enabled,
+            features.neuromodulation_enabled
+        );
+        assert_eq!(
+            deserialized.active_inference_enabled,
+            features.active_inference_enabled
+        );
         assert_eq!(deserialized.immune_enabled, features.immune_enabled);
     }
 
@@ -415,8 +461,14 @@ mod tests {
         // TC-GHOST-006: Server config must have correct defaults
         let server = ServerConfig::default();
 
-        assert_eq!(server.name, "context-graph", "Server name must be context-graph");
-        assert_eq!(server.version, "0.1.0-ghost", "Server version must be 0.1.0-ghost");
+        assert_eq!(
+            server.name, "context-graph",
+            "Server name must be context-graph"
+        );
+        assert_eq!(
+            server.version, "0.1.0-ghost",
+            "Server version must be 0.1.0-ghost"
+        );
     }
 
     #[test]
@@ -426,7 +478,10 @@ mod tests {
 
         assert_eq!(mcp.transport, "stdio", "Transport must be stdio");
         assert_eq!(mcp.max_payload_size, 10_485_760, "Max payload must be 10MB");
-        assert_eq!(mcp.request_timeout, 30, "Request timeout must be 30 seconds");
+        assert_eq!(
+            mcp.request_timeout, 30,
+            "Request timeout must be 30 seconds"
+        );
     }
 
     #[test]
@@ -435,8 +490,14 @@ mod tests {
         let logging = LoggingConfig::default();
 
         assert_eq!(logging.level, "info", "Default log level must be info");
-        assert_eq!(logging.format, "pretty", "Default log format must be pretty");
-        assert!(!logging.include_location, "Location should be disabled by default");
+        assert_eq!(
+            logging.format, "pretty",
+            "Default log format must be pretty"
+        );
+        assert!(
+            !logging.include_location,
+            "Location should be disabled by default"
+        );
     }
 
     #[test]
@@ -445,8 +506,14 @@ mod tests {
         let storage = StorageConfig::default();
 
         assert_eq!(storage.backend, "memory", "Default backend must be memory");
-        assert_eq!(storage.path, "./data/storage", "Default path must be ./data/storage");
-        assert!(storage.compression, "Compression should be enabled by default");
+        assert_eq!(
+            storage.path, "./data/storage",
+            "Default path must be ./data/storage"
+        );
+        assert!(
+            storage.compression,
+            "Compression should be enabled by default"
+        );
     }
 
     #[test]
@@ -455,8 +522,14 @@ mod tests {
         let embedding = EmbeddingConfig::default();
 
         assert_eq!(embedding.model, "stub", "Default model must be stub");
-        assert_eq!(embedding.dimension, 1536, "Dimension must be 1536 (OpenAI compatible)");
-        assert_eq!(embedding.max_input_length, 8191, "Max input length must be 8191");
+        assert_eq!(
+            embedding.dimension, 1536,
+            "Dimension must be 1536 (OpenAI compatible)"
+        );
+        assert_eq!(
+            embedding.max_input_length, 8191,
+            "Max input length must be 8191"
+        );
     }
 
     #[test]
@@ -465,8 +538,14 @@ mod tests {
         let utl = UtlConfig::default();
 
         assert_eq!(utl.mode, "stub", "Default mode must be stub");
-        assert_eq!(utl.default_emotional_weight, 1.0, "Default emotional weight must be 1.0");
-        assert_eq!(utl.consolidation_threshold, 0.7, "Consolidation threshold must be 0.7");
+        assert_eq!(
+            utl.default_emotional_weight, 1.0,
+            "Default emotional weight must be 1.0"
+        );
+        assert_eq!(
+            utl.consolidation_threshold, 0.7,
+            "Consolidation threshold must be 0.7"
+        );
     }
 
     #[test]
@@ -476,7 +555,10 @@ mod tests {
 
         assert!(!cuda.enabled, "CUDA must be disabled by default");
         assert_eq!(cuda.device_id, 0, "Default device ID must be 0");
-        assert_eq!(cuda.memory_limit_gb, 4.0, "Default memory limit must be 4GB");
+        assert_eq!(
+            cuda.memory_limit_gb, 4.0,
+            "Default memory limit must be 4GB"
+        );
     }
 
     #[test]

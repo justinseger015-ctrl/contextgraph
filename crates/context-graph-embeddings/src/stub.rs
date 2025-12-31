@@ -189,8 +189,14 @@ mod tests {
         let e2 = embedder2.embed("Context Graph").await.unwrap();
         let e3 = embedder3.embed("Context Graph").await.unwrap();
 
-        assert_eq!(e1, e2, "Same input across instances must produce identical embedding");
-        assert_eq!(e2, e3, "Same input across instances must produce identical embedding");
+        assert_eq!(
+            e1, e2,
+            "Same input across instances must produce identical embedding"
+        );
+        assert_eq!(
+            e2, e3,
+            "Same input across instances must produce identical embedding"
+        );
     }
 
     #[tokio::test]
@@ -234,10 +240,7 @@ mod tests {
         let e1 = embedder.embed("First distinct input").await.unwrap();
         let e2 = embedder.embed("Second distinct input").await.unwrap();
 
-        assert_ne!(
-            e1, e2,
-            "Different inputs must produce different embeddings"
-        );
+        assert_ne!(e1, e2, "Different inputs must produce different embeddings");
     }
 
     #[tokio::test]
@@ -247,7 +250,11 @@ mod tests {
         let e1 = embedder.embed("").await.unwrap();
         let e2 = embedder.embed("").await.unwrap();
 
-        assert_eq!(e1.len(), 1536, "Empty input embedding must be 1536-dimensional");
+        assert_eq!(
+            e1.len(),
+            1536,
+            "Empty input embedding must be 1536-dimensional"
+        );
         assert_eq!(e1, e2, "Empty input must produce identical embedding");
     }
 }

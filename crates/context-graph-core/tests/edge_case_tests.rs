@@ -4,13 +4,13 @@
 //! Tests use REAL data, not mocks. Each test prints before/after state as evidence.
 
 use context_graph_core::{
-    types::{MemoryNode, CognitivePulse, UtlContext, EmotionalState},
-    stubs::{InMemoryStore, StubUtlProcessor, InMemoryGraphIndex},
-    traits::{MemoryStore, UtlProcessor, GraphIndex},
     error::CoreError,
+    stubs::{InMemoryGraphIndex, InMemoryStore, StubUtlProcessor},
+    traits::{GraphIndex, MemoryStore, UtlProcessor},
+    types::{CognitivePulse, EmotionalState, MemoryNode, UtlContext},
 };
-use uuid::Uuid;
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Helper to create a dummy embedding vector of given size
 fn dummy_embedding(dim: usize) -> Vec<f32> {
@@ -57,7 +57,10 @@ async fn edge_case_max_content_size() {
 
     // Create node with maximum content (65536 chars as per spec)
     let max_content = "x".repeat(65536);
-    println!("STATE BEFORE: Creating node with {} chars", max_content.len());
+    println!(
+        "STATE BEFORE: Creating node with {} chars",
+        max_content.len()
+    );
     println!("  - Store count: {}", store.count().await.unwrap());
 
     let node = MemoryNode::new(max_content.clone(), dummy_embedding(1536));
@@ -72,7 +75,11 @@ async fn edge_case_max_content_size() {
             // Verify retrieval
             let retrieved = store.retrieve(*id).await.unwrap().unwrap();
             println!("  - Retrieved content length: {}", retrieved.content.len());
-            assert_eq!(retrieved.content.len(), 65536, "Content should preserve full length");
+            assert_eq!(
+                retrieved.content.len(),
+                65536,
+                "Content should preserve full length"
+            );
         }
         Err(e) => {
             println!("  - Error: {:?}", e);
@@ -100,7 +107,10 @@ async fn edge_case_nonexistent_uuid_retrieval() {
     match result {
         Ok(None) => {
             println!("  - Correctly returned None for non-existent ID");
-            println!("  - Store count unchanged: {}", store.count().await.unwrap());
+            println!(
+                "  - Store count unchanged: {}",
+                store.count().await.unwrap()
+            );
         }
         Ok(Some(_)) => {
             panic!("Should not find non-existent node");
@@ -121,18 +131,24 @@ async fn edge_case_utl_extreme_values() {
 
     // Test with extreme context values
     let extreme_context = UtlContext {
-        prior_entropy: 1.0,        // Maximum entropy
-        current_coherence: 0.0,    // Minimum coherence
+        prior_entropy: 1.0,     // Maximum entropy
+        current_coherence: 0.0, // Minimum coherence
         emotional_state: EmotionalState::Stressed,
         goal_vector: None,
     };
 
     println!("STATE BEFORE:");
     println!("  - Prior entropy: {}", extreme_context.prior_entropy);
-    println!("  - Current coherence: {}", extreme_context.current_coherence);
+    println!(
+        "  - Current coherence: {}",
+        extreme_context.current_coherence
+    );
     println!("  - Emotional state: {:?}", extreme_context.emotional_state);
 
-    let metrics = processor.compute_metrics("test extreme values", &extreme_context).await.unwrap();
+    let metrics = processor
+        .compute_metrics("test extreme values", &extreme_context)
+        .await
+        .unwrap();
 
     println!("STATE AFTER:");
     println!("  - Computed entropy: {}", metrics.entropy);
@@ -141,10 +157,22 @@ async fn edge_case_utl_extreme_values() {
     println!("  - Surprise: {}", metrics.surprise);
 
     // Verify all values are in valid range [0, 1]
-    assert!(metrics.entropy >= 0.0 && metrics.entropy <= 1.0, "Entropy out of range");
-    assert!(metrics.coherence >= 0.0 && metrics.coherence <= 1.0, "Coherence out of range");
-    assert!(metrics.learning_score >= 0.0 && metrics.learning_score <= 1.0, "Learning score out of range");
-    assert!(metrics.surprise >= 0.0 && metrics.surprise <= 1.0, "Surprise out of range");
+    assert!(
+        metrics.entropy >= 0.0 && metrics.entropy <= 1.0,
+        "Entropy out of range"
+    );
+    assert!(
+        metrics.coherence >= 0.0 && metrics.coherence <= 1.0,
+        "Coherence out of range"
+    );
+    assert!(
+        metrics.learning_score >= 0.0 && metrics.learning_score <= 1.0,
+        "Learning score out of range"
+    );
+    assert!(
+        metrics.surprise >= 0.0 && metrics.surprise <= 1.0,
+        "Surprise out of range"
+    );
 
     println!("EVIDENCE: All UTL metrics remain in valid [0,1] range with extreme inputs");
 }
@@ -205,8 +233,14 @@ async fn edge_case_cognitive_pulse_boundaries() {
     ];
 
     for (entropy, coherence, desc) in test_cases {
-        println!("\nTesting: {} (entropy={}, coherence={})", desc, entropy, coherence);
-        println!("STATE BEFORE: Raw values entropy={}, coherence={}", entropy, coherence);
+        println!(
+            "\nTesting: {} (entropy={}, coherence={})",
+            desc, entropy, coherence
+        );
+        println!(
+            "STATE BEFORE: Raw values entropy={}, coherence={}",
+            entropy, coherence
+        );
 
         // Use CognitivePulse::computed which auto-calculates action
         let pulse = CognitivePulse::computed(entropy, coherence);
@@ -218,8 +252,14 @@ async fn edge_case_cognitive_pulse_boundaries() {
         println!("  - Is healthy: {}", pulse.is_healthy());
 
         // Verify clamping
-        assert!(pulse.entropy >= 0.0 && pulse.entropy <= 1.0, "Entropy not clamped");
-        assert!(pulse.coherence >= 0.0 && pulse.coherence <= 1.0, "Coherence not clamped");
+        assert!(
+            pulse.entropy >= 0.0 && pulse.entropy <= 1.0,
+            "Entropy not clamped"
+        );
+        assert!(
+            pulse.coherence >= 0.0 && pulse.coherence <= 1.0,
+            "Coherence not clamped"
+        );
     }
     println!("\nEVIDENCE: All boundary values correctly clamped to [0,1]");
 }
@@ -231,7 +271,10 @@ async fn edge_case_concurrent_store_operations() {
 
     let store = Arc::new(InMemoryStore::new());
 
-    println!("STATE BEFORE: Store count = {}", store.count().await.unwrap());
+    println!(
+        "STATE BEFORE: Store count = {}",
+        store.count().await.unwrap()
+    );
 
     // Spawn multiple concurrent store operations
     let mut handles = vec![];
@@ -257,7 +300,11 @@ async fn edge_case_concurrent_store_operations() {
     println!("  - Final store count: {}", store.count().await.unwrap());
 
     assert_eq!(success_count, 10, "All concurrent stores should succeed");
-    assert_eq!(store.count().await.unwrap(), 10, "Store should contain 10 nodes");
+    assert_eq!(
+        store.count().await.unwrap(),
+        10,
+        "Store should contain 10 nodes"
+    );
 
     println!("EVIDENCE: Concurrent operations handled correctly with thread-safe store");
 }

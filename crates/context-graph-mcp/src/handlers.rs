@@ -724,7 +724,11 @@ mod tests {
     }
 
     /// Create a JSON-RPC request for testing.
-    fn make_request(method: &str, id: Option<JsonRpcId>, params: Option<serde_json::Value>) -> JsonRpcRequest {
+    fn make_request(
+        method: &str,
+        id: Option<JsonRpcId>,
+        params: Option<serde_json::Value>,
+    ) -> JsonRpcRequest {
         JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             id,
@@ -744,15 +748,22 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "Initialize should not return an error");
+        assert!(
+            response.error.is_none(),
+            "Initialize should not return an error"
+        );
         let result = response.result.expect("Initialize must return a result");
 
         // MCP REQUIREMENT: protocolVersion MUST be "2024-11-05"
-        let protocol_version = result.get("protocolVersion")
+        let protocol_version = result
+            .get("protocolVersion")
             .expect("Response must contain protocolVersion")
             .as_str()
             .expect("protocolVersion must be a string");
-        assert_eq!(protocol_version, "2024-11-05", "Protocol version must be 2024-11-05");
+        assert_eq!(
+            protocol_version, "2024-11-05",
+            "Protocol version must be 2024-11-05"
+        );
     }
 
     #[tokio::test]
@@ -764,13 +775,16 @@ mod tests {
         let result = response.result.expect("Initialize must return a result");
 
         // MCP REQUIREMENT: capabilities object MUST exist
-        let capabilities = result.get("capabilities")
+        let capabilities = result
+            .get("capabilities")
             .expect("Response must contain capabilities object");
 
         // MCP REQUIREMENT: capabilities.tools MUST exist with listChanged
-        let tools = capabilities.get("tools")
+        let tools = capabilities
+            .get("tools")
             .expect("capabilities must contain tools object");
-        let list_changed = tools.get("listChanged")
+        let list_changed = tools
+            .get("listChanged")
             .expect("tools must contain listChanged")
             .as_bool()
             .expect("listChanged must be a boolean");
@@ -786,16 +800,22 @@ mod tests {
         let result = response.result.expect("Initialize must return a result");
 
         // MCP REQUIREMENT: serverInfo object MUST exist with name and version
-        let server_info = result.get("serverInfo")
+        let server_info = result
+            .get("serverInfo")
             .expect("Response must contain serverInfo object");
 
-        let name = server_info.get("name")
+        let name = server_info
+            .get("name")
             .expect("serverInfo must contain name")
             .as_str()
             .expect("name must be a string");
-        assert_eq!(name, "context-graph-mcp", "Server name must be context-graph-mcp");
+        assert_eq!(
+            name, "context-graph-mcp",
+            "Server name must be context-graph-mcp"
+        );
 
-        let version = server_info.get("version")
+        let version = server_info
+            .get("version")
             .expect("serverInfo must contain version")
             .as_str()
             .expect("version must be a string");
@@ -810,16 +830,23 @@ mod tests {
         let response = handlers.dispatch(request).await;
 
         // Context Graph Extension: cognitive_pulse header
-        let pulse = response.cognitive_pulse
+        let pulse = response
+            .cognitive_pulse
             .expect("Initialize should include cognitive pulse");
 
         // Verify entropy is in valid range [0.0, 1.0]
-        assert!(pulse.entropy >= 0.0 && pulse.entropy <= 1.0,
-            "Entropy must be in [0.0, 1.0], got {}", pulse.entropy);
+        assert!(
+            pulse.entropy >= 0.0 && pulse.entropy <= 1.0,
+            "Entropy must be in [0.0, 1.0], got {}",
+            pulse.entropy
+        );
 
         // Verify coherence is in valid range [0.0, 1.0]
-        assert!(pulse.coherence >= 0.0 && pulse.coherence <= 1.0,
-            "Coherence must be in [0.0, 1.0], got {}", pulse.coherence);
+        assert!(
+            pulse.coherence >= 0.0 && pulse.coherence <= 1.0,
+            "Coherence must be in [0.0, 1.0], got {}",
+            pulse.coherence
+        );
     }
 
     // =========================================================================
@@ -833,17 +860,26 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "tools/list should not return an error");
+        assert!(
+            response.error.is_none(),
+            "tools/list should not return an error"
+        );
         let result = response.result.expect("tools/list must return a result");
 
         // MCP REQUIREMENT: tools array MUST exist
-        let tools = result.get("tools")
+        let tools = result
+            .get("tools")
             .expect("Response must contain tools array")
             .as_array()
             .expect("tools must be an array");
 
         // Verify exactly 5 tools returned
-        assert_eq!(tools.len(), 5, "Must return exactly 5 tools, got {}", tools.len());
+        assert_eq!(
+            tools.len(),
+            5,
+            "Must return exactly 5 tools, got {}",
+            tools.len()
+        );
     }
 
     #[tokio::test]
@@ -857,26 +893,36 @@ mod tests {
 
         for tool in tools {
             // MCP REQUIREMENT: each tool MUST have name (string)
-            let name = tool.get("name")
+            let name = tool
+                .get("name")
                 .expect("Tool must have name field")
                 .as_str()
                 .expect("Tool name must be a string");
             assert!(!name.is_empty(), "Tool name must not be empty");
 
             // MCP REQUIREMENT: each tool MUST have description (string)
-            let description = tool.get("description")
+            let description = tool
+                .get("description")
                 .expect("Tool must have description field")
                 .as_str()
                 .expect("Tool description must be a string");
-            assert!(!description.is_empty(), "Tool description must not be empty");
+            assert!(
+                !description.is_empty(),
+                "Tool description must not be empty"
+            );
 
             // MCP REQUIREMENT: each tool MUST have inputSchema (JSON Schema object)
-            let input_schema = tool.get("inputSchema")
+            let input_schema = tool
+                .get("inputSchema")
                 .expect("Tool must have inputSchema field");
-            assert!(input_schema.is_object(), "inputSchema must be a JSON object");
+            assert!(
+                input_schema.is_object(),
+                "inputSchema must be a JSON object"
+            );
 
             // Verify inputSchema is valid JSON Schema (has type field)
-            let schema_type = input_schema.get("type")
+            let schema_type = input_schema
+                .get("type")
                 .expect("inputSchema must have a type field")
                 .as_str()
                 .expect("inputSchema type must be a string");
@@ -893,16 +939,32 @@ mod tests {
         let result = response.result.expect("tools/list must return a result");
         let tools = result.get("tools").unwrap().as_array().unwrap();
 
-        let tool_names: Vec<&str> = tools.iter()
+        let tool_names: Vec<&str> = tools
+            .iter()
             .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
             .collect();
 
         // Verify all expected tools are present
-        assert!(tool_names.contains(&"inject_context"), "Missing inject_context tool");
-        assert!(tool_names.contains(&"store_memory"), "Missing store_memory tool");
-        assert!(tool_names.contains(&"get_memetic_status"), "Missing get_memetic_status tool");
-        assert!(tool_names.contains(&"get_graph_manifest"), "Missing get_graph_manifest tool");
-        assert!(tool_names.contains(&"search_graph"), "Missing search_graph tool");
+        assert!(
+            tool_names.contains(&"inject_context"),
+            "Missing inject_context tool"
+        );
+        assert!(
+            tool_names.contains(&"store_memory"),
+            "Missing store_memory tool"
+        );
+        assert!(
+            tool_names.contains(&"get_memetic_status"),
+            "Missing get_memetic_status tool"
+        );
+        assert!(
+            tool_names.contains(&"get_graph_manifest"),
+            "Missing get_graph_manifest tool"
+        );
+        assert!(
+            tool_names.contains(&"search_graph"),
+            "Missing search_graph tool"
+        );
     }
 
     // =========================================================================
@@ -923,11 +985,15 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "Valid inject_context should not return an error");
+        assert!(
+            response.error.is_none(),
+            "Valid inject_context should not return an error"
+        );
         let result = response.result.expect("tools/call must return a result");
 
         // MCP REQUIREMENT: content array MUST exist
-        let content = result.get("content")
+        let content = result
+            .get("content")
             .expect("Response must contain content array")
             .as_array()
             .expect("content must be an array");
@@ -935,29 +1001,35 @@ mod tests {
         // MCP REQUIREMENT: content items must have type and text
         assert!(!content.is_empty(), "Content array must not be empty");
         let first_item = &content[0];
-        let item_type = first_item.get("type")
+        let item_type = first_item
+            .get("type")
             .expect("Content item must have type")
             .as_str()
             .expect("type must be a string");
         assert_eq!(item_type, "text", "Content item type must be 'text'");
 
-        let text = first_item.get("text")
+        let text = first_item
+            .get("text")
             .expect("Content item must have text")
             .as_str()
             .expect("text must be a string");
         assert!(!text.is_empty(), "Content text must not be empty");
 
         // MCP REQUIREMENT: isError MUST be false for successful calls
-        let is_error = result.get("isError")
+        let is_error = result
+            .get("isError")
             .expect("Response must contain isError")
             .as_bool()
             .expect("isError must be a boolean");
         assert!(!is_error, "isError must be false for successful tool calls");
 
         // Verify nodeId is present in the response text
-        let parsed_text: serde_json::Value = serde_json::from_str(text)
-            .expect("Content text should be valid JSON");
-        assert!(parsed_text.get("nodeId").is_some(), "Response must contain nodeId");
+        let parsed_text: serde_json::Value =
+            serde_json::from_str(text).expect("Content text should be valid JSON");
+        assert!(
+            parsed_text.get("nodeId").is_some(),
+            "Response must contain nodeId"
+        );
     }
 
     #[tokio::test]
@@ -979,9 +1051,13 @@ mod tests {
         let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
         // Verify UTL metrics are present
-        let utl = parsed_text.get("utl")
+        let utl = parsed_text
+            .get("utl")
             .expect("Response must contain utl object");
-        assert!(utl.get("learningScore").is_some(), "utl must contain learningScore");
+        assert!(
+            utl.get("learningScore").is_some(),
+            "utl must contain learningScore"
+        );
         assert!(utl.get("entropy").is_some(), "utl must contain entropy");
         assert!(utl.get("coherence").is_some(), "utl must contain coherence");
         assert!(utl.get("surprise").is_some(), "utl must contain surprise");
@@ -1002,7 +1078,10 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "get_memetic_status should not return an error");
+        assert!(
+            response.error.is_none(),
+            "get_memetic_status should not return an error"
+        );
         let result = response.result.expect("tools/call must return a result");
 
         // Verify MCP format
@@ -1011,10 +1090,22 @@ mod tests {
         let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
         // Verify expected fields
-        assert!(parsed_text.get("phase").is_some(), "Response must contain phase");
-        assert!(parsed_text.get("nodeCount").is_some(), "Response must contain nodeCount");
-        assert!(parsed_text.get("utl").is_some(), "Response must contain utl");
-        assert!(parsed_text.get("layers").is_some(), "Response must contain layers");
+        assert!(
+            parsed_text.get("phase").is_some(),
+            "Response must contain phase"
+        );
+        assert!(
+            parsed_text.get("nodeCount").is_some(),
+            "Response must contain nodeCount"
+        );
+        assert!(
+            parsed_text.get("utl").is_some(),
+            "Response must contain utl"
+        );
+        assert!(
+            parsed_text.get("layers").is_some(),
+            "Response must contain layers"
+        );
     }
 
     // =========================================================================
@@ -1032,7 +1123,10 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "get_graph_manifest should not return an error");
+        assert!(
+            response.error.is_none(),
+            "get_graph_manifest should not return an error"
+        );
         let result = response.result.expect("tools/call must return a result");
 
         let content = result.get("content").unwrap().as_array().unwrap();
@@ -1040,26 +1134,43 @@ mod tests {
         let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
         // Verify 5-layer architecture
-        let architecture = parsed_text.get("architecture")
+        let architecture = parsed_text
+            .get("architecture")
             .expect("Response must contain architecture")
             .as_str()
             .expect("architecture must be a string");
-        assert_eq!(architecture, "5-layer-bio-nervous", "Architecture must be 5-layer-bio-nervous");
+        assert_eq!(
+            architecture, "5-layer-bio-nervous",
+            "Architecture must be 5-layer-bio-nervous"
+        );
 
         // Verify exactly 5 layers
-        let layers = parsed_text.get("layers")
+        let layers = parsed_text
+            .get("layers")
             .expect("Response must contain layers")
             .as_array()
             .expect("layers must be an array");
-        assert_eq!(layers.len(), 5, "Must have exactly 5 layers, got {}", layers.len());
+        assert_eq!(
+            layers.len(),
+            5,
+            "Must have exactly 5 layers, got {}",
+            layers.len()
+        );
 
         // Verify expected layer names
-        let layer_names: Vec<&str> = layers.iter()
+        let layer_names: Vec<&str> = layers
+            .iter()
             .filter_map(|l| l.get("name").and_then(|n| n.as_str()))
             .collect();
-        assert!(layer_names.contains(&"Perception"), "Missing Perception layer");
+        assert!(
+            layer_names.contains(&"Perception"),
+            "Missing Perception layer"
+        );
         assert!(layer_names.contains(&"Memory"), "Missing Memory layer");
-        assert!(layer_names.contains(&"Reasoning"), "Missing Reasoning layer");
+        assert!(
+            layer_names.contains(&"Reasoning"),
+            "Missing Reasoning layer"
+        );
         assert!(layer_names.contains(&"Action"), "Missing Action layer");
         assert!(layer_names.contains(&"Meta"), "Missing Meta layer");
     }
@@ -1075,12 +1186,19 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.result.is_none(), "Unknown method should not return a result");
+        assert!(
+            response.result.is_none(),
+            "Unknown method should not return a result"
+        );
         let error = response.error.expect("Unknown method must return an error");
 
         // MCP REQUIREMENT: Method not found error code is -32601
-        assert_eq!(error.code, error_codes::METHOD_NOT_FOUND,
-            "Method not found error code must be -32601, got {}", error.code);
+        assert_eq!(
+            error.code,
+            error_codes::METHOD_NOT_FOUND,
+            "Method not found error code must be -32601, got {}",
+            error.code
+        );
         assert_eq!(error.code, -32601, "Error code -32601 expected");
     }
 
@@ -1092,12 +1210,19 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.result.is_none(), "Invalid params should not return a result");
+        assert!(
+            response.result.is_none(),
+            "Invalid params should not return a result"
+        );
         let error = response.error.expect("Invalid params must return an error");
 
         // MCP REQUIREMENT: Invalid params error code is -32602
-        assert_eq!(error.code, error_codes::INVALID_PARAMS,
-            "Invalid params error code must be -32602, got {}", error.code);
+        assert_eq!(
+            error.code,
+            error_codes::INVALID_PARAMS,
+            "Invalid params error code must be -32602, got {}",
+            error.code
+        );
         assert_eq!(error.code, -32602, "Error code -32602 expected");
     }
 
@@ -1112,11 +1237,18 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.result.is_none(), "Missing name should not return a result");
+        assert!(
+            response.result.is_none(),
+            "Missing name should not return a result"
+        );
         let error = response.error.expect("Missing name must return an error");
 
-        assert_eq!(error.code, error_codes::INVALID_PARAMS,
-            "Invalid params error code must be -32602, got {}", error.code);
+        assert_eq!(
+            error.code,
+            error_codes::INVALID_PARAMS,
+            "Invalid params error code must be -32602, got {}",
+            error.code
+        );
     }
 
     #[tokio::test]
@@ -1130,12 +1262,19 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.result.is_none(), "Unknown tool should not return a result");
+        assert!(
+            response.result.is_none(),
+            "Unknown tool should not return a result"
+        );
         let error = response.error.expect("Unknown tool must return an error");
 
         // Context Graph specific: Tool not found error code is -32006
-        assert_eq!(error.code, error_codes::TOOL_NOT_FOUND,
-            "Tool not found error code must be -32006, got {}", error.code);
+        assert_eq!(
+            error.code,
+            error_codes::TOOL_NOT_FOUND,
+            "Tool not found error code must be -32006, got {}",
+            error.code
+        );
         assert_eq!(error.code, -32006, "Error code -32006 expected");
     }
 
@@ -1152,20 +1291,30 @@ mod tests {
 
         // JSON-RPC 2.0 REQUIREMENT: ID must be echoed back exactly
         let response_id = response.id.expect("Response must include ID");
-        assert_eq!(response_id, JsonRpcId::Number(42),
-            "Response ID must match request ID");
+        assert_eq!(
+            response_id,
+            JsonRpcId::Number(42),
+            "Response ID must match request ID"
+        );
     }
 
     #[tokio::test]
     async fn test_id_echoed_correctly_string() {
         let handlers = create_test_handlers();
-        let request = make_request("initialize", Some(JsonRpcId::String("request-abc-123".to_string())), None);
+        let request = make_request(
+            "initialize",
+            Some(JsonRpcId::String("request-abc-123".to_string())),
+            None,
+        );
 
         let response = handlers.dispatch(request).await;
 
         let response_id = response.id.expect("Response must include ID");
-        assert_eq!(response_id, JsonRpcId::String("request-abc-123".to_string()),
-            "Response ID must match request ID");
+        assert_eq!(
+            response_id,
+            JsonRpcId::String("request-abc-123".to_string()),
+            "Response ID must match request ID"
+        );
     }
 
     #[tokio::test]
@@ -1177,8 +1326,11 @@ mod tests {
 
         // ID must be echoed even on error responses
         let response_id = response.id.expect("Error response must include ID");
-        assert_eq!(response_id, JsonRpcId::Number(999),
-            "Error response ID must match request ID");
+        assert_eq!(
+            response_id,
+            JsonRpcId::Number(999),
+            "Error response ID must match request ID"
+        );
     }
 
     // =========================================================================
@@ -1200,17 +1352,24 @@ mod tests {
         let response = handlers.dispatch(request).await;
 
         // Tool errors return success with isError: true (MCP format)
-        assert!(response.error.is_none(), "Tool errors use isError flag, not JSON-RPC error");
-        let result = response.result.expect("Tool error must return a result with isError");
+        assert!(
+            response.error.is_none(),
+            "Tool errors use isError flag, not JSON-RPC error"
+        );
+        let result = response
+            .result
+            .expect("Tool error must return a result with isError");
 
-        let is_error = result.get("isError")
+        let is_error = result
+            .get("isError")
             .expect("Response must contain isError")
             .as_bool()
             .expect("isError must be a boolean");
         assert!(is_error, "isError must be true for tool errors");
 
         // Verify error message is in content
-        let content = result.get("content")
+        let content = result
+            .get("content")
             .expect("Response must contain content")
             .as_array()
             .expect("content must be an array");
@@ -1246,7 +1405,10 @@ mod tests {
 
         // JSON-RPC 2.0: Notifications should return "no response" indicator
         // In this implementation, we return a response with no id, result, or error
-        assert!(response.id.is_none(), "Notification response should have no ID");
+        assert!(
+            response.id.is_none(),
+            "Notification response should have no ID"
+        );
     }
 
     // =========================================================================
@@ -1267,7 +1429,10 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "Valid search_graph should not return an error");
+        assert!(
+            response.error.is_none(),
+            "Valid search_graph should not return an error"
+        );
         let result = response.result.expect("tools/call must return a result");
 
         // Verify MCP format
@@ -1279,8 +1444,14 @@ mod tests {
         let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
         // Verify search results structure
-        assert!(parsed_text.get("results").is_some(), "Response must contain results");
-        assert!(parsed_text.get("count").is_some(), "Response must contain count");
+        assert!(
+            parsed_text.get("results").is_some(),
+            "Response must contain results"
+        );
+        assert!(
+            parsed_text.get("count").is_some(),
+            "Response must contain count"
+        );
     }
 
     #[tokio::test]
@@ -1320,7 +1491,10 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "Valid store_memory should not return an error");
+        assert!(
+            response.error.is_none(),
+            "Valid store_memory should not return an error"
+        );
         let result = response.result.expect("tools/call must return a result");
 
         let is_error = result.get("isError").unwrap().as_bool().unwrap();
@@ -1330,7 +1504,10 @@ mod tests {
         let text = content[0].get("text").unwrap().as_str().unwrap();
         let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
-        assert!(parsed_text.get("nodeId").is_some(), "Response must contain nodeId");
+        assert!(
+            parsed_text.get("nodeId").is_some(),
+            "Response must contain nodeId"
+        );
     }
 
     // =========================================================================
@@ -1343,7 +1520,8 @@ mod tests {
     fn test_feature_disabled_error_code_value() {
         // TC-GHOST-006: FEATURE_DISABLED must be -32001
         assert_eq!(
-            error_codes::FEATURE_DISABLED, -32001,
+            error_codes::FEATURE_DISABLED,
+            -32001,
             "FEATURE_DISABLED error code must be -32001"
         );
     }
@@ -1352,17 +1530,50 @@ mod tests {
     fn test_all_error_codes_are_negative() {
         // TC-GHOST-006: All Context Graph error codes must be negative (per JSON-RPC spec)
         assert!(error_codes::PARSE_ERROR < 0, "PARSE_ERROR must be negative");
-        assert!(error_codes::INVALID_REQUEST < 0, "INVALID_REQUEST must be negative");
-        assert!(error_codes::METHOD_NOT_FOUND < 0, "METHOD_NOT_FOUND must be negative");
-        assert!(error_codes::INVALID_PARAMS < 0, "INVALID_PARAMS must be negative");
-        assert!(error_codes::INTERNAL_ERROR < 0, "INTERNAL_ERROR must be negative");
-        assert!(error_codes::FEATURE_DISABLED < 0, "FEATURE_DISABLED must be negative");
-        assert!(error_codes::NODE_NOT_FOUND < 0, "NODE_NOT_FOUND must be negative");
-        assert!(error_codes::PAYLOAD_TOO_LARGE < 0, "PAYLOAD_TOO_LARGE must be negative");
-        assert!(error_codes::STORAGE_ERROR < 0, "STORAGE_ERROR must be negative");
-        assert!(error_codes::EMBEDDING_ERROR < 0, "EMBEDDING_ERROR must be negative");
-        assert!(error_codes::TOOL_NOT_FOUND < 0, "TOOL_NOT_FOUND must be negative");
-        assert!(error_codes::LAYER_TIMEOUT < 0, "LAYER_TIMEOUT must be negative");
+        assert!(
+            error_codes::INVALID_REQUEST < 0,
+            "INVALID_REQUEST must be negative"
+        );
+        assert!(
+            error_codes::METHOD_NOT_FOUND < 0,
+            "METHOD_NOT_FOUND must be negative"
+        );
+        assert!(
+            error_codes::INVALID_PARAMS < 0,
+            "INVALID_PARAMS must be negative"
+        );
+        assert!(
+            error_codes::INTERNAL_ERROR < 0,
+            "INTERNAL_ERROR must be negative"
+        );
+        assert!(
+            error_codes::FEATURE_DISABLED < 0,
+            "FEATURE_DISABLED must be negative"
+        );
+        assert!(
+            error_codes::NODE_NOT_FOUND < 0,
+            "NODE_NOT_FOUND must be negative"
+        );
+        assert!(
+            error_codes::PAYLOAD_TOO_LARGE < 0,
+            "PAYLOAD_TOO_LARGE must be negative"
+        );
+        assert!(
+            error_codes::STORAGE_ERROR < 0,
+            "STORAGE_ERROR must be negative"
+        );
+        assert!(
+            error_codes::EMBEDDING_ERROR < 0,
+            "EMBEDDING_ERROR must be negative"
+        );
+        assert!(
+            error_codes::TOOL_NOT_FOUND < 0,
+            "TOOL_NOT_FOUND must be negative"
+        );
+        assert!(
+            error_codes::LAYER_TIMEOUT < 0,
+            "LAYER_TIMEOUT must be negative"
+        );
     }
 
     #[test]
@@ -1381,7 +1592,8 @@ mod tests {
         for code in custom_codes {
             assert!(
                 code >= -32099 && code <= -32001,
-                "Error code {} must be in range [-32099, -32001]", code
+                "Error code {} must be in range [-32099, -32001]",
+                code
             );
         }
     }
@@ -1389,11 +1601,31 @@ mod tests {
     #[test]
     fn test_standard_jsonrpc_error_codes() {
         // TC-GHOST-006: Standard JSON-RPC codes must match spec
-        assert_eq!(error_codes::PARSE_ERROR, -32700, "PARSE_ERROR must be -32700");
-        assert_eq!(error_codes::INVALID_REQUEST, -32600, "INVALID_REQUEST must be -32600");
-        assert_eq!(error_codes::METHOD_NOT_FOUND, -32601, "METHOD_NOT_FOUND must be -32601");
-        assert_eq!(error_codes::INVALID_PARAMS, -32602, "INVALID_PARAMS must be -32602");
-        assert_eq!(error_codes::INTERNAL_ERROR, -32603, "INTERNAL_ERROR must be -32603");
+        assert_eq!(
+            error_codes::PARSE_ERROR,
+            -32700,
+            "PARSE_ERROR must be -32700"
+        );
+        assert_eq!(
+            error_codes::INVALID_REQUEST,
+            -32600,
+            "INVALID_REQUEST must be -32600"
+        );
+        assert_eq!(
+            error_codes::METHOD_NOT_FOUND,
+            -32601,
+            "METHOD_NOT_FOUND must be -32601"
+        );
+        assert_eq!(
+            error_codes::INVALID_PARAMS,
+            -32602,
+            "INVALID_PARAMS must be -32602"
+        );
+        assert_eq!(
+            error_codes::INTERNAL_ERROR,
+            -32603,
+            "INTERNAL_ERROR must be -32603"
+        );
     }
 
     #[test]
@@ -1407,11 +1639,17 @@ mod tests {
             "Dream mode is disabled in current phase",
         );
 
-        assert!(response.result.is_none(), "Error response must not have result");
+        assert!(
+            response.result.is_none(),
+            "Error response must not have result"
+        );
         let error = response.error.expect("Error response must have error");
 
         assert_eq!(error.code, -32001, "Error code must be -32001");
-        assert!(error.message.contains("disabled"), "Error message must mention disabled");
+        assert!(
+            error.message.contains("disabled"),
+            "Error message must mention disabled"
+        );
     }
 
     #[tokio::test]
@@ -1427,7 +1665,11 @@ mod tests {
 
         // Should return NODE_NOT_FOUND error
         let error = response.error.expect("Missing node must return error");
-        assert_eq!(error.code, error_codes::NODE_NOT_FOUND, "Error code must be NODE_NOT_FOUND (-32002)");
+        assert_eq!(
+            error.code,
+            error_codes::NODE_NOT_FOUND,
+            "Error code must be NODE_NOT_FOUND (-32002)"
+        );
         assert_eq!(error.code, -32002);
     }
 
@@ -1461,7 +1703,11 @@ mod tests {
 
         // Store a memory
         let store_params = json!({ "content": "Test memory content" });
-        let store_request = make_request("memory/store", Some(JsonRpcId::Number(2)), Some(store_params));
+        let store_request = make_request(
+            "memory/store",
+            Some(JsonRpcId::Number(2)),
+            Some(store_params),
+        );
         handlers.dispatch(store_request).await;
 
         // Count should now be 1
@@ -1480,16 +1726,25 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "system/health should not return error");
+        assert!(
+            response.error.is_none(),
+            "system/health should not return error"
+        );
         let result = response.result.expect("system/health must return result");
 
         let healthy = result.get("healthy").unwrap().as_bool().unwrap();
         assert!(healthy, "System must report healthy");
 
         let components = result.get("components").unwrap();
-        assert_eq!(components.get("memory").unwrap().as_str().unwrap(), "healthy");
+        assert_eq!(
+            components.get("memory").unwrap().as_str().unwrap(),
+            "healthy"
+        );
         assert_eq!(components.get("utl").unwrap().as_str().unwrap(), "healthy");
-        assert_eq!(components.get("graph").unwrap().as_str().unwrap(), "healthy");
+        assert_eq!(
+            components.get("graph").unwrap().as_str().unwrap(),
+            "healthy"
+        );
     }
 
     #[tokio::test]
@@ -1532,7 +1787,10 @@ mod tests {
 
         // Verify architecture description
         let architecture = manifest.get("architecture").unwrap().as_str().unwrap();
-        assert_eq!(architecture, "5-layer-bio-nervous", "Architecture must be 5-layer-bio-nervous");
+        assert_eq!(
+            architecture, "5-layer-bio-nervous",
+            "Architecture must be 5-layer-bio-nervous"
+        );
     }
 
     #[tokio::test]
@@ -1559,8 +1817,13 @@ mod tests {
             let name = layer.get("name").expect("Layer must have name");
             assert!(name.as_str().is_some(), "Layer name must be a string");
 
-            let description = layer.get("description").expect("Layer must have description");
-            assert!(description.as_str().is_some(), "Layer description must be a string");
+            let description = layer
+                .get("description")
+                .expect("Layer must have description");
+            assert!(
+                description.as_str().is_some(),
+                "Layer description must be a string"
+            );
 
             let status = layer.get("status").expect("Layer must have status");
             let status_str = status.as_str().unwrap();
@@ -1592,8 +1855,11 @@ mod tests {
 
         for (i, layer) in layers.iter().enumerate() {
             let name = layer.get("name").unwrap().as_str().unwrap();
-            assert_eq!(name, expected_order[i],
-                "Layer {} must be {}, got {}", i, expected_order[i], name);
+            assert_eq!(
+                name, expected_order[i],
+                "Layer {} must be {}, got {}",
+                i, expected_order[i], name
+            );
         }
     }
 
@@ -1613,15 +1879,24 @@ mod tests {
         let text = content[0].get("text").unwrap().as_str().unwrap();
         let manifest: serde_json::Value = serde_json::from_str(text).unwrap();
 
-        let utl = manifest.get("utl").expect("Manifest must contain utl object");
+        let utl = manifest
+            .get("utl")
+            .expect("Manifest must contain utl object");
 
         let description = utl.get("description").expect("UTL must have description");
-        assert!(description.as_str().unwrap().contains("Universal Transfer Learning"),
-            "UTL description must mention Universal Transfer Learning");
+        assert!(
+            description
+                .as_str()
+                .unwrap()
+                .contains("Universal Transfer Learning"),
+            "UTL description must mention Universal Transfer Learning"
+        );
 
         let formula = utl.get("formula").expect("UTL must have formula");
-        assert!(formula.as_str().unwrap().contains("H(P)"),
-            "UTL formula must contain entropy H(P)");
+        assert!(
+            formula.as_str().unwrap().contains("H(P)"),
+            "UTL formula must contain entropy H(P)"
+        );
     }
 
     #[tokio::test]
@@ -1644,21 +1919,31 @@ mod tests {
         let distilled: serde_json::Value = serde_json::from_str(text).unwrap();
 
         // Verify UTL metrics are computed
-        let utl = distilled.get("utl").expect("Response must contain utl object");
+        let utl = distilled
+            .get("utl")
+            .expect("Response must contain utl object");
 
-        let learning_score = utl.get("learningScore")
+        let learning_score = utl
+            .get("learningScore")
             .expect("UTL must have learningScore")
             .as_f64()
             .expect("learningScore must be a number");
-        assert!(learning_score >= 0.0 && learning_score <= 1.0,
-            "Learning score must be in [0.0, 1.0], got {}", learning_score);
+        assert!(
+            learning_score >= 0.0 && learning_score <= 1.0,
+            "Learning score must be in [0.0, 1.0], got {}",
+            learning_score
+        );
 
-        let surprise = utl.get("surprise")
+        let surprise = utl
+            .get("surprise")
             .expect("UTL must have surprise")
             .as_f64()
             .expect("surprise must be a number");
-        assert!(surprise >= 0.0 && surprise <= 1.0,
-            "Surprise must be in [0.0, 1.0], got {}", surprise);
+        assert!(
+            surprise >= 0.0 && surprise <= 1.0,
+            "Surprise must be in [0.0, 1.0], got {}",
+            surprise
+        );
     }
 
     #[tokio::test]
@@ -1676,7 +1961,11 @@ mod tests {
         });
 
         // First call
-        let request1 = make_request("tools/call", Some(JsonRpcId::Number(1)), Some(params.clone()));
+        let request1 = make_request(
+            "tools/call",
+            Some(JsonRpcId::Number(1)),
+            Some(params.clone()),
+        );
         let response1 = handlers.dispatch(request1).await;
         let result1 = response1.result.unwrap();
         let content1 = result1.get("content").unwrap().as_array().unwrap();
@@ -1718,18 +2007,27 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "utl/compute should not return error");
+        assert!(
+            response.error.is_none(),
+            "utl/compute should not return error"
+        );
         let result = response.result.expect("utl/compute must return result");
 
-        let learning_score = result.get("learningScore")
+        let learning_score = result
+            .get("learningScore")
             .expect("Result must have learningScore")
             .as_f64()
             .expect("learningScore must be a number");
-        assert!(learning_score >= 0.0 && learning_score <= 1.0,
-            "Learning score must be in [0.0, 1.0], got {}", learning_score);
+        assert!(
+            learning_score >= 0.0 && learning_score <= 1.0,
+            "Learning score must be in [0.0, 1.0], got {}",
+            learning_score
+        );
 
         // Verify cognitive pulse is included
-        let pulse = response.cognitive_pulse.expect("utl/compute should include cognitive pulse");
+        let pulse = response
+            .cognitive_pulse
+            .expect("utl/compute should include cognitive pulse");
         assert!(pulse.entropy >= 0.0 && pulse.entropy <= 1.0);
         assert!(pulse.coherence >= 0.0 && pulse.coherence <= 1.0);
     }
@@ -1745,16 +2043,28 @@ mod tests {
 
         let response = handlers.dispatch(request).await;
 
-        assert!(response.error.is_none(), "utl/metrics should not return error");
+        assert!(
+            response.error.is_none(),
+            "utl/metrics should not return error"
+        );
         let result = response.result.expect("utl/metrics must return result");
 
         // Verify all UTL components are present
         assert!(result.get("entropy").is_some(), "Must have entropy");
         assert!(result.get("coherence").is_some(), "Must have coherence");
-        assert!(result.get("learningScore").is_some(), "Must have learningScore");
+        assert!(
+            result.get("learningScore").is_some(),
+            "Must have learningScore"
+        );
         assert!(result.get("surprise").is_some(), "Must have surprise");
-        assert!(result.get("coherenceChange").is_some(), "Must have coherenceChange");
-        assert!(result.get("emotionalWeight").is_some(), "Must have emotionalWeight");
+        assert!(
+            result.get("coherenceChange").is_some(),
+            "Must have coherenceChange"
+        );
+        assert!(
+            result.get("emotionalWeight").is_some(),
+            "Must have emotionalWeight"
+        );
         assert!(result.get("alignment").is_some(), "Must have alignment");
 
         // Verify all values are valid numbers
@@ -1764,10 +2074,19 @@ mod tests {
         let emotional_weight = result.get("emotionalWeight").unwrap().as_f64().unwrap();
         let alignment = result.get("alignment").unwrap().as_f64().unwrap();
 
-        assert!(learning_score >= 0.0 && learning_score <= 1.0, "Learning score range");
+        assert!(
+            learning_score >= 0.0 && learning_score <= 1.0,
+            "Learning score range"
+        );
         assert!(surprise >= 0.0 && surprise <= 1.0, "Surprise range");
-        assert!(coherence_change >= 0.0 && coherence_change <= 1.0, "Coherence change range");
-        assert!(emotional_weight >= 0.5 && emotional_weight <= 1.5, "Emotional weight range");
+        assert!(
+            coherence_change >= 0.0 && coherence_change <= 1.0,
+            "Coherence change range"
+        );
+        assert!(
+            emotional_weight >= 0.5 && emotional_weight <= 1.5,
+            "Emotional weight range"
+        );
         assert!(alignment >= -1.0 && alignment <= 1.0, "Alignment range");
     }
 
@@ -1826,8 +2145,14 @@ mod tests {
         // Verify UTL fields
         assert!(utl.get("entropy").is_some(), "UTL must have entropy");
         assert!(utl.get("coherence").is_some(), "UTL must have coherence");
-        assert!(utl.get("learningScore").is_some(), "UTL must have learningScore");
-        assert!(utl.get("suggestedAction").is_some(), "UTL must have suggestedAction");
+        assert!(
+            utl.get("learningScore").is_some(),
+            "UTL must have learningScore"
+        );
+        assert!(
+            utl.get("suggestedAction").is_some(),
+            "UTL must have suggestedAction"
+        );
     }
 
     #[tokio::test]
@@ -1844,10 +2169,18 @@ mod tests {
 
         // Verify suggested action is valid
         let action_json = serde_json::to_string(&pulse.suggested_action).unwrap();
-        let valid_actions = ["\"ready\"", "\"continue\"", "\"consolidate\"", "\"explore\"", "\"stabilize\""];
+        let valid_actions = [
+            "\"ready\"",
+            "\"continue\"",
+            "\"consolidate\"",
+            "\"explore\"",
+            "\"stabilize\"",
+        ];
         assert!(
             valid_actions.iter().any(|a| action_json == *a),
-            "Suggested action must be one of {:?}, got {}", valid_actions, action_json
+            "Suggested action must be one of {:?}, got {}",
+            valid_actions,
+            action_json
         );
     }
 
@@ -1859,7 +2192,13 @@ mod tests {
         // Get initial count
         let status_request = make_request("system/status", Some(JsonRpcId::Number(1)), None);
         let status_response = handlers.dispatch(status_request).await;
-        let initial_count = status_response.result.unwrap().get("nodeCount").unwrap().as_u64().unwrap();
+        let initial_count = status_response
+            .result
+            .unwrap()
+            .get("nodeCount")
+            .unwrap()
+            .as_u64()
+            .unwrap();
 
         // Inject context
         let inject_params = json!({
@@ -1869,7 +2208,11 @@ mod tests {
                 "rationale": "Testing that injection stores memory"
             }
         });
-        let inject_request = make_request("tools/call", Some(JsonRpcId::Number(2)), Some(inject_params));
+        let inject_request = make_request(
+            "tools/call",
+            Some(JsonRpcId::Number(2)),
+            Some(inject_params),
+        );
         let inject_response = handlers.dispatch(inject_request).await;
 
         // Verify injection succeeded
@@ -1880,8 +2223,18 @@ mod tests {
         // Verify node count increased
         let final_status = make_request("system/status", Some(JsonRpcId::Number(3)), None);
         let final_response = handlers.dispatch(final_status).await;
-        let final_count = final_response.result.unwrap().get("nodeCount").unwrap().as_u64().unwrap();
+        let final_count = final_response
+            .result
+            .unwrap()
+            .get("nodeCount")
+            .unwrap()
+            .as_u64()
+            .unwrap();
 
-        assert_eq!(final_count, initial_count + 1, "Node count must increase by 1 after injection");
+        assert_eq!(
+            final_count,
+            initial_count + 1,
+            "Node count must increase by 1 after injection"
+        );
     }
 }

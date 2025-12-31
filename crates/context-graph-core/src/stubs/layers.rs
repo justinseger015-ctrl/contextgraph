@@ -791,7 +791,8 @@ mod tests {
         assert!(
             elapsed <= budget,
             "Sensing layer took {:?} but budget is {:?}",
-            elapsed, budget
+            elapsed,
+            budget
         );
     }
 
@@ -812,7 +813,8 @@ mod tests {
         assert!(
             elapsed <= budget,
             "Reflex layer took {:?} but budget is {:?}",
-            elapsed, budget
+            elapsed,
+            budget
         );
     }
 
@@ -833,7 +835,8 @@ mod tests {
         assert!(
             elapsed <= budget,
             "Memory layer took {:?} but budget is {:?}",
-            elapsed, budget
+            elapsed,
+            budget
         );
     }
 
@@ -854,7 +857,8 @@ mod tests {
         assert!(
             elapsed <= budget,
             "Learning layer took {:?} but budget is {:?}",
-            elapsed, budget
+            elapsed,
+            budget
         );
     }
 
@@ -875,7 +879,8 @@ mod tests {
         assert!(
             elapsed <= budget,
             "Coherence layer took {:?} but budget is {:?}",
-            elapsed, budget
+            elapsed,
+            budget
         );
     }
 
@@ -893,22 +898,23 @@ mod tests {
         ];
 
         for (layer, name) in layers {
-            let input = LayerInput::new("test-request".to_string(), format!("test content for {}", name));
+            let input = LayerInput::new(
+                "test-request".to_string(),
+                format!("test content for {}", name),
+            );
 
             let budget = layer.latency_budget();
             let start = Instant::now();
             let result = layer.process(input).await;
             let elapsed = start.elapsed();
 
-            assert!(
-                result.is_ok(),
-                "{} layer must process successfully",
-                name
-            );
+            assert!(result.is_ok(), "{} layer must process successfully", name);
             assert!(
                 elapsed <= budget,
                 "{} layer took {:?} but budget is {:?}",
-                name, elapsed, budget
+                name,
+                elapsed,
+                budget
             );
         }
     }
@@ -932,7 +938,9 @@ mod tests {
             assert!(
                 output.duration_us < budget_us,
                 "{} reported duration {}us exceeds budget {}us",
-                layer.layer_name(), output.duration_us, budget_us
+                layer.layer_name(),
+                output.duration_us,
+                budget_us
             );
         }
     }
@@ -949,18 +957,23 @@ mod tests {
         ];
 
         for layer in layers {
-            let input = LayerInput::new("test-request".to_string(), "test content for range validation".to_string());
+            let input = LayerInput::new(
+                "test-request".to_string(),
+                "test content for range validation".to_string(),
+            );
             let output = layer.process(input).await.unwrap();
 
             assert!(
                 output.pulse.entropy >= 0.0 && output.pulse.entropy <= 1.0,
                 "{} entropy {} must be in [0.0, 1.0]",
-                layer.layer_name(), output.pulse.entropy
+                layer.layer_name(),
+                output.pulse.entropy
             );
             assert!(
                 output.pulse.coherence >= 0.0 && output.pulse.coherence <= 1.0,
                 "{} coherence {} must be in [0.0, 1.0]",
-                layer.layer_name(), output.pulse.coherence
+                layer.layer_name(),
+                output.pulse.coherence
             );
         }
     }
@@ -969,7 +982,10 @@ mod tests {
     async fn test_layer_output_correct_layer_id() {
         // TC-GHOST-007: Each layer must report its correct LayerId in output
         let test_cases = vec![
-            (Box::new(StubSensingLayer::new()) as Box<dyn NervousLayer>, LayerId::Sensing),
+            (
+                Box::new(StubSensingLayer::new()) as Box<dyn NervousLayer>,
+                LayerId::Sensing,
+            ),
             (Box::new(StubReflexLayer::new()), LayerId::Reflex),
             (Box::new(StubMemoryLayer::new()), LayerId::Memory),
             (Box::new(StubLearningLayer::new()), LayerId::Learning),
@@ -981,14 +997,20 @@ mod tests {
             let output = layer.process(input).await.unwrap();
 
             assert_eq!(
-                output.layer, expected_id,
+                output.layer,
+                expected_id,
                 "{} must report correct LayerId {:?}, got {:?}",
-                layer.layer_name(), expected_id, output.layer
+                layer.layer_name(),
+                expected_id,
+                output.layer
             );
             assert_eq!(
-                output.result.layer, expected_id,
+                output.result.layer,
+                expected_id,
                 "{} result must report correct LayerId {:?}, got {:?}",
-                layer.layer_name(), expected_id, output.result.layer
+                layer.layer_name(),
+                expected_id,
+                output.result.layer
             );
         }
     }
@@ -1021,7 +1043,8 @@ mod tests {
         assert!(
             elapsed <= total_budget,
             "Full pipeline took {:?} but total budget is {:?}",
-            elapsed, total_budget
+            elapsed,
+            total_budget
         );
     }
 }

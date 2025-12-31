@@ -253,7 +253,8 @@ mod tests {
         let store = InMemoryStore::new();
         let embedding = vec![0.5; 1536];
 
-        let mut node = MemoryNode::new("Test content for round-trip".to_string(), embedding.clone());
+        let mut node =
+            MemoryNode::new("Test content for round-trip".to_string(), embedding.clone());
         node.importance = 0.8;
         let original_id = node.id;
         let original_content = node.content.clone();
@@ -264,13 +265,24 @@ mod tests {
         assert_eq!(stored_id, original_id, "Stored ID must match original");
 
         // Retrieve
-        let retrieved = store.retrieve(original_id).await.unwrap().expect("Node must exist");
+        let retrieved = store
+            .retrieve(original_id)
+            .await
+            .unwrap()
+            .expect("Node must exist");
 
         // Verify exact match
         assert_eq!(retrieved.id, original_id, "ID must match");
         assert_eq!(retrieved.content, original_content, "Content must match");
-        assert_eq!(retrieved.importance, original_importance, "Importance must match");
-        assert_eq!(retrieved.embedding.len(), 1536, "Embedding dimension must be preserved");
+        assert_eq!(
+            retrieved.importance, original_importance,
+            "Importance must match"
+        );
+        assert_eq!(
+            retrieved.embedding.len(),
+            1536,
+            "Embedding dimension must be preserved"
+        );
     }
 
     #[tokio::test]
@@ -297,7 +309,9 @@ mod tests {
             "Embedding length must be preserved"
         );
 
-        for (i, (&original, &stored)) in embedding.iter().zip(retrieved.embedding.iter()).enumerate() {
+        for (i, (&original, &stored)) in
+            embedding.iter().zip(retrieved.embedding.iter()).enumerate()
+        {
             assert_eq!(
                 original, stored,
                 "Embedding value at index {} must be exactly preserved: {} != {}",
@@ -334,16 +348,28 @@ mod tests {
         assert_eq!(retrieved.importance, 0.95, "Importance must match");
         assert_eq!(retrieved.access_count, 42, "Access count must match");
         assert_eq!(retrieved.deleted, false, "Deleted flag must match");
-        assert_eq!(retrieved.created_at, original_created_at, "Created timestamp must match");
-        assert_eq!(retrieved.last_accessed, original_last_accessed, "Last accessed must match");
+        assert_eq!(
+            retrieved.created_at, original_created_at,
+            "Created timestamp must match"
+        );
+        assert_eq!(
+            retrieved.last_accessed, original_last_accessed,
+            "Last accessed must match"
+        );
 
         // Verify metadata
         assert_eq!(retrieved.metadata.source, Some("test-source".to_string()));
         assert_eq!(retrieved.metadata.language, Some("en".to_string()));
-        assert_eq!(retrieved.metadata.tags, vec!["tag1".to_string(), "tag2".to_string()]);
+        assert_eq!(
+            retrieved.metadata.tags,
+            vec!["tag1".to_string(), "tag2".to_string()]
+        );
         assert_eq!(retrieved.metadata.utl_score, Some(0.75));
         assert_eq!(retrieved.metadata.consolidated, true);
-        assert_eq!(retrieved.metadata.rationale, Some("Test rationale".to_string()));
+        assert_eq!(
+            retrieved.metadata.rationale,
+            Some("Test rationale".to_string())
+        );
     }
 
     #[tokio::test]
@@ -402,7 +428,10 @@ mod tests {
         let final_node = store.retrieve(id).await.unwrap().unwrap();
         assert_eq!(final_node.content, "Modified content");
         assert_eq!(final_node.importance, 0.9);
-        assert_eq!(final_node.metadata.source, Some("original-source".to_string()));
+        assert_eq!(
+            final_node.metadata.source,
+            Some("original-source".to_string())
+        );
         assert_eq!(final_node.created_at, original_created_at);
         assert_eq!(final_node.embedding, embedding);
     }
