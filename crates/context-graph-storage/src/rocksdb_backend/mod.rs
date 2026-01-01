@@ -27,6 +27,7 @@
 //! - `core`: Main RocksDbMemex struct with open/close/health
 //! - `node_ops`: Node CRUD operations
 //! - `edge_ops`: Edge CRUD operations
+//! - `index_ops`: Secondary index query operations
 //! - `helpers`: Key formatting utilities
 
 mod config;
@@ -34,6 +35,7 @@ mod core;
 mod edge_ops;
 mod error;
 mod helpers;
+mod index_ops;
 mod node_ops;
 
 #[cfg(test)]
@@ -42,6 +44,8 @@ mod tests_core;
 mod tests_edge;
 #[cfg(test)]
 mod tests_edge_scan;
+#[cfg(test)]
+mod tests_index;
 #[cfg(test)]
 mod tests_node;
 #[cfg(test)]

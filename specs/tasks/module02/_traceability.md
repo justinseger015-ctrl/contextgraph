@@ -92,9 +92,9 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | RocksDbMemex::get_edge() | Retrieve graph edge | TASK-M02-018 | ✅ |
 | RocksDbMemex::get_edges_from() | Get outgoing edges | TASK-M02-018 | ✅ |
 | RocksDbMemex::get_edges_to() | Get incoming edges | TASK-M02-018 | ✅ |
-| get_nodes_by_quadrant() | Query nodes by Johari quadrant | TASK-M02-023 | ☐ |
-| get_nodes_by_tag() | Query nodes by tag | TASK-M02-023 | ☐ |
-| get_nodes_in_time_range() | Query nodes by time range | TASK-M02-023 | ☐ |
+| get_nodes_by_quadrant() | Query nodes by Johari quadrant | TASK-M02-023 | ✅ |
+| get_nodes_by_tag() | Query nodes by tag | TASK-M02-023 | ✅ |
+| get_nodes_in_time_range() | Query nodes by time range | TASK-M02-023 | ✅ |
 | store_embedding() | Store embedding vector | TASK-M02-024 | ☐ |
 | get_embedding() | Retrieve embedding vector | TASK-M02-024 | ☐ |
 | batch_get_embeddings() | Batch retrieve embeddings | TASK-M02-024 | ☐ |
@@ -189,7 +189,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Node CRUD tests | Store/get/update/delete | TASK-M02-017 | ✅ |
 | Edge CRUD tests | Edge operations | TASK-M02-018 | ✅ |
 | Pulse unit tests | 23 tests for all pulse methods | TASK-M02-021 | ✅ |
-| Index operation tests | Secondary index queries | TASK-M02-023 | ☐ |
+| Index operation tests | Secondary index queries | TASK-M02-023 | ✅ |
 | Embedding storage tests | Vector operations | TASK-M02-024 | ☐ |
 | Memex trait tests | Trait implementation | TASK-M02-026 | ☐ |
 | Integration tests | End-to-end workflows | TASK-M02-027 | ☐ |
