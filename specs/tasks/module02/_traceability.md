@@ -79,7 +79,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | serialize_embedding() | Serialize embedding vector | TASK-M02-014 | ✅ |
 | deserialize_embedding() | Deserialize embedding vector | TASK-M02-014 | ✅ |
 | get_column_family_descriptors() | Get all CF descriptors | TASK-M02-015 | ✅ |
-| RocksDbMemex::open() | Open database connection | TASK-M02-016 | ☐ |
+| RocksDbMemex::open() | Open database connection | TASK-M02-016 | ✅ |
 | RocksDbMemex::store_node() | Store memory node | TASK-M02-017 | ☐ |
 | RocksDbMemex::get_node() | Retrieve memory node | TASK-M02-017 | ☐ |
 | RocksDbMemex::update_node() | Update existing node | TASK-M02-017 | ☐ |
@@ -181,7 +181,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Johari transition tests | Valid transition logic | TASK-M02-012 | ✅ |
 | Serialization tests | Round-trip serialization | TASK-M02-014 | ✅ |
 | Column family tests | CF creation and options | TASK-M02-015 | ✅ |
-| RocksDB backend tests | Open/close lifecycle | TASK-M02-016 | ☐ |
+| RocksDB backend tests | Open/close lifecycle | TASK-M02-016 | ✅ |
 | Node CRUD tests | Store/get/update/delete | TASK-M02-017 | ☐ |
 | Edge CRUD tests | Edge operations | TASK-M02-018 | ☐ |
 | Pulse unit tests | All pulse methods | TASK-M02-022 | ☐ |
