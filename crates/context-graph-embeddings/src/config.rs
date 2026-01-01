@@ -151,91 +151,167 @@ impl ModelRegistryConfig {
 }
 
 // ============================================================================
+// PADDING STRATEGY ENUM
+// ============================================================================
+
+/// Padding strategy for variable-length sequences in a batch.
+///
+/// Controls how inputs of different lengths are padded to form uniform batches.
+/// Choice affects memory usage and computational efficiency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PaddingStrategy {
+    /// Pad all sequences to the model's max_tokens limit.
+    /// Most memory-intensive but safest for models with fixed expectations.
+    MaxLength,
+
+    /// Pad to the longest sequence in the current batch.
+    /// Most memory-efficient for variable-length inputs.
+    #[default]
+    DynamicMax,
+
+    /// Pad to next power of two (cache-friendly).
+    /// Good for GPU memory alignment and tensor core efficiency.
+    PowerOfTwo,
+
+    /// Use predefined length buckets (64, 128, 256, 512).
+    /// Balances padding efficiency with kernel optimization.
+    Bucket,
+}
+
+impl PaddingStrategy {
+    /// Returns all valid padding strategies.
+    pub fn all() -> &'static [PaddingStrategy] {
+        &[
+            PaddingStrategy::MaxLength,
+            PaddingStrategy::DynamicMax,
+            PaddingStrategy::PowerOfTwo,
+            PaddingStrategy::Bucket,
+        ]
+    }
+
+    /// Returns the strategy name as snake_case string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PaddingStrategy::MaxLength => "max_length",
+            PaddingStrategy::DynamicMax => "dynamic_max",
+            PaddingStrategy::PowerOfTwo => "power_of_two",
+            PaddingStrategy::Bucket => "bucket",
+        }
+    }
+}
+
+// ============================================================================
 // BATCH CONFIG
 // ============================================================================
 
 /// Configuration for batch processing.
 ///
 /// Controls how embedding requests are batched for efficient GPU utilization.
+/// The batch processor accumulates requests and triggers batch inference when:
+/// - Batch reaches `max_batch_size`, OR
+/// - `max_wait_ms` timeout expires (if `min_batch_size` is met)
+///
+/// This enables high throughput (>100 items/sec) by amortizing model invocation overhead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchConfig {
-    /// Maximum number of inputs per batch.
-    /// Larger batches improve throughput but use more memory.
+    /// Maximum number of inputs per batch before triggering inference.
+    /// Larger batches improve throughput but use more GPU memory.
     /// Constitution spec: max 32
     #[serde(default = "default_max_batch_size")]
     pub max_batch_size: usize,
 
+    /// Minimum batch size to wait for before processing.
+    /// If timeout expires and batch size >= min_batch_size, process immediately.
+    /// Set to 1 for latency-sensitive applications.
+    /// Default: 1
+    #[serde(default = "default_min_batch_size")]
+    pub min_batch_size: usize,
+
     /// Maximum time to wait for a full batch (milliseconds).
-    /// After this time, partial batch is processed.
-    /// Constitution spec: 50ms
+    /// After this time, partial batch is processed (if >= min_batch_size).
+    /// Constitution spec: 50ms (latency-sensitive: 10-100ms range)
     #[serde(default = "default_max_wait_ms")]
     pub max_wait_ms: u64,
 
-    /// Whether to sort inputs by sequence length before batching.
-    /// Reduces padding overhead.
-    #[serde(default = "default_sort_by_length")]
-    pub sort_by_length: bool,
+    /// Whether to enable dynamic batching based on system load.
+    /// When enabled, batch sizes adjust based on queue depth and GPU utilization.
+    /// Default: true
+    #[serde(default = "default_dynamic_batching")]
+    pub dynamic_batching: bool,
 
     /// Padding strategy for variable-length inputs.
-    /// "max_length" pads all to max, "longest" pads to longest in batch.
-    #[serde(default = "default_padding_strategy")]
-    pub padding_strategy: String,
+    /// Controls how sequences of different lengths are padded in a batch.
+    #[serde(default)]
+    pub padding_strategy: PaddingStrategy,
+
+    /// Whether to sort inputs by sequence length before batching.
+    /// Reduces padding waste by grouping similar-length sequences.
+    /// Can reduce padding overhead by 20-40%.
+    /// Default: true
+    #[serde(default = "default_sort_by_length")]
+    pub sort_by_length: bool,
 }
 
 fn default_max_batch_size() -> usize {
     32
 }
 
+fn default_min_batch_size() -> usize {
+    1
+}
+
 fn default_max_wait_ms() -> u64 {
     50
+}
+
+fn default_dynamic_batching() -> bool {
+    true
 }
 
 fn default_sort_by_length() -> bool {
     true
 }
 
-fn default_padding_strategy() -> String {
-    "longest".to_string()
-}
-
 impl Default for BatchConfig {
     fn default() -> Self {
         Self {
             max_batch_size: default_max_batch_size(),
+            min_batch_size: default_min_batch_size(),
             max_wait_ms: default_max_wait_ms(),
+            dynamic_batching: default_dynamic_batching(),
+            padding_strategy: PaddingStrategy::default(),
             sort_by_length: default_sort_by_length(),
-            padding_strategy: default_padding_strategy(),
         }
     }
 }
 
 impl BatchConfig {
-    /// Validate the configuration.
+    /// Validate batch configuration values.
     ///
     /// # Errors
     /// - `EmbeddingError::ConfigError` if max_batch_size is 0
-    /// - `EmbeddingError::ConfigError` if max_wait_ms is 0
-    /// - `EmbeddingError::ConfigError` if padding_strategy is invalid
+    /// - `EmbeddingError::ConfigError` if min_batch_size > max_batch_size
+    /// - `EmbeddingError::ConfigError` if max_wait_ms is 0 when min_batch_size > 1
     pub fn validate(&self) -> EmbeddingResult<()> {
         if self.max_batch_size == 0 {
             return Err(EmbeddingError::ConfigError {
-                message: "max_batch_size must be greater than 0".to_string(),
+                message: "max_batch_size must be > 0".to_string(),
             });
         }
 
-        if self.max_wait_ms == 0 {
-            return Err(EmbeddingError::ConfigError {
-                message: "max_wait_ms must be greater than 0".to_string(),
-            });
-        }
-
-        let valid_strategies = ["max_length", "longest"];
-        if !valid_strategies.contains(&self.padding_strategy.as_str()) {
+        if self.min_batch_size > self.max_batch_size {
             return Err(EmbeddingError::ConfigError {
                 message: format!(
-                    "Invalid padding_strategy: '{}'. Valid: {:?}",
-                    self.padding_strategy, valid_strategies
+                    "min_batch_size ({}) cannot exceed max_batch_size ({})",
+                    self.min_batch_size, self.max_batch_size
                 ),
+            });
+        }
+
+        if self.max_wait_ms == 0 && self.min_batch_size > 1 {
+            return Err(EmbeddingError::ConfigError {
+                message: "max_wait_ms must be > 0 when min_batch_size > 1".to_string(),
             });
         }
 
@@ -783,9 +859,11 @@ mod tests {
     fn test_batch_config_default() {
         let config = BatchConfig::default();
         assert_eq!(config.max_batch_size, 32);
+        assert_eq!(config.min_batch_size, 1);
         assert_eq!(config.max_wait_ms, 50);
+        assert!(config.dynamic_batching);
         assert!(config.sort_by_length);
-        assert_eq!(config.padding_strategy, "longest");
+        assert_eq!(config.padding_strategy, PaddingStrategy::DynamicMax);
     }
 
     #[test]
@@ -863,9 +941,11 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_zero_wait_fails() {
+    fn test_batch_zero_wait_with_min_batch_greater_than_one_fails() {
+        // max_wait_ms=0 is only invalid when min_batch_size > 1
         let config = BatchConfig {
             max_wait_ms: 0,
+            min_batch_size: 4,
             ..Default::default()
         };
         let result = config.validate();
@@ -874,14 +954,31 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_invalid_padding_fails() {
+    fn test_batch_zero_wait_with_min_batch_one_succeeds() {
+        // Special case: max_wait_ms=0 is OK if min_batch_size=1
         let config = BatchConfig {
-            padding_strategy: "invalid".to_string(),
+            min_batch_size: 1,
+            max_wait_ms: 0,
+            max_batch_size: 32,
+            dynamic_batching: true,
+            padding_strategy: PaddingStrategy::DynamicMax,
+            sort_by_length: true,
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_batch_min_exceeds_max_fails() {
+        let config = BatchConfig {
+            min_batch_size: 64,
+            max_batch_size: 32,
             ..Default::default()
         };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("padding_strategy"));
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("min_batch_size"));
+        assert!(msg.contains("cannot exceed"));
     }
 
     #[test]
@@ -1206,5 +1303,109 @@ enabled = false
         assert!(result.is_err());
         // Error message should include [batch] section
         assert!(result.unwrap_err().to_string().contains("[batch]"));
+    }
+
+    // =========================================================================
+    // PADDING STRATEGY TESTS (6 tests)
+    // =========================================================================
+
+    #[test]
+    fn test_padding_strategy_default_is_dynamic_max() {
+        assert_eq!(PaddingStrategy::default(), PaddingStrategy::DynamicMax);
+    }
+
+    #[test]
+    fn test_padding_strategy_all_variants() {
+        let all = PaddingStrategy::all();
+        assert_eq!(all.len(), 4);
+        assert!(all.contains(&PaddingStrategy::MaxLength));
+        assert!(all.contains(&PaddingStrategy::DynamicMax));
+        assert!(all.contains(&PaddingStrategy::PowerOfTwo));
+        assert!(all.contains(&PaddingStrategy::Bucket));
+    }
+
+    #[test]
+    fn test_padding_strategy_as_str() {
+        assert_eq!(PaddingStrategy::MaxLength.as_str(), "max_length");
+        assert_eq!(PaddingStrategy::DynamicMax.as_str(), "dynamic_max");
+        assert_eq!(PaddingStrategy::PowerOfTwo.as_str(), "power_of_two");
+        assert_eq!(PaddingStrategy::Bucket.as_str(), "bucket");
+    }
+
+    #[test]
+    fn test_padding_strategy_serde_roundtrip() {
+        for strategy in PaddingStrategy::all() {
+            let json = serde_json::to_string(strategy).unwrap();
+            let restored: PaddingStrategy = serde_json::from_str(&json).unwrap();
+            assert_eq!(*strategy, restored);
+        }
+    }
+
+    #[test]
+    fn test_padding_strategy_serde_snake_case() {
+        // Verify snake_case serialization
+        let json = serde_json::to_string(&PaddingStrategy::DynamicMax).unwrap();
+        assert_eq!(json, "\"dynamic_max\"");
+
+        let json = serde_json::to_string(&PaddingStrategy::PowerOfTwo).unwrap();
+        assert_eq!(json, "\"power_of_two\"");
+    }
+
+    #[test]
+    fn test_padding_strategy_copy() {
+        // PaddingStrategy must be Copy for efficiency
+        let a = PaddingStrategy::Bucket;
+        let b = a; // Copy
+        assert_eq!(a, b);
+    }
+
+    // =========================================================================
+    // BATCH CONFIG NEW FIELD TESTS (3 tests)
+    // =========================================================================
+
+    #[test]
+    fn test_batch_config_new_defaults() {
+        let config = BatchConfig::default();
+        assert_eq!(config.min_batch_size, 1);
+        assert!(config.dynamic_batching);
+        assert_eq!(config.padding_strategy, PaddingStrategy::DynamicMax);
+    }
+
+    #[test]
+    fn test_batch_config_toml_roundtrip() {
+        let original = BatchConfig {
+            max_batch_size: 64,
+            min_batch_size: 4,
+            max_wait_ms: 100,
+            dynamic_batching: false,
+            padding_strategy: PaddingStrategy::PowerOfTwo,
+            sort_by_length: false,
+        };
+
+        let toml_str = toml::to_string(&original).unwrap();
+        let restored: BatchConfig = toml::from_str(&toml_str).unwrap();
+
+        assert_eq!(original.max_batch_size, restored.max_batch_size);
+        assert_eq!(original.min_batch_size, restored.min_batch_size);
+        assert_eq!(original.max_wait_ms, restored.max_wait_ms);
+        assert_eq!(original.dynamic_batching, restored.dynamic_batching);
+        assert_eq!(original.padding_strategy, restored.padding_strategy);
+        assert_eq!(original.sort_by_length, restored.sort_by_length);
+    }
+
+    #[test]
+    fn test_batch_config_partial_toml_uses_defaults() {
+        // Only specify max_batch_size, rest should be defaults
+        let toml_str = r#"
+max_batch_size = 64
+"#;
+        let config: BatchConfig = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.max_batch_size, 64);
+        assert_eq!(config.min_batch_size, 1); // default
+        assert_eq!(config.max_wait_ms, 50); // default
+        assert!(config.dynamic_batching); // default
+        assert_eq!(config.padding_strategy, PaddingStrategy::DynamicMax); // default
+        assert!(config.sort_by_length); // default
     }
 }

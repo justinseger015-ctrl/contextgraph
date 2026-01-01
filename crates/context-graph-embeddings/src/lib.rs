@@ -38,6 +38,7 @@ pub use config::{
     FusionConfig,
     GpuConfig,
     ModelRegistryConfig,
+    PaddingStrategy,
 };
 pub use error::{EmbeddingError, EmbeddingResult};
 pub use provider::EmbeddingProvider;
