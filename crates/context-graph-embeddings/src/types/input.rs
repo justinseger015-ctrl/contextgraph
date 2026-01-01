@@ -460,7 +460,7 @@ impl ModelInput {
     /// # Returns
     /// Approximate memory usage including:
     /// - String heap allocations (capacity, not just len for accuracy)
-    /// - Vec<u8> heap allocations
+    /// - `Vec<u8>` heap allocations
     /// - Struct overhead is NOT included (stack-allocated)
     ///
     /// # Example

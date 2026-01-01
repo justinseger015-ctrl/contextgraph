@@ -763,7 +763,7 @@ pub struct GpuConfig {
 
     /// CUDA device IDs to use.
     /// Empty means auto-select first available device.
-    /// Default: [0]
+    /// Default: `[0]`
     #[serde(default = "default_device_ids")]
     pub device_ids: Vec<u32>,
 

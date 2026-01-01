@@ -50,8 +50,26 @@ pub use traits::{
     ModelFactory,
     QuantizationMode,
     SingleModelConfig,
+    MEMORY_ESTIMATES,
+    TOTAL_MEMORY_ESTIMATE,
+    get_memory_estimate,
 };
-pub use types::ModelId;
+
+// Type re-exports for public API
+pub use types::{
+    AuxiliaryEmbeddingData,
+    ConcatenatedEmbedding,
+    FusedEmbedding,
+    ImageFormat,
+    InputType,
+    ModelEmbedding,
+    ModelId,
+    ModelInput,
+    TokenizerFamily,
+};
+
+// Re-export dimensions module for constant access
+pub use types::dimensions;
 
 /// Default embedding dimension (FuseMoE output, OpenAI ada-002 compatible).
 pub const DEFAULT_DIMENSION: usize = 1536;
