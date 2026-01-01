@@ -13,7 +13,7 @@
 //!
 //! # Performance
 //! All operations use iterator-based pagination for memory efficiency.
-//! Results are Vec<NodeId>, NOT full MemoryNode objects.
+//! Results are `Vec<NodeId>`, NOT full MemoryNode objects.
 //!
 //! # Error Handling
 //! Empty results return `Ok(Vec::new())`, NOT errors.

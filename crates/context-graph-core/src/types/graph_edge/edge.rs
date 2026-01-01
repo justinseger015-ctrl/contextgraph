@@ -80,22 +80,48 @@ pub struct GraphEdge {
 }
 
 impl GraphEdge {
-    /// Create a new edge with default values for the given domain.
+    /// Creates a new edge with default values for the given domain.
+    ///
+    /// Initializes an edge with domain-appropriate neurotransmitter weights
+    /// and edge-type-appropriate base weight. The edge starts with neutral
+    /// confidence (0.5) and no steering reward.
     ///
     /// # Arguments
-    /// * `source_id` - Source node UUID
-    /// * `target_id` - Target node UUID
-    /// * `edge_type` - Type of relationship
-    /// * `domain` - Knowledge domain (determines NT weights)
+    ///
+    /// * `source_id` - Source node UUID (edge originates here)
+    /// * `target_id` - Target node UUID (edge points here)
+    /// * `edge_type` - Type of relationship (Semantic, Temporal, Causal, Hierarchical)
+    /// * `domain` - Knowledge domain for NT weight profiles
     ///
     /// # Returns
+    ///
     /// New GraphEdge with:
-    /// - weight = edge_type.default_weight()
-    /// - confidence = 0.5
-    /// - neurotransmitter_weights = NeurotransmitterWeights::for_domain(domain)
-    /// - steering_reward = 0.0
-    /// - traversal_count = 0
-    /// - is_amortized_shortcut = false
+    /// - `weight` = `edge_type.default_weight()`
+    /// - `confidence` = 0.5
+    /// - `neurotransmitter_weights` = domain-specific profile
+    /// - `steering_reward` = 0.0
+    /// - `traversal_count` = 0
+    /// - `is_amortized_shortcut` = false
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use uuid::Uuid;
+    /// use context_graph_core::types::GraphEdge;
+    /// use context_graph_core::marblestone::{EdgeType, Domain};
+    ///
+    /// let source = Uuid::new_v4();
+    /// let target = Uuid::new_v4();
+    ///
+    /// let edge = GraphEdge::new(source, target, EdgeType::Causal, Domain::Code);
+    ///
+    /// assert_eq!(edge.source_id, source);
+    /// assert_eq!(edge.target_id, target);
+    /// assert_eq!(edge.edge_type, EdgeType::Causal);
+    /// assert_eq!(edge.weight, 0.8); // Causal default
+    /// assert_eq!(edge.confidence, 0.5);
+    /// assert_eq!(edge.steering_reward, 0.0);
+    /// ```
     pub fn new(source_id: NodeId, target_id: NodeId, edge_type: EdgeType, domain: Domain) -> Self {
         let now = Utc::now();
         Self {
@@ -115,15 +141,55 @@ impl GraphEdge {
         }
     }
 
-    /// Create a new edge with explicit weight and confidence.
+    /// Creates a new edge with explicit weight and confidence values.
+    ///
+    /// Use this constructor when you have specific weight and confidence
+    /// values rather than relying on edge type defaults.
     ///
     /// # Arguments
+    ///
     /// * `source_id` - Source node UUID
     /// * `target_id` - Target node UUID
     /// * `edge_type` - Type of relationship
     /// * `domain` - Knowledge domain
-    /// * `weight` - Base edge weight (will be clamped to [0.0, 1.0])
-    /// * `confidence` - Confidence level (will be clamped to [0.0, 1.0])
+    /// * `weight` - Base edge weight (clamped to [0.0, 1.0])
+    /// * `confidence` - Confidence level (clamped to [0.0, 1.0])
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use uuid::Uuid;
+    /// use context_graph_core::types::GraphEdge;
+    /// use context_graph_core::marblestone::{EdgeType, Domain};
+    ///
+    /// let source = Uuid::new_v4();
+    /// let target = Uuid::new_v4();
+    ///
+    /// // Create edge with custom weight and high confidence
+    /// let edge = GraphEdge::with_weight(
+    ///     source,
+    ///     target,
+    ///     EdgeType::Semantic,
+    ///     Domain::Research,
+    ///     0.95,  // High semantic similarity
+    ///     0.85,  // High confidence
+    /// );
+    ///
+    /// assert_eq!(edge.weight, 0.95);
+    /// assert_eq!(edge.confidence, 0.85);
+    ///
+    /// // Values are clamped to valid range
+    /// let clamped = GraphEdge::with_weight(
+    ///     source,
+    ///     target,
+    ///     EdgeType::Semantic,
+    ///     Domain::General,
+    ///     1.5,   // Will be clamped to 1.0
+    ///     -0.2,  // Will be clamped to 0.0
+    /// );
+    /// assert_eq!(clamped.weight, 1.0);
+    /// assert_eq!(clamped.confidence, 0.0);
+    /// ```
     pub fn with_weight(
         source_id: NodeId,
         target_id: NodeId,

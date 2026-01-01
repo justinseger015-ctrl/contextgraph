@@ -1,83 +1,335 @@
 //! Storage error types for RocksDB backend.
 //!
-//! These errors cover database lifecycle operations and CRUD operations.
-//! Designed for fail-fast debugging with descriptive error messages.
+//! This module defines the error types for all RocksDB storage operations.
+//! Errors are designed for fail-fast debugging with descriptive messages.
+//!
+//! # Error Categories
+//!
+//! - **Lifecycle Errors**: `OpenFailed`, `FlushFailed` - database open/close operations
+//! - **CRUD Errors**: `WriteFailed`, `ReadFailed`, `NotFound` - data operations
+//! - **Data Integrity**: `Serialization`, `ValidationFailed`, `IndexCorrupted`
+//! - **Internal**: `ColumnFamilyNotFound`, `Internal` - unexpected failures
+//!
+//! # Constitution Reference
+//!
+//! - SEC-06: Soft delete 30-day recovery (see `delete_node` documentation)
+//! - AP-001: Never unwrap() in prod - all errors bubble up via `StorageResult<T>`
+//!
+//! # Example: Error Handling Pattern
+//!
+//! ```rust
+//! use context_graph_storage::{RocksDbMemex, StorageError, Memex};
+//! use tempfile::TempDir;
+//! use uuid::Uuid;
+//!
+//! let tmp = TempDir::new().unwrap();
+//! let memex = RocksDbMemex::open(tmp.path()).unwrap();
+//!
+//! // Attempting to get a non-existent node
+//! let missing_id = Uuid::new_v4();
+//! match memex.get_node(&missing_id) {
+//!     Ok(node) => println!("Found: {}", node.content),
+//!     Err(StorageError::NotFound { id }) => println!("Node {} not found", id),
+//!     Err(e) => println!("Other error: {}", e),
+//! }
+//! ```
 
 use crate::serialization::SerializationError;
 use context_graph_core::marblestone::EdgeType;
 use context_graph_core::types::{NodeId, ValidationError};
 use thiserror::Error;
 
-/// Storage operation errors.
+/// Storage operation errors for RocksDB backend.
 ///
-/// These errors cover database lifecycle operations and CRUD operations.
-/// Designed for fail-fast debugging with descriptive error messages.
+/// Provides typed errors for all storage operations with descriptive messages.
+/// Implements `std::error::Error` and `Display` via `thiserror`.
 ///
-/// # TASK-M02-017 Additions
-/// - `NotFound`: Node/entity not found by ID
-/// - `Serialization`: Serialization/deserialization errors
-/// - `ValidationFailed`: Node validation failed before storage
+/// # Design Philosophy
+///
+/// - **Fail-Fast**: Errors contain enough context for immediate debugging
+/// - **Type Safety**: Each error variant has specific fields for its context
+/// - **Composable**: `From` implementations allow `?` operator usage
+///
+/// # Error Matching
+///
+/// ```rust
+/// use context_graph_storage::StorageError;
+///
+/// fn handle_error(err: StorageError) -> &'static str {
+///     match err {
+///         StorageError::NotFound { .. } => "Entity not found - check ID",
+///         StorageError::ValidationFailed(_) => "Invalid data - check input",
+///         StorageError::OpenFailed { .. } => "DB unavailable - check path/permissions",
+///         StorageError::WriteFailed(_) => "Write failed - check disk space",
+///         StorageError::ReadFailed(_) => "Read failed - check DB health",
+///         StorageError::FlushFailed(_) => "Flush failed - check disk",
+///         StorageError::Serialization(_) => "Data corruption - investigate",
+///         StorageError::ColumnFamilyNotFound { .. } => "Internal error - report bug",
+///         StorageError::IndexCorrupted { .. } => "Index corruption - rebuild needed",
+///         StorageError::Internal(_) => "Internal error - report bug",
+///     }
+/// }
+/// ```
 #[derive(Debug, Error)]
 pub enum StorageError {
-    /// Database failed to open.
+    /// Database failed to open at the specified path.
+    ///
+    /// # When This Occurs
+    ///
+    /// - Path does not exist and `create_if_missing` is false
+    /// - Insufficient permissions to read/write the directory
+    /// - Database files are corrupted or locked by another process
+    /// - Disk is full or has I/O errors
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::OpenFailed {
+    ///     path: "/invalid/path".to_string(),
+    ///     message: "No such file or directory".to_string(),
+    /// };
+    /// assert!(error.to_string().contains("/invalid/path"));
+    /// ```
     #[error("Failed to open database at '{path}': {message}")]
-    OpenFailed { path: String, message: String },
+    OpenFailed {
+        /// The path where database open was attempted
+        path: String,
+        /// The underlying error message from RocksDB
+        message: String,
+    },
 
-    /// Column family not found (should never happen if DB opened correctly).
+    /// Column family not found in the database.
+    ///
+    /// # When This Occurs
+    ///
+    /// This error should never occur in normal operation. It indicates:
+    /// - Database was opened without all required column families
+    /// - Database schema mismatch between versions
+    /// - Internal bug in column family initialization
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::ColumnFamilyNotFound {
+    ///     name: "unknown_cf".to_string(),
+    /// };
+    /// assert!(error.to_string().contains("unknown_cf"));
+    /// ```
     #[error("Column family '{name}' not found")]
-    ColumnFamilyNotFound { name: String },
+    ColumnFamilyNotFound {
+        /// Name of the missing column family
+        name: String,
+    },
 
     /// Write operation failed.
+    ///
+    /// # When This Occurs
+    ///
+    /// - Disk is full or has I/O errors
+    /// - Database is read-only
+    /// - WAL (Write-Ahead Log) write failed
+    /// - Memory pressure causing write buffer issues
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::WriteFailed("Disk full".to_string());
+    /// assert!(error.to_string().contains("Disk full"));
+    /// ```
     #[error("Write failed: {0}")]
     WriteFailed(String),
 
     /// Read operation failed.
+    ///
+    /// # When This Occurs
+    ///
+    /// - Database file corruption
+    /// - I/O error during read
+    /// - Memory allocation failure
+    /// - SST file read error
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::ReadFailed("I/O error".to_string());
+    /// assert!(error.to_string().contains("I/O error"));
+    /// ```
     #[error("Read failed: {0}")]
     ReadFailed(String),
 
     /// Flush operation failed.
+    ///
+    /// # When This Occurs
+    ///
+    /// - Disk is full
+    /// - I/O error during flush
+    /// - Database shutdown during flush
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::FlushFailed("Sync failed".to_string());
+    /// assert!(error.to_string().contains("Sync failed"));
+    /// ```
     #[error("Flush failed: {0}")]
     FlushFailed(String),
 
-    /// Node not found by ID.
+    /// Entity not found by ID.
     ///
-    /// Returned by `get_node()`, `update_node()`, and `delete_node()` when
-    /// the requested node does not exist in the database.
+    /// # When This Occurs
+    ///
+    /// - `get_node()`: Node with given ID does not exist
+    /// - `update_node()`: Attempting to update non-existent node
+    /// - `delete_node()`: Attempting to delete non-existent node
+    /// - `get_edge()`: Edge with given composite key does not exist
+    /// - `get_embedding()`: No embedding stored for given node ID
+    ///
+    /// # ID Format
+    ///
+    /// The `id` field contains a formatted identifier:
+    /// - Nodes: UUID string (e.g., "550e8400-e29b-41d4-a716-446655440000")
+    /// - Edges: "source->target:EdgeType" format
+    /// - Embeddings: "embedding:UUID" format
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    /// use uuid::Uuid;
+    ///
+    /// // Node not found
+    /// let node_id = Uuid::new_v4();
+    /// let error = StorageError::not_found_node(node_id);
+    /// assert!(error.to_string().contains("Node not found"));
+    ///
+    /// // Embedding not found
+    /// let error = StorageError::not_found_embedding(node_id);
+    /// assert!(error.to_string().contains("embedding:"));
+    /// ```
     #[error("Node not found: {id}")]
     NotFound {
-        /// The node ID that was not found (as string for display)
+        /// The entity ID that was not found (formatted as string)
         id: String,
     },
 
-    /// Serialization or deserialization error.
+    /// Serialization or deserialization failed.
     ///
-    /// Wraps errors from the serialization module during storage operations.
+    /// # When This Occurs
+    ///
+    /// - Corrupted data in database
+    /// - Schema mismatch between stored and expected format
+    /// - Invalid MessagePack or bincode data
+    /// - Truncated data (incomplete write)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::Serialization("Invalid msgpack".to_string());
+    /// assert!(error.to_string().contains("Serialization error"));
+    /// ```
     #[error("Serialization error: {0}")]
     Serialization(String),
 
-    /// Node validation failed.
+    /// Node validation failed before storage.
     ///
-    /// Returned when `MemoryNode::validate()` fails before storage.
-    /// Fail fast: invalid nodes are never stored.
+    /// # When This Occurs
+    ///
+    /// Returned when `MemoryNode::validate()` fails. Common causes:
+    /// - Embedding dimension mismatch (expected 1536, got different)
+    /// - Embedding not normalized (magnitude not ~1.0)
+    /// - Content exceeds MAX_CONTENT_SIZE (1MB)
+    /// - Importance out of range [0.0, 1.0]
+    /// - Emotional valence out of range [-1.0, 1.0]
+    ///
+    /// # Fail-Fast Principle
+    ///
+    /// Invalid nodes are NEVER stored. This prevents data corruption
+    /// and ensures all persisted data meets invariants.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::ValidationFailed(
+    ///     "Importance 1.5 out of range [0.0, 1.0]".to_string()
+    /// );
+    /// assert!(error.to_string().contains("Validation error"));
+    /// ```
     #[error("Validation error: {0}")]
     ValidationFailed(String),
 
     /// Index corruption detected during scan or validation.
     ///
-    /// Indicates data integrity issues in secondary indexes.
-    /// Should trigger investigation and potential index rebuild.
+    /// # When This Occurs
+    ///
+    /// - Secondary index contains invalid UUID bytes
+    /// - Index references non-existent primary data
+    /// - Partial write left index in inconsistent state
+    /// - Manual database manipulation corrupted indexes
+    ///
+    /// # Recovery
+    ///
+    /// When this error occurs:
+    /// 1. Log the error with full details
+    /// 2. Consider rebuilding the affected index
+    /// 3. Investigate root cause (disk errors, bugs, etc.)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::IndexCorrupted {
+    ///     index_name: "johari_open".to_string(),
+    ///     details: "UUID parse failed for key".to_string(),
+    /// };
+    /// assert!(error.to_string().contains("johari_open"));
+    /// assert!(error.to_string().contains("UUID parse failed"));
+    /// ```
     #[error("Index corruption detected in {index_name}: {details}")]
     IndexCorrupted {
-        /// Name of the corrupted index (e.g., "johari_open", "temporal")
+        /// Name of the corrupted index (e.g., "johari_open", "temporal", "tags")
         index_name: String,
-        /// Details about the corruption (e.g., "UUID parse failed")
+        /// Details about what corruption was detected
         details: String,
     },
 
     /// Generic internal error for unexpected failures.
     ///
-    /// Used for internal errors that don't fit other categories.
-    /// Should include diagnostic information for debugging.
+    /// # When This Occurs
+    ///
+    /// Used for errors that don't fit other categories:
+    /// - Unexpected RocksDB internal errors
+    /// - Logic errors that should never happen
+    /// - Edge cases not covered by specific variants
+    ///
+    /// # Debugging
+    ///
+    /// The message should contain enough context for debugging.
+    /// If you see this error frequently, consider adding a
+    /// specific variant for that error case.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    ///
+    /// let error = StorageError::Internal("Unexpected state: X".to_string());
+    /// assert!(error.to_string().contains("Internal storage error"));
+    /// ```
     #[error("Internal storage error: {0}")]
     Internal(String),
 }
@@ -95,31 +347,64 @@ impl From<ValidationError> for StorageError {
 }
 
 impl StorageError {
-    /// Create NotFound error for a missing MemoryNode.
+    /// Creates a `NotFound` error for a missing `MemoryNode`.
+    ///
+    /// Convenience constructor that formats the UUID as a string
+    /// for the error message.
     ///
     /// # Arguments
-    /// * `id` - The NodeId (UUID) that was not found
+    ///
+    /// * `id` - The `NodeId` (UUID) that was not found
+    ///
+    /// # Returns
+    ///
+    /// A `StorageError::NotFound` variant with the formatted node ID.
     ///
     /// # Example
-    /// ```ignore
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    /// use uuid::Uuid;
+    ///
+    /// let node_id = Uuid::new_v4();
     /// let error = StorageError::not_found_node(node_id);
+    ///
+    /// assert!(error.to_string().contains("Node not found"));
+    /// assert!(error.to_string().contains(&node_id.to_string()));
     /// ```
     pub fn not_found_node(id: NodeId) -> Self {
         StorageError::NotFound { id: id.to_string() }
     }
 
-    /// Create NotFound error for a missing GraphEdge.
+    /// Creates a `NotFound` error for a missing `GraphEdge`.
     ///
-    /// Formats the edge identifier as "source->target:EdgeType" for clarity.
+    /// Formats the edge identifier as "source->target:EdgeType" for clarity,
+    /// making it easy to identify which edge was missing.
     ///
     /// # Arguments
+    ///
     /// * `source` - The source node ID
     /// * `target` - The target node ID
-    /// * `edge_type` - The type of edge
+    /// * `edge_type` - The type of edge (Semantic, Temporal, Causal, etc.)
+    ///
+    /// # Returns
+    ///
+    /// A `StorageError::NotFound` variant with the formatted edge key.
     ///
     /// # Example
-    /// ```ignore
-    /// let error = StorageError::not_found_edge(source_id, target_id, EdgeType::Semantic);
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    /// use context_graph_core::marblestone::EdgeType;
+    /// use uuid::Uuid;
+    ///
+    /// let source = Uuid::new_v4();
+    /// let target = Uuid::new_v4();
+    /// let error = StorageError::not_found_edge(source, target, EdgeType::Semantic);
+    ///
+    /// let msg = error.to_string();
+    /// assert!(msg.contains("->"));
+    /// assert!(msg.contains("Semantic"));
     /// ```
     pub fn not_found_edge(source: NodeId, target: NodeId, edge_type: EdgeType) -> Self {
         StorageError::NotFound {
@@ -127,16 +412,31 @@ impl StorageError {
         }
     }
 
-    /// Create NotFound error for a missing Embedding.
+    /// Creates a `NotFound` error for a missing embedding.
     ///
-    /// Prefixes with "embedding:" to distinguish from node lookups.
+    /// Prefixes the ID with "embedding:" to distinguish embedding lookups
+    /// from node lookups in error messages.
     ///
     /// # Arguments
-    /// * `id` - The NodeId (UUID) whose embedding was not found
+    ///
+    /// * `id` - The `NodeId` (UUID) whose embedding was not found
+    ///
+    /// # Returns
+    ///
+    /// A `StorageError::NotFound` variant with "embedding:" prefix.
     ///
     /// # Example
-    /// ```ignore
+    ///
+    /// ```rust
+    /// use context_graph_storage::StorageError;
+    /// use uuid::Uuid;
+    ///
+    /// let node_id = Uuid::new_v4();
     /// let error = StorageError::not_found_embedding(node_id);
+    ///
+    /// let msg = error.to_string();
+    /// assert!(msg.contains("embedding:"));
+    /// assert!(msg.contains(&node_id.to_string()));
     /// ```
     pub fn not_found_embedding(id: NodeId) -> Self {
         StorageError::NotFound {

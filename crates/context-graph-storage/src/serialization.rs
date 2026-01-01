@@ -1,28 +1,61 @@
-//! Binary serialization utilities.
+//! Binary serialization utilities for storage operations.
 //!
-//! Provides efficient binary serialization for MemoryNode, GraphEdge,
-//! and EmbeddingVector.
+//! This module provides efficient binary serialization for `MemoryNode`,
+//! `GraphEdge`, `EmbeddingVector`, and `UUID` types. It is optimized for
+//! both space efficiency and speed.
 //!
 //! # Serialization Strategy
-//! - **MemoryNode**: Uses MessagePack (rmp-serde) - handles `skip_serializing_if` correctly
-//! - **GraphEdge**: Uses bincode - optimal for fixed-layout types
-//! - **EmbeddingVector**: Raw little-endian f32 bytes - maximum performance
-//! - **UUID**: Direct byte access - 16 bytes exactly
 //!
-//! # Performance
-//! - MemoryNode serialized: ~6.5KB average (with 1536D embedding)
-//! - GraphEdge serialized: ~200 bytes
-//! - Round-trip overhead: < 100μs
+//! | Type | Format | Rationale |
+//! |------|--------|-----------|
+//! | `MemoryNode` | MessagePack | Handles `skip_serializing_if` correctly |
+//! | `GraphEdge` | bincode | Optimal for fixed-layout structs |
+//! | `EmbeddingVector` | Raw LE f32 | Maximum performance, no overhead |
+//! | `UUID` | Raw bytes | Exactly 16 bytes, no overhead |
+//!
+//! # Performance Characteristics
+//!
+//! | Operation | Size | Latency |
+//! |-----------|------|---------|
+//! | MemoryNode (1536D) | ~6.5KB | < 100us |
+//! | GraphEdge | ~200 bytes | < 50us |
+//! | Embedding (1536D) | 6144 bytes | < 10us |
+//! | UUID | 16 bytes | < 1us |
 //!
 //! # Constitution Compliance
-//! - AP-009: All functions clamp/validate to prevent NaN/Infinity propagation
-//! - Naming: snake_case functions, PascalCase types
 //!
-//! # Implementation Notes
-//! MemoryNode contains NodeMetadata which uses `#[serde(skip_serializing_if = "Option::is_none")]`.
-//! Bincode requires fixed-layout serialization and doesn't support skip_serializing_if.
-//! MessagePack (rmp-serde) properly handles these serde attributes while still
-//! providing compact binary output (smaller than JSON, similar to bincode).
+//! - AP-009: All functions preserve exact f32 values (no NaN/Infinity manipulation)
+//! - Naming: `snake_case` functions, `PascalCase` types
+//!
+//! # Example: Round-trip Serialization
+//!
+//! ```rust
+//! use context_graph_storage::serialization::{
+//!     serialize_embedding, deserialize_embedding,
+//!     serialize_uuid, deserialize_uuid,
+//! };
+//! use uuid::Uuid;
+//!
+//! // Embedding round-trip
+//! let embedding = vec![0.5_f32; 100];
+//! let bytes = serialize_embedding(&embedding);
+//! let restored = deserialize_embedding(&bytes).unwrap();
+//! assert_eq!(embedding, restored);
+//!
+//! // UUID round-trip
+//! let id = Uuid::new_v4();
+//! let bytes = serialize_uuid(&id);
+//! let restored = deserialize_uuid(&bytes);
+//! assert_eq!(id, restored);
+//! ```
+//!
+//! # Why MessagePack for MemoryNode?
+//!
+//! `MemoryNode` contains `NodeMetadata` which uses serde attributes like
+//! `#[serde(skip_serializing_if = "Option::is_none")]`. Bincode requires
+//! fixed-layout serialization and doesn't support these attributes.
+//! MessagePack properly handles serde attributes while still providing
+//! compact binary output (smaller than JSON, similar to bincode).
 
 use thiserror::Error;
 use uuid::Uuid;
@@ -31,34 +64,107 @@ use context_graph_core::types::{EmbeddingVector, GraphEdge, MemoryNode};
 
 /// Errors that can occur during serialization/deserialization operations.
 ///
+/// These errors indicate data format issues or corruption. They are converted
+/// to [`StorageError::Serialization`](crate::StorageError::Serialization)
+/// when propagated from storage operations.
+///
 /// # Design Notes
-/// - bincode::Error does not implement Clone, so we store error messages as String
+///
+/// - `bincode::Error` does not implement `Clone`, so we store error messages as `String`
 /// - All variants include enough context for debugging
+/// - Implements `Clone` and `PartialEq` for testing
 ///
-/// # Example
+/// # Example: Error Construction
+///
 /// ```rust
-/// use context_graph_storage::serialization::SerializationError;
+/// use context_graph_storage::SerializationError;
 ///
+/// // Invalid embedding size
 /// let error = SerializationError::InvalidEmbeddingSize {
 ///     expected: 6144,
 ///     actual: 100,
 /// };
 /// assert!(error.to_string().contains("expected 6144"));
+///
+/// // Serialization failure
+/// let error = SerializationError::SerializeFailed("corrupt data".to_string());
+/// assert!(error.to_string().contains("Serialization failed"));
+/// ```
+///
+/// # Example: Error Matching
+///
+/// ```rust
+/// use context_graph_storage::serialization::{SerializationError, deserialize_embedding};
+///
+/// let bad_bytes = vec![0u8; 13]; // Not divisible by 4
+/// match deserialize_embedding(&bad_bytes) {
+///     Ok(_) => unreachable!(),
+///     Err(SerializationError::InvalidEmbeddingSize { expected, actual }) => {
+///         println!("Expected {} bytes, got {}", expected, actual);
+///     }
+///     Err(_) => unreachable!(),
+/// }
 /// ```
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum SerializationError {
     /// Serialization operation failed.
-    /// Contains the underlying error message from bincode.
+    ///
+    /// Contains the underlying error message from bincode or MessagePack.
+    /// Common causes:
+    /// - Data structure incompatible with serialization format
+    /// - Out of memory during serialization
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::SerializationError;
+    ///
+    /// let error = SerializationError::SerializeFailed("unexpected type".to_string());
+    /// assert!(error.to_string().contains("Serialization failed"));
+    /// ```
     #[error("Serialization failed: {0}")]
     SerializeFailed(String),
 
     /// Deserialization operation failed.
-    /// Contains the underlying error message from bincode.
+    ///
+    /// Contains the underlying error message from bincode or MessagePack.
+    /// Common causes:
+    /// - Corrupted data in database
+    /// - Schema version mismatch
+    /// - Truncated data (incomplete write)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::SerializationError;
+    ///
+    /// let error = SerializationError::DeserializeFailed("invalid format".to_string());
+    /// assert!(error.to_string().contains("Deserialization failed"));
+    /// ```
     #[error("Deserialization failed: {0}")]
     DeserializeFailed(String),
 
     /// Embedding byte array has invalid size.
+    ///
     /// Embedding bytes must be divisible by 4 (size of f32).
+    /// This error occurs when deserializing raw embedding bytes.
+    ///
+    /// # Fields
+    ///
+    /// - `expected`: The next valid byte count (rounded up to multiple of 4)
+    /// - `actual`: The actual byte count received
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::SerializationError;
+    ///
+    /// let error = SerializationError::InvalidEmbeddingSize {
+    ///     expected: 16, // Next multiple of 4
+    ///     actual: 13,
+    /// };
+    /// assert!(error.to_string().contains("expected 16"));
+    /// ```
     #[error("Invalid embedding size: expected {expected} bytes, got {actual}")]
     InvalidEmbeddingSize {
         /// Expected byte count (must be divisible by 4)
@@ -68,7 +174,19 @@ pub enum SerializationError {
     },
 
     /// UUID byte array has invalid size.
-    /// UUID requires exactly 16 bytes.
+    ///
+    /// UUID requires exactly 16 bytes. This error is included for
+    /// completeness but is unlikely in practice since UUIDs use
+    /// fixed-size arrays.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::SerializationError;
+    ///
+    /// let error = SerializationError::InvalidUuidSize { actual: 10 };
+    /// assert!(error.to_string().contains("expected 16 bytes"));
+    /// ```
     #[error("Invalid UUID bytes: expected 16 bytes, got {actual}")]
     InvalidUuidSize {
         /// Actual byte count received
@@ -76,47 +194,85 @@ pub enum SerializationError {
     },
 }
 
-/// Serialize a MemoryNode to bincode bytes.
+/// Serializes a `MemoryNode` to MessagePack bytes.
+///
+/// Uses MessagePack (rmp-serde) format which properly handles serde's
+/// `skip_serializing_if` attributes on `NodeMetadata`.
 ///
 /// # Arguments
-/// * `node` - The MemoryNode to serialize
+///
+/// * `node` - The `MemoryNode` to serialize
 ///
 /// # Returns
+///
 /// * `Ok(Vec<u8>)` - Serialized bytes (~6.5KB for node with 1536D embedding)
-/// * `Err(SerializationError)` - If serialization fails
+/// * `Err(SerializationError::SerializeFailed)` - If serialization fails
+///
+/// # Errors
+///
+/// * `SerializationError::SerializeFailed` - MessagePack serialization error
 ///
 /// # Performance
-/// - Constraint: < 100μs for typical node
+///
+/// `Constraint: latency < 100us for typical node`
 ///
 /// # Example
-/// ```rust,ignore
-/// use context_graph_storage::serialization::serialize_node;
-/// use context_graph_core::types::MemoryNode;
 ///
-/// let node = MemoryNode::new("test".to_string(), vec![0.1; 1536]);
+/// ```rust
+/// use context_graph_storage::serialization::{serialize_node, deserialize_node};
+/// use context_graph_storage::MemoryNode;
+///
+/// // Create a valid normalized embedding
+/// let dim = 1536;
+/// let val = 1.0_f32 / (dim as f32).sqrt();
+/// let embedding = vec![val; dim];
+///
+/// // Create and serialize node
+/// let node = MemoryNode::new("Test content".to_string(), embedding);
 /// let bytes = serialize_node(&node).expect("serialize failed");
+///
+/// // Serialized size should be ~6.5KB
 /// assert!(bytes.len() > 6000);
+/// assert!(bytes.len() < 10000);
+///
+/// // Round-trip verification
+/// let restored = deserialize_node(&bytes).unwrap();
+/// assert_eq!(node.id, restored.id);
+/// assert_eq!(node.content, restored.content);
 /// ```
 pub fn serialize_node(node: &MemoryNode) -> Result<Vec<u8>, SerializationError> {
     // Use named format for proper field handling with skip_serializing_if attrs
     rmp_serde::to_vec_named(node).map_err(|e| SerializationError::SerializeFailed(e.to_string()))
 }
 
-/// Deserialize bincode bytes to MemoryNode.
+/// Deserializes MessagePack bytes to a `MemoryNode`.
 ///
 /// # Arguments
-/// * `bytes` - The bincode bytes to deserialize
+///
+/// * `bytes` - The MessagePack bytes to deserialize
 ///
 /// # Returns
+///
 /// * `Ok(MemoryNode)` - The deserialized node
-/// * `Err(SerializationError)` - If deserialization fails (invalid/corrupt data)
+/// * `Err(SerializationError::DeserializeFailed)` - If deserialization fails
+///
+/// # Errors
+///
+/// * `SerializationError::DeserializeFailed` - Corrupt data, truncated bytes,
+///   or schema mismatch
 ///
 /// # Example
-/// ```rust,ignore
-/// use context_graph_storage::serialization::{serialize_node, deserialize_node};
-/// use context_graph_core::types::MemoryNode;
 ///
-/// let node = MemoryNode::new("test".to_string(), vec![0.1; 1536]);
+/// ```rust
+/// use context_graph_storage::serialization::{serialize_node, deserialize_node};
+/// use context_graph_storage::MemoryNode;
+///
+/// // Create a node with normalized embedding
+/// let dim = 1536;
+/// let val = 1.0_f32 / (dim as f32).sqrt();
+/// let node = MemoryNode::new("Test".to_string(), vec![val; dim]);
+///
+/// // Round-trip
 /// let bytes = serialize_node(&node).unwrap();
 /// let restored = deserialize_node(&bytes).unwrap();
 /// assert_eq!(node, restored);
@@ -125,53 +281,88 @@ pub fn deserialize_node(bytes: &[u8]) -> Result<MemoryNode, SerializationError> 
     rmp_serde::from_slice(bytes).map_err(|e| SerializationError::DeserializeFailed(e.to_string()))
 }
 
-/// Serialize a GraphEdge to bincode bytes.
+/// Serializes a `GraphEdge` to bincode bytes.
+///
+/// Uses bincode format which is optimal for fixed-layout structs like `GraphEdge`.
 ///
 /// # Arguments
-/// * `edge` - The GraphEdge to serialize
+///
+/// * `edge` - The `GraphEdge` to serialize
 ///
 /// # Returns
+///
 /// * `Ok(Vec<u8>)` - Serialized bytes (~200 bytes)
-/// * `Err(SerializationError)` - If serialization fails
+/// * `Err(SerializationError::SerializeFailed)` - If serialization fails
+///
+/// # Errors
+///
+/// * `SerializationError::SerializeFailed` - Bincode serialization error
 ///
 /// # Performance
-/// - Constraint: < 50μs for typical edge
+///
+/// `Constraint: latency < 50us for typical edge`
 ///
 /// # Example
-/// ```rust,ignore
-/// use context_graph_storage::serialization::serialize_edge;
-/// use context_graph_core::types::GraphEdge;
-/// use context_graph_core::marblestone::{Domain, EdgeType};
+///
+/// ```rust
+/// use context_graph_storage::serialization::{serialize_edge, deserialize_edge};
+/// use context_graph_storage::{GraphEdge, EdgeType, Domain};
 /// use uuid::Uuid;
 ///
-/// let edge = GraphEdge::new(Uuid::new_v4(), Uuid::new_v4(), EdgeType::Semantic, Domain::Code);
+/// // Create edge
+/// let edge = GraphEdge::new(
+///     Uuid::new_v4(),
+///     Uuid::new_v4(),
+///     EdgeType::Semantic,
+///     Domain::Code,
+/// );
+///
+/// // Serialize
 /// let bytes = serialize_edge(&edge).expect("serialize failed");
 /// assert!(bytes.len() > 100 && bytes.len() < 500);
+///
+/// // Round-trip
+/// let restored = deserialize_edge(&bytes).unwrap();
+/// assert_eq!(edge, restored);
 /// ```
 pub fn serialize_edge(edge: &GraphEdge) -> Result<Vec<u8>, SerializationError> {
     bincode::serialize(edge).map_err(|e| SerializationError::SerializeFailed(e.to_string()))
 }
 
-/// Deserialize bincode bytes to GraphEdge.
+/// Deserializes bincode bytes to a `GraphEdge`.
 ///
 /// # Arguments
+///
 /// * `bytes` - The bincode bytes to deserialize
 ///
 /// # Returns
+///
 /// * `Ok(GraphEdge)` - The deserialized edge
-/// * `Err(SerializationError)` - If deserialization fails
+/// * `Err(SerializationError::DeserializeFailed)` - If deserialization fails
+///
+/// # Errors
+///
+/// * `SerializationError::DeserializeFailed` - Corrupt data, truncated bytes,
+///   or schema mismatch
 ///
 /// # Example
-/// ```rust,ignore
+///
+/// ```rust
 /// use context_graph_storage::serialization::{serialize_edge, deserialize_edge};
-/// use context_graph_core::types::GraphEdge;
-/// use context_graph_core::marblestone::{Domain, EdgeType};
+/// use context_graph_storage::{GraphEdge, EdgeType, Domain};
 /// use uuid::Uuid;
 ///
-/// let edge = GraphEdge::new(Uuid::new_v4(), Uuid::new_v4(), EdgeType::Semantic, Domain::Code);
+/// let edge = GraphEdge::new(
+///     Uuid::new_v4(),
+///     Uuid::new_v4(),
+///     EdgeType::Causal,
+///     Domain::Medical,
+/// );
+///
 /// let bytes = serialize_edge(&edge).unwrap();
 /// let restored = deserialize_edge(&bytes).unwrap();
-/// assert_eq!(edge, restored);
+/// assert_eq!(edge.edge_type, restored.edge_type);
+/// assert_eq!(edge.domain, restored.domain);
 /// ```
 pub fn deserialize_edge(bytes: &[u8]) -> Result<GraphEdge, SerializationError> {
     bincode::deserialize(bytes).map_err(|e| SerializationError::DeserializeFailed(e.to_string()))

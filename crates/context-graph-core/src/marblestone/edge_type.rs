@@ -10,39 +10,90 @@ use std::fmt;
 ///
 /// Each edge type represents a distinct semantic relationship with
 /// different traversal and weighting characteristics:
-/// - Semantic: Similarity-based connections
-/// - Temporal: Time-ordered sequences
-/// - Causal: Cause-effect relationships
-/// - Hierarchical: Parent-child taxonomies
+/// - Semantic: Similarity-based connections (weight: 0.5)
+/// - Temporal: Time-ordered sequences (weight: 0.7)
+/// - Causal: Cause-effect relationships (weight: 0.8)
+/// - Hierarchical: Parent-child taxonomies (weight: 0.9)
 ///
 /// # Constitution Reference
+///
 /// - edge_model.attrs: type:Semantic|Temporal|Causal|Hierarchical
 ///
-/// # Example
+/// # Examples
+///
+/// ## Creating and Inspecting Edge Types
+///
 /// ```rust
 /// use context_graph_core::marblestone::EdgeType;
 ///
-/// let edge = EdgeType::Causal;
-/// assert_eq!(edge.to_string(), "causal");
-/// assert_eq!(edge.default_weight(), 0.8);
+/// // Create different edge types
+/// let semantic = EdgeType::Semantic;
+/// let causal = EdgeType::Causal;
+///
+/// // Check string representation
+/// assert_eq!(semantic.to_string(), "semantic");
+/// assert_eq!(causal.to_string(), "causal");
+///
+/// // Get default weights
+/// assert_eq!(semantic.default_weight(), 0.5);
+/// assert_eq!(causal.default_weight(), 0.8);
+/// ```
+///
+/// ## Iterating Over All Edge Types
+///
+/// ```rust
+/// use context_graph_core::marblestone::EdgeType;
+///
+/// for edge_type in EdgeType::all() {
+///     println!("{}: weight={}, desc={}",
+///         edge_type,
+///         edge_type.default_weight(),
+///         edge_type.description()
+///     );
+/// }
+/// ```
+///
+/// ## Using with GraphEdge
+///
+/// ```rust
+/// use uuid::Uuid;
+/// use context_graph_core::types::GraphEdge;
+/// use context_graph_core::marblestone::{EdgeType, Domain};
+///
+/// // Hierarchical edges have highest default weight
+/// let edge = GraphEdge::new(
+///     Uuid::new_v4(),
+///     Uuid::new_v4(),
+///     EdgeType::Hierarchical,
+///     Domain::Code,
+/// );
+/// assert_eq!(edge.weight, 0.9);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EdgeType {
     /// Semantic similarity relationship.
+    ///
     /// Nodes share similar meaning, topic, or conceptual space.
+    /// Default weight: 0.5 (variable based on embedding similarity).
     Semantic,
 
     /// Temporal sequence relationship.
+    ///
     /// Source node occurred before target node in time.
+    /// Default weight: 0.7 (time relationships are usually reliable).
     Temporal,
 
     /// Causal relationship.
+    ///
     /// Source node causes, influences, or triggers target node.
+    /// Default weight: 0.8 (strong evidence when established).
     Causal,
 
     /// Hierarchical relationship.
+    ///
     /// Source node is a parent, category, or ancestor of target node.
+    /// Default weight: 0.9 (taxonomy relationships are very strong).
     Hierarchical,
 }
 

@@ -1,6 +1,40 @@
 //! Core RocksDbMemex struct and database operations.
 //!
-//! Provides the main database wrapper with open/close and health check functionality.
+//! This module provides the main `RocksDbMemex` struct, which is the primary
+//! storage implementation for the Context Graph system. It wraps RocksDB
+//! with optimized column families for nodes, edges, embeddings, and indexes.
+//!
+//! # Architecture
+//!
+//! ```text
+//! RocksDbMemex
+//! ├── DB (RocksDB instance)
+//! │   ├── CF: nodes        - Primary node storage
+//! │   ├── CF: edges        - Graph edge storage
+//! │   ├── CF: embeddings   - Vector embeddings (1536D)
+//! │   ├── CF: johari_*     - Quadrant indexes (4 CFs)
+//! │   ├── CF: temporal     - Time-based index
+//! │   ├── CF: tags         - Tag index
+//! │   ├── CF: sources      - Source index
+//! │   └── CF: system       - Metadata storage
+//! └── Cache (LRU block cache, 256MB default)
+//! ```
+//!
+//! # Usage
+//!
+//! ```rust
+//! use context_graph_storage::RocksDbMemex;
+//! use tempfile::TempDir;
+//!
+//! let tmp = TempDir::new().unwrap();
+//! let memex = RocksDbMemex::open(tmp.path()).unwrap();
+//!
+//! // Check health
+//! memex.health_check().unwrap();
+//!
+//! // Flush all data to disk
+//! memex.flush_all().unwrap();
+//! ```
 
 use rocksdb::{Cache, ColumnFamily, Options, DB};
 use std::path::Path;
@@ -10,61 +44,178 @@ use crate::column_families::{cf_names, get_column_family_descriptors};
 use super::config::RocksDbConfig;
 use super::error::StorageError;
 
-/// RocksDB-backed storage implementation.
+/// RocksDB-backed storage implementation for the Context Graph system.
 ///
-/// Provides persistent storage for MemoryNodes and GraphEdges with
-/// optimized column families for different access patterns.
+/// `RocksDbMemex` provides persistent storage for `MemoryNode` and `GraphEdge`
+/// entities with optimized column families for different access patterns.
+/// It implements the [`Memex`](crate::Memex) trait for abstraction.
 ///
 /// # Thread Safety
+///
 /// RocksDB's `DB` type is internally thread-safe for concurrent reads and writes.
-/// This struct can be shared across threads via `Arc<RocksDbMemex>`.
+/// This struct can be safely shared across threads via `Arc<RocksDbMemex>`.
+/// All methods take `&self` (not `&mut self`) because RocksDB handles locking internally.
 ///
 /// # Column Families
-/// Opens all 12 column families defined in `column_families.rs`.
 ///
-/// # Example
-/// ```rust,ignore
-/// use context_graph_storage::rocksdb_backend::{RocksDbMemex, RocksDbConfig};
+/// Opens 12 column families with optimized settings:
+///
+/// | Column Family | Purpose | Block Size |
+/// |--------------|---------|------------|
+/// | `nodes` | Primary node storage | 16KB |
+/// | `edges` | Graph edge storage | 16KB |
+/// | `embeddings` | Vector embeddings | 64KB (write-optimized) |
+/// | `johari_open/blind/hidden/unknown` | Quadrant indexes | 4KB |
+/// | `temporal` | Time-based index | 4KB |
+/// | `tags` | Tag index | 4KB |
+/// | `sources` | Source index | 4KB |
+/// | `system` | Metadata storage | 4KB |
+///
+/// # Performance
+///
+/// - Block cache: 256MB default (configurable via `RocksDbConfig`)
+/// - WAL enabled by default for durability
+/// - Bloom filters on index column families
+///
+/// # Example: Basic Usage
+///
+/// ```rust
+/// use context_graph_storage::{RocksDbMemex, Memex, MemoryNode, JohariQuadrant};
+/// use tempfile::TempDir;
+///
+/// // Create database
+/// let tmp = TempDir::new().unwrap();
+/// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+///
+/// // Create and store a node
+/// let dim = 1536;
+/// let val = 1.0_f32 / (dim as f32).sqrt();
+/// let embedding = vec![val; dim];
+///
+/// let mut node = MemoryNode::new("Hello, RocksDB!".to_string(), embedding);
+/// node.quadrant = JohariQuadrant::Open;
+/// memex.store_node(&node).unwrap();
+///
+/// // Retrieve the node
+/// let retrieved = memex.get_node(&node.id).unwrap();
+/// assert_eq!(retrieved.content, "Hello, RocksDB!");
+/// ```
+///
+/// # Example: Custom Configuration
+///
+/// ```rust
+/// use context_graph_storage::{RocksDbMemex, RocksDbConfig};
 /// use tempfile::TempDir;
 ///
 /// let tmp = TempDir::new().unwrap();
-/// let db = RocksDbMemex::open(tmp.path()).expect("open failed");
-/// assert!(db.health_check().is_ok());
+/// let config = RocksDbConfig {
+///     block_cache_size: 512 * 1024 * 1024, // 512MB cache
+///     max_open_files: 2000,
+///     enable_wal: true,
+///     create_if_missing: true,
+/// };
+///
+/// let memex = RocksDbMemex::open_with_config(tmp.path(), config).unwrap();
+/// memex.health_check().unwrap();
 /// ```
 pub struct RocksDbMemex {
     /// The RocksDB database instance.
+    ///
+    /// Accessed via `self.db` for all RocksDB operations. Thread-safe
+    /// for concurrent reads and writes.
     pub(crate) db: DB,
-    /// Shared block cache (kept alive for DB lifetime).
+
+    /// Shared LRU block cache.
+    ///
+    /// Kept alive for the database lifetime. The cache is shared across
+    /// all column families to optimize memory usage.
     #[allow(dead_code)]
     cache: Cache,
-    /// Database path for reference.
+
+    /// Database path for reference and logging.
+    ///
+    /// Stores the path as a string for error messages and diagnostics.
     path: String,
 }
 
 impl RocksDbMemex {
-    /// Open a RocksDB database at the specified path with default configuration.
+    /// Opens a RocksDB database at the specified path with default configuration.
     ///
-    /// Creates the database and all 12 column families if they don't exist.
+    /// Creates the database directory and all 12 column families if they don't exist.
+    /// Uses default configuration: 256MB cache, 1000 max open files, WAL enabled.
     ///
     /// # Arguments
-    /// * `path` - Path to the database directory
+    ///
+    /// * `path` - Path to the database directory. Will be created if it doesn't exist.
     ///
     /// # Returns
+    ///
     /// * `Ok(RocksDbMemex)` - Successfully opened database
     /// * `Err(StorageError::OpenFailed)` - Database could not be opened
+    ///
+    /// # Errors
+    ///
+    /// * `StorageError::OpenFailed` - Path is invalid, permissions denied,
+    ///   database is locked, or disk is full
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::RocksDbMemex;
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    /// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+    ///
+    /// // Database is ready for use
+    /// memex.health_check().unwrap();
+    /// ```
+    ///
+    /// `Constraint: latency < 100ms for new DB, < 500ms for large existing DB`
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, StorageError> {
         Self::open_with_config(path, RocksDbConfig::default())
     }
 
-    /// Open a RocksDB database with custom configuration.
+    /// Opens a RocksDB database with custom configuration.
+    ///
+    /// Allows fine-grained control over RocksDB settings like cache size,
+    /// file handles, and WAL behavior.
     ///
     /// # Arguments
+    ///
     /// * `path` - Path to the database directory
-    /// * `config` - Custom configuration options
+    /// * `config` - Custom configuration options (see [`RocksDbConfig`])
     ///
     /// # Returns
+    ///
     /// * `Ok(RocksDbMemex)` - Successfully opened database
     /// * `Err(StorageError::OpenFailed)` - Database could not be opened
+    ///
+    /// # Errors
+    ///
+    /// * `StorageError::OpenFailed` - Path is invalid, permissions denied,
+    ///   database is locked, disk is full, or config is incompatible
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::{RocksDbMemex, RocksDbConfig};
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    ///
+    /// // High-performance configuration
+    /// let config = RocksDbConfig {
+    ///     block_cache_size: 1024 * 1024 * 1024, // 1GB cache
+    ///     max_open_files: 5000,
+    ///     enable_wal: true, // Durability
+    ///     create_if_missing: true,
+    /// };
+    ///
+    /// let memex = RocksDbMemex::open_with_config(tmp.path(), config).unwrap();
+    /// ```
+    ///
+    /// `Constraint: latency < 100ms for new DB, < 500ms for large existing DB`
     pub fn open_with_config<P: AsRef<Path>>(
         path: P,
         config: RocksDbConfig,
@@ -103,14 +254,32 @@ impl RocksDbMemex {
         })
     }
 
-    /// Get a reference to a column family by name.
+    /// Gets a reference to a column family by name.
+    ///
+    /// Used internally to access specific column families for operations.
+    /// External callers should use the high-level API methods instead.
     ///
     /// # Arguments
-    /// * `name` - Column family name (use `cf_names::*` constants)
+    ///
+    /// * `name` - Column family name. Use `cf_names::*` constants for type safety.
     ///
     /// # Returns
-    /// * `Ok(&ColumnFamily)` - Reference to the column family
+    ///
+    /// * `Ok(&ColumnFamily)` - Reference to the column family handle
     /// * `Err(StorageError::ColumnFamilyNotFound)` - CF doesn't exist
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::{RocksDbMemex, cf_names};
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    /// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+    ///
+    /// // Access the nodes column family
+    /// let cf = memex.get_cf(cf_names::NODES).unwrap();
+    /// ```
     pub fn get_cf(&self, name: &str) -> Result<&ColumnFamily, StorageError> {
         self.db
             .cf_handle(name)
@@ -119,21 +288,56 @@ impl RocksDbMemex {
             })
     }
 
-    /// Get the database path.
+    /// Gets the database path.
+    ///
+    /// Returns the path where the database files are stored, useful for
+    /// logging and diagnostics.
     ///
     /// # Returns
-    /// The path where the database is stored.
+    ///
+    /// The path string where the database is stored.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::RocksDbMemex;
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    /// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+    ///
+    /// println!("Database at: {}", memex.path());
+    /// ```
     pub fn path(&self) -> &str {
         &self.path
     }
 
-    /// Check if the database is healthy.
+    /// Checks if the database is healthy.
     ///
-    /// Verifies all 12 column families are accessible.
+    /// Verifies that all 12 column families are accessible. This is a
+    /// lightweight check that doesn't scan data.
     ///
     /// # Returns
-    /// * `Ok(())` - All CFs accessible
-    /// * `Err(StorageError::ColumnFamilyNotFound)` - A CF is missing
+    ///
+    /// * `Ok(())` - All column families are accessible
+    /// * `Err(StorageError::ColumnFamilyNotFound)` - A column family is missing
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::RocksDbMemex;
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    /// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+    ///
+    /// // Verify database health before operations
+    /// if memex.health_check().is_ok() {
+    ///     println!("Database is healthy");
+    /// }
+    /// ```
+    ///
+    /// `Constraint: latency < 1ms`
     pub fn health_check(&self) -> Result<(), StorageError> {
         for cf_name in cf_names::ALL {
             self.get_cf(cf_name)?;
@@ -141,13 +345,42 @@ impl RocksDbMemex {
         Ok(())
     }
 
-    /// Flush all column families to disk.
+    /// Flushes all column families to disk.
     ///
-    /// Forces all buffered writes to be persisted.
+    /// Forces all buffered writes in the memtable to be persisted to SST files.
+    /// Useful before shutdown or when durability is critical.
     ///
     /// # Returns
-    /// * `Ok(())` - All CFs flushed successfully
+    ///
+    /// * `Ok(())` - All column families flushed successfully
     /// * `Err(StorageError::FlushFailed)` - Flush operation failed
+    ///
+    /// # Errors
+    ///
+    /// * `StorageError::FlushFailed` - Disk I/O error, disk full, or
+    ///   database is shutting down
+    ///
+    /// # Performance
+    ///
+    /// This is an I/O-intensive operation. Avoid calling frequently in
+    /// hot paths. RocksDB automatically flushes based on memtable size.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::RocksDbMemex;
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    /// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+    ///
+    /// // ... perform writes ...
+    ///
+    /// // Ensure all writes are persisted before shutdown
+    /// memex.flush_all().unwrap();
+    /// ```
+    ///
+    /// `Constraint: latency < 500ms for typical workload`
     pub fn flush_all(&self) -> Result<(), StorageError> {
         for cf_name in cf_names::ALL {
             let cf = self.get_cf(cf_name)?;
@@ -158,10 +391,33 @@ impl RocksDbMemex {
         Ok(())
     }
 
-    /// Get a reference to the underlying RocksDB instance.
+    /// Gets a reference to the underlying RocksDB instance.
     ///
     /// Use this for advanced operations not covered by the high-level API.
-    /// Be careful not to violate data invariants.
+    /// Be careful not to violate data invariants or column family schemas.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the RocksDB `DB` instance.
+    ///
+    /// # Warning
+    ///
+    /// Direct DB access bypasses validation and index maintenance.
+    /// Only use for operations like statistics gathering or manual repairs.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_storage::RocksDbMemex;
+    /// use tempfile::TempDir;
+    ///
+    /// let tmp = TempDir::new().unwrap();
+    /// let memex = RocksDbMemex::open(tmp.path()).unwrap();
+    ///
+    /// // Get RocksDB statistics (advanced usage)
+    /// let db = memex.db();
+    /// // db.property_value("rocksdb.stats") etc.
+    /// ```
     pub fn db(&self) -> &DB {
         &self.db
     }

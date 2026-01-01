@@ -10,23 +10,45 @@ use super::DEFAULT_EMBEDDING_DIM;
 /// and what values were involved, enabling actionable error messages.
 ///
 /// # Constitution Compliance
+///
 /// - AP-009: Prevents NaN/Infinity by validating before storage
 /// - Naming: PascalCase enum, snake_case fields
 ///
-/// # Example
+/// # Examples
+///
 /// ```rust
 /// use context_graph_core::types::ValidationError;
 ///
+/// // Dimension mismatch error
 /// let error = ValidationError::InvalidEmbeddingDimension {
 ///     expected: 1536,
 ///     actual: 768,
 /// };
 /// assert!(error.to_string().contains("expected 1536"));
+///
+/// // Out of bounds error
+/// let error = ValidationError::OutOfBounds {
+///     field: "importance".to_string(),
+///     value: 1.5,
+///     min: 0.0,
+///     max: 1.0,
+/// };
+/// assert!(error.to_string().contains("importance"));
 /// ```
 #[derive(Debug, Clone, Error, PartialEq)]
 pub enum ValidationError {
     /// Embedding vector has incorrect dimensions.
-    /// Expected: 1536 (per constitution.yaml embedding spec)
+    ///
+    /// Occurs when the provided embedding vector length does not match
+    /// the expected dimension (1536 for OpenAI text-embedding-3-large).
+    ///
+    /// # When This Occurs
+    ///
+    /// - Creating a MemoryNode with wrong embedding size
+    /// - Loading embeddings from incompatible model
+    /// - Deserializing corrupted embedding data
+    ///
+    /// `Constraint: embedding.len() == 1536`
     #[error("Invalid embedding dimension: expected {expected}, got {actual}")]
     InvalidEmbeddingDimension {
         /// Required dimension (1536)
@@ -36,7 +58,20 @@ pub enum ValidationError {
     },
 
     /// A numeric field value is outside its valid range.
-    /// Used for importance [0.0, 1.0], valence [-1.0, 1.0], etc.
+    ///
+    /// Occurs when bounded fields receive values outside their constraints:
+    /// - `importance`: [0.0, 1.0]
+    /// - `emotional_valence`: [-1.0, 1.0]
+    /// - `confidence`: [0.0, 1.0]
+    /// - `weight`: [0.0, 1.0]
+    ///
+    /// # When This Occurs
+    ///
+    /// - Setting importance > 1.0 or < 0.0
+    /// - Providing valence outside [-1.0, 1.0]
+    /// - Passing NaN or Infinity (fails AP-009)
+    ///
+    /// `Constraint: min <= value <= max`
     #[error("Field '{field}' value {value} is out of bounds [{min}, {max}]")]
     OutOfBounds {
         /// Name of the field that failed validation
@@ -50,7 +85,17 @@ pub enum ValidationError {
     },
 
     /// Content exceeds maximum allowed size.
-    /// Limit: 1MB (1,048,576 bytes) per constitution.yaml
+    ///
+    /// Occurs when node content exceeds the 1MB (1,048,576 bytes) limit
+    /// defined in constitution.yaml for memory constraints.
+    ///
+    /// # When This Occurs
+    ///
+    /// - Storing very large documents without chunking
+    /// - Embedding binary data directly in content
+    /// - Accumulated edits growing content beyond limit
+    ///
+    /// `Constraint: content.len() <= 1,048,576 bytes`
     #[error("Content size {size} bytes exceeds maximum allowed {max_size} bytes")]
     ContentTooLarge {
         /// Actual content size in bytes
@@ -60,7 +105,18 @@ pub enum ValidationError {
     },
 
     /// Embedding vector is not normalized (magnitude should be ~1.0).
-    /// Tolerance: magnitude must be in [0.99, 1.01]
+    ///
+    /// Occurs when the embedding vector's L2 norm deviates significantly
+    /// from 1.0. Normalized embeddings are required for accurate cosine
+    /// similarity calculations.
+    ///
+    /// # When This Occurs
+    ///
+    /// - Using raw embeddings without normalization
+    /// - Scaling embeddings incorrectly
+    /// - Corrupted embedding data
+    ///
+    /// `Constraint: 0.99 <= magnitude <= 1.01`
     #[error("Embedding not normalized: magnitude is {magnitude:.6}, expected ~1.0")]
     EmbeddingNotNormalized {
         /// Actual magnitude of the embedding vector

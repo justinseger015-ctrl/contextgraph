@@ -22,7 +22,7 @@ use crate::types::JohariQuadrant;
 /// - `content`: str[<=65536] - actual stored knowledge (max 1MB enforced)
 /// - `embedding`: Vec1536 - dense vector representation
 /// - `quadrant`: Johari Window classification
-/// - `importance`: f32[0,1] - relevance score
+/// - `importance`: f32 \[0,1\] - relevance score
 /// - `emotional_valence`: f32[-1,1] - emotional charge
 /// - `created_at`: Creation timestamp
 /// - `accessed_at`: Last access timestamp

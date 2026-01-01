@@ -122,7 +122,31 @@ impl NodeMetadata {
         self
     }
 
-    /// Add a tag. Automatically deduplicates (no duplicates stored).
+    /// Adds a tag to this node's metadata for categorization.
+    ///
+    /// Tags enable content discovery and filtering across the knowledge graph.
+    /// Automatically deduplicates - adding an existing tag is a no-op.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The tag string to add (anything convertible to `String`)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use context_graph_core::types::NodeMetadata;
+    ///
+    /// let mut meta = NodeMetadata::new();
+    /// meta.add_tag("important");
+    /// meta.add_tag("rust");
+    /// meta.add_tag("important"); // Duplicate ignored
+    ///
+    /// assert_eq!(meta.tags.len(), 2);
+    /// assert!(meta.has_tag("important"));
+    /// assert!(meta.has_tag("rust"));
+    /// ```
+    ///
+    /// `Constraint: O(n) deduplication check`
     pub fn add_tag(&mut self, tag: impl Into<String>) {
         let tag = tag.into();
         if !self.tags.contains(&tag) {
@@ -130,7 +154,31 @@ impl NodeMetadata {
         }
     }
 
-    /// Remove a tag. Returns true if tag was present and removed.
+    /// Removes a tag from this node's metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `tag` - The tag string to remove
+    ///
+    /// # Returns
+    ///
+    /// `true` if the tag was present and removed, `false` if tag was not found.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use context_graph_core::types::NodeMetadata;
+    ///
+    /// let mut meta = NodeMetadata::new();
+    /// meta.add_tag("temporary");
+    /// meta.add_tag("permanent");
+    ///
+    /// assert!(meta.remove_tag("temporary"));
+    /// assert!(!meta.remove_tag("nonexistent"));
+    /// assert_eq!(meta.tags.len(), 1);
+    /// ```
+    ///
+    /// `Constraint: O(n) linear search`
     pub fn remove_tag(&mut self, tag: &str) -> bool {
         if let Some(pos) = self.tags.iter().position(|t| t == tag) {
             self.tags.remove(pos);
@@ -160,14 +208,62 @@ impl NodeMetadata {
         self.custom.remove(key)
     }
 
-    /// Mark as consolidated with current timestamp.
+    /// Marks this node as consolidated during dream consolidation.
+    ///
+    /// Consolidation is the process of strengthening important memories
+    /// during offline processing (inspired by sleep consolidation in
+    /// biological memory systems).
+    ///
+    /// Sets `consolidated = true` and records the current timestamp
+    /// in `consolidated_at`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use context_graph_core::types::NodeMetadata;
+    ///
+    /// let mut meta = NodeMetadata::new();
+    /// assert!(!meta.consolidated);
+    /// assert!(meta.consolidated_at.is_none());
+    ///
+    /// meta.mark_consolidated();
+    ///
+    /// assert!(meta.consolidated);
+    /// assert!(meta.consolidated_at.is_some());
+    /// ```
     pub fn mark_consolidated(&mut self) {
         self.consolidated = true;
         self.consolidated_at = Some(Utc::now());
     }
 
-    /// Mark as deleted (soft delete) with current timestamp.
-    /// Per SEC-06: Soft delete with 30-day recovery.
+    /// Marks this node as deleted (soft delete) with current timestamp.
+    ///
+    /// Implements soft deletion per SEC-06 constitution compliance:
+    /// - Sets `deleted = true` and records timestamp in `deleted_at`
+    /// - Node remains in storage for 30-day recovery window
+    /// - Can be restored via [`restore()`](Self::restore)
+    ///
+    /// # Constitution Compliance
+    ///
+    /// SEC-06: Soft delete with 30-day recovery period before permanent removal.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use context_graph_core::types::NodeMetadata;
+    ///
+    /// let mut meta = NodeMetadata::new();
+    /// assert!(!meta.deleted);
+    ///
+    /// meta.mark_deleted();
+    ///
+    /// assert!(meta.deleted);
+    /// assert!(meta.deleted_at.is_some());
+    ///
+    /// // Can be restored within 30 days
+    /// meta.restore();
+    /// assert!(!meta.deleted);
+    /// ```
     pub fn mark_deleted(&mut self) {
         self.deleted = true;
         self.deleted_at = Some(Utc::now());

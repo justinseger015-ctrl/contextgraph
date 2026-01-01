@@ -20,3 +20,7 @@ rand.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+
+[[example]]
+name = "cognitive_pulse"
+path = "examples/cognitive_pulse.rs"

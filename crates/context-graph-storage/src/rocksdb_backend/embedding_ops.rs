@@ -94,7 +94,7 @@ impl RocksDbMemex {
 
     /// Retrieves multiple embeddings in a single batch operation.
     ///
-    /// Returns a Vec of Option<Vec<f32>> in the same order as input IDs.
+    /// Returns a Vec of `Option<Vec<f32>>` in the same order as input IDs.
     /// None indicates the embedding was not found for that ID.
     ///
     /// More efficient than multiple `get_embedding()` calls because:

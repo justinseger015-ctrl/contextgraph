@@ -193,18 +193,18 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Index operation tests | Secondary index queries | TASK-M02-023 | ✅ |
 | Embedding storage tests | Vector operations | TASK-M02-024 | ✅ |
 | Memex trait tests | Trait implementation | TASK-M02-026 | ✅ |
-| Integration tests | End-to-end workflows | TASK-M02-027 | ☐ |
-| Doc tests | Example code in documentation | TASK-M02-028 | ☐ |
+| Integration tests | End-to-end workflows | TASK-M02-027 | ✅ |
+| Doc tests | Example code in documentation | TASK-M02-028 | ✅ |
 
 ### Documentation
 
 | Item | Description | Task ID | Verified |
 |------|-------------|---------|----------|
-| Public API doc comments | /// comments on all public items | TASK-M02-028 | ☐ |
-| basic_storage.rs example | Simple node creation/retrieval | TASK-M02-028 | ☐ |
-| marblestone_edges.rs example | Edge creation with NT weights | TASK-M02-028 | ☐ |
-| cognitive_pulse.rs example | Pulse generation and interpretation | TASK-M02-028 | ☐ |
-| Crate README files | Purpose documentation per crate | TASK-M02-028 | ☐ |
+| Public API doc comments | /// comments on all public items | TASK-M02-028 | ✅ |
+| basic_storage.rs example | Simple node creation/retrieval | TASK-M02-028 | ✅ |
+| marblestone_edges.rs example | Edge creation with NT weights | TASK-M02-028 | ✅ |
+| cognitive_pulse.rs example | Pulse generation and interpretation | TASK-M02-028 | ✅ |
+| Crate README files | Purpose documentation per crate | TASK-M02-028 | ✅ |
 
 ## Uncovered Items
 
