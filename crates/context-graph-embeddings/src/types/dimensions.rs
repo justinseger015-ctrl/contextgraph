@@ -60,6 +60,22 @@ pub const ENTITY_NATIVE: usize = 384;
 pub const LATE_INTERACTION_NATIVE: usize = 128;
 
 // =============================================================================
+// FUSEMOE CONFIGURATION CONSTANTS
+// =============================================================================
+
+/// Number of expert networks in FuseMoE.
+/// Constitution.yaml specifies 8 experts for the fusion layer.
+pub const NUM_EXPERTS: usize = 8;
+
+/// Top-K experts selected for each input (routing).
+/// Constitution.yaml specifies top-k=2 for sparse expert activation.
+pub const TOP_K_EXPERTS: usize = 2;
+
+/// ColBERT v3 per-token embedding dimension.
+/// Used for AuxiliaryEmbeddingData in FusedEmbedding.
+pub const COLBERT_V3_DIM: usize = 128;
+
+// =============================================================================
 // PROJECTED DIMENSIONS (for FuseMoE concatenation input)
 // =============================================================================
 
@@ -149,6 +165,30 @@ const _FUSED_OUTPUT_CHECK: () = assert!(
 const _MODEL_COUNT_CHECK: () = assert!(
     MODEL_COUNT == 12,
     "MODEL_COUNT must equal 12"
+);
+
+/// Compile-time assertion that NUM_EXPERTS equals 8.
+const _NUM_EXPERTS_CHECK: () = assert!(
+    NUM_EXPERTS == 8,
+    "NUM_EXPERTS must equal 8"
+);
+
+/// Compile-time assertion that TOP_K_EXPERTS equals 2.
+const _TOP_K_EXPERTS_CHECK: () = assert!(
+    TOP_K_EXPERTS == 2,
+    "TOP_K_EXPERTS must equal 2"
+);
+
+/// Compile-time assertion that COLBERT_V3_DIM equals 128.
+const _COLBERT_V3_DIM_CHECK: () = assert!(
+    COLBERT_V3_DIM == 128,
+    "COLBERT_V3_DIM must equal 128"
+);
+
+/// Compile-time assertion that TOP_K_EXPERTS < NUM_EXPERTS.
+const _TOP_K_LESS_THAN_NUM_CHECK: () = assert!(
+    TOP_K_EXPERTS < NUM_EXPERTS,
+    "TOP_K_EXPERTS must be less than NUM_EXPERTS"
 );
 
 // =============================================================================

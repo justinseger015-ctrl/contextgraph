@@ -21,6 +21,30 @@ pub enum EmbeddingError {
     #[error("Dimension mismatch: expected {expected}, got {actual}")]
     DimensionMismatch { expected: usize, actual: usize },
 
+    /// Invalid embedding vector (contains NaN or Infinity).
+    #[error("Invalid vector: {0}")]
+    InvalidVector(String),
+
+    /// Expert weights validation failed (e.g., sum != 1.0).
+    #[error("Expert weights invalid: {0}")]
+    ExpertWeightsInvalid(String),
+
+    /// Invalid expert index (must be < NUM_EXPERTS).
+    #[error("Invalid expert index: {index}, must be < {max}")]
+    InvalidExpertIndex { index: u8, max: usize },
+
+    /// Serialization/deserialization error.
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// Compression/decompression error.
+    #[error("Compression error: {0}")]
+    CompressionError(String),
+
+    /// Invalid auxiliary data.
+    #[error("Invalid auxiliary data: {0}")]
+    InvalidAuxData(String),
+
     /// IO error.
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
