@@ -28,7 +28,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | MemoryNode | Core knowledge node struct | TASK-M02-005 | `crates/context-graph-core/src/types/memory_node.rs` | ✅ |
 | NeurotransmitterWeights | Marblestone NT weight struct | TASK-M02-008 | `crates/context-graph-core/src/marblestone.rs` | ✅ |
 | GraphEdge | Graph edge with 13 Marblestone fields (replaces 7-field legacy struct) | TASK-M02-010 | `crates/context-graph-core/src/types/graph_edge.rs` | ✅ |
-| CognitivePulse | System cognitive state struct | TASK-M02-021 | `crates/context-graph-core/src/pulse.rs` | ☐ |
+| CognitivePulse | System cognitive state struct (7 fields) | TASK-M02-021 | `crates/context-graph-core/src/types/pulse.rs` | ✅ |
 | JohariTransition | Quadrant transition record | TASK-M02-012 | `crates/context-graph-core/src/types/johari.rs` | ✅ |
 
 ### Methods / Business Logic
@@ -62,8 +62,12 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | GraphEdge::mark_as_shortcut() | Mark edge as amortized shortcut | TASK-M02-011 | ✅ |
 | GraphEdge::age_seconds() | Get edge age in seconds | TASK-M02-011 | ✅ |
 | JohariQuadrant::valid_transitions() | Get valid transitions from quadrant | TASK-M02-012 | ✅ |
-| CognitivePulse::new() | Create new cognitive pulse | TASK-M02-022 | ☐ |
-| CognitivePulse::compute_suggested_action() | Compute suggested action | TASK-M02-022 | ☐ |
+| CognitivePulse::new() | Create new cognitive pulse (7 fields) | TASK-M02-021 | ✅ |
+| CognitivePulse::compute_action() | Compute suggested action from entropy/coherence | TASK-M02-021 | ✅ |
+| CognitivePulse::computed() | Create pulse from UtlMetrics | TASK-M02-021 | ✅ |
+| CognitivePulse::from_values() | Create pulse from entropy/coherence | TASK-M02-021 | ✅ |
+| CognitivePulse::with_emotion() | Create pulse with EmotionalState | TASK-M02-021 | ✅ |
+| CognitivePulse::is_healthy() | Check if system state is healthy | TASK-M02-021 | ✅ |
 | CognitivePulse::update() | Update pulse metrics | TASK-M02-022 | ☐ |
 | CognitivePulse::blend() | Blend two pulses | TASK-M02-022 | ☐ |
 | EmotionalState::weight_modifier() | Get UTL weight modifier | TASK-M02-019 | ✅ |
@@ -122,9 +126,9 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Default for MemoryNode | Default implementation | TASK-M02-006 | ✅ |
 | Default for NeurotransmitterWeights | Default implementation | TASK-M02-008 | ✅ |
 | Default for Domain | Default implementation | TASK-M02-007 | ✅ |
-| Default for EmotionalState | Default implementation | TASK-M02-019 | ☐ |
+| Default for EmotionalState | Default implementation (Neutral) | TASK-M02-019 | ✅ |
 | Default for SuggestedAction | Default implementation | TASK-M02-020 | ✅ |
-| Default for CognitivePulse | Default implementation | TASK-M02-022 | ☐ |
+| Default for CognitivePulse | Default implementation | TASK-M02-021 | ✅ |
 
 ### Validation Rules
 
@@ -137,7 +141,7 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Embedding normalization | Must be normalized | TASK-M02-006 | ☐ |
 | NT weights range | [0.0, 1.0] each | TASK-M02-008 | ✅ |
 | Steering reward range | [-1.0, 1.0] | TASK-M02-011 | ✅ |
-| Pulse metrics range | [0.0, 1.0] | TASK-M02-022 | ☐ |
+| Pulse metrics range | entropy/coherence [0,1], coherence_delta [-1,1], emotional_weight [0,2] | TASK-M02-021 | ✅ |
 
 ### Marblestone Integration
 
@@ -183,8 +187,8 @@ This matrix ensures every requirement, component, and behavior from the Module 0
 | Column family tests | CF creation and options | TASK-M02-015 | ✅ |
 | RocksDB backend tests | Open/close lifecycle | TASK-M02-016 | ✅ |
 | Node CRUD tests | Store/get/update/delete | TASK-M02-017 | ✅ |
-| Edge CRUD tests | Edge operations | TASK-M02-018 | ☐ |
-| Pulse unit tests | All pulse methods | TASK-M02-022 | ☐ |
+| Edge CRUD tests | Edge operations | TASK-M02-018 | ✅ |
+| Pulse unit tests | 23 tests for all pulse methods | TASK-M02-021 | ✅ |
 | Index operation tests | Secondary index queries | TASK-M02-023 | ☐ |
 | Embedding storage tests | Vector operations | TASK-M02-024 | ☐ |
 | Memex trait tests | Trait implementation | TASK-M02-026 | ☐ |

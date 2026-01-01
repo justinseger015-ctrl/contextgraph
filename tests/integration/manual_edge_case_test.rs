@@ -203,7 +203,7 @@ async fn edge_case_cognitive_pulse_boundaries() {
         println!("\nTesting: {} (entropy={}, coherence={})", desc, entropy, coherence);
         println!("STATE BEFORE: Raw values entropy={}, coherence={}", entropy, coherence);
 
-        let pulse = CognitivePulse::new(entropy, coherence);
+        let pulse = CognitivePulse::from_values(entropy, coherence);
 
         println!("STATE AFTER:");
         println!("  - Clamped entropy: {}", pulse.entropy);

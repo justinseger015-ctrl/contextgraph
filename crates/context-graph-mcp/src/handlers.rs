@@ -66,7 +66,7 @@ impl Handlers {
     async fn handle_initialize(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
         info!("Handling initialize request");
 
-        let pulse = CognitivePulse::new(0.5, 0.8, SuggestedAction::Ready);
+        let pulse = CognitivePulse::new(0.5, 0.8, 0.0, 1.0, SuggestedAction::Ready, None);
 
         // MCP-compliant initialize response
         JsonRpcResponse::success(
@@ -414,7 +414,7 @@ impl Handlers {
 
         match self.memory_store.store(node).await {
             Ok(_) => {
-                let pulse = CognitivePulse::new(0.6, 0.75, SuggestedAction::Continue);
+                let pulse = CognitivePulse::new(0.6, 0.75, 0.0, 1.0, SuggestedAction::Continue, None);
                 JsonRpcResponse::success(id, json!({ "nodeId": node_id.to_string() }))
                     .with_pulse(pulse)
             }
@@ -523,7 +523,7 @@ impl Handlers {
                     })
                     .collect();
 
-                let pulse = CognitivePulse::new(0.4, 0.8, SuggestedAction::Continue);
+                let pulse = CognitivePulse::new(0.4, 0.8, 0.0, 1.0, SuggestedAction::Continue, None);
                 JsonRpcResponse::success(id, json!({ "results": results_json })).with_pulse(pulse)
             }
             Err(e) => JsonRpcResponse::error(id, error_codes::STORAGE_ERROR, e.to_string()),
@@ -620,7 +620,7 @@ impl Handlers {
                 };
 
                 let pulse =
-                    CognitivePulse::new(context.prior_entropy, context.current_coherence, action);
+                    CognitivePulse::new(context.prior_entropy, context.current_coherence, 0.0, 1.0, action, None);
                 JsonRpcResponse::success(id, json!({ "learningScore": score })).with_pulse(pulse)
             }
             Err(e) => JsonRpcResponse::error(id, error_codes::INTERNAL_ERROR, e.to_string()),

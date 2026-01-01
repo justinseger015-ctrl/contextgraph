@@ -71,7 +71,7 @@ impl NervousLayer for StubSensingLayer {
         Ok(LayerOutput {
             layer: LayerId::Sensing,
             result,
-            pulse: CognitivePulse::new(entropy, coherence, SuggestedAction::Continue),
+            pulse: CognitivePulse::new(entropy, coherence, 0.0, 1.0, SuggestedAction::Continue, Some(LayerId::Sensing)),
             duration_us: 500, // 500us stub value, well under 5ms budget
         })
     }
@@ -144,7 +144,7 @@ impl NervousLayer for StubReflexLayer {
         Ok(LayerOutput {
             layer: LayerId::Reflex,
             result,
-            pulse: CognitivePulse::new(entropy, coherence, SuggestedAction::Continue),
+            pulse: CognitivePulse::new(entropy, coherence, 0.0, 1.0, SuggestedAction::Continue, Some(LayerId::Reflex)),
             duration_us: 50, // 50us stub value, well under 100us budget
         })
     }
@@ -217,7 +217,7 @@ impl NervousLayer for StubMemoryLayer {
         Ok(LayerOutput {
             layer: LayerId::Memory,
             result,
-            pulse: CognitivePulse::new(entropy, coherence, SuggestedAction::Continue),
+            pulse: CognitivePulse::new(entropy, coherence, 0.0, 1.0, SuggestedAction::Continue, Some(LayerId::Memory)),
             duration_us: 200, // 200us stub value, well under 1ms budget
         })
     }
@@ -299,7 +299,7 @@ impl NervousLayer for StubLearningLayer {
         Ok(LayerOutput {
             layer: LayerId::Learning,
             result,
-            pulse: CognitivePulse::new(entropy, coherence, action),
+            pulse: CognitivePulse::new(entropy, coherence, 0.0, 1.0, action, Some(LayerId::Learning)),
             duration_us: 2000, // 2ms stub value, well under 10ms budget
         })
     }
@@ -381,7 +381,7 @@ impl NervousLayer for StubCoherenceLayer {
         Ok(LayerOutput {
             layer: LayerId::Coherence,
             result,
-            pulse: CognitivePulse::new(entropy, coherence, action),
+            pulse: CognitivePulse::new(entropy, coherence, 0.05, 1.0, action, Some(LayerId::Coherence)),
             duration_us: 1500, // 1.5ms stub value, well under 10ms budget
         })
     }

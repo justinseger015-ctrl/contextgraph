@@ -242,8 +242,8 @@ async fn edge_case_cognitive_pulse_boundaries() {
             entropy, coherence
         );
 
-        // Use CognitivePulse::computed which auto-calculates action
-        let pulse = CognitivePulse::computed(entropy, coherence);
+        // Use CognitivePulse::from_values which auto-calculates action from entropy/coherence
+        let pulse = CognitivePulse::from_values(entropy, coherence);
 
         println!("STATE AFTER:");
         println!("  - Clamped entropy: {}", pulse.entropy);
