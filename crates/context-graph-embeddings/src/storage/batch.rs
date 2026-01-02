@@ -143,8 +143,8 @@ impl BatchBinaryEncoder {
     /// ## Data File (.cgeb)
     /// Each embedding starts at a 4KB page boundary:
     /// ```text
-    /// [0x0000] Embedding 0 (6242 bytes) + padding to 4KB
-    /// [0x1000] Embedding 1 (6242 bytes) + padding to 4KB
+    /// [0x0000] Embedding 0 (6244 bytes) + padding to 4KB
+    /// [0x1000] Embedding 1 (6244 bytes) + padding to 4KB
     /// [0x2000] ...
     /// ```
     ///
@@ -300,7 +300,7 @@ mod tests {
         FusedEmbedding::new(
             vec![0.1; FUSED_OUTPUT],
             [0.125; NUM_EXPERTS],
-            [0, 1],
+            [0, 1, 2, 3],
             1000,
             hash,
         )
@@ -339,9 +339,9 @@ mod tests {
         let embedding = make_test_embedding(0);
         encoder.push(&embedding).expect("push");
 
-        println!("BEFORE: expected buffer_size = 6242");
+        println!("BEFORE: expected buffer_size = 6244");
         println!("AFTER: actual buffer_size = {}", encoder.buffer_size());
-        assert_eq!(encoder.buffer_size(), 6242);
+        assert_eq!(encoder.buffer_size(), 6244);
         println!("PASSED: buffer size matches single embedding");
     }
 
@@ -363,9 +363,9 @@ mod tests {
 
         assert_eq!(offsets.len(), 3);
         assert_eq!(offsets[0], 0);
-        assert_eq!(offsets[1], 6242);
-        assert_eq!(offsets[2], 12484);
-        assert_eq!(buffer.len(), 6242 * 3);
+        assert_eq!(offsets[1], 6244);
+        assert_eq!(offsets[2], 12488);
+        assert_eq!(buffer.len(), 6244 * 3);
         println!("PASSED: finalize returns correct buffer and offsets");
     }
 
@@ -458,8 +458,8 @@ mod tests {
         println!("BEFORE: expecting compact data file (no padding)");
         println!("AFTER: data file size = {} bytes", data_bytes.len());
 
-        // 3 embeddings × 6242 bytes = 18726 bytes (no padding)
-        assert_eq!(data_bytes.len(), 6242 * 3);
+        // 3 embeddings × 6244 bytes = 18732 bytes (no padding)
+        assert_eq!(data_bytes.len(), 6244 * 3);
         println!("PASSED: write_unaligned produces compact file");
     }
 

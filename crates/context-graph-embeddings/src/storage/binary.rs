@@ -9,8 +9,8 @@
 //! | 0 | 64 | EmbeddingHeader (cache-line aligned) |
 //! | 64 | 6144 | Vector: [f32; 1536] big-endian |
 //! | 6208 | 32 | ExpertWeights: [f32; 8] big-endian |
-//! | 6240 | 2 | SelectedExperts: [u8; 2] |
-//! | 6242 | var | AuxData (if present) |
+//! | 6240 | 4 | SelectedExperts: [u8; TOP_K_EXPERTS] |
+//! | 6244 | var | AuxData (if present) |
 //!
 //! # Example
 //!
@@ -68,7 +68,7 @@ pub struct EmbeddingHeader {
     pub dimension: u32,
     /// Number of experts (8)
     pub num_experts: u8,
-    /// Top-K experts selected (2)
+    /// Top-K experts selected (4 per constitution.yaml)
     pub top_k: u8,
     /// Reserved for future use
     pub _reserved: [u8; 2],
@@ -119,7 +119,7 @@ pub struct EmbeddingBinaryCodec {
 
 impl EmbeddingBinaryCodec {
     /// Minimum buffer size without aux_data.
-    /// Header(64) + Vector(6144) + Weights(32) + Selected(2) = 6242 bytes
+    /// Header(64) + Vector(6144) + Weights(32) + Selected(4) = 6244 bytes
     pub const MIN_BUFFER_SIZE: usize = 64 + (FUSED_OUTPUT * 4) + (NUM_EXPERTS * 4) + TOP_K_EXPERTS;
 
     /// Create codec with default settings (no aux_data).
@@ -148,8 +148,8 @@ impl EmbeddingBinaryCodec {
     /// | 0 | 64 | EmbeddingHeader (cache-line aligned) |
     /// | 64 | 6144 | Vector: [f32; 1536] big-endian |
     /// | 6208 | 32 | ExpertWeights: [f32; 8] big-endian |
-    /// | 6240 | 2 | SelectedExperts: [u8; 2] |
-    /// | 6242 | var | AuxData (if present) |
+    /// | 6240 | 4 | SelectedExperts: [u8; TOP_K_EXPERTS] |
+    /// | 6244 | var | AuxData (if present) |
     ///
     /// # Errors
     /// - `EncodeError::InvalidDimension` if vector dimension != 1536
@@ -307,7 +307,10 @@ impl EmbeddingBinaryCodec {
 
         // Parse selected experts
         let selected_offset = 64 + (FUSED_OUTPUT * 4) + (NUM_EXPERTS * 4);
-        let selected_experts = [bytes[selected_offset], bytes[selected_offset + 1]];
+        let mut selected_experts = [0u8; TOP_K_EXPERTS];
+        for (i, expert) in selected_experts.iter_mut().enumerate() {
+            *expert = bytes[selected_offset + i];
+        }
 
         // Parse aux_data if present
         let aux_data_offset = u64::from_be(header.aux_data_offset) as usize;
@@ -412,7 +415,7 @@ impl EmbeddingBinaryCodec {
         let weights_bytes =
             &bytes[64 + FUSED_OUTPUT * 4..64 + FUSED_OUTPUT * 4 + NUM_EXPERTS * 4];
 
-        // Selected experts: bytes 6240..6242
+        // Selected experts: bytes 6240..6244
         let selected_offset = 64 + FUSED_OUTPUT * 4 + NUM_EXPERTS * 4;
         let selected_bytes = &bytes[selected_offset..selected_offset + TOP_K_EXPERTS];
 
@@ -519,7 +522,9 @@ impl<'a> FusedEmbeddingRef<'a> {
     /// Get selected experts.
     #[inline]
     pub fn selected_experts(&self) -> [u8; TOP_K_EXPERTS] {
-        [self.selected_bytes[0], self.selected_bytes[1]]
+        let mut result = [0u8; TOP_K_EXPERTS];
+        result.copy_from_slice(&self.selected_bytes[..TOP_K_EXPERTS]);
+        result
     }
 
     /// Convert to owned FusedEmbedding (allocates).
@@ -629,7 +634,7 @@ mod tests {
         FusedEmbedding::new(
             vec![0.1; FUSED_OUTPUT],
             [0.125; NUM_EXPERTS], // sum = 1.0
-            [0, 1],
+            [0, 1, 2, 3],
             1000,
             0xDEADBEEF,
         )
@@ -660,20 +665,20 @@ mod tests {
     }
 
     #[test]
-    fn test_min_buffer_size_is_6242() {
-        println!("BEFORE: Expected MIN_BUFFER_SIZE = 6242");
+    fn test_min_buffer_size_is_6244() {
+        println!("BEFORE: Expected MIN_BUFFER_SIZE = 6244");
         println!(
             "AFTER: Actual MIN_BUFFER_SIZE = {}",
             EmbeddingBinaryCodec::MIN_BUFFER_SIZE
         );
-        assert_eq!(EmbeddingBinaryCodec::MIN_BUFFER_SIZE, 6242);
-        println!("PASSED: MIN_BUFFER_SIZE is exactly 6242 bytes");
+        assert_eq!(EmbeddingBinaryCodec::MIN_BUFFER_SIZE, 6244);
+        println!("PASSED: MIN_BUFFER_SIZE is exactly 6244 bytes");
     }
 
     // ========== Encode Tests ==========
 
     #[test]
-    fn test_encode_produces_6242_bytes_no_aux() {
+    fn test_encode_produces_6244_bytes_no_aux() {
         let codec = EmbeddingBinaryCodec::new();
         let embedding = make_test_embedding();
 
@@ -686,8 +691,8 @@ mod tests {
 
         println!("AFTER: bytes.len() = {}", bytes.len());
         assert_eq!(bytes.len(), EmbeddingBinaryCodec::MIN_BUFFER_SIZE);
-        assert_eq!(bytes.len(), 6242);
-        println!("PASSED: encode produces exactly 6242 bytes (no aux_data)");
+        assert_eq!(bytes.len(), 6244);
+        println!("PASSED: encode produces exactly 6244 bytes (no aux_data)");
     }
 
     #[test]
@@ -711,7 +716,7 @@ mod tests {
         let bad_embedding = FusedEmbedding {
             vector: vec![0.0; 512], // WRONG dimension
             expert_weights: [0.125; 8],
-            selected_experts: [0, 1],
+            selected_experts: [0, 1, 2, 3],
             pipeline_latency_us: 0,
             content_hash: 0,
             aux_data: None,
@@ -789,7 +794,7 @@ mod tests {
         println!("AFTER: result = {:?}", result);
         match result {
             Err(DecodeError::BufferTooShort { needed, available }) => {
-                assert_eq!(needed, 6242);
+                assert_eq!(needed, 6244);
                 assert_eq!(available, 100);
             }
             _ => panic!("Expected BufferTooShort"),
@@ -951,7 +956,7 @@ mod tests {
             &buffer[0..4]
         );
 
-        assert_eq!(written, 6242);
+        assert_eq!(written, 6244);
         assert_eq!(&buffer[0..4], &EMBEDDING_MAGIC);
         println!("PASSED: encode_to_buffer works correctly");
     }
@@ -967,7 +972,7 @@ mod tests {
         println!("Result: {:?}", result);
         match result {
             Err(EncodeError::BufferTooSmall { needed, available }) => {
-                assert_eq!(needed, 6242);
+                assert_eq!(needed, 6244);
                 assert_eq!(available, 100);
             }
             _ => panic!("Expected BufferTooSmall"),
@@ -982,9 +987,9 @@ mod tests {
 
         let size = codec.serialized_size(&embedding);
 
-        println!("BEFORE: Expected size = 6242");
+        println!("BEFORE: Expected size = 6244");
         println!("AFTER: Actual size = {}", size);
-        assert_eq!(size, 6242);
+        assert_eq!(size, 6244);
         println!("PASSED: serialized_size returns correct value");
     }
 

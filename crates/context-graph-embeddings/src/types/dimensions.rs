@@ -68,8 +68,8 @@ pub const LATE_INTERACTION_NATIVE: usize = 128;
 pub const NUM_EXPERTS: usize = 8;
 
 /// Top-K experts selected for each input (routing).
-/// Constitution.yaml specifies top-k=2 for sparse expert activation.
-pub const TOP_K_EXPERTS: usize = 2;
+/// Constitution.yaml specifies top_k=4 for sparse expert activation.
+pub const TOP_K_EXPERTS: usize = 4;
 
 /// ColBERT v3 per-token embedding dimension.
 /// Used for AuxiliaryEmbeddingData in FusedEmbedding.
@@ -173,10 +173,10 @@ const _NUM_EXPERTS_CHECK: () = assert!(
     "NUM_EXPERTS must equal 8"
 );
 
-/// Compile-time assertion that TOP_K_EXPERTS equals 2.
+/// Compile-time assertion that TOP_K_EXPERTS equals 4.
 const _TOP_K_EXPERTS_CHECK: () = assert!(
-    TOP_K_EXPERTS == 2,
-    "TOP_K_EXPERTS must equal 2"
+    TOP_K_EXPERTS == 4,
+    "TOP_K_EXPERTS must equal 4"
 );
 
 /// Compile-time assertion that COLBERT_V3_DIM equals 128.

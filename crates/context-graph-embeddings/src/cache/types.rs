@@ -167,7 +167,7 @@ mod tests {
     fn make_real_fused_embedding() -> FusedEmbedding {
         let vector = vec![0.1f32; FUSED_OUTPUT]; // Real 1536D dimension
         let weights = [0.125f32; 8]; // Real 8 experts, sum = 1.0
-        FusedEmbedding::new(vector, weights, [0, 1], 100, 0xDEADBEEF)
+        FusedEmbedding::new(vector, weights, [0, 1, 2, 3], 100, 0xDEADBEEF)
             .expect("Test helper should create valid embedding")
     }
 

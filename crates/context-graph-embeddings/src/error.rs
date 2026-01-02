@@ -146,6 +146,15 @@ pub enum EmbeddingError {
     /// Serialization/deserialization failed (JSON, binary, protobuf).
     #[error("Serialization error: {message}")]
     SerializationError { message: String },
+
+    // === Expert Routing Errors ===
+    /// Invalid expert index in FuseMoE routing.
+    #[error("Invalid expert index: {index} (max: {max})")]
+    InvalidExpertIndex { index: usize, max: usize },
+
+    /// Dimension mismatch between expected and actual values.
+    #[error("Dimension mismatch: expected {expected}, got {got}")]
+    DimensionMismatch { expected: usize, got: usize },
 }
 
 /// Result type alias for embedding operations.

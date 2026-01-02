@@ -262,7 +262,7 @@ mod tests {
         FusedEmbedding::new(
             vec![0.1 * hash as f32; FUSED_OUTPUT],
             [0.125; NUM_EXPERTS],
-            [0, 1],
+            [0, 1, 2, 3],
             hash * 100,
             hash,
         )

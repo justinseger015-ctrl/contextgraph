@@ -28,6 +28,7 @@ pub mod batch;
 pub mod cache;
 pub mod config;
 pub mod error;
+pub mod fusion;
 pub mod models;
 pub mod provider;
 pub mod storage;
@@ -77,6 +78,9 @@ pub use types::dimensions;
 
 // Model registry re-exports
 pub use models::{MemoryTracker, ModelRegistry, ModelRegistryConfig, RegistryStats};
+
+// Fusion layer re-exports
+pub use fusion::{Activation, Expert, ExpertPool, GatingNetwork, LayerNorm, Linear};
 
 /// Default embedding dimension (FuseMoE output, OpenAI ada-002 compatible).
 pub const DEFAULT_DIMENSION: usize = 1536;

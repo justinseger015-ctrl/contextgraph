@@ -29,6 +29,7 @@ use tracing::error;
 use crate::cache::types::{CacheEntry, CacheKey};
 use crate::config::CacheConfig;
 use crate::error::{EmbeddingError, EmbeddingResult};
+use crate::types::dimensions::TOP_K_EXPERTS;
 use crate::types::{AuxiliaryEmbeddingData, FusedEmbedding};
 
 /// Magic bytes for cache persistence file format.
@@ -45,7 +46,7 @@ struct SerializableCacheEntry {
     key: CacheKey,
     vector: Vec<f32>,
     expert_weights: [f32; 8],
-    selected_experts: [u8; 2],
+    selected_experts: [u8; TOP_K_EXPERTS],
     pipeline_latency_us: u64,
     content_hash: u64,
     aux_data: Option<AuxiliaryEmbeddingData>,
@@ -655,7 +656,7 @@ mod tests {
             .map(|i| ((i as f32 + content_hash as f32) % 2.0) - 1.0)
             .collect();
         let weights = [0.125f32; 8]; // Equal weights summing to 1.0
-        FusedEmbedding::new(vector, weights, [0, 1], 100, content_hash)
+        FusedEmbedding::new(vector, weights, [0, 1, 2, 3], 100, content_hash)
             .expect("Test helper should create valid embedding")
     }
 

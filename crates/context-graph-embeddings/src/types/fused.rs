@@ -9,15 +9,15 @@
 //! 12 models and produces a unified 1536D vector through sparse expert routing:
 //!
 //! - 8 expert networks, each specialized for different aspects
-//! - Top-2 routing selects the best 2 experts per input
+//! - Top-K routing selects the best K experts per input (K=4 per constitution.yaml)
 //! - Expert weights sum to 1.0 for normalized contribution
 //!
 //! # Binary Format
 //!
-//! Core embedding serializes to exactly 6198 bytes:
+//! Core embedding serializes to exactly 6200 bytes:
 //! - 6144 bytes: 1536 × f32 vector
 //! - 32 bytes: 8 × f32 expert weights
-//! - 2 bytes: 2 × u8 selected experts
+//! - 4 bytes: 4 × u8 selected experts (TOP_K_EXPERTS=4)
 //! - 8 bytes: u64 pipeline latency
 //! - 8 bytes: u64 content hash
 //! - 4 bytes: u32 aux_data length (0 if None)
@@ -28,7 +28,7 @@ use crate::types::ModelId;
 use serde::{Deserialize, Serialize};
 
 /// Binary format constants.
-/// Core embedding size: 1536*4 + 8*4 + 2 + 8 + 8 + 4 = 6198 bytes.
+/// Core embedding size: 1536*4 + 8*4 + 4 + 8 + 8 + 4 = 6200 bytes.
 const VECTOR_BYTES: usize = FUSED_OUTPUT * 4;
 const WEIGHTS_BYTES: usize = NUM_EXPERTS * 4;
 const SELECTED_BYTES: usize = TOP_K_EXPERTS;
@@ -49,8 +49,8 @@ pub struct FusedEmbedding {
     pub vector: Vec<f32>,
     /// Expert weights for all 8 experts (sum to 1.0)
     pub expert_weights: [f32; 8],
-    /// Indices of top-2 selected experts (0-7 each)
-    pub selected_experts: [u8; 2],
+    /// Indices of top-K selected experts (0-7 each)
+    pub selected_experts: [u8; TOP_K_EXPERTS],
     /// Pipeline latency in microseconds
     pub pipeline_latency_us: u64,
     /// xxHash64 of original content for caching
@@ -86,7 +86,7 @@ impl FusedEmbedding {
     /// # Arguments
     /// * `vector` - 1536D fused embedding vector
     /// * `expert_weights` - Weights for all 8 experts (must sum to ~1.0)
-    /// * `selected_experts` - Indices of top-2 selected experts (0-7)
+    /// * `selected_experts` - Indices of top-K selected experts (0-7)
     /// * `pipeline_latency_us` - Pipeline latency in microseconds
     /// * `content_hash` - xxHash64 of original content
     ///
@@ -100,7 +100,7 @@ impl FusedEmbedding {
     pub fn new(
         vector: Vec<f32>,
         expert_weights: [f32; 8],
-        selected_experts: [u8; 2],
+        selected_experts: [u8; TOP_K_EXPERTS],
         pipeline_latency_us: u64,
         content_hash: u64,
     ) -> EmbeddingResult<Self> {
@@ -232,18 +232,18 @@ impl FusedEmbedding {
         dot_product / (norm_a * norm_b)
     }
 
-    /// Serialize to compact binary format (6198 bytes + aux_data).
+    /// Serialize to compact binary format (6200 bytes + aux_data).
     ///
     /// # Binary Layout
     /// | Offset | Size | Field |
     /// |--------|------|-------|
     /// | 0 | 6144 | vector (1536 × f32 LE) |
     /// | 6144 | 32 | expert_weights (8 × f32 LE) |
-    /// | 6176 | 2 | selected_experts (2 × u8) |
-    /// | 6178 | 8 | pipeline_latency_us (u64 LE) |
-    /// | 6186 | 8 | content_hash (u64 LE) |
-    /// | 6194 | 4 | aux_data_len (u32 LE, 0 if None) |
-    /// | 6198+ | var | aux_data blob (if present) |
+    /// | 6176 | 4 | selected_experts (4 × u8, TOP_K_EXPERTS) |
+    /// | 6180 | 8 | pipeline_latency_us (u64 LE) |
+    /// | 6188 | 8 | content_hash (u64 LE) |
+    /// | 6196 | 4 | aux_data_len (u32 LE, 0 if None) |
+    /// | 6200+ | var | aux_data blob (if present) |
     pub fn to_bytes(&self) -> Vec<u8> {
         let aux_blob = self.aux_data.as_ref().map(|a| a.to_blob());
         let aux_len = aux_blob.as_ref().map(|b| b.len()).unwrap_or(0);
@@ -321,9 +321,12 @@ impl FusedEmbedding {
             offset += 4;
         }
 
-        // Selected experts: 2 × u8
-        let selected_experts = [bytes[offset], bytes[offset + 1]];
-        offset += 2;
+        // Selected experts: TOP_K_EXPERTS × u8
+        let mut selected_experts = [0u8; TOP_K_EXPERTS];
+        for (i, expert) in selected_experts.iter_mut().enumerate() {
+            *expert = bytes[offset + i];
+        }
+        offset += TOP_K_EXPERTS;
 
         // Pipeline latency: u64
         let pipeline_latency_us = u64::from_le_bytes([
@@ -454,7 +457,7 @@ impl FusedEmbedding {
 
     /// Total memory size in bytes for cache budgeting.
     ///
-    /// Returns the base binary size (6198 bytes) plus any auxiliary data size.
+    /// Returns the base binary size (6200 bytes) plus any auxiliary data size.
     /// This matches the serialized format size for accurate memory tracking.
     #[inline]
     #[must_use]
@@ -664,8 +667,8 @@ mod tests {
         [0.25, 0.25, 0.0, 0.0, 0.25, 0.0, 0.0, 0.25]
     }
 
-    fn make_valid_selected() -> [u8; 2] {
-        [0, 4]
+    fn make_valid_selected() -> [u8; TOP_K_EXPERTS] {
+        [0, 1, 4, 5]
     }
 
     fn make_valid_fused() -> FusedEmbedding {
@@ -722,7 +725,7 @@ mod tests {
     fn test_new_with_invalid_expert_indices_fails() {
         let vector = make_valid_vector();
         let weights = make_valid_weights();
-        let selected = [8, 0]; // 8 is invalid (must be 0-7)
+        let selected = [8, 0, 1, 2]; // 8 is invalid (must be 0-7)
 
         let result = FusedEmbedding::new(vector, weights, selected, 1000, 12345);
 
@@ -1111,7 +1114,7 @@ mod tests {
     // ========== Serialization Tests (8 tests) ==========
 
     #[test]
-    fn test_to_bytes_produces_exactly_6198_bytes_no_aux_data() {
+    fn test_to_bytes_produces_exactly_6200_bytes_no_aux_data() {
         let emb = make_valid_fused();
 
         let bytes = emb.to_bytes();
@@ -1124,7 +1127,7 @@ mod tests {
             CORE_BINARY_SIZE,
             bytes.len()
         );
-        println!("PASSED: to_bytes() produces exactly 6198 bytes (no aux_data)");
+        println!("PASSED: to_bytes() produces exactly 6200 bytes (no aux_data)");
     }
 
     #[test]
@@ -1400,7 +1403,7 @@ mod tests {
         // Edge Case: Duplicate expert indices should fail
         let vector = make_valid_vector();
         let weights = make_valid_weights();
-        let selected = [3, 3]; // Duplicate!
+        let selected = [3, 3, 1, 2]; // Duplicate at index 0 and 1!
 
         let result = FusedEmbedding::new(vector, weights, selected, 1000, 12345);
 
@@ -1424,7 +1427,7 @@ mod tests {
         assert_eq!(FusedEmbedding::NUM_EXPERTS, NUM_EXPERTS);
         assert_eq!(FusedEmbedding::NUM_EXPERTS, 8);
         assert_eq!(FusedEmbedding::TOP_K, TOP_K_EXPERTS);
-        assert_eq!(FusedEmbedding::TOP_K, 2);
+        assert_eq!(FusedEmbedding::TOP_K, 4);
         assert_eq!(AuxiliaryEmbeddingData::TOKEN_DIM, COLBERT_V3_DIM);
         assert_eq!(AuxiliaryEmbeddingData::TOKEN_DIM, 128);
         println!("PASSED: All constants match dimensions.rs");
@@ -1432,7 +1435,7 @@ mod tests {
 
     #[test]
     fn test_binary_size_constant() {
-        assert_eq!(CORE_BINARY_SIZE, 6198);
-        println!("PASSED: CORE_BINARY_SIZE = 6198 bytes");
+        assert_eq!(CORE_BINARY_SIZE, 6200);
+        println!("PASSED: CORE_BINARY_SIZE = 6200 bytes");
     }
 }
