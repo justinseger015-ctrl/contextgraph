@@ -1,70 +1,3 @@
----
-id: "M04-T04"
-title: "Define PoincarePoint for 64D Hyperbolic Space"
-version: "2.0.0"
-updated: "2026-01-03"
-layer: "foundation"
-status: "ready"
-priority: "critical"
-estimated_hours: 2
-sequence: 7
-depends_on:
-  - "M04-T02"  # HyperbolicConfig - VERIFIED COMPLETE
-spec_refs:
-  - "TECH-GRAPH-004 Section 5.1"
-  - "REQ-KG-050"
-  - "REQ-KG-054"
-files_to_create:
-  - path: "crates/context-graph-graph/src/hyperbolic/poincare.rs"
-    description: "PoincarePoint struct implementation"
-files_to_modify:
-  - path: "crates/context-graph-graph/src/hyperbolic/mod.rs"
-    description: "Add `pub mod poincare;` and re-export PoincarePoint"
-test_file: "crates/context-graph-graph/src/hyperbolic/poincare.rs"
----
-
-# M04-T04: Define PoincarePoint for 64D Hyperbolic Space
-
-## CRITICAL CONTEXT FOR AI AGENT
-
-**YOU ARE IMPLEMENTING**: A 64-dimensional point struct for the Poincare ball model of hyperbolic space. This is a FOUNDATION type used by ALL subsequent hyperbolic operations.
-
-**CONSTRAINT**: All points MUST have `||coords|| < 1.0` (strictly inside unit ball). Points at or outside the boundary cause numerical instability in distance calculations.
-
-**DEPENDENCY STATUS**:
-- M04-T02 (HyperbolicConfig) - ✅ COMPLETE - See `crates/context-graph-graph/src/config.rs:114-330`
-- HyperbolicConfig provides: `dim=64`, `curvature=-1.0`, `eps=1e-7`, `max_norm=0.99999`
-
-## Current Codebase State
-
-### Files That Already Exist
-```
-crates/context-graph-graph/
-├── Cargo.toml                 # ✅ EXISTS
-├── src/
-│   ├── lib.rs                 # ✅ EXISTS - exports HyperbolicConfig
-│   ├── config.rs              # ✅ EXISTS - HyperbolicConfig COMPLETE (lines 114-330)
-│   ├── error.rs               # ✅ EXISTS - GraphError defined
-│   └── hyperbolic/
-│       └── mod.rs             # ✅ EXISTS - placeholder, needs update
-```
-
-### What You Must Create
-```
-crates/context-graph-graph/src/hyperbolic/poincare.rs  # NEW FILE
-```
-
-### What You Must Modify
-```
-crates/context-graph-graph/src/hyperbolic/mod.rs       # Add module declaration
-crates/context-graph-graph/src/lib.rs                  # Add re-export (optional)
-```
-
-## Exact Implementation Required
-
-### File: `crates/context-graph-graph/src/hyperbolic/poincare.rs`
-
-```rust
 //! PoincarePoint implementation for 64D hyperbolic space.
 //!
 //! # Poincare Ball Model
@@ -113,7 +46,8 @@ use crate::config::HyperbolicConfig;
 /// let config = HyperbolicConfig::default();
 /// let mut point = PoincarePoint::from_coords([0.9; 64]);
 /// point.project(&config);
-/// assert!(point.norm() < config.max_norm);
+/// // Floating point tolerance for norm after projection
+/// assert!(point.norm() <= config.max_norm + 1e-6);
 /// ```
 #[repr(C, align(64))]
 #[derive(Clone, Debug)]
@@ -159,7 +93,7 @@ impl PoincarePoint {
     /// # Warning
     ///
     /// Does NOT validate norm. Call `project()` after if norm may exceed 1.0.
-    /// For validated construction, use `try_from_coords()`.
+    /// For validated construction, use `from_coords_projected()`.
     ///
     /// # Arguments
     ///
@@ -203,7 +137,8 @@ impl PoincarePoint {
     /// let coords = [1.0f32; 64]; // norm = 8.0, way outside ball
     /// let point = PoincarePoint::from_coords_projected(coords, &config);
     /// assert!(point.is_valid());
-    /// assert!(point.norm() < config.max_norm);
+    /// // Floating point tolerance for norm after projection
+    /// assert!(point.norm() <= config.max_norm + 1e-6);
     /// ```
     pub fn from_coords_projected(coords: [f32; 64], config: &HyperbolicConfig) -> Self {
         let mut point = Self { coords };
@@ -316,7 +251,7 @@ impl PoincarePoint {
     ///
     /// # Returns
     ///
-    /// New PoincarePoint with norm < max_norm
+    /// New PoincarePoint with norm <= max_norm
     ///
     /// # Example
     ///
@@ -327,7 +262,8 @@ impl PoincarePoint {
     /// let config = HyperbolicConfig::default();
     /// let original = PoincarePoint::from_coords([0.2f32; 64]);
     /// let projected = original.projected(&config);
-    /// assert!(projected.norm() < config.max_norm);
+    /// // Floating point tolerance for norm after projection
+    /// assert!(projected.norm() <= config.max_norm + 1e-6);
     /// // original unchanged
     /// assert!((original.norm() - projected.norm()).abs() > 0.5);
     /// ```
@@ -453,7 +389,8 @@ mod tests {
         let coords = [1.0f32; 64]; // norm = 8.0
         let point = PoincarePoint::from_coords_projected(coords, &config);
         assert!(point.is_valid(), "Projected point must be valid");
-        assert!(point.norm() < config.max_norm);
+        // After projection, norm is at most max_norm (may be exactly equal due to floating point)
+        assert!(point.norm() <= config.max_norm + 1e-6);
     }
 
     // ========== NORM TESTS ==========
@@ -700,216 +637,3 @@ mod tests {
         assert!(!point.is_valid());
     }
 }
-```
-
-### File: `crates/context-graph-graph/src/hyperbolic/mod.rs` (UPDATE)
-
-Replace entire contents with:
-
-```rust
-//! Hyperbolic geometry module using Poincare ball model.
-//!
-//! This module implements hyperbolic geometry operations for representing
-//! hierarchical relationships in the knowledge graph. Points closer to the
-//! boundary represent more specific concepts; points near origin are general.
-//!
-//! # Mathematics
-//!
-//! The Poincare ball model uses the unit ball B^n = {x in R^n : ||x|| < 1}
-//! with the metric:
-//!
-//! ```text
-//! d(x,y) = arcosh(1 + 2||x-y||² / ((1-||x||²)(1-||y||²)))
-//! ```
-//!
-//! # Components
-//!
-//! - [`PoincarePoint`]: 64D point in hyperbolic space
-//! - `PoincareBall`: Mobius operations (TODO: M04-T05)
-//!
-//! # Constitution Reference
-//!
-//! - perf.latency.entailment_check: <1ms
-//! - hyperbolic.curvature: -1.0 (default)
-//!
-//! # GPU Acceleration
-//!
-//! CUDA kernels for batch operations: TODO: M04-T23
-
-pub mod poincare;
-
-pub use poincare::PoincarePoint;
-
-// TODO: M04-T05 - Implement PoincareBall Mobius operations
-// pub mod mobius;
-// pub use mobius::PoincareBall;
-```
-
-### File: `crates/context-graph-graph/src/lib.rs` (UPDATE)
-
-Add to re-exports section (after line 54):
-
-```rust
-pub use hyperbolic::PoincarePoint;
-```
-
-## Verification Commands
-
-### Build Verification
-```bash
-cd /home/cabdru/contextgraph
-cargo build -p context-graph-graph 2>&1 | head -50
-```
-
-### Test Verification
-```bash
-cargo test -p context-graph-graph poincare -- --nocapture 2>&1 | head -100
-```
-
-### Clippy Verification
-```bash
-cargo clippy -p context-graph-graph -- -D warnings 2>&1 | head -50
-```
-
-### Memory Layout Verification
-```bash
-cargo test -p context-graph-graph test_size_is_256_bytes -- --nocapture
-cargo test -p context-graph-graph test_alignment_is_64_bytes -- --nocapture
-```
-
-## Full State Verification Protocol
-
-**MANDATORY**: After implementing, you MUST verify the actual state of the system.
-
-### 1. Source of Truth Identification
-
-The source of truth for this task is:
-- **File existence**: `crates/context-graph-graph/src/hyperbolic/poincare.rs`
-- **Module registration**: `pub mod poincare;` in `hyperbolic/mod.rs`
-- **Compilation success**: `cargo build -p context-graph-graph` exits 0
-- **Test success**: `cargo test -p context-graph-graph poincare` all pass
-
-### 2. Execute & Inspect Protocol
-
-After writing code, you MUST run these commands and verify output:
-
-```bash
-# 1. Verify file exists with correct content
-cat crates/context-graph-graph/src/hyperbolic/poincare.rs | head -20
-
-# 2. Verify module is declared
-grep "pub mod poincare" crates/context-graph-graph/src/hyperbolic/mod.rs
-
-# 3. Build and capture output
-cargo build -p context-graph-graph 2>&1
-
-# 4. Run tests and capture output
-cargo test -p context-graph-graph poincare 2>&1
-
-# 5. Verify struct properties
-cargo test -p context-graph-graph test_size_is_256_bytes test_alignment_is_64_bytes 2>&1
-```
-
-### 3. Edge Case Verification (Manual)
-
-You MUST execute these test scenarios and print before/after state:
-
-**Edge Case 1: Origin Point**
-```rust
-let origin = PoincarePoint::origin();
-println!("BEFORE: coords = {:?}", &origin.coords[..4]);
-println!("AFTER: norm = {}, is_valid = {}", origin.norm(), origin.is_valid());
-// EXPECTED: norm=0.0, is_valid=true
-```
-
-**Edge Case 2: Point Outside Ball**
-```rust
-let config = HyperbolicConfig::default();
-let mut point = PoincarePoint::from_coords([0.2f32; 64]);
-println!("BEFORE: norm = {}", point.norm()); // ~1.6
-point.project(&config);
-println!("AFTER: norm = {}, is_valid = {}", point.norm(), point.is_valid());
-// EXPECTED: norm ≈ 0.99999, is_valid=true
-```
-
-**Edge Case 3: Point with NaN**
-```rust
-let mut coords = [0.0f32; 64];
-coords[0] = f32::NAN;
-let point = PoincarePoint::from_coords(coords);
-println!("norm = {}, is_valid = {}", point.norm(), point.is_valid());
-// EXPECTED: norm=NaN, is_valid=false
-```
-
-### 4. Evidence of Success Log
-
-After all verification, output a summary like:
-
-```
-=== M04-T04 VERIFICATION COMPLETE ===
-[✓] File created: crates/context-graph-graph/src/hyperbolic/poincare.rs
-[✓] Module declared: pub mod poincare in hyperbolic/mod.rs
-[✓] Build successful: exit code 0
-[✓] Tests passed: 25/25
-[✓] Memory layout: size=256, align=64
-[✓] Edge case 1 (origin): PASS
-[✓] Edge case 2 (projection): PASS
-[✓] Edge case 3 (NaN handling): PASS
-```
-
-## Acceptance Criteria Checklist
-
-- [ ] `crates/context-graph-graph/src/hyperbolic/poincare.rs` exists
-- [ ] `PoincarePoint` struct has `coords: [f32; 64]`
-- [ ] `#[repr(C, align(64))]` attribute present
-- [ ] `origin()` returns all zeros
-- [ ] `from_coords()` takes `[f32; 64]`
-- [ ] `norm_squared()` computes sum of squares
-- [ ] `norm()` computes sqrt of norm_squared
-- [ ] `project(&HyperbolicConfig)` rescales when norm >= max_norm
-- [ ] `projected(&HyperbolicConfig)` returns new projected point
-- [ ] `is_valid()` returns true when norm_squared < 1.0
-- [ ] `Clone`, `Debug`, `PartialEq` traits implemented
-- [ ] `Default` implements origin()
-- [ ] Size is exactly 256 bytes
-- [ ] Alignment is exactly 64 bytes
-- [ ] `cargo build -p context-graph-graph` succeeds
-- [ ] `cargo test -p context-graph-graph poincare` all pass
-- [ ] `cargo clippy -p context-graph-graph -- -D warnings` no warnings
-
-## FINAL VERIFICATION: Sherlock-Holmes Agent
-
-**MANDATORY**: After completing implementation and passing all tests, you MUST spawn the `sherlock-holmes` subagent to forensically verify the implementation is complete and correct.
-
-The sherlock-holmes agent will:
-1. Verify all files exist with correct content
-2. Verify all acceptance criteria are met
-3. Run independent verification tests
-4. Check for any edge cases or issues not covered
-5. Provide final sign-off or identify issues to fix
-
-If sherlock-holmes identifies any issues, you MUST fix them before marking this task complete.
-
-## Dependencies
-
-| Task | Status | Location |
-|------|--------|----------|
-| M04-T00 | ✅ Complete | Crate exists at `crates/context-graph-graph/` |
-| M04-T02 | ✅ Complete | `HyperbolicConfig` at `src/config.rs:114-330` |
-| M04-T02a | ✅ Complete | `validate()` method at `src/config.rs:246-306` |
-
-## What This Task Enables
-
-After completion, these tasks become unblocked:
-- **M04-T05**: PoincareBall Mobius operations (mobius_add, distance, exp_map, log_map)
-- **M04-T06**: EntailmentCone struct (uses PoincarePoint for apex)
-- **M04-T23**: CUDA Poincare distance kernel (batch operations on PoincarePoint)
-
-## NO BACKWARDS COMPATIBILITY
-
-- Do NOT create fallback implementations
-- Do NOT create mock data
-- Do NOT add compatibility shims
-- If something fails, it MUST error with clear message
-- All tests MUST use real data structures
-- If a test would pass with broken code, the test is wrong

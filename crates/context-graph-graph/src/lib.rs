@@ -48,6 +48,7 @@ pub mod traversal;
 // Re-exports for convenience
 pub use config::{ConeConfig, HyperbolicConfig, IndexConfig};
 pub use error::{GraphError, GraphResult};
+pub use hyperbolic::PoincarePoint;
 
 // Re-export core types for convenience
 pub use context_graph_core::marblestone::{Domain, EdgeType, NeurotransmitterWeights};

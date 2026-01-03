@@ -329,32 +329,198 @@ impl HyperbolicConfig {
     }
 }
 
-/// Entailment cone configuration.
+/// Configuration for entailment cones in hyperbolic space.
 ///
-/// Configures entailment cones for O(1) IS-A hierarchy queries.
-/// Cones narrow as depth increases (children have smaller apertures).
+/// Entailment cones enable O(1) IS-A hierarchy queries. A concept's cone
+/// contains all concepts it subsumes. Aperture narrows with depth,
+/// creating increasingly specific cones for child concepts.
+///
+/// # Mathematics
+///
+/// - Aperture at depth d: `aperture(d) = base_aperture * decay^d`
+/// - Result clamped to `[min_aperture, max_aperture]`
+/// - Cone A contains point P iff angle(P - apex, axis) <= aperture
 ///
 /// # Constitution Reference
-/// - perf.latency.entailment_check: <1ms
 ///
-/// TODO: M04-T03 - Add aperture calculation helpers
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// - perf.latency.entailment_check: <1ms
+/// - Section 9 "HYPERBOLIC ENTAILMENT CONES" in contextprd.md
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConeConfig {
-    /// Base aperture angle in radians (default: PI/4 = 45 degrees)
-    pub base_aperture: f32,
-    /// Aperture decay factor per depth level (default: 0.9)
-    pub aperture_decay: f32,
-    /// Minimum aperture angle (default: 0.1 radians)
+    /// Minimum cone aperture in radians.
+    /// Prevents cones from becoming too narrow at deep levels.
+    /// Default: 0.1 rad (~5.7 degrees)
     pub min_aperture: f32,
+
+    /// Maximum cone aperture in radians.
+    /// Prevents cones from becoming too wide at root level.
+    /// Default: 1.5 rad (~85.9 degrees)
+    pub max_aperture: f32,
+
+    /// Base aperture for depth 0 nodes (root concepts).
+    /// This is the starting aperture before decay is applied.
+    /// Default: 1.0 rad (~57.3 degrees)
+    pub base_aperture: f32,
+
+    /// Decay factor applied per hierarchy level.
+    /// Must be in open interval (0, 1).
+    /// Default: 0.85 (15% narrower per level)
+    pub aperture_decay: f32,
+
+    /// Threshold for soft membership scoring.
+    /// Points with membership score >= threshold are considered contained.
+    /// Must be in open interval (0, 1).
+    /// Default: 0.7
+    pub membership_threshold: f32,
 }
 
 impl Default for ConeConfig {
     fn default() -> Self {
         Self {
-            base_aperture: std::f32::consts::FRAC_PI_4,
-            aperture_decay: 0.9,
-            min_aperture: 0.1,
+            min_aperture: 0.1,      // ~5.7 degrees
+            max_aperture: 1.5,      // ~85.9 degrees
+            base_aperture: 1.0,     // ~57.3 degrees
+            aperture_decay: 0.85,   // 15% narrower per level
+            membership_threshold: 0.7,
         }
+    }
+}
+
+impl ConeConfig {
+    /// Compute aperture for a node at given depth.
+    ///
+    /// # Formula
+    /// `aperture = base_aperture * aperture_decay^depth`
+    /// Result is clamped to `[min_aperture, max_aperture]`.
+    ///
+    /// # Arguments
+    /// * `depth` - Depth in hierarchy (0 = root)
+    ///
+    /// # Returns
+    /// Aperture in radians, clamped to valid range.
+    ///
+    /// # Example
+    /// ```
+    /// use context_graph_graph::config::ConeConfig;
+    ///
+    /// let config = ConeConfig::default();
+    /// assert_eq!(config.compute_aperture(0), 1.0);  // base at root
+    /// assert!((config.compute_aperture(1) - 0.85).abs() < 1e-6);  // 1.0 * 0.85
+    /// assert_eq!(config.compute_aperture(100), 0.1);  // clamped to min
+    /// ```
+    pub fn compute_aperture(&self, depth: u32) -> f32 {
+        let raw = self.base_aperture * self.aperture_decay.powi(depth as i32);
+        raw.clamp(self.min_aperture, self.max_aperture)
+    }
+
+    /// Validate configuration parameters.
+    ///
+    /// # Validation Rules
+    /// - `min_aperture` > 0: Must be positive
+    /// - `max_aperture` > `min_aperture`: Max must exceed min
+    /// - `base_aperture` in [`min_aperture`, `max_aperture`]: Base must be in valid range
+    /// - `aperture_decay` in (0, 1): Must be strictly between 0 and 1
+    /// - `membership_threshold` in (0, 1): Must be strictly between 0 and 1
+    ///
+    /// # Errors
+    /// Returns `GraphError::InvalidConfig` with descriptive message if any
+    /// parameter is invalid. Fails fast on first error.
+    ///
+    /// # Example
+    /// ```
+    /// use context_graph_graph::config::ConeConfig;
+    ///
+    /// let valid = ConeConfig::default();
+    /// assert!(valid.validate().is_ok());
+    ///
+    /// let mut invalid = ConeConfig::default();
+    /// invalid.aperture_decay = 1.5;  // must be < 1
+    /// assert!(invalid.validate().is_err());
+    /// ```
+    pub fn validate(&self) -> Result<(), GraphError> {
+        // Check for NaN in min_aperture
+        if self.min_aperture.is_nan() {
+            return Err(GraphError::InvalidConfig(
+                "min_aperture cannot be NaN".to_string()
+            ));
+        }
+
+        // Check min_aperture is positive
+        if self.min_aperture <= 0.0 {
+            return Err(GraphError::InvalidConfig(
+                format!("min_aperture must be positive (got {})", self.min_aperture)
+            ));
+        }
+
+        // Check for NaN in max_aperture
+        if self.max_aperture.is_nan() {
+            return Err(GraphError::InvalidConfig(
+                "max_aperture cannot be NaN".to_string()
+            ));
+        }
+
+        // Check max_aperture > min_aperture
+        if self.max_aperture <= self.min_aperture {
+            return Err(GraphError::InvalidConfig(
+                format!(
+                    "max_aperture ({}) must be greater than min_aperture ({})",
+                    self.max_aperture, self.min_aperture
+                )
+            ));
+        }
+
+        // Check for NaN in base_aperture
+        if self.base_aperture.is_nan() {
+            return Err(GraphError::InvalidConfig(
+                "base_aperture cannot be NaN".to_string()
+            ));
+        }
+
+        // Check base_aperture is in valid range
+        if self.base_aperture < self.min_aperture || self.base_aperture > self.max_aperture {
+            return Err(GraphError::InvalidConfig(
+                format!(
+                    "base_aperture ({}) must be in range [{}, {}]",
+                    self.base_aperture, self.min_aperture, self.max_aperture
+                )
+            ));
+        }
+
+        // Check for NaN in aperture_decay
+        if self.aperture_decay.is_nan() {
+            return Err(GraphError::InvalidConfig(
+                "aperture_decay cannot be NaN".to_string()
+            ));
+        }
+
+        // Check aperture_decay in (0, 1)
+        if self.aperture_decay <= 0.0 || self.aperture_decay >= 1.0 {
+            return Err(GraphError::InvalidConfig(
+                format!(
+                    "aperture_decay must be in open interval (0, 1), got {}",
+                    self.aperture_decay
+                )
+            ));
+        }
+
+        // Check for NaN in membership_threshold
+        if self.membership_threshold.is_nan() {
+            return Err(GraphError::InvalidConfig(
+                "membership_threshold cannot be NaN".to_string()
+            ));
+        }
+
+        // Check membership_threshold in (0, 1)
+        if self.membership_threshold <= 0.0 || self.membership_threshold >= 1.0 {
+            return Err(GraphError::InvalidConfig(
+                format!(
+                    "membership_threshold must be in open interval (0, 1), got {}",
+                    self.membership_threshold
+                )
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -691,23 +857,254 @@ mod tests {
         assert!(barely_valid.validate().is_ok());
     }
 
+    // ============ ConeConfig Tests ============
+
     #[test]
-    fn test_cone_config_default() {
+    fn test_cone_config_default_values() {
         let config = ConeConfig::default();
-        assert!(config.base_aperture > 0.0);
-        assert!(config.base_aperture < std::f32::consts::PI);
-        assert!(config.aperture_decay > 0.0 && config.aperture_decay <= 1.0);
-        assert!(config.min_aperture > 0.0);
-        assert!(config.min_aperture < config.base_aperture);
+
+        // Verify all 5 fields match spec
+        assert_eq!(config.min_aperture, 0.1, "min_aperture must be 0.1");
+        assert_eq!(config.max_aperture, 1.5, "max_aperture must be 1.5");
+        assert_eq!(config.base_aperture, 1.0, "base_aperture must be 1.0");
+        assert_eq!(config.aperture_decay, 0.85, "aperture_decay must be 0.85");
+        assert_eq!(config.membership_threshold, 0.7, "membership_threshold must be 0.7");
     }
 
+    #[test]
+    fn test_cone_config_field_constraints() {
+        let config = ConeConfig::default();
+
+        // Verify logical relationships
+        assert!(config.min_aperture > 0.0, "min_aperture must be positive");
+        assert!(config.max_aperture > config.min_aperture, "max > min");
+        assert!(config.base_aperture >= config.min_aperture, "base >= min");
+        assert!(config.base_aperture <= config.max_aperture, "base <= max");
+        assert!(config.aperture_decay > 0.0 && config.aperture_decay < 1.0, "decay in (0,1)");
+        assert!(config.membership_threshold > 0.0 && config.membership_threshold < 1.0, "threshold in (0,1)");
+    }
 
     #[test]
-    fn test_cone_config_serialization() {
+    fn test_compute_aperture_depth_zero() {
         let config = ConeConfig::default();
-        let json = serde_json::to_string(&config).expect("Failed to serialize");
-        let deserialized: ConeConfig =
-            serde_json::from_str(&json).expect("Failed to deserialize");
-        assert_eq!(config.base_aperture, deserialized.base_aperture);
+        // depth=0: base_aperture * 0.85^0 = 1.0 * 1 = 1.0
+        assert_eq!(config.compute_aperture(0), 1.0);
+    }
+
+    #[test]
+    fn test_compute_aperture_depth_one() {
+        let config = ConeConfig::default();
+        // depth=1: 1.0 * 0.85^1 = 0.85
+        let result = config.compute_aperture(1);
+        assert!((result - 0.85).abs() < 1e-6, "Expected 0.85, got {}", result);
+    }
+
+    #[test]
+    fn test_compute_aperture_depth_two() {
+        let config = ConeConfig::default();
+        // depth=2: 1.0 * 0.85^2 = 0.7225
+        let result = config.compute_aperture(2);
+        assert!((result - 0.7225).abs() < 1e-6, "Expected 0.7225, got {}", result);
+    }
+
+    #[test]
+    fn test_compute_aperture_clamps_to_min() {
+        let config = ConeConfig::default();
+        // Very deep: should clamp to min_aperture = 0.1
+        // 1.0 * 0.85^100 ≈ 3.6e-8, clamped to 0.1
+        assert_eq!(config.compute_aperture(100), 0.1);
+    }
+
+    #[test]
+    fn test_compute_aperture_clamps_to_max() {
+        // Config where base > max (shouldn't happen in practice but test clamping)
+        let config = ConeConfig {
+            min_aperture: 0.1,
+            max_aperture: 0.5,
+            base_aperture: 1.0,  // Exceeds max
+            aperture_decay: 0.85,
+            membership_threshold: 0.7,
+        };
+        // depth=0: raw=1.0, clamped to max=0.5
+        assert_eq!(config.compute_aperture(0), 0.5);
+    }
+
+    #[test]
+    fn test_cone_validate_default_passes() {
+        let config = ConeConfig::default();
+        assert!(config.validate().is_ok(), "Default config must be valid");
+    }
+
+    #[test]
+    fn test_cone_validate_min_aperture_zero_fails() {
+        let config = ConeConfig {
+            min_aperture: 0.0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("min_aperture"));
+    }
+
+    #[test]
+    fn test_cone_validate_min_aperture_negative_fails() {
+        let config = ConeConfig {
+            min_aperture: -0.1,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_cone_validate_max_less_than_min_fails() {
+        let config = ConeConfig {
+            min_aperture: 1.0,
+            max_aperture: 0.5,  // Less than min
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("max_aperture"));
+    }
+
+    #[test]
+    fn test_cone_validate_max_equals_min_fails() {
+        let config = ConeConfig {
+            min_aperture: 0.5,
+            max_aperture: 0.5,  // Equal, should fail (must be greater)
+            base_aperture: 0.5,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_cone_validate_decay_zero_fails() {
+        let config = ConeConfig {
+            aperture_decay: 0.0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("aperture_decay"));
+    }
+
+    #[test]
+    fn test_cone_validate_decay_one_fails() {
+        let config = ConeConfig {
+            aperture_decay: 1.0,  // Boundary, excluded
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_cone_validate_decay_greater_than_one_fails() {
+        let config = ConeConfig {
+            aperture_decay: 1.5,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_cone_validate_threshold_zero_fails() {
+        let config = ConeConfig {
+            membership_threshold: 0.0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("membership_threshold"));
+    }
+
+    #[test]
+    fn test_cone_validate_threshold_one_fails() {
+        let config = ConeConfig {
+            membership_threshold: 1.0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_cone_validate_nan_fields_fail() {
+        // Test each field with NaN
+        let configs = [
+            ConeConfig { min_aperture: f32::NAN, ..Default::default() },
+            ConeConfig { max_aperture: f32::NAN, ..Default::default() },
+            ConeConfig { base_aperture: f32::NAN, ..Default::default() },
+            ConeConfig { aperture_decay: f32::NAN, ..Default::default() },
+            ConeConfig { membership_threshold: f32::NAN, ..Default::default() },
+        ];
+
+        for (i, config) in configs.iter().enumerate() {
+            assert!(
+                config.validate().is_err(),
+                "Config {} with NaN should fail validation", i
+            );
+        }
+    }
+
+    #[test]
+    fn test_cone_config_serialization_roundtrip() {
+        let config = ConeConfig::default();
+        let json = serde_json::to_string(&config).expect("Serialization failed");
+        let deserialized: ConeConfig = serde_json::from_str(&json).expect("Deserialization failed");
+        assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn test_cone_config_json_has_all_fields() {
+        let config = ConeConfig::default();
+        let json = serde_json::to_string_pretty(&config).expect("Serialization failed");
+
+        // Verify all 5 fields appear in JSON
+        assert!(json.contains("\"min_aperture\":"), "JSON must contain min_aperture");
+        assert!(json.contains("\"max_aperture\":"), "JSON must contain max_aperture");
+        assert!(json.contains("\"base_aperture\":"), "JSON must contain base_aperture");
+        assert!(json.contains("\"aperture_decay\":"), "JSON must contain aperture_decay");
+        assert!(json.contains("\"membership_threshold\":"), "JSON must contain membership_threshold");
+    }
+
+    #[test]
+    fn test_cone_config_equality() {
+        let a = ConeConfig::default();
+        let b = ConeConfig::default();
+        assert_eq!(a, b, "Two default configs must be equal");
+
+        let c = ConeConfig {
+            min_aperture: 0.2,  // Different
+            ..Default::default()
+        };
+        assert_ne!(a, c, "Different configs must not be equal");
+    }
+
+    #[test]
+    fn test_cone_validate_base_below_min_fails() {
+        let config = ConeConfig {
+            min_aperture: 0.5,
+            max_aperture: 1.5,
+            base_aperture: 0.3,  // Below min
+            aperture_decay: 0.85,
+            membership_threshold: 0.7,
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("base_aperture"));
+    }
+
+    #[test]
+    fn test_cone_validate_base_above_max_fails() {
+        let config = ConeConfig {
+            min_aperture: 0.1,
+            max_aperture: 0.8,
+            base_aperture: 1.0,  // Above max
+            aperture_decay: 0.85,
+            membership_threshold: 0.7,
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("base_aperture"));
     }
 }

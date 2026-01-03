@@ -15,8 +15,8 @@
 //!
 //! # Components
 //!
-//! - `PoincarePoint`: 64D point in hyperbolic space (TODO: M04-T04)
-//! - `PoincareBall`: Mobius operations (add, distance, exp_map, log_map) (TODO: M04-T05)
+//! - [`PoincarePoint`]: 64D point in hyperbolic space
+//! - `PoincareBall`: Mobius operations (TODO: M04-T05)
 //!
 //! # Constitution Reference
 //!
@@ -27,14 +27,10 @@
 //!
 //! CUDA kernels for batch operations: TODO: M04-T23
 
-// TODO: M04-T04 - Define PoincarePoint struct
-// pub struct PoincarePoint { ... }
+pub mod poincare;
+
+pub use poincare::PoincarePoint;
 
 // TODO: M04-T05 - Implement PoincareBall Mobius operations
-// pub struct PoincareBall { ... }
-// impl PoincareBall {
-//     pub fn mobius_add(&self, x: &PoincarePoint, y: &PoincarePoint) -> PoincarePoint
-//     pub fn distance(&self, x: &PoincarePoint, y: &PoincarePoint) -> f32
-//     pub fn exp_map(&self, x: &PoincarePoint, v: &[f32]) -> PoincarePoint
-//     pub fn log_map(&self, x: &PoincarePoint, y: &PoincarePoint) -> Vec<f32>
-// }
+// pub mod mobius;
+// pub use mobius::PoincareBall;
