@@ -562,6 +562,7 @@ dependencies = [
  "context-graph-cuda",
  "context-graph-embeddings",
  "criterion",
+ "num_cpus",
  "rocksdb",
  "serde",
  "serde_json",

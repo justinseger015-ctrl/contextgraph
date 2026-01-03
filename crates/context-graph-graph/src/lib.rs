@@ -51,6 +51,10 @@ pub use entailment::EntailmentCone;
 pub use error::{GraphError, GraphResult};
 pub use hyperbolic::{PoincareBall, PoincarePoint};
 pub use index::{FaissGpuIndex, GpuResources, MetricType, SearchResult, SearchResultItem};
+pub use storage::{
+    get_column_family_descriptors, get_db_options, StorageConfig, ALL_COLUMN_FAMILIES,
+    CF_ADJACENCY, CF_CONES, CF_FAISS_IDS, CF_HYPERBOLIC, CF_METADATA, CF_NODES,
+};
 
 // Re-export core types for convenience
 pub use context_graph_core::marblestone::{Domain, EdgeType, NeurotransmitterWeights};
