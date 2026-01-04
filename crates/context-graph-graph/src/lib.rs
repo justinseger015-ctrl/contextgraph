@@ -49,7 +49,11 @@ pub mod traversal;
 
 // Re-exports for convenience
 pub use config::{ConeConfig, HyperbolicConfig, IndexConfig};
-pub use entailment::EntailmentCone;
+pub use entailment::{
+    entailment_check_batch, entailment_query, entailment_score, is_entailed_by,
+    lowest_common_ancestor, BatchEntailmentResult, EntailmentCone, EntailmentDirection,
+    EntailmentQueryParams, EntailmentResult, LcaResult,
+};
 pub use error::{GraphError, GraphResult};
 pub use hyperbolic::{PoincareBall, PoincarePoint};
 pub use index::{FaissGpuIndex, GpuResources, MetricType, SearchResult, SearchResultItem};

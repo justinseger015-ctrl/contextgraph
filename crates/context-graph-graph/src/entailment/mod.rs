@@ -20,7 +20,7 @@
 //! # Components
 //!
 //! - [`EntailmentCone`]: Cone with apex, aperture, and depth for IS-A queries
-//! - Containment logic: O(1) check algorithm (TODO: M04-T07)
+//! - [`query`]: Entailment query functions (M04-T20)
 //!
 //! # Constitution Reference
 //!
@@ -31,5 +31,11 @@
 //! CUDA kernels for batch containment checks: TODO: M04-T24
 
 pub mod cones;
+pub mod query;
 
 pub use cones::EntailmentCone;
+pub use query::{
+    entailment_check_batch, entailment_query, entailment_score, is_entailed_by,
+    lowest_common_ancestor, BatchEntailmentResult, EntailmentDirection, EntailmentQueryParams,
+    EntailmentResult, LcaResult,
+};
