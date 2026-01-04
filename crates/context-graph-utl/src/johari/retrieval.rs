@@ -38,7 +38,9 @@ use crate::error::{UtlError, UtlResult};
 /// Hidden:  delta_s < 0.5, delta_c < 0.5 -> private (get_neighborhood)
 /// Unknown: delta_s > 0.5, delta_c > 0.5 -> frontier
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SuggestedAction {
     /// Direct memory recall - for Open quadrant.
     ///

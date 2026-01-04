@@ -11,12 +11,12 @@
 
 ## IMPORTANT: Current State
 
-The `context-graph-utl` crate has been **fully implemented** with 369 tests passing.
+The `context-graph-utl` crate has been **fully implemented** with 385 tests passing.
 
 **Verification:**
 ```bash
 cargo test -p context-graph-utl --lib 2>&1 | tail -3
-# Expected: test result: ok. 369 passed; 0 failed;
+# Expected: test result: ok. 385 passed; 0 failed;
 ```
 
 **Git Reference:** `f521803 feat(utl): complete context-graph-utl crate with 453 tests passing`
@@ -25,9 +25,9 @@ cargo test -p context-graph-utl --lib 2>&1 | tail -3
 
 | Status | Count |
 |--------|-------|
-| Completed | 33 |
+| Completed | 34 |
 | Needs Implementation | 1 (M05-T12) |
-| Pending (MCP Integration) | 29 |
+| Pending (MCP Integration) | 28 |
 | In Progress | 0 |
 | Blocked | 0 |
 
@@ -84,7 +84,7 @@ cargo test -p context-graph-utl --lib 2>&1 | tail -3
 | M05-T18 | Implement JohariClassifier | high | 2 | **COMPLETE** | M05-T08, M05-T33 |
 | M05-T19 | Implement LifecycleManager State Machine | high | 3 | **COMPLETE** | M05-T07 |
 | M05-T20 | Implement Core UTL Learning Magnitude | critical | 3 | **COMPLETE** | M05-T11, M05-T13, M05-T16, M05-T17 |
-| M05-T21 | Implement LearningSignal and UtlState | high | 2 | **COMPLETE** | M05-T18, M05-T19, M05-T20 |
+| [M05-T21](M05-T21.md) | Implement LearningSignal and UtlState | critical | 3 | **COMPLETE** | M05-T18, M05-T19, M05-T20 |
 | M05-T22 | Implement UtlProcessor Orchestrator | critical | 4 | **partial** | M05-T11, M05-T13, M05-T16, M05-T17, M05-T18, M05-T19, M05-T20, M05-T21 |
 | M05-T23 | Implement UtlError Enum | high | 1.5 | **COMPLETE** | M05-T00 |
 | M05-T30 | Implement SessionContext | medium | 2 | pending | M05-T22 |
@@ -169,7 +169,7 @@ The following components exist in `crates/context-graph-utl/`:
 | Lifecycle | `src/lifecycle/*.rs` | 60+ tests |
 | Core | `src/lib.rs` | 17 tests |
 
-**Total: 369 passing tests**
+**Total: 385 passing tests**
 
 ## Next Priority Tasks
 
