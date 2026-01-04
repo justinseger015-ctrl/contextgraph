@@ -1,413 +1,250 @@
 ---
 id: "M04-T14"
-title: "Implement NeurotransmitterWeights for Edges (Marblestone)"
+title: "Integrate NeurotransmitterWeights with Graph Layer"
 description: |
-  Implement NeurotransmitterWeights struct from Module 2 in graph context.
-  Fields: excitatory (f32), inhibitory (f32), modulatory (f32), all in [0,1].
-  Include for_domain(Domain) factory with domain-specific profiles.
+  NeurotransmitterWeights and Domain ALREADY EXIST in context-graph-core.
+  This task verifies integration with context-graph-graph and documents the API.
+  NO NEW TYPES TO CREATE - verify re-exports and write integration tests.
 
-  CANONICAL FORMULA for net_activation():
-  net_activation = excitatory - inhibitory + (modulatory * 0.5)
+  CANONICAL FORMULA (from context-graph-core):
+  w_eff = ((base * excitatory - base * inhibitory) * (1 + (modulatory - 0.5) * 0.4)).clamp(0.0, 1.0)
 layer: "logic"
 status: "pending"
 priority: "high"
-estimated_hours: 2
+estimated_hours: 1
 sequence: 19
 depends_on: []
 spec_refs:
   - "TECH-GRAPH-004 Section 4.1"
   - "REQ-KG-065"
-files_to_create:
-  - path: "crates/context-graph-graph/src/storage/edges.rs"
-    description: "NeurotransmitterWeights struct and Domain enum"
-files_to_modify:
-  - path: "crates/context-graph-graph/src/storage/mod.rs"
-    description: "Add edges module"
-test_file: "crates/context-graph-graph/tests/marblestone_tests.rs"
+  - "constitution.yaml edge_model.nt_weights"
+files_to_create: []
+files_to_modify: []
+test_file: "crates/context-graph-graph/tests/nt_integration_tests.rs"
 ---
+
+## ⚠️ CRITICAL: Current Codebase State
+
+**NeurotransmitterWeights and Domain ALREADY EXIST. DO NOT RECREATE.**
+
+### Existing Implementation Locations
+
+| Type | Location | Status |
+|------|----------|--------|
+| `NeurotransmitterWeights` | `context-graph-core/src/marblestone/neurotransmitter_weights.rs` | ✅ COMPLETE |
+| `Domain` | `context-graph-core/src/marblestone/domain.rs` | ✅ COMPLETE |
+| Re-export | `context-graph-graph/src/lib.rs` line 60 | ✅ COMPLETE |
+| Error type | `context-graph-graph/src/error.rs` `InvalidNtWeights` | ✅ COMPLETE |
+
+### Existing API (DO NOT MODIFY)
+
+```rust
+// In context-graph-core/src/marblestone/neurotransmitter_weights.rs
+pub struct NeurotransmitterWeights {
+    pub excitatory: f32,  // [0.0, 1.0]
+    pub inhibitory: f32,  // [0.0, 1.0]
+    pub modulatory: f32,  // [0.0, 1.0]
+}
+
+impl NeurotransmitterWeights {
+    pub fn new(excitatory: f32, inhibitory: f32, modulatory: f32) -> Self;
+    pub fn for_domain(domain: Domain) -> Self;
+    pub fn compute_effective_weight(&self, base_weight: f32) -> f32;
+    pub fn validate(&self) -> bool;  // Returns bool, NOT Result
+}
+
+// In context-graph-core/src/marblestone/domain.rs
+pub enum Domain { Code, Legal, Medical, Creative, Research, General }
+```
+
+### Domain-Specific Profiles (EXISTING)
+
+| Domain | excitatory | inhibitory | modulatory |
+|--------|------------|------------|------------|
+| Code | 0.6 | 0.3 | 0.4 |
+| Legal | 0.4 | 0.4 | 0.2 |
+| Medical | 0.5 | 0.3 | 0.5 |
+| Creative | 0.8 | 0.1 | 0.6 |
+| Research | 0.6 | 0.2 | 0.5 |
+| General | 0.5 | 0.2 | 0.3 |
 
 ## Context
 
-NeurotransmitterWeights implements the Marblestone neuroscience-inspired modulation system. Based on biological neural networks, three weight classes modulate edge importance: excitatory (increases activation), inhibitory (decreases activation), and modulatory (adjusts sensitivity). This enables domain-specific search behavior without retraining the graph.
+The Marblestone-inspired neurotransmitter system is already implemented in `context-graph-core`. This task verifies the integration with `context-graph-graph` works correctly through re-exports.
+
+### Constitution Reference
+- `edge_model.nt_weights`: Defines weight structure and domain profiles
+- `AP-009`: All weights must be in [0.0, 1.0]
 
 ## Scope
 
 ### In Scope
-- NeurotransmitterWeights struct with 3 f32 fields
-- Domain enum (Code, Legal, Medical, Creative, Research, General)
-- for_domain() factory method
-- Default implementation
-- Serde serialization
+- Verify re-exports work from `context-graph-graph::NeurotransmitterWeights`
+- Verify re-exports work from `context-graph-graph::Domain`
+- Write integration tests in context-graph-graph
+- Document the API for downstream consumers
 
 ### Out of Scope
-- Weight validation (see M04-T14a)
-- net_activation() implementation (see M04-T14a)
-- GraphEdge struct (see M04-T15)
+- Creating new types (ALREADY EXIST)
+- Modifying existing implementations
+- GraphEdge integration (M04-T15)
+- Result-returning validation (M04-T14a)
 
 ## Definition of Done
 
-### Signatures
-
-```rust
-// In crates/context-graph-graph/src/storage/edges.rs
-
-use serde::{Deserialize, Serialize};
-
-/// Cognitive domains for domain-aware retrieval
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum Domain {
-    /// Software development, algorithms, systems
-    Code,
-    /// Legal documents, contracts, regulations
-    Legal,
-    /// Medical literature, clinical notes, research
-    Medical,
-    /// Creative writing, art, design
-    Creative,
-    /// Academic research, scientific papers
-    Research,
-    /// General knowledge, misc content
-    General,
-}
-
-impl Domain {
-    /// Get all domain variants
-    pub fn all() -> &'static [Domain] {
-        &[
-            Domain::Code,
-            Domain::Legal,
-            Domain::Medical,
-            Domain::Creative,
-            Domain::Research,
-            Domain::General,
-        ]
-    }
-
-    /// Parse domain from string (case-insensitive)
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "code" | "software" | "programming" => Some(Domain::Code),
-            "legal" | "law" => Some(Domain::Legal),
-            "medical" | "health" | "clinical" => Some(Domain::Medical),
-            "creative" | "art" | "writing" => Some(Domain::Creative),
-            "research" | "academic" | "science" => Some(Domain::Research),
-            "general" | "misc" | "" => Some(Domain::General),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for Domain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Domain::Code => write!(f, "Code"),
-            Domain::Legal => write!(f, "Legal"),
-            Domain::Medical => write!(f, "Medical"),
-            Domain::Creative => write!(f, "Creative"),
-            Domain::Research => write!(f, "Research"),
-            Domain::General => write!(f, "General"),
-        }
-    }
-}
-
-impl Default for Domain {
-    fn default() -> Self {
-        Domain::General
-    }
-}
-
-/// Neurotransmitter-inspired weights for edge modulation
-///
-/// Based on Marblestone architecture, these weights modulate edge importance
-/// during traversal and search operations. Each weight should be in [0, 1].
-///
-/// # CANONICAL FORMULA
-/// ```text
-/// net_activation = excitatory - inhibitory + (modulatory * 0.5)
-/// ```
-///
-/// The result is in range [-1.5, 1.5] for valid weights.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct NeurotransmitterWeights {
-    /// Excitatory weight - increases edge activation
-    /// Higher values make the edge more likely to be traversed
-    /// Range: [0.0, 1.0]
-    pub excitatory: f32,
-
-    /// Inhibitory weight - decreases edge activation
-    /// Higher values suppress the edge during traversal
-    /// Range: [0.0, 1.0]
-    pub inhibitory: f32,
-
-    /// Modulatory weight - adjusts sensitivity
-    /// Adds additional activation scaled by 0.5
-    /// Range: [0.0, 1.0]
-    pub modulatory: f32,
-}
-
-impl NeurotransmitterWeights {
-    /// Create new weights with specified values
-    ///
-    /// # Arguments
-    /// * `excitatory` - Excitatory weight [0, 1]
-    /// * `inhibitory` - Inhibitory weight [0, 1]
-    /// * `modulatory` - Modulatory weight [0, 1]
-    ///
-    /// # Note
-    /// Use validate() to check weight ranges (see M04-T14a)
-    pub fn new(excitatory: f32, inhibitory: f32, modulatory: f32) -> Self {
-        Self {
-            excitatory,
-            inhibitory,
-            modulatory,
-        }
-    }
-
-    /// Create domain-specific weights
-    ///
-    /// # Arguments
-    /// * `domain` - Target cognitive domain
-    ///
-    /// # Returns
-    /// Weights optimized for the specified domain's access patterns
-    pub fn for_domain(domain: Domain) -> Self {
-        match domain {
-            Domain::Code => Self {
-                // Code: High precision, moderate inhibition, some modulation
-                excitatory: 0.7,
-                inhibitory: 0.3,
-                modulatory: 0.2,
-            },
-            Domain::Legal => Self {
-                // Legal: High precision, strong inhibition (avoid wrong info)
-                excitatory: 0.6,
-                inhibitory: 0.4,
-                modulatory: 0.1,
-            },
-            Domain::Medical => Self {
-                // Medical: High precision, strong inhibition (safety critical)
-                excitatory: 0.6,
-                inhibitory: 0.5,
-                modulatory: 0.1,
-            },
-            Domain::Creative => Self {
-                // Creative: Exploratory, low inhibition, high modulation
-                excitatory: 0.8,
-                inhibitory: 0.2,
-                modulatory: 0.5,
-            },
-            Domain::Research => Self {
-                // Research: Balanced exploration and precision
-                excitatory: 0.7,
-                inhibitory: 0.35,
-                modulatory: 0.3,
-            },
-            Domain::General => Self::default(),
-        }
-    }
-
-    /// Create neutral weights (no modulation effect)
-    ///
-    /// net_activation with neutral weights = 0.5 - 0.5 + 0 = 0
-    pub fn neutral() -> Self {
-        Self {
-            excitatory: 0.5,
-            inhibitory: 0.5,
-            modulatory: 0.0,
-        }
-    }
-
-    /// Create maximum activation weights
-    ///
-    /// net_activation = 1.0 - 0.0 + (1.0 * 0.5) = 1.5
-    pub fn max_activation() -> Self {
-        Self {
-            excitatory: 1.0,
-            inhibitory: 0.0,
-            modulatory: 1.0,
-        }
-    }
-
-    /// Create minimum activation weights
-    ///
-    /// net_activation = 0.0 - 1.0 + (0.0 * 0.5) = -1.0
-    pub fn min_activation() -> Self {
-        Self {
-            excitatory: 0.0,
-            inhibitory: 1.0,
-            modulatory: 0.0,
-        }
-    }
-
-    /// Linearly interpolate between two weight sets
-    ///
-    /// # Arguments
-    /// * `other` - Target weights
-    /// * `t` - Interpolation factor [0, 1]
-    ///
-    /// # Returns
-    /// Interpolated weights: self * (1-t) + other * t
-    pub fn lerp(&self, other: &Self, t: f32) -> Self {
-        let t = t.clamp(0.0, 1.0);
-        Self {
-            excitatory: self.excitatory * (1.0 - t) + other.excitatory * t,
-            inhibitory: self.inhibitory * (1.0 - t) + other.inhibitory * t,
-            modulatory: self.modulatory * (1.0 - t) + other.modulatory * t,
-        }
-    }
-
-    /// Get domain-based bonus weight
-    ///
-    /// Returns 0.1 for exact domain match, 0.0 otherwise.
-    /// Used in edge weight modulation formula.
-    pub fn domain_bonus(edge_domain: Domain, query_domain: Domain) -> f32 {
-        if edge_domain == query_domain {
-            0.1
-        } else {
-            0.0
-        }
-    }
-}
-
-impl Default for NeurotransmitterWeights {
-    /// Default weights: balanced excitation/inhibition, no modulation
-    ///
-    /// net_activation = 0.5 - 0.5 + (0.0 * 0.5) = 0.0
-    fn default() -> Self {
-        Self {
-            excitatory: 0.5,
-            inhibitory: 0.5,
-            modulatory: 0.0,
-        }
-    }
-}
-
-/// Display weights in compact format
-impl std::fmt::Display for NeurotransmitterWeights {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NT(e={:.2}, i={:.2}, m={:.2})",
-            self.excitatory, self.inhibitory, self.modulatory
-        )
-    }
-}
-```
-
-### Constraints
-- All weights should be in [0.0, 1.0] (validated in M04-T14a)
-- net_activation formula: `excitatory - inhibitory + (modulatory * 0.5)`
-- Default: excitatory=0.5, inhibitory=0.5, modulatory=0.0 (neutral)
-- for_domain(Code) = {0.7, 0.3, 0.2}
-- for_domain(Creative) = {0.8, 0.2, 0.5}
-
 ### Acceptance Criteria
-- [ ] NeurotransmitterWeights struct with 3 f32 fields
-- [ ] Default: excitatory=0.5, inhibitory=0.5, modulatory=0.0
-- [ ] for_domain(Code) = {0.7, 0.3, 0.2}
-- [ ] for_domain(Creative) = {0.8, 0.2, 0.5}
-- [ ] Serde serialization works
-- [ ] Compiles with `cargo build`
-- [ ] Tests pass with `cargo test`
+- [ ] `use context_graph_graph::NeurotransmitterWeights;` compiles
+- [ ] `use context_graph_graph::Domain;` compiles
+- [ ] `NeurotransmitterWeights::for_domain(Domain::Code)` returns correct values
+- [ ] `weights.compute_effective_weight(1.0)` computes correctly
+- [ ] `weights.validate()` returns true for valid weights
+- [ ] Integration tests pass in context-graph-graph
 - [ ] No clippy warnings
 
-## Implementation Approach
-
-### Pseudocode/Algorithm
-1. Define Domain enum with 6 variants
-2. Define NeurotransmitterWeights struct with 3 f32 fields
-3. Implement for_domain() with match on each domain
-4. Implement Default with neutral values
-5. Add helper methods (neutral, max_activation, min_activation, lerp)
-
-### Edge Cases
-- Unknown domain string: Return None from from_str
-- Interpolation t outside [0,1]: Clamp to valid range
-- Display formatting: Use 2 decimal places
-
-## Verification
-
-### Test Commands
+### Verification Commands
 ```bash
 cargo build -p context-graph-graph
-cargo test -p context-graph-graph marblestone
+cargo test -p context-graph-graph nt_integration
 cargo clippy -p context-graph-graph -- -D warnings
 ```
 
-### Manual Verification
-- [ ] Default weights are neutral
-- [ ] Domain-specific weights match spec
-- [ ] Serialization roundtrip works
+## Implementation Approach
 
-### Test Cases
-
+### Step 1: Verify Re-exports
 ```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
+// In crates/context-graph-graph/tests/nt_integration_tests.rs
+use context_graph_graph::{NeurotransmitterWeights, Domain};
 
-    #[test]
-    fn test_default_weights() {
-        let weights = NeurotransmitterWeights::default();
-        assert!((weights.excitatory - 0.5).abs() < 1e-6);
-        assert!((weights.inhibitory - 0.5).abs() < 1e-6);
-        assert!((weights.modulatory - 0.0).abs() < 1e-6);
-    }
+#[test]
+fn test_nt_weights_reexport() {
+    let weights = NeurotransmitterWeights::for_domain(Domain::Code);
+    assert_eq!(weights.excitatory, 0.6);
+    assert_eq!(weights.inhibitory, 0.3);
+    assert_eq!(weights.modulatory, 0.4);
+}
+```
 
-    #[test]
-    fn test_code_domain() {
-        let weights = NeurotransmitterWeights::for_domain(Domain::Code);
-        assert!((weights.excitatory - 0.7).abs() < 1e-6);
-        assert!((weights.inhibitory - 0.3).abs() < 1e-6);
-        assert!((weights.modulatory - 0.2).abs() < 1e-6);
-    }
+### Step 2: Write Integration Tests
+```rust
+#[test]
+fn test_compute_effective_weight_general_domain() {
+    let weights = NeurotransmitterWeights::for_domain(Domain::General);
+    // General: e=0.5, i=0.2, m=0.3
+    // w_eff = ((1.0*0.5 - 1.0*0.2) * (1 + (0.3-0.5)*0.4)).clamp(0,1)
+    // w_eff = (0.3 * 0.92).clamp(0,1) = 0.276
+    let effective = weights.compute_effective_weight(1.0);
+    assert!((effective - 0.276).abs() < 0.001);
+}
 
-    #[test]
-    fn test_creative_domain() {
-        let weights = NeurotransmitterWeights::for_domain(Domain::Creative);
-        assert!((weights.excitatory - 0.8).abs() < 1e-6);
-        assert!((weights.inhibitory - 0.2).abs() < 1e-6);
-        assert!((weights.modulatory - 0.5).abs() < 1e-6);
-    }
+#[test]
+fn test_validate_returns_bool() {
+    let valid = NeurotransmitterWeights::new(0.5, 0.3, 0.4);
+    assert!(valid.validate());  // Returns bool, not Result
 
-    #[test]
-    fn test_neutral_weights() {
-        let weights = NeurotransmitterWeights::neutral();
-        // net_activation = 0.5 - 0.5 + 0 = 0
-        assert_eq!(weights, NeurotransmitterWeights::default());
-    }
+    let invalid = NeurotransmitterWeights::new(1.5, 0.0, 0.0);
+    assert!(!invalid.validate());
+}
 
-    #[test]
-    fn test_domain_bonus() {
-        assert!((NeurotransmitterWeights::domain_bonus(Domain::Code, Domain::Code) - 0.1).abs() < 1e-6);
-        assert!((NeurotransmitterWeights::domain_bonus(Domain::Code, Domain::Legal) - 0.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_lerp() {
-        let a = NeurotransmitterWeights::new(0.0, 0.0, 0.0);
-        let b = NeurotransmitterWeights::new(1.0, 1.0, 1.0);
-
-        let mid = a.lerp(&b, 0.5);
-        assert!((mid.excitatory - 0.5).abs() < 1e-6);
-        assert!((mid.inhibitory - 0.5).abs() < 1e-6);
-        assert!((mid.modulatory - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_serde_roundtrip() {
-        let weights = NeurotransmitterWeights::for_domain(Domain::Code);
-        let json = serde_json::to_string(&weights).unwrap();
-        let loaded: NeurotransmitterWeights = serde_json::from_str(&json).unwrap();
-        assert_eq!(weights, loaded);
-    }
-
-    #[test]
-    fn test_domain_from_str() {
-        assert_eq!(Domain::from_str("code"), Some(Domain::Code));
-        assert_eq!(Domain::from_str("CODE"), Some(Domain::Code));
-        assert_eq!(Domain::from_str("programming"), Some(Domain::Code));
-        assert_eq!(Domain::from_str("unknown"), None);
+#[test]
+fn test_all_domains_produce_valid_weights() {
+    for domain in Domain::all() {
+        let weights = NeurotransmitterWeights::for_domain(domain);
+        assert!(weights.validate(), "Domain {:?} produces invalid weights", domain);
     }
 }
 ```
+
+## Full State Verification Requirements
+
+### Source of Truth
+- **File**: `crates/context-graph-core/src/marblestone/neurotransmitter_weights.rs`
+- **Re-export**: `crates/context-graph-graph/src/lib.rs` line 60
+- **Verify**: `grep -n "NeurotransmitterWeights" crates/context-graph-graph/src/lib.rs`
+
+### Execute & Inspect
+```bash
+# 1. Verify re-export exists
+grep -n "pub use context_graph_core::marblestone" crates/context-graph-graph/src/lib.rs
+
+# 2. Run integration tests
+cargo test -p context-graph-graph nt_integration -- --nocapture
+
+# 3. Verify compilation
+cargo build -p context-graph-graph 2>&1 | head -20
+```
+
+### Edge Cases (3 Required - BEFORE/AFTER logging)
+
+#### Edge Case 1: Boundary Values
+```rust
+#[test]
+fn test_boundary_values() {
+    println!("BEFORE: Testing boundary value weights (0.0, 0.0, 0.0)");
+    let min = NeurotransmitterWeights::new(0.0, 0.0, 0.0);
+    println!("AFTER: validate() = {}", min.validate());
+    assert!(min.validate());
+
+    println!("BEFORE: Testing boundary value weights (1.0, 1.0, 1.0)");
+    let max = NeurotransmitterWeights::new(1.0, 1.0, 1.0);
+    println!("AFTER: validate() = {}", max.validate());
+    assert!(max.validate());
+}
+```
+
+#### Edge Case 2: Out of Range (Negative)
+```rust
+#[test]
+fn test_negative_weight_invalid() {
+    println!("BEFORE: Testing negative excitatory weight -0.1");
+    let invalid = NeurotransmitterWeights::new(-0.1, 0.5, 0.5);
+    println!("AFTER: validate() = {}", invalid.validate());
+    assert!(!invalid.validate());
+}
+```
+
+#### Edge Case 3: Out of Range (Above 1.0)
+```rust
+#[test]
+fn test_above_one_weight_invalid() {
+    println!("BEFORE: Testing excitatory weight 1.1 (above max)");
+    let invalid = NeurotransmitterWeights::new(1.1, 0.5, 0.5);
+    println!("AFTER: validate() = {}", invalid.validate());
+    assert!(!invalid.validate());
+}
+```
+
+### Evidence of Success
+1. `cargo test -p context-graph-graph nt_integration` shows all tests pass
+2. No warnings from `cargo clippy -p context-graph-graph`
+3. `use context_graph_graph::NeurotransmitterWeights` compiles in downstream code
+
+## Sherlock-Holmes Verification
+
+After implementation, spawn `sherlock-holmes` subagent to verify:
+
+```
+Investigate and verify M04-T14 implementation:
+
+1. VERIFY: Re-exports exist in crates/context-graph-graph/src/lib.rs
+   - Check line 60: `pub use context_graph_core::marblestone::{Domain, EdgeType, NeurotransmitterWeights};`
+
+2. VERIFY: Integration tests exist and pass
+   - Run: cargo test -p context-graph-graph nt_integration -- --nocapture
+   - All 6 domains must produce valid weights
+
+3. VERIFY: No duplicate implementations
+   - Run: grep -r "struct NeurotransmitterWeights" crates/
+   - Should only find ONE definition in context-graph-core
+
+4. VERIFY: Formula correctness
+   - compute_effective_weight(1.0) for General domain = 0.276 ± 0.001
+
+5. EVIDENCE REQUIRED:
+   - Screenshot/log of passing tests
+   - grep output showing single definition
+   - Formula verification calculation
+```
+
+## Related Tasks
+- M04-T14a: Add Result-returning validation wrapper in graph layer
+- M04-T15: Integrate NT weights into GraphEdge struct

@@ -9,7 +9,7 @@
 //! based on the current domain context:
 //!
 //! ```text
-//! w_eff = base * (1 + excitatory - inhibitory + 0.5 * modulatory)
+//! w_eff = ((base * excitatory - base * inhibitory) * (1 + (modulatory - 0.5) * 0.4)).clamp(0.0, 1.0)
 //! ```
 //!
 //! # Domain-Specific Modulation
@@ -23,6 +23,7 @@
 //! # Components
 //!
 //! - Re-exports from context-graph-core
+//! - Validation: `validate_or_error()` for Result-returning validation (M04-T14a)
 //! - Domain-aware search (TODO: M04-T19)
 //! - NT modulation functions (TODO: M04-T26)
 //!
@@ -30,9 +31,15 @@
 //!
 //! - edge_model.nt_weights: Definition and formula
 //! - edge_model.nt_weights.domain: Code|Legal|Medical|Creative|Research|General
+//! - AP-001: Never unwrap() in prod - all errors properly typed
+
+mod validation;
 
 // Re-export from core for convenience
 pub use context_graph_core::marblestone::{Domain, EdgeType, NeurotransmitterWeights};
+
+// Re-export validation functions (M04-T14a)
+pub use validation::{compute_effective_validated, validate_or_error};
 
 // TODO: M04-T19 - Implement domain-aware search
 // pub fn search_with_domain(
