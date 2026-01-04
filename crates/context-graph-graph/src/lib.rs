@@ -37,6 +37,7 @@
 //! ```
 
 pub mod config;
+pub mod contradiction;
 pub mod entailment;
 pub mod error;
 pub mod hyperbolic;
@@ -49,6 +50,10 @@ pub mod traversal;
 
 // Re-exports for convenience
 pub use config::{ConeConfig, HyperbolicConfig, IndexConfig};
+pub use contradiction::{
+    check_contradiction, contradiction_detect, get_contradictions, mark_contradiction,
+    ContradictionParams, ContradictionResult, ContradictionType,
+};
 pub use entailment::{
     entailment_check_batch, entailment_query, entailment_score, is_entailed_by,
     lowest_common_ancestor, BatchEntailmentResult, EntailmentCone, EntailmentDirection,

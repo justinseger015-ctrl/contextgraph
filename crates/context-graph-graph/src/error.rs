@@ -146,6 +146,11 @@ pub enum GraphError {
     MissingHyperbolicData(i64),
 
     // ========== Validation Errors ==========
+    /// Invalid input provided to a function.
+    /// Used for FAIL FAST validation of parameters.
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     /// Vector ID mismatch between index and storage.
     #[error("Vector ID mismatch: {0}")]
     VectorIdMismatch(String),

@@ -37,8 +37,8 @@ fn test_edge_type_hierarchical_description() {
 }
 
 #[test]
-fn test_edge_type_all_returns_4_variants() {
-    assert_eq!(EdgeType::all().len(), 4);
+fn test_edge_type_all_returns_5_variants() {
+    assert_eq!(EdgeType::all().len(), 5);
 }
 
 #[test]
@@ -48,6 +48,7 @@ fn test_edge_type_all_contains_all_variants() {
     assert!(all.contains(&EdgeType::Temporal));
     assert!(all.contains(&EdgeType::Causal));
     assert!(all.contains(&EdgeType::Hierarchical));
+    assert!(all.contains(&EdgeType::Contradicts));
 }
 
 #[test]
@@ -57,6 +58,7 @@ fn test_edge_type_all_order() {
     assert_eq!(all[1], EdgeType::Temporal);
     assert_eq!(all[2], EdgeType::Causal);
     assert_eq!(all[3], EdgeType::Hierarchical);
+    assert_eq!(all[4], EdgeType::Contradicts);
 }
 
 #[test]
@@ -197,7 +199,47 @@ fn test_edge_type_all_unique() {
     use std::collections::HashSet;
     let all = EdgeType::all();
     let unique: HashSet<_> = all.iter().collect();
-    assert_eq!(unique.len(), 4);
+    assert_eq!(unique.len(), 5);
+}
+
+// ========== M04-T26: Contradicts Tests ==========
+
+#[test]
+fn test_edge_type_contradicts_description() {
+    assert!(EdgeType::Contradicts.description().to_lowercase().contains("contradict"));
+}
+
+#[test]
+fn test_edge_type_contradicts_weight() {
+    assert!((EdgeType::Contradicts.default_weight() - 0.3).abs() < 0.001);
+}
+
+#[test]
+fn test_edge_type_contradicts_display() {
+    assert_eq!(EdgeType::Contradicts.to_string(), "contradicts");
+}
+
+#[test]
+fn test_edge_type_contradicts_serde() {
+    let edge: EdgeType = serde_json::from_str(r#""contradicts""#).unwrap();
+    assert_eq!(edge, EdgeType::Contradicts);
+}
+
+#[test]
+fn test_edge_type_is_contradiction() {
+    assert!(EdgeType::Contradicts.is_contradiction());
+    assert!(!EdgeType::Semantic.is_contradiction());
+}
+
+#[test]
+fn test_edge_type_is_symmetric() {
+    // Symmetric edges
+    assert!(EdgeType::Semantic.is_symmetric());
+    assert!(EdgeType::Contradicts.is_symmetric());
+    // Directed edges
+    assert!(!EdgeType::Temporal.is_symmetric());
+    assert!(!EdgeType::Causal.is_symmetric());
+    assert!(!EdgeType::Hierarchical.is_symmetric());
 }
 
 #[test]

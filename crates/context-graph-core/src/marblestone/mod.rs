@@ -25,6 +25,7 @@
 //! let base_weight = edge.default_weight();
 //! ```
 
+mod contradiction_type;
 mod domain;
 mod edge_type;
 mod neurotransmitter_weights;
@@ -38,7 +39,8 @@ mod tests_neurotransmitter_weights;
 #[cfg(test)]
 mod edge_case_verification;
 
-// Re-export all public types for backwards compatibility
+// Re-export all public types
+pub use self::contradiction_type::ContradictionType;
 pub use self::domain::Domain;
 pub use self::edge_type::EdgeType;
 pub use self::neurotransmitter_weights::NeurotransmitterWeights;
