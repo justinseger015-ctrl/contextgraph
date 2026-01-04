@@ -25,9 +25,9 @@ cargo test -p context-graph-utl --lib 2>&1 | tail -3
 
 | Status | Count |
 |--------|-------|
-| Completed | 34 |
+| Completed | 36 |
 | Needs Implementation | 1 (M05-T12) |
-| Pending (MCP Integration) | 28 |
+| Pending (MCP Integration) | 26 |
 | In Progress | 0 |
 | Blocked | 0 |
 
@@ -77,7 +77,7 @@ cargo test -p context-graph-utl --lib 2>&1 | tail -3
 - `crates/context-graph-utl/src/emotional/` (state.rs, calculator.rs, lexicon.rs)
 - `crates/context-graph-utl/src/phase/` (oscillator.rs, consolidation.rs)
 
-### Surface Layer (Week 3) - MOSTLY COMPLETE
+### Surface Layer (Week 3) - COMPLETE
 
 | Task ID | Title | Priority | Hours | Status | Dependencies |
 |---------|-------|----------|-------|--------|--------------|
@@ -85,9 +85,9 @@ cargo test -p context-graph-utl --lib 2>&1 | tail -3
 | M05-T19 | Implement LifecycleManager State Machine | high | 3 | **COMPLETE** | M05-T07 |
 | M05-T20 | Implement Core UTL Learning Magnitude | critical | 3 | **COMPLETE** | M05-T11, M05-T13, M05-T16, M05-T17 |
 | [M05-T21](M05-T21.md) | Implement LearningSignal and UtlState | critical | 3 | **COMPLETE** | M05-T18, M05-T19, M05-T20 |
-| M05-T22 | Implement UtlProcessor Orchestrator | critical | 4 | **partial** | M05-T11, M05-T13, M05-T16, M05-T17, M05-T18, M05-T19, M05-T20, M05-T21 |
+| [M05-T22](M05-T22.md) | Implement UtlProcessor Orchestrator | critical | 4 | **COMPLETE** | M05-T11, M05-T13, M05-T16, M05-T17, M05-T18, M05-T19, M05-T20, M05-T21 |
 | M05-T23 | Implement UtlError Enum | high | 1.5 | **COMPLETE** | M05-T00 |
-| M05-T30 | Implement SessionContext | medium | 2 | pending | M05-T22 |
+| M05-T30 | Implement SessionContext | medium | 2 | **COMPLETE** | M05-T22 |
 
 **Verification:**
 - `crates/context-graph-utl/src/johari/` (classifier.rs, retrieval.rs)
@@ -175,10 +175,10 @@ The following components exist in `crates/context-graph-utl/`:
 
 The remaining tasks are primarily MCP integration work:
 
-1. **M05-T22**: Complete UtlProcessor orchestrator (partially done)
-2. **M05-T26-M05-T29**: MCP tool implementations
-3. **M05-T38**: inject_context UTL integration (CRITICAL)
-4. **M05-T34**: config/utl.yaml file
+1. **M05-T26-M05-T29**: MCP tool implementations
+2. **M05-T38**: inject_context UTL integration (CRITICAL)
+3. **M05-T34**: config/utl.yaml file
+4. **M05-T12**: CoherenceEntry and Window (Needs Implementation)
 
 ## Quality Gates
 

@@ -46,6 +46,7 @@ pub mod emotional;
 pub mod johari;
 pub mod lifecycle;
 pub mod phase;
+pub mod processor;
 
 // Re-export commonly used types from this crate
 pub use config::UtlConfig;
@@ -62,6 +63,9 @@ pub use johari::{classify_quadrant, JohariClassifier, JohariQuadrant, SuggestedA
 
 // Re-export phase types for convenience
 pub use phase::{ConsolidationPhase, PhaseDetector, PhaseOscillator};
+
+// Re-export processor types for convenience
+pub use processor::{SessionContext, UtlProcessor};
 
 /// Compute the learning magnitude using the UTL formula.
 ///
