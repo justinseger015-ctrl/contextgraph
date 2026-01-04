@@ -340,6 +340,7 @@ impl LearningSignal {
     ///
     /// # Errors
     /// Returns `UtlError::InvalidComputation` if magnitude is NaN or Infinity
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         magnitude: f32,
         delta_s: f32,

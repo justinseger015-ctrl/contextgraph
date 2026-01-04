@@ -33,7 +33,9 @@ use crate::error::{UtlError, UtlResult};
 /// assert_eq!(phase.recency_bias(), 0.8);
 /// assert!(phase.is_consolidation_phase());
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum ConsolidationPhase {
     /// Non-REM sleep phase: Memory replay with tight coupling.
     ///
