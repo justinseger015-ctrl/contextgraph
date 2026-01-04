@@ -299,9 +299,7 @@ pub fn dfs_traverse(
             neighbors.push((neighbor_id, effective_weight));
 
             // Record parent if not already set
-            if !result.parents.contains_key(&neighbor_id) {
-                result.parents.insert(neighbor_id, Some(current));
-            }
+            result.parents.entry(neighbor_id).or_insert(Some(current));
 
             // Record edge traversal
             result.edges_traversed.push((current, neighbor_id, effective_weight));

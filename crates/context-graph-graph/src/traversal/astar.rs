@@ -263,7 +263,7 @@ fn to_hyperbolic_point(storage_point: StoragePoint) -> HyperbolicPoint {
 #[inline]
 fn edge_cost(weight: f32) -> f32 {
     // Clamp weight to valid range
-    let w = weight.max(0.0).min(1.0);
+    let w = weight.clamp(0.0, 1.0);
     1.0 / (w + 0.001)
 }
 

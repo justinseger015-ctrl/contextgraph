@@ -11,6 +11,7 @@
 //! - **hyperbolic**: Poincare ball model with Mobius operations
 //! - **entailment**: Entailment cones for O(1) IS-A queries
 //! - **index**: FAISS GPU IVF-PQ index wrapper
+//! - **search**: Semantic search with filters and metadata enrichment
 //! - **storage**: RocksDB backend for graph persistence
 //! - **traversal**: BFS, DFS, and A* graph traversal
 //! - **marblestone**: Marblestone NT integration
@@ -42,6 +43,7 @@ pub mod hyperbolic;
 pub mod index;
 pub mod marblestone;
 pub mod query;
+pub mod search;
 pub mod storage;
 pub mod traversal;
 
@@ -51,6 +53,11 @@ pub use entailment::EntailmentCone;
 pub use error::{GraphError, GraphResult};
 pub use hyperbolic::{PoincareBall, PoincarePoint};
 pub use index::{FaissGpuIndex, GpuResources, MetricType, SearchResult, SearchResultItem};
+pub use search::{
+    semantic_search, semantic_search_batch, semantic_search_batch_simple, semantic_search_simple,
+    BatchSemanticSearchResult, NodeMetadataProvider, NoMetadataProvider, SearchFilters,
+    SearchStats, SemanticSearchResult, SemanticSearchResultItem,
+};
 pub use storage::{
     get_column_family_descriptors, get_db_options, StorageConfig, ALL_COLUMN_FAMILIES,
     CF_ADJACENCY, CF_CONES, CF_FAISS_IDS, CF_HYPERBOLIC, CF_METADATA, CF_NODES,
