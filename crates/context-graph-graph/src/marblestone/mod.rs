@@ -24,7 +24,7 @@
 //!
 //! - Re-exports from context-graph-core
 //! - Validation: `validate_or_error()` for Result-returning validation (M04-T14a)
-//! - Domain-aware search (TODO: M04-T19)
+//! - Domain-aware search (M04-T19 COMPLETE)
 //! - NT modulation functions (TODO: M04-T26)
 //!
 //! # Constitution Reference
@@ -41,14 +41,11 @@ pub use context_graph_core::marblestone::{Domain, EdgeType, NeurotransmitterWeig
 // Re-export validation functions (M04-T14a)
 pub use validation::{compute_effective_validated, validate_or_error};
 
-// TODO: M04-T19 - Implement domain-aware search
-// pub fn search_with_domain(
-//     index: &FaissGpuIndex,
-//     storage: &GraphStorage,
-//     query: &[f32],
-//     domain: Domain,
-//     k: usize,
-// ) -> GraphResult<Vec<SearchResultWithNt>>
+// Re-export domain-aware search (M04-T19)
+pub use crate::search::domain_search::{
+    domain_aware_search, domain_nt_summary, expected_domain_boost, DomainSearchResult,
+    DomainSearchResults,
+};
 
 // TODO: M04-T26 - Implement NT modulation
 // pub fn compute_effective_weight(

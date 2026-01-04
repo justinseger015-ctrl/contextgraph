@@ -33,10 +33,12 @@
 //! - AP-001: Never unwrap() in prod - all errors properly typed
 //! - perf.latency.faiss_1M_k100: <2ms target
 
+pub mod domain_search;
 pub mod filters;
 pub mod result;
 
 // Re-exports for convenience
+pub use domain_search::{domain_aware_search, DomainSearchResult, DomainSearchResults};
 pub use filters::{Domain, SearchFilters};
 pub use result::{
     BatchSemanticSearchResult, SearchStats, SemanticSearchResult, SemanticSearchResultItem,
