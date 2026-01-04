@@ -139,6 +139,12 @@ pub enum GraphError {
     #[error("Cycle detected at node: {0}")]
     CycleDetected(String),
 
+    /// Missing hyperbolic coordinates for A* traversal (M04-T17a).
+    /// A* requires hyperbolic embeddings for distance heuristic.
+    /// NO FALLBACK - fail fast per AP-001.
+    #[error("Missing hyperbolic data for node {0}: A* requires hyperbolic embeddings")]
+    MissingHyperbolicData(i64),
+
     // ========== Validation Errors ==========
     /// Vector ID mismatch between index and storage.
     #[error("Vector ID mismatch: {0}")]

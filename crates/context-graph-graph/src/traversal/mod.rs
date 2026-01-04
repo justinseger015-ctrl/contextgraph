@@ -6,8 +6,8 @@
 //! # Algorithms
 //!
 //! - **BFS**: Breadth-first search for shortest paths and level-order exploration (M04-T16 ✓)
-//! - **DFS**: Depth-first search (iterative, NOT recursive) for deep exploration
-//! - **A***: A* search with hyperbolic distance heuristic for optimal pathfinding
+//! - **DFS**: Depth-first search (iterative, NOT recursive) for deep exploration (M04-T17 ✓)
+//! - **A***: A* search with hyperbolic distance heuristic for optimal pathfinding (M04-T17a ✓)
 //!
 //! # Edge Filtering
 //!
@@ -19,8 +19,8 @@
 //! # Components
 //!
 //! - BFS traversal (M04-T16 ✓)
-//! - DFS traversal (TODO: M04-T17)
-//! - A* traversal with hyperbolic heuristic (TODO: M04-T17a)
+//! - DFS traversal (M04-T17 ✓)
+//! - A* traversal with hyperbolic heuristic (M04-T17a ✓)
 //! - Traversal utilities (TODO: M04-T22)
 //!
 //! # Constitution Reference
@@ -52,9 +52,30 @@
 //!     println!("Path: {:?}", path);
 //! }
 //! ```
+//!
+//! ## A* Optimal Pathfinding
+//!
+//! ```rust,ignore
+//! use context_graph_graph::traversal::{astar_search, AstarParams, Domain};
+//!
+//! let params = AstarParams::default()
+//!     .domain(Domain::Code)
+//!     .min_weight(0.3);
+//!
+//! let result = astar_search(&storage, start, goal, params)?;
+//! if result.path_found {
+//!     println!("Path: {:?}, cost: {}", result.path, result.total_cost);
+//! }
+//! ```
 
 // M04-T16: BFS traversal with domain modulation
 pub mod bfs;
+
+// M04-T17: DFS traversal with domain modulation (iterative, NOT recursive)
+pub mod dfs;
+
+// M04-T17a: A* traversal with hyperbolic distance heuristic
+pub mod astar;
 
 // Re-export BFS public API
 pub use bfs::{
@@ -62,20 +83,20 @@ pub use bfs::{
     BfsResult, Domain, EdgeType, NodeId,
 };
 
-// TODO: M04-T17 - Implement DFS traversal
-// pub struct DfsIterator<'a> { ... }
-// impl<'a> DfsIterator<'a> {
-//     pub fn new(storage: &'a GraphStorage, start: NodeId, filter: EdgeFilter) -> Self
-// }
-// Note: MUST be iterative, NOT recursive (to avoid stack overflow)
+// Re-export DFS public API (M04-T17 ✓)
+pub use dfs::{
+    dfs_domain_neighborhood, dfs_neighborhood, dfs_traverse,
+    DfsIterator, DfsParams, DfsResult,
+};
 
-// TODO: M04-T17a - Implement A* traversal
-// pub fn astar(
-//     storage: &GraphStorage,
-//     start: NodeId,
-//     goal: NodeId,
-//     heuristic: impl Fn(&PoincarePoint, &PoincarePoint) -> f32,
-// ) -> GraphResult<Vec<NodeId>>
+// Re-export A* public API (M04-T17a ✓)
+pub use astar::{
+    astar_search, astar_bidirectional, astar_path, astar_domain_path,
+    AstarParams, AstarResult,
+};
+
+// M04-T17 COMPLETE: DFS implemented in dfs.rs (iterative, NOT recursive)
+// M04-T17a COMPLETE: A* implemented in astar.rs with hyperbolic heuristic
 
 // TODO: M04-T22 - Implement traversal utilities
 // pub struct EdgeFilter {
