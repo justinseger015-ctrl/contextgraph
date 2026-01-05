@@ -1,56 +1,93 @@
-//! Embedding provider trait for text-to-vector conversion.
+//! Embedding provider trait for vector generation.
 //!
-//! This trait defines the interface for embedding generation that MCP handlers
-//! use. Implementations include:
-//! - `StubEmbeddingProvider`: Deterministic test embeddings (hash-based)
-//! - Real Candle-based provider (M06-T04)
+//! This module defines the [`EmbeddingProvider`] trait and [`EmbeddingOutput`] struct
+//! for generating semantic embeddings from text content.
 //!
-//! # Performance Requirements (constitution.yaml:108-122)
-//! - Single embed: <10ms
-//! - Batch embed (64): <50ms
+//! # Performance Requirements (constitution.yaml)
 //!
-//! # FAIL FAST: No fallbacks. Errors propagate immediately.
+//! - Single embed: <10ms latency
+//! - Batch embed (64 items): <50ms latency
+//! - Default dimensions: 1536 (OpenAI text-embedding-3-small compatible)
+//!
+//! # Example
+//!
+//! ```ignore
+//! use context_graph_core::traits::{EmbeddingProvider, EmbeddingOutput};
+//!
+//! async fn generate_embedding<P: EmbeddingProvider>(provider: &P, content: &str) {
+//!     let output = provider.embed(content).await.unwrap();
+//!     assert_eq!(output.dimensions, provider.dimensions());
+//!     assert_eq!(output.vector.len(), output.dimensions);
+//! }
+//! ```
+
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
-use crate::error::{CoreError, CoreResult};
+use crate::error::CoreResult;
 
-/// Result of embedding generation with metadata.
+/// Output from an embedding generation operation.
 ///
-/// Contains the embedding vector plus diagnostic information
-/// for performance monitoring and debugging.
+/// Contains the generated embedding vector along with metadata about
+/// the generation process including model identification and timing.
+///
+/// # Fields
+///
+/// - `vector`: The 1536-dimensional embedding vector (default dimension)
+/// - `model_id`: Identifier of the model used for generation
+/// - `dimensions`: Length of the embedding vector (typically 1536)
+/// - `latency`: Time taken to generate the embedding
+///
+/// # Performance Constraints (constitution.yaml)
+///
+/// - Single embed latency: <10ms
+/// - Batch embed (64) latency: <50ms
 ///
 /// # Example
 ///
-/// ```rust
+/// ```
 /// use context_graph_core::traits::EmbeddingOutput;
 /// use std::time::Duration;
 ///
-/// let output = EmbeddingOutput::new(
-///     vec![0.1, 0.2, 0.3],
-///     "stub-embedding-v1",
-///     Duration::from_micros(500),
-/// ).unwrap();
+/// let output = EmbeddingOutput {
+///     vector: vec![0.1; 1536],
+///     model_id: "text-embedding-3-small".to_string(),
+///     dimensions: 1536,
+///     latency: Duration::from_millis(5),
+/// };
 ///
-/// assert_eq!(output.dimensions, 3);
-/// assert_eq!(output.model_id, "stub-embedding-v1");
+/// assert_eq!(output.vector.len(), output.dimensions);
+/// assert!(output.latency < Duration::from_millis(10));
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingOutput {
-    /// The embedding vector (1536 dimensions by default).
+    /// The embedding vector (1536D by default).
+    ///
+    /// Each component is a 32-bit float representing a semantic dimension.
+    /// The vector is L2-normalized for cosine similarity computation.
     pub vector: Vec<f32>,
-    /// Model identifier that generated this embedding.
+
+    /// Model identifier used for embedding generation.
+    ///
+    /// Examples: "text-embedding-3-small", "text-embedding-ada-002"
     pub model_id: String,
-    /// Actual vector dimensions.
+
+    /// Dimensionality of the embedding vector.
+    ///
+    /// Standard dimension is 1536 for OpenAI models.
+    /// Must equal `vector.len()`.
     pub dimensions: usize,
-    /// Time taken to generate embedding.
+
+    /// Time taken to generate this embedding.
+    ///
+    /// Performance target: <10ms for single embeddings.
     #[serde(with = "duration_serde")]
     pub latency: Duration,
 }
 
-/// Custom serde implementation for Duration.
+/// Serde support for Duration serialization.
 mod duration_serde {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::time::Duration;
@@ -72,203 +109,187 @@ mod duration_serde {
 }
 
 impl EmbeddingOutput {
-    /// Create new embedding output with validation.
+    /// Create a new EmbeddingOutput with validation.
     ///
     /// # Arguments
     ///
-    /// * `vector` - The embedding vector (must not be empty)
-    /// * `model_id` - Identifier of the model that generated this embedding
-    /// * `latency` - Time taken to generate the embedding
+    /// * `vector` - The embedding vector
+    /// * `model_id` - Model identifier
+    /// * `latency` - Generation time
     ///
     /// # Returns
     ///
-    /// `EmbeddingOutput` on success, or `CoreError::Embedding` if vector is empty.
-    ///
-    /// # Errors
-    ///
-    /// Returns `CoreError::Embedding` if vector is empty.
+    /// A new `EmbeddingOutput` with dimensions automatically set from vector length.
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use context_graph_core::traits::EmbeddingOutput;
-    /// use std::time::Duration;
-    ///
-    /// // Valid embedding
-    /// let result = EmbeddingOutput::new(
-    ///     vec![0.1, 0.2, 0.3],
-    ///     "test-model",
-    ///     Duration::from_millis(5),
-    /// );
-    /// assert!(result.is_ok());
-    ///
-    /// // Empty vector fails
-    /// let result = EmbeddingOutput::new(
-    ///     vec![],
-    ///     "test-model",
-    ///     Duration::from_millis(5),
-    /// );
-    /// assert!(result.is_err());
     /// ```
-    pub fn new(
-        vector: Vec<f32>,
-        model_id: impl Into<String>,
-        latency: Duration,
-    ) -> CoreResult<Self> {
-        if vector.is_empty() {
-            return Err(CoreError::Embedding("Empty embedding vector".into()));
-        }
-        let dimensions = vector.len();
-        Ok(Self {
-            vector,
-            model_id: model_id.into(),
-            dimensions,
-            latency,
-        })
-    }
-
-    /// Get the magnitude (L2 norm) of the embedding vector.
-    ///
-    /// Used to verify normalization.
-    ///
-    /// # Example
-    ///
-    /// ```rust
     /// use context_graph_core::traits::EmbeddingOutput;
     /// use std::time::Duration;
     ///
     /// let output = EmbeddingOutput::new(
-    ///     vec![0.6, 0.8],  // 3-4-5 triangle, magnitude = 1.0
-    ///     "test",
-    ///     Duration::from_millis(1),
-    /// ).unwrap();
-    ///
-    /// assert!((output.magnitude() - 1.0).abs() < 0.001);
+    ///     vec![0.1; 1536],
+    ///     "text-embedding-3-small".to_string(),
+    ///     Duration::from_millis(5),
+    /// );
+    /// assert_eq!(output.dimensions, 1536);
     /// ```
-    pub fn magnitude(&self) -> f32 {
-        self.vector.iter().map(|v| v * v).sum::<f32>().sqrt()
+    pub fn new(vector: Vec<f32>, model_id: String, latency: Duration) -> Self {
+        let dimensions = vector.len();
+        Self {
+            vector,
+            model_id,
+            dimensions,
+            latency,
+        }
     }
 }
 
-/// Trait for embedding generation.
+/// Trait for embedding generation providers.
 ///
-/// Provides async interface for converting text to dense vector representations.
-/// All implementations must be thread-safe (Send + Sync) for use in async handlers.
+/// Implementations provide semantic embedding generation capabilities,
+/// transforming text content into dense vector representations suitable
+/// for similarity search and retrieval operations.
 ///
-/// # Error Handling
+/// # Performance Requirements (constitution.yaml)
 ///
-/// FAIL FAST: Errors propagate immediately. No fallbacks to fake embeddings.
-/// If embedding generation fails, the caller receives the error.
+/// Implementations MUST meet these performance targets:
+/// - Single embed (`embed`): <10ms latency
+/// - Batch embed of 64 items (`embed_batch`): <50ms latency
 ///
-/// # Performance
+/// # Thread Safety
 ///
-/// Implementations must meet these budgets (constitution.yaml:115-116):
-/// - Single embed: <10ms
-/// - Batch embed (64): <50ms
+/// All implementations must be `Send + Sync` to support concurrent access
+/// in multi-threaded environments.
 ///
-/// # Example
+/// # Example Implementation
 ///
-/// ```rust,ignore
-/// use context_graph_core::traits::EmbeddingProvider;
-/// use context_graph_core::stubs::StubEmbeddingProvider;
+/// ```ignore
+/// use async_trait::async_trait;
+/// use context_graph_core::traits::{EmbeddingProvider, EmbeddingOutput};
+/// use context_graph_core::error::CoreResult;
 ///
-/// let provider = StubEmbeddingProvider::new();
-/// let embedding = provider.embed("Some text content").await?;
-/// assert_eq!(embedding.dimensions, 1536);
+/// struct OpenAIEmbedder {
+///     model: String,
+///     dimensions: usize,
+/// }
+///
+/// #[async_trait]
+/// impl EmbeddingProvider for OpenAIEmbedder {
+///     async fn embed(&self, content: &str) -> CoreResult<EmbeddingOutput> {
+///         // Implementation that calls OpenAI API
+///         todo!()
+///     }
+///
+///     async fn embed_batch(&self, contents: &[String]) -> CoreResult<Vec<EmbeddingOutput>> {
+///         // Batch implementation for efficiency
+///         todo!()
+///     }
+///
+///     fn dimensions(&self) -> usize {
+///         self.dimensions
+///     }
+///
+///     fn model_id(&self) -> &str {
+///         &self.model
+///     }
+///
+///     fn is_ready(&self) -> bool {
+///         true
+///     }
+/// }
 /// ```
 #[async_trait]
 pub trait EmbeddingProvider: Send + Sync {
-    /// Generate embedding for single text content.
+    /// Generate an embedding for a single piece of content.
     ///
     /// # Arguments
     ///
-    /// * `content` - Text to embed (max 8192 tokens typical)
+    /// * `content` - The text content to embed
     ///
     /// # Returns
     ///
-    /// `EmbeddingOutput` with vector and metadata on success.
+    /// An [`EmbeddingOutput`] containing the embedding vector and metadata.
     ///
     /// # Errors
     ///
-    /// - `CoreError::Embedding` if generation fails or content is empty
+    /// Returns `CoreError::Embedding` if:
+    /// - Content is empty
+    /// - Provider is not ready (`is_ready()` returns false)
+    /// - Embedding generation fails
+    /// - Timeout exceeded (>10ms target)
     ///
     /// # Performance
     ///
-    /// Target: <10ms (constitution.yaml:115)
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// let output = provider.embed("Hello world").await?;
-    /// assert_eq!(output.dimensions, provider.dimensions());
-    /// ```
+    /// Target latency: <10ms (constitution.yaml requirement)
     async fn embed(&self, content: &str) -> CoreResult<EmbeddingOutput>;
 
-    /// Generate embeddings for batch of texts.
+    /// Generate embeddings for multiple pieces of content in batch.
     ///
-    /// More efficient than calling `embed` in a loop.
-    /// Implementations should process in parallel where possible.
+    /// Batch processing is more efficient than individual calls for
+    /// multiple items, amortizing API overhead across the batch.
     ///
     /// # Arguments
     ///
-    /// * `contents` - Slice of texts to embed
+    /// * `contents` - Slice of text content to embed
     ///
     /// # Returns
     ///
-    /// Vector of `EmbeddingOutput` in same order as input.
+    /// A vector of [`EmbeddingOutput`] in the same order as input contents.
     ///
     /// # Errors
     ///
-    /// - `CoreError::Embedding` if any generation fails
+    /// Returns `CoreError::Embedding` if:
+    /// - Any content is empty
+    /// - Provider is not ready
+    /// - Batch processing fails
+    /// - Timeout exceeded (>50ms for 64 items)
     ///
     /// # Performance
     ///
-    /// Target: <50ms for 64 items (constitution.yaml:116)
+    /// Target latency for 64 items: <50ms (constitution.yaml requirement)
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// let contents = vec!["first".to_string(), "second".to_string()];
-    /// let outputs = provider.embed_batch(&contents).await?;
-    /// assert_eq!(outputs.len(), 2);
+    /// ```ignore
+    /// let contents = vec![
+    ///     "First document".to_string(),
+    ///     "Second document".to_string(),
+    /// ];
+    /// let embeddings = provider.embed_batch(&contents).await?;
+    /// assert_eq!(embeddings.len(), 2);
     /// ```
     async fn embed_batch(&self, contents: &[String]) -> CoreResult<Vec<EmbeddingOutput>>;
 
-    /// Get the output dimension for embeddings.
+    /// Get the dimensionality of embeddings produced by this provider.
     ///
-    /// Default is 1536 (OpenAI ada-002 compatible, FuseMoE output).
+    /// Standard dimension is 1536 for OpenAI text-embedding models.
+    /// All embeddings from a provider will have this dimension.
     ///
-    /// # Example
+    /// # Returns
     ///
-    /// ```rust,ignore
-    /// let dim = provider.dimensions();
-    /// assert_eq!(dim, 1536);
-    /// ```
+    /// The number of dimensions in the embedding vectors (typically 1536).
     fn dimensions(&self) -> usize;
 
-    /// Get the model identifier string.
+    /// Get the model identifier for this provider.
     ///
-    /// Used for logging, debugging, and `EmbeddingOutput.model_id`.
+    /// Used for tracking which model generated embeddings and ensuring
+    /// compatibility when comparing embeddings.
     ///
-    /// # Example
+    /// # Returns
     ///
-    /// ```rust,ignore
-    /// let id = provider.model_id();
-    /// assert!(id.contains("embedding"));
-    /// ```
+    /// The model ID string (e.g., "text-embedding-3-small").
     fn model_id(&self) -> &str;
 
-    /// Check if provider is ready to generate embeddings.
+    /// Check if the provider is ready to generate embeddings.
     ///
-    /// Returns false if model needs initialization (weight loading, GPU warm-up).
+    /// Providers may require initialization (loading models, establishing
+    /// connections) before they can generate embeddings.
     ///
-    /// # Example
+    /// # Returns
     ///
-    /// ```rust,ignore
-    /// if provider.is_ready() {
-    ///     let output = provider.embed("text").await?;
-    /// }
-    /// ```
+    /// `true` if the provider is ready to accept embedding requests,
+    /// `false` if initialization is incomplete or provider is in error state.
     fn is_ready(&self) -> bool;
 }
 
@@ -277,48 +298,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_embedding_output_new_success() {
-        let result = EmbeddingOutput::new(
-            vec![0.1, 0.2, 0.3],
-            "test-model",
+    fn test_embedding_output_new() {
+        let vector = vec![0.1, 0.2, 0.3];
+        let output = EmbeddingOutput::new(
+            vector.clone(),
+            "test-model".to_string(),
             Duration::from_millis(5),
         );
-        assert!(result.is_ok());
-        let output = result.unwrap();
-        assert_eq!(output.dimensions, 3);
+
+        assert_eq!(output.vector, vector);
         assert_eq!(output.model_id, "test-model");
-        assert_eq!(output.vector.len(), 3);
-    }
-
-    #[test]
-    fn test_embedding_output_empty_vector_fails() {
-        let result = EmbeddingOutput::new(vec![], "test-model", Duration::from_millis(5));
-        assert!(result.is_err());
-        match result {
-            Err(CoreError::Embedding(msg)) => {
-                assert!(msg.contains("Empty"));
-            }
-            _ => panic!("Expected CoreError::Embedding"),
-        }
-    }
-
-    #[test]
-    fn test_embedding_output_magnitude() {
-        // 3-4-5 triangle scaled: 0.6^2 + 0.8^2 = 0.36 + 0.64 = 1.0
-        let output =
-            EmbeddingOutput::new(vec![0.6, 0.8], "test", Duration::from_millis(1)).unwrap();
-        assert!((output.magnitude() - 1.0).abs() < 0.001);
+        assert_eq!(output.dimensions, 3);
+        assert_eq!(output.latency, Duration::from_millis(5));
     }
 
     #[test]
     fn test_embedding_output_serialization() {
-        let output =
-            EmbeddingOutput::new(vec![0.1, 0.2], "test-model", Duration::from_micros(500)).unwrap();
-        let json = serde_json::to_string(&output).unwrap();
-        assert!(json.contains("test-model"));
+        let output = EmbeddingOutput::new(
+            vec![0.1, 0.2, 0.3],
+            "test-model".to_string(),
+            Duration::from_millis(5),
+        );
 
+        let json = serde_json::to_string(&output).unwrap();
         let deserialized: EmbeddingOutput = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.vector, output.vector);
         assert_eq!(deserialized.model_id, output.model_id);
         assert_eq!(deserialized.dimensions, output.dimensions);
+        assert_eq!(deserialized.latency, output.latency);
+    }
+
+    #[test]
+    fn test_embedding_output_1536_dimensions() {
+        let vector = vec![0.0; 1536];
+        let output = EmbeddingOutput::new(
+            vector,
+            "text-embedding-3-small".to_string(),
+            Duration::from_millis(8),
+        );
+
+        assert_eq!(output.dimensions, 1536);
+        assert_eq!(output.vector.len(), 1536);
     }
 }

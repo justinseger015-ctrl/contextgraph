@@ -69,7 +69,7 @@ pub use config::{
     ModelPathConfig, PaddingStrategy,
 };
 pub use error::{EmbeddingError, EmbeddingResult};
-pub use provider::EmbeddingProvider;
+pub use provider::{EmbeddingProvider, FusedEmbeddingProvider, FusedProviderConfig, ProjectionLayer};
 pub use traits::{
     get_memory_estimate, DevicePlacement, EmbeddingModel, ModelFactory, QuantizationMode,
     SingleModelConfig, MEMORY_ESTIMATES, TOTAL_MEMORY_ESTIMATE,

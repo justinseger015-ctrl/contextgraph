@@ -21,6 +21,7 @@
 //! RUST_LOG=debug context-graph-mcp
 //! ```
 
+mod adapters;
 mod handlers;
 mod middleware;
 mod protocol;

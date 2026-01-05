@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tracing::debug;
 
-use context_graph_core::traits::{MemoryStore, UtlProcessor};
+use context_graph_core::traits::{EmbeddingProvider, MemoryStore, UtlProcessor};
 
 use crate::protocol::{error_codes, methods, JsonRpcRequest, JsonRpcResponse};
 
@@ -12,14 +12,20 @@ use crate::protocol::{error_codes, methods, JsonRpcRequest, JsonRpcResponse};
 pub struct Handlers {
     pub(super) memory_store: Arc<dyn MemoryStore>,
     pub(super) utl_processor: Arc<dyn UtlProcessor>,
+    pub(super) embedding_provider: Arc<dyn EmbeddingProvider>,
 }
 
 impl Handlers {
     /// Create new handlers with the given dependencies.
-    pub fn new(memory_store: Arc<dyn MemoryStore>, utl_processor: Arc<dyn UtlProcessor>) -> Self {
+    pub fn new(
+        memory_store: Arc<dyn MemoryStore>,
+        utl_processor: Arc<dyn UtlProcessor>,
+        embedding_provider: Arc<dyn EmbeddingProvider>,
+    ) -> Self {
         Self {
             memory_store,
             utl_processor,
+            embedding_provider,
         }
     }
 

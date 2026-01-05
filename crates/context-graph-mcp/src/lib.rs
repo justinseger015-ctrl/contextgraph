@@ -10,7 +10,8 @@
 //! The `adapters` module provides bridge types between specialized implementations
 //! and core traits. Notable adapters:
 //!
-//! - `UtlProcessorAdapter`: Bridges the real UTL processor to the core trait interface
+//! - [`UtlProcessorAdapter`]: Bridges the real UTL processor to the core trait interface
+//! - [`EmbeddingProviderAdapter`]: Bridges the embeddings provider to the core trait interface
 
 pub mod adapters;
 pub mod handlers;
@@ -19,5 +20,5 @@ pub mod protocol;
 pub mod server;
 pub mod tools;
 
-// Re-export the adapter for convenient access
-pub use adapters::UtlProcessorAdapter;
+// Re-export adapters for convenient access
+pub use adapters::{EmbeddingProviderAdapter, UtlProcessorAdapter};

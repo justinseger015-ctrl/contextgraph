@@ -14,8 +14,8 @@ mod utl;
 
 use std::sync::Arc;
 
-use context_graph_core::stubs::{InMemoryStore, StubUtlProcessor};
-use context_graph_core::traits::{MemoryStore, UtlProcessor};
+use context_graph_core::stubs::{InMemoryStore, StubEmbeddingProvider, StubUtlProcessor};
+use context_graph_core::traits::{EmbeddingProvider, MemoryStore, UtlProcessor};
 
 use crate::handlers::Handlers;
 use crate::protocol::{JsonRpcId, JsonRpcRequest};
@@ -24,7 +24,8 @@ use crate::protocol::{JsonRpcId, JsonRpcRequest};
 pub(crate) fn create_test_handlers() -> Handlers {
     let memory_store: Arc<dyn MemoryStore> = Arc::new(InMemoryStore::new());
     let utl_processor: Arc<dyn UtlProcessor> = Arc::new(StubUtlProcessor::new());
-    Handlers::new(memory_store, utl_processor)
+    let embedding_provider: Arc<dyn EmbeddingProvider> = Arc::new(StubEmbeddingProvider::new());
+    Handlers::new(memory_store, utl_processor, embedding_provider)
 }
 
 /// Create a JSON-RPC request for testing.

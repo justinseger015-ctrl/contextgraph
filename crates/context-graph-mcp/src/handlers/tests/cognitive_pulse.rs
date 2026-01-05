@@ -222,10 +222,11 @@ async fn test_pulse_values_in_valid_ranges() {
     );
 
     // Validate quadrant is one of the valid values
+    // Note: JohariQuadrant uses #[serde(rename_all = "snake_case")] so values are lowercase
     let quadrant = pulse.get("quadrant")
         .and_then(|v| v.as_str())
         .expect("quadrant should be a string");
-    let valid_quadrants = ["Open", "Blind", "Hidden", "Unknown"];
+    let valid_quadrants = ["open", "blind", "hidden", "unknown"];
     assert!(
         valid_quadrants.contains(&quadrant),
         "quadrant '{}' should be one of {:?}", quadrant, valid_quadrants

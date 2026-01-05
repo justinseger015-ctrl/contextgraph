@@ -38,9 +38,19 @@ impl Handlers {
             }
         };
 
-        // Create node with stub embedding
-        let embedding = vec![0.1; 1536]; // Stub embedding
-        let node = MemoryNode::new(content, embedding);
+        // Generate embedding using the embedding provider
+        let embedding_output = match self.embedding_provider.embed(&content).await {
+            Ok(output) => output,
+            Err(e) => {
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::EMBEDDING_ERROR,
+                    format!("Embedding failed: {}", e),
+                );
+            }
+        };
+
+        let node = MemoryNode::new(content, embedding_output.vector);
         let node_id = node.id;
 
         match self.memory_store.store(node).await {

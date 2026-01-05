@@ -1,9 +1,120 @@
 //! Memory store trait for persistent storage.
 
 use async_trait::async_trait;
+use std::path::{Path, PathBuf};
 
 use crate::error::CoreResult;
 use crate::types::{JohariQuadrant, MemoryNode, Modality, NodeId};
+
+// =========================================================================
+// Storage Backend Types
+// =========================================================================
+
+/// Storage backend type indicator.
+///
+/// Identifies the underlying storage implementation being used.
+/// This allows code to make decisions based on backend capabilities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StorageBackend {
+    /// In-memory storage (development/testing only).
+    /// Data is lost when the process exits.
+    InMemory,
+    /// SQLite file-based storage (development).
+    /// Single-file database, good for local development.
+    SQLite,
+    /// RocksDB embedded database (production).
+    /// High-performance key-value store with LSM-tree.
+    RocksDB,
+    /// PostgreSQL with pgvector (production, distributed).
+    /// Full SQL database with vector similarity extensions.
+    PostgreSQL,
+}
+
+/// Configuration for storage backend selection.
+///
+/// Provides all necessary parameters to initialize a storage backend.
+///
+/// # Examples
+///
+/// ```
+/// use context_graph_core::traits::StorageConfig;
+/// use std::path::PathBuf;
+///
+/// // Default in-memory config
+/// let config = StorageConfig::default();
+/// assert_eq!(config.cache_size_mb, 64);
+///
+/// // RocksDB config
+/// let rocks_config = StorageConfig::rocksdb("/var/data/contextgraph");
+/// assert!(rocks_config.sync_writes);
+/// ```
+#[derive(Debug, Clone)]
+pub struct StorageConfig {
+    /// Selected storage backend.
+    pub backend: StorageBackend,
+    /// Path to storage (file path for SQLite/RocksDB, connection string for PostgreSQL).
+    pub path: Option<PathBuf>,
+    /// Cache size in megabytes.
+    pub cache_size_mb: usize,
+    /// Whether to synchronize writes immediately.
+    /// If true, ensures durability at cost of performance.
+    pub sync_writes: bool,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            backend: StorageBackend::InMemory,
+            path: None,
+            cache_size_mb: 64,
+            sync_writes: false,
+        }
+    }
+}
+
+impl StorageConfig {
+    /// Create configuration for RocksDB backend.
+    ///
+    /// Uses production-appropriate defaults:
+    /// - 256 MB cache
+    /// - Synchronous writes enabled
+    pub fn rocksdb(path: impl Into<PathBuf>) -> Self {
+        Self {
+            backend: StorageBackend::RocksDB,
+            path: Some(path.into()),
+            cache_size_mb: 256,
+            sync_writes: true,
+        }
+    }
+
+    /// Create configuration for SQLite backend.
+    ///
+    /// Uses development-appropriate defaults:
+    /// - 64 MB cache
+    /// - Synchronous writes disabled for speed
+    pub fn sqlite(path: impl Into<PathBuf>) -> Self {
+        Self {
+            backend: StorageBackend::SQLite,
+            path: Some(path.into()),
+            cache_size_mb: 64,
+            sync_writes: false,
+        }
+    }
+
+    /// Create configuration for PostgreSQL backend.
+    ///
+    /// Uses production-appropriate defaults:
+    /// - 128 MB cache
+    /// - Synchronous writes enabled
+    pub fn postgresql(connection_string: impl Into<PathBuf>) -> Self {
+        Self {
+            backend: StorageBackend::PostgreSQL,
+            path: Some(connection_string.into()),
+            cache_size_mb: 128,
+            sync_writes: true,
+        }
+    }
+}
 
 /// Query options for memory search.
 #[derive(Debug, Clone, Default)]

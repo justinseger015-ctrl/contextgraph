@@ -38,7 +38,7 @@ This matrix ensures every stub, fake implementation, and silent fallback identif
 | `core::traits::MemoryStore` | N/A (only InMemoryStore stub) | No real implementation | M06-T05 | [ ] |
 | `core::traits::GraphIndex` | `cuda::FaissGpuIndex` | Not connected via trait | M06-T06 | [ ] |
 | `core::traits::NervousLayer` | N/A (5 stubs only) | No real implementations | M06-T07, M06-T08 | [ ] |
-| `embeddings::EmbeddingModel` | `embeddings::candle_models::*` | Factory not wired | M06-T02, M06-T04 | [ ] |
+| `embeddings::EmbeddingModel` | `embeddings::candle_models::*` | **TRAIT COMPLETE** (M06-T02), factory wiring pending (M06-T04) | M06-T02, M06-T04 | [x] (T02 only) |
 
 ### Silent Fallbacks (Sample - 100+ identified)
 

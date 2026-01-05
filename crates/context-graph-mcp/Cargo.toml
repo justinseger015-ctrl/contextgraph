@@ -58,3 +58,5 @@ default = ["candle"]
 candle = ["context-graph-embeddings/candle"]
 cuda = ["context-graph-cuda/cuda", "candle"]
 stub = ["context-graph-cuda/stub"]  # Only for context-graph-cuda, embeddings requires candle
+# Integration tests requiring real GPU/model files
+integration = []

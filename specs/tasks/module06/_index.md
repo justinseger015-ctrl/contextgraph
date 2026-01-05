@@ -70,9 +70,9 @@ graph TD
 | # | Task ID | Title | Layer | Depends On | Status | Priority |
 |---|---------|-------|-------|------------|--------|----------|
 | 1 | [M06-T01](M06-T01.md) | Bridge UtlProcessor Trait to Real Implementation | foundation | - | Complete | critical |
-| 2 | [M06-T02](M06-T02.md) | Define EmbeddingProvider Trait & Factory | foundation | - | Ready | critical |
+| 2 | [M06-T02](M06-T02.md) | Define EmbeddingProvider Trait & Factory | foundation | - | Complete | critical |
 | 3 | [M06-T03](M06-T03.md) | Define PersistentMemoryStore Interface | foundation | - | Ready | critical |
-| 4 | [M06-T04](M06-T04.md) | Implement Candle EmbeddingProvider | logic | T02 | Blocked | critical |
+| 4 | [M06-T04](M06-T04.md) | Implement Candle EmbeddingProvider | logic | T02 | Ready | critical |
 | 5 | [M06-T05](M06-T05.md) | Implement RocksDB MemoryStore | logic | T03 | Blocked | high |
 | 6 | [M06-T06](M06-T06.md) | Implement FAISS GraphIndex | logic | - | Ready | high |
 | 7 | [M06-T07](M06-T07.md) | Implement Real SensingLayer (L1) | logic | T04 | Blocked | high |

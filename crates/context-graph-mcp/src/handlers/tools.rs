@@ -226,9 +226,14 @@ impl Handlers {
             Err(e) => return self.tool_error_with_pulse(id, &format!("UTL processing failed: {}", e)),
         };
 
+        // Generate embedding using the embedding provider
+        let embedding_output = match self.embedding_provider.embed(&content).await {
+            Ok(output) => output,
+            Err(e) => return self.tool_error_with_pulse(id, &format!("Embedding failed: {}", e)),
+        };
+
         // Create and store the memory node
-        let embedding = vec![0.1; 1536]; // Stub embedding
-        let mut node = MemoryNode::new(content, embedding);
+        let mut node = MemoryNode::new(content, embedding_output.vector);
         node.importance = importance as f32;
         let node_id = node.id;
 
@@ -270,8 +275,13 @@ impl Handlers {
             .and_then(|v| v.as_f64())
             .unwrap_or(0.5);
 
-        let embedding = vec![0.1; 1536]; // Stub embedding
-        let mut node = MemoryNode::new(content, embedding);
+        // Generate embedding using the embedding provider
+        let embedding_output = match self.embedding_provider.embed(&content).await {
+            Ok(output) => output,
+            Err(e) => return self.tool_error_with_pulse(id, &format!("Embedding failed: {}", e)),
+        };
+
+        let mut node = MemoryNode::new(content, embedding_output.vector);
         node.importance = importance as f32;
         let node_id = node.id;
 
