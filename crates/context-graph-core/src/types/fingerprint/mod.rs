@@ -3,9 +3,9 @@
 //! This module provides the complete teleological fingerprint hierarchy:
 //! - SemanticFingerprint: 13-embedding array (TASK-F001) ✅
 //! - SparseVector: SPLADE sparse vector for E6 and E13 (TASK-F001) ✅
-//! - PurposeVector: 13D alignment to North Star (TASK-F002)
-//! - JohariFingerprint: Per-embedder awareness (TASK-F003 stub)
-//! - TeleologicalFingerprint: Complete node representation (TASK-F002)
+//! - PurposeVector: 13D alignment to North Star (TASK-F002) ✅
+//! - JohariFingerprint: Per-embedder awareness classification (TASK-F003) ✅
+//! - TeleologicalFingerprint: Complete node representation (TASK-F002) ✅
 //!
 //! # Design Philosophy
 //!
@@ -55,7 +55,7 @@ pub use purpose::{AlignmentThreshold, PurposeVector};
 // Re-export Evolution types (TASK-F002)
 pub use evolution::{EvolutionTrigger, PurposeSnapshot};
 
-// Re-export Johari types (TASK-F003 stub)
+// Re-export Johari types (TASK-F003) ✅
 pub use johari::JohariFingerprint;
 
 // Re-export TeleologicalFingerprint (TASK-F002)

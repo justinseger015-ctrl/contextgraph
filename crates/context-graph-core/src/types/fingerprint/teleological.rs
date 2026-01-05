@@ -265,7 +265,6 @@ impl TeleologicalFingerprint {
 mod tests {
     use super::*;
     use crate::types::fingerprint::NUM_EMBEDDERS;
-    use crate::types::JohariQuadrant;
 
     // ===== Test Helpers =====
 
@@ -278,7 +277,12 @@ mod tests {
     }
 
     fn make_test_johari() -> JohariFingerprint {
-        JohariFingerprint::new([JohariQuadrant::Open; NUM_EMBEDDERS])
+        // Create with all Open quadrants (high openness)
+        let mut jf = JohariFingerprint::zeroed();
+        for i in 0..NUM_EMBEDDERS {
+            jf.set_quadrant(i, 1.0, 0.0, 0.0, 0.0, 1.0); // 100% Open, 100% confidence
+        }
+        jf
     }
 
     fn make_test_hash() -> [u8; 32] {
