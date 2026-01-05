@@ -113,7 +113,10 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
         // get_memetic_status - get UTL metrics and system state
         ToolDefinition::new(
             "get_memetic_status",
-            "Get current UTL metrics, entropy, coherence, and overall system cognitive state.",
+            "Get current system status with LIVE UTL metrics from the UtlProcessor: \
+             entropy (novelty), coherence (understanding), learning score (magnitude), \
+             Johari quadrant classification, consolidation phase, and suggested action. \
+             Also returns node count and 5-layer bio-nervous system status.",
             json!({
                 "type": "object",
                 "properties": {},

@@ -187,19 +187,76 @@ impl Handlers {
     }
 
     /// get_memetic_status tool implementation.
+    ///
+    /// Returns comprehensive system status including:
+    /// - Node count from memory store
+    /// - Live UTL metrics from UtlProcessor (NOT hardcoded)
+    /// - 5-layer bio-nervous system status
+    ///
+    /// # Constitution References
+    /// - UTL formula: constitution.yaml:152
+    /// - Johari quadrant actions: constitution.yaml:159-163
     pub(super) async fn call_get_memetic_status(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
         let node_count = self.memory_store.count().await.unwrap_or(0);
+
+        // Get LIVE UTL status from the processor
+        let utl_status = self.utl_processor.get_status();
+
+        // Extract values with explicit defaults on parse failure
+        let lifecycle_phase = utl_status
+            .get("lifecycle_phase")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Infancy");
+
+        let entropy = utl_status
+            .get("entropy")
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(0.0);
+
+        let coherence = utl_status
+            .get("coherence")
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(0.0);
+
+        let learning_score = utl_status
+            .get("learning_score")
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32)
+            .unwrap_or(0.0);
+
+        let johari_quadrant = utl_status
+            .get("johari_quadrant")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Hidden");
+
+        let consolidation_phase = utl_status
+            .get("consolidation_phase")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Wake");
+
+        // Map Johari quadrant to suggested action per constitution.yaml:159-163
+        let suggested_action = match johari_quadrant {
+            "Open" => "direct_recall",
+            "Blind" => "trigger_dream",
+            "Hidden" => "get_neighborhood",
+            "Unknown" => "epistemic_action",
+            _ => "continue",
+        };
 
         Self::tool_result(
             id,
             json!({
-                "phase": "ghost-system",
+                "phase": lifecycle_phase,
                 "nodeCount": node_count,
                 "utl": {
-                    "entropy": 0.5,
-                    "coherence": 0.8,
-                    "learningScore": 0.65,
-                    "suggestedAction": "continue"
+                    "entropy": entropy,
+                    "coherence": coherence,
+                    "learningScore": learning_score,
+                    "johariQuadrant": johari_quadrant,
+                    "consolidationPhase": consolidation_phase,
+                    "suggestedAction": suggested_action
                 },
                 "layers": {
                     "perception": "active",
