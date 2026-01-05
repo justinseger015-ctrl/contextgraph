@@ -9,7 +9,7 @@ use crate::types::{ModelEmbedding, ModelId};
 /// Aggregates outputs from all 12 embedding models.
 ///
 /// This struct collects individual `ModelEmbedding` outputs and concatenates
-/// them into a single 8320D vector for FuseMoE input.
+/// them into a single 8320D vector for multi-array storage input.
 ///
 /// # Invariants
 /// - `embeddings` is indexed by `ModelId as u8` (0-11)

@@ -1,7 +1,6 @@
 //! MCP Server implementation.
 
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,10 +8,9 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use context_graph_core::config::Config;
-use context_graph_core::stubs::{InMemoryStore, StubUtlProcessor};
+use context_graph_core::stubs::{InMemoryStore, StubEmbeddingProvider, StubUtlProcessor};
 use context_graph_core::traits::{EmbeddingProvider, MemoryStore, UtlProcessor};
 
-use crate::adapters::EmbeddingProviderAdapter;
 use crate::handlers::Handlers;
 use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 
@@ -36,18 +34,10 @@ impl McpServer {
         let memory_store: Arc<dyn MemoryStore> = Arc::new(InMemoryStore::new());
         let utl_processor: Arc<dyn UtlProcessor> = Arc::new(StubUtlProcessor::new());
 
-        // Create embedding provider
-        // Model path can be configured; default to models/e5-large-v2 relative to cwd
-        let model_path = PathBuf::from("models/e5-large-v2");
-        let embedding_adapter = EmbeddingProviderAdapter::with_defaults(&model_path)
-            .map_err(|e| anyhow::anyhow!("Failed to create embedding provider: {}", e))?;
-
-        // Initialize the embedding provider (load model weights)
-        let init_result: context_graph_core::error::CoreResult<()> =
-            embedding_adapter.initialize().await;
-        init_result.map_err(|e| anyhow::anyhow!("Failed to initialize embedding provider: {}", e))?;
-
-        let embedding_provider: Arc<dyn EmbeddingProvider> = Arc::new(embedding_adapter);
+        // BLOCKED: EmbeddingProviderAdapter removed with FusedEmbeddingProvider (TASK-F006).
+        // Using StubEmbeddingProvider until TASK-F007 implements multi-array provider.
+        // TODO(TASK-F007): Replace with real multi-array embedding provider
+        let embedding_provider: Arc<dyn EmbeddingProvider> = Arc::new(StubEmbeddingProvider::new());
 
         let handlers = Handlers::new(
             Arc::clone(&memory_store),

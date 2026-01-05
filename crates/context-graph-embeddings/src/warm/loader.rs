@@ -1,7 +1,7 @@
 //! Warm Model Loader Orchestrator
 //!
 //! The main orchestrator for warm model loading. Coordinates the loading of all 12
-//! embedding models + FuseMoE into VRAM at startup, ensuring they remain resident
+//! embedding models into VRAM at startup, ensuring they remain resident
 //! for the application lifetime.
 //!
 //! # Critical Design Decisions
@@ -40,12 +40,11 @@
 //! 2. **Initialize VRAM pools**: Allocate 24GB model pool + 8GB working pool
 //! 3. **Load models**: Largest first, via registry state machine
 //! 4. **Validate models**: Dimension, weight, and inference validation
-//! 5. **Final verification**: Ensure all 13 models are Warm
+//! 5. **Final verification**: Ensure all 12 models are Warm
 //!
 //! # Requirements Implemented
 //!
 //! - REQ-WARM-001: Load all 12 embedding models at startup
-//! - REQ-WARM-002: Load FuseMoE layer at startup
 //! - REQ-WARM-003: Validate models with test inference
 //! - REQ-WARM-004: Use cudaMalloc for non-evictable allocations
 //! - REQ-WARM-005: Protect allocations from memory pressure
@@ -77,7 +76,7 @@ use super::cuda_alloc::{
 use super::error::{WarmError, WarmResult};
 use super::handle::ModelHandle;
 use super::memory_pool::WarmMemoryPools;
-use super::registry::{SharedWarmRegistry, WarmModelRegistry, EMBEDDING_MODEL_IDS, FUSEMOE_MODEL_ID, TOTAL_MODEL_COUNT};
+use super::registry::{SharedWarmRegistry, WarmModelRegistry, EMBEDDING_MODEL_IDS, TOTAL_MODEL_COUNT};
 use super::state::WarmModelState;
 use super::validation::{TestInferenceConfig, WarmValidator};
 
@@ -90,9 +89,6 @@ const GB: usize = 1024 * 1024 * 1024;
 
 /// Default expected dimension for embedding models.
 const DEFAULT_EMBEDDING_DIMENSION: usize = 768;
-
-/// Default expected dimension for FuseMoE output.
-const FUSEMOE_DIMENSION: usize = 2048;
 
 /// Expected model sizes in bytes (FP16, from spec).
 /// These are approximate sizes for budget planning.
@@ -109,7 +105,6 @@ const MODEL_SIZES: &[(&str, usize)] = &[
     ("E10_Multimodal", 800 * 1024 * 1024),      // 800MB
     ("E11_Entity", 450 * 1024 * 1024),          // 450MB
     ("E12_LateInteraction", 600 * 1024 * 1024), // 600MB
-    ("FuseMoE", 2 * GB),                        // 2GB
 ];
 
 // ============================================================================
@@ -288,7 +283,7 @@ impl WarmLoader {
         })
     }
 
-    /// Register all 12 embedding models + FuseMoE in the registry.
+    /// Register all 12 embedding models in the registry.
     fn register_all_models(registry: &mut WarmModelRegistry) -> WarmResult<()> {
         // Create a lookup for model sizes
         let size_map: HashMap<&str, usize> = MODEL_SIZES.iter().copied().collect();
@@ -298,10 +293,6 @@ impl WarmLoader {
             let size = size_map.get(model_id).copied().unwrap_or(500 * 1024 * 1024);
             registry.register_model(model_id, size, DEFAULT_EMBEDDING_DIMENSION)?;
         }
-
-        // Register FuseMoE
-        let fusemoe_size = size_map.get(FUSEMOE_MODEL_ID).copied().unwrap_or(2 * GB);
-        registry.register_model(FUSEMOE_MODEL_ID, fusemoe_size, FUSEMOE_DIMENSION)?;
 
         Ok(())
     }
@@ -596,11 +587,7 @@ impl WarmLoader {
         tracing::debug!("Validating model {}", model_id);
 
         // Create test inference config (for future use with actual inference)
-        let _test_config = if model_id == FUSEMOE_MODEL_ID {
-            TestInferenceConfig::for_fusemoe(expected_dimension)
-        } else {
-            TestInferenceConfig::for_embedding_model(model_id, expected_dimension)
-        };
+        let _test_config = TestInferenceConfig::for_embedding_model(model_id, expected_dimension);
 
         // Simulate test inference output
         // In a real implementation, this would run actual inference
@@ -831,9 +818,6 @@ mod tests {
             let state = registry.get_state(model_id);
             assert!(matches!(state, Some(WarmModelState::Pending)));
         }
-
-        let fusemoe_state = registry.get_state(FUSEMOE_MODEL_ID);
-        assert!(matches!(fusemoe_state, Some(WarmModelState::Pending)));
     }
 
     // ========================================================================
@@ -870,9 +854,8 @@ mod tests {
         assert!(!loader.loading_order.is_empty());
         assert_eq!(loader.loading_order.len(), TOTAL_MODEL_COUNT);
 
-        // Verify FuseMoE (largest) is first in loading order
-        // Based on MODEL_SIZES, FuseMoE is 2GB which is largest
-        assert_eq!(loader.loading_order[0], FUSEMOE_MODEL_ID);
+        // Verify E10_Multimodal (largest at 800MB) is first in loading order
+        assert_eq!(loader.loading_order[0], "E10_Multimodal");
     }
 
     // ========================================================================
@@ -958,7 +941,7 @@ mod tests {
         // Manually transition all models to Warm for testing
         {
             let mut registry = loader.registry().write().unwrap();
-            for model_id in EMBEDDING_MODEL_IDS.iter().chain(std::iter::once(&FUSEMOE_MODEL_ID)) {
+            for model_id in EMBEDDING_MODEL_IDS.iter() {
                 registry.start_loading(model_id).unwrap();
                 registry.mark_validating(model_id).unwrap();
                 let handle = ModelHandle::new(0x1000, 1024, 0, 0xDEAD);
@@ -985,7 +968,7 @@ mod tests {
         // Transition all models through the state machine
         {
             let mut registry = loader.registry().write().unwrap();
-            for model_id in EMBEDDING_MODEL_IDS.iter().chain(std::iter::once(&FUSEMOE_MODEL_ID)) {
+            for model_id in EMBEDDING_MODEL_IDS.iter() {
                 registry.start_loading(model_id).unwrap();
                 registry.mark_validating(model_id).unwrap();
                 let handle = ModelHandle::new(0x1000, 1024, 0, 0xCAFE);
@@ -1059,7 +1042,6 @@ mod tests {
         for model_id in EMBEDDING_MODEL_IDS {
             assert!(size_map.contains_key(model_id), "Missing size for {}", model_id);
         }
-        assert!(size_map.contains_key(FUSEMOE_MODEL_ID), "Missing size for FuseMoE");
 
         // Verify total is reasonable (should fit in 24GB)
         let total_size: usize = MODEL_SIZES.iter().map(|(_, s)| s).sum();
@@ -1077,9 +1059,6 @@ mod tests {
         for model_id in EMBEDDING_MODEL_IDS {
             assert!(registry.get_state(model_id).is_some(), "Missing model {}", model_id);
         }
-
-        // Verify FuseMoE is registered
-        assert!(registry.get_state(FUSEMOE_MODEL_ID).is_some());
     }
 
     #[test]

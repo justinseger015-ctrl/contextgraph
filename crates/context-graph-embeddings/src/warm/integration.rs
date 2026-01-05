@@ -23,7 +23,6 @@
 //! # Requirements Implemented
 //!
 //! - REQ-WARM-001: Load all 12 embedding models at startup
-//! - REQ-WARM-002: Load FuseMoE layer at startup
 //! - REQ-WARM-003: Validate models with test inference
 //! - REQ-WARM-006: Health check status reporting
 //! - REQ-WARM-007: Per-model state visibility
@@ -68,7 +67,7 @@ use super::registry::SharedWarmRegistry;
 /// It integrates [`WarmLoader`], [`WarmHealthChecker`], and [`WarmDiagnostics`]
 /// into a unified pipeline that:
 ///
-/// - Loads all 13 models (12 embeddings + FuseMoE) into VRAM at startup
+/// - Loads all 12 embedding models into VRAM at startup
 /// - Validates each model with test inference
 /// - Provides real-time health monitoring
 /// - Generates diagnostic reports on demand
@@ -259,7 +258,7 @@ impl WarmEmbeddingPipeline {
 
     /// Warm all models (call after [`new()`](Self::new) if used).
     ///
-    /// Loads all 13 models into VRAM and validates them. Unlike
+    /// Loads all 12 models into VRAM and validates them. Unlike
     /// [`create_and_warm()`](Self::create_and_warm), this method returns
     /// an error instead of exiting on failure.
     ///
@@ -462,7 +461,7 @@ impl WarmEmbeddingPipeline {
     /// Get a status line for quick monitoring.
     ///
     /// Returns a concise string like:
-    /// `WARM: 13/13 models | 24.0GB/24.0GB VRAM | OK`
+    /// `WARM: 12/12 models | 24.0GB/24.0GB VRAM | OK`
     ///
     /// # Example
     ///
@@ -500,7 +499,7 @@ mod tests {
     use super::*;
     use crate::warm::handle::ModelHandle;
     use crate::warm::health::WarmHealthStatus;
-    use crate::warm::registry::{EMBEDDING_MODEL_IDS, FUSEMOE_MODEL_ID, TOTAL_MODEL_COUNT};
+    use crate::warm::registry::{EMBEDDING_MODEL_IDS, TOTAL_MODEL_COUNT};
 
     /// Create a test config that doesn't require real files.
     fn test_config() -> WarmConfig {
@@ -541,7 +540,7 @@ mod tests {
         // Manually transition all models to Warm state (simulating load)
         {
             let mut registry = pipeline.registry().write().unwrap();
-            for model_id in EMBEDDING_MODEL_IDS.iter().chain(std::iter::once(&FUSEMOE_MODEL_ID)) {
+            for model_id in EMBEDDING_MODEL_IDS.iter() {
                 registry.start_loading(model_id).unwrap();
                 registry.mark_validating(model_id).unwrap();
                 registry.mark_warm(model_id, test_handle()).unwrap();
@@ -658,7 +657,6 @@ mod tests {
         for model_id in EMBEDDING_MODEL_IDS {
             assert!(guard.get_state(model_id).is_some());
         }
-        assert!(guard.get_state(FUSEMOE_MODEL_ID).is_some());
     }
 
     // ========================================================================
@@ -676,7 +674,7 @@ mod tests {
         // Simulate successful loading
         {
             let mut registry = pipeline.registry().write().unwrap();
-            for model_id in EMBEDDING_MODEL_IDS.iter().chain(std::iter::once(&FUSEMOE_MODEL_ID)) {
+            for model_id in EMBEDDING_MODEL_IDS.iter() {
                 registry.start_loading(model_id).unwrap();
                 registry.mark_validating(model_id).unwrap();
                 registry.mark_warm(model_id, test_handle()).unwrap();
@@ -713,7 +711,7 @@ mod tests {
         assert!(status.contains("models"));
         assert!(status.contains("VRAM"));
         // Initial state should show LOADING
-        assert!(status.contains("LOADING:") || status.contains("0/13"));
+        assert!(status.contains("LOADING:") || status.contains("0/12"));
     }
 
     #[test]

@@ -26,10 +26,6 @@
 //! assert_eq!(ModelId::Code.dimension(), 256);  // CodeT5p embed_dim
 //! assert_eq!(ModelId::Entity.dimension(), 384);
 //!
-//! // Verify projected dimensions for FuseMoE
-//! assert_eq!(ModelId::Semantic.projected_dimension(), 1024);
-//! assert_eq!(ModelId::Code.projected_dimension(), 768);  // Projected from 256
-//!
 //! // Registry config defaults
 //! let config = ModelRegistryConfig::default();
 //! assert!(config.max_concurrent_loads > 0);
@@ -52,10 +48,8 @@ compile_error!(
 );
 
 pub mod batch;
-pub mod cache;
 pub mod config;
 pub mod error;
-pub mod fusion;
 pub mod gpu;
 pub mod models;
 pub mod provider;
@@ -64,12 +58,14 @@ pub mod traits;
 pub mod types;
 pub mod warm;
 
+// NOTE: cache module removed - depended on FusedEmbedding which no longer exists
+
 pub use config::{
-    BatchConfig, CacheConfig, EmbeddingConfig, EvictionPolicy, FusionConfig, GpuConfig,
+    BatchConfig, CacheConfig, EmbeddingConfig, EvictionPolicy, GpuConfig,
     ModelPathConfig, PaddingStrategy,
 };
 pub use error::{EmbeddingError, EmbeddingResult};
-pub use provider::{EmbeddingProvider, FusedEmbeddingProvider, FusedProviderConfig, ProjectionLayer};
+pub use provider::EmbeddingProvider;
 pub use traits::{
     get_memory_estimate, DevicePlacement, EmbeddingModel, ModelFactory, QuantizationMode,
     SingleModelConfig, MEMORY_ESTIMATES, TOTAL_MEMORY_ESTIMATE,
@@ -77,7 +73,7 @@ pub use traits::{
 
 // Type re-exports for public API
 pub use types::{
-    AuxiliaryEmbeddingData, ConcatenatedEmbedding, FusedEmbedding, ImageFormat, InputType,
+    ConcatenatedEmbedding, ImageFormat, InputType,
     ModelEmbedding, ModelId, ModelInput, TokenizerFamily,
 };
 
@@ -86,13 +82,3 @@ pub use types::dimensions;
 
 // Model registry re-exports
 pub use models::{MemoryTracker, ModelRegistry, ModelRegistryConfig, RegistryStats};
-
-// Fusion layer re-exports
-pub use fusion::{Activation, Expert, ExpertPool, GatingNetwork, LayerNorm, Linear};
-
-/// Default embedding dimension (FuseMoE output, OpenAI ada-002 compatible).
-pub const DEFAULT_DIMENSION: usize = 1536;
-
-/// Total concatenated dimension before FuseMoE fusion (all 12 models).
-/// Calculated as sum of projected dimensions from all models.
-pub const CONCATENATED_DIMENSION: usize = 8320;

@@ -4,222 +4,486 @@
 - **ID**: TASK-F006
 - **Layer**: Foundation
 - **Priority**: P0 (Critical Path - Blocking)
-- **Estimated Effort**: M (Medium)
+- **Estimated Effort**: L (Large - 29 files + 80+ references)
 - **Dependencies**: None (Can run in parallel with TASK-F001 through TASK-F005)
 - **Traces To**: TS-601, FR-601, FR-602
+- **Last Audited**: 2026-01-05
+
+## Current Codebase State (VERIFIED 2026-01-05)
+
+### Fusion Files CONFIRMED TO EXIST (29 files in fusion/ directory):
+
+```
+crates/context-graph-embeddings/src/fusion/
+├── mod.rs                                          # Root module - exports fusion types
+├── experts/
+│   ├── mod.rs                                      # Expert module exports
+│   ├── activation.rs                               # Activation functions (GELU, ReLU, SiLU)
+│   ├── expert.rs                                   # Expert FFN (8320→4096→1536)
+│   ├── pool.rs                                     # ExpertPool with top-k routing
+│   └── tests.rs                                    # Expert unit tests
+├── gating/
+│   ├── mod.rs                                      # Gating module exports
+│   ├── layer_norm.rs                               # LayerNorm implementation
+│   ├── linear.rs                                   # Linear projection layer
+│   ├── routing.rs                                  # Top-k expert routing
+│   ├── softmax.rs                                  # Softmax implementation
+│   ├── network/
+│   │   ├── mod.rs                                  # GatingNetwork module
+│   │   ├── core.rs                                 # GatingNetwork struct
+│   │   └── forward.rs                              # Forward pass implementation
+│   └── tests/
+│       ├── mod.rs                                  # Test module
+│       ├── gating_tests.rs                         # Core gating tests
+│       ├── edge_case_tests.rs                      # Edge case tests
+│       └── integration_tests.rs                    # Integration tests
+└── gpu_fusion/
+    ├── mod.rs                                      # GPU module exports
+    ├── activation.rs                               # GPU activation kernels
+    ├── expert.rs                                   # GpuExpert implementation
+    ├── expert_pool.rs                              # GpuExpertPool implementation
+    ├── fusemoe.rs                                  # GpuFuseMoE (main fusion layer)
+    ├── gating.rs                                   # GpuGatingNetwork
+    ├── layer_norm.rs                               # GPU LayerNorm
+    ├── linear.rs                                   # GPU Linear (cuBLAS GEMM)
+    ├── tests.rs                                    # GPU fusion tests
+    ├── tests_expert.rs                             # GPU expert tests
+    └── tests_pool.rs                               # GPU pool tests
+```
+
+### Additional Fusion-Related Files (VERIFIED):
+
+```
+crates/context-graph-embeddings/src/
+├── config/fusion.rs                                # FusionConfig struct (8266 bytes)
+├── provider/fused.rs                               # FusedEmbeddingProvider
+└── types/dimensions/fusemoe.rs                     # FuseMoE dimension constants
+
+crates/context-graph-mcp/src/adapters/
+├── embedding_adapter.rs                            # Uses FusedEmbeddingProvider (modify)
+└── mod.rs                                          # Exports embedding_adapter (modify)
+```
+
+### Files That Import Fusion Types (112 files reference fusion patterns):
+
+**Critical files requiring modification:**
+1. `crates/context-graph-embeddings/src/lib.rs` - Exports fusion module and types
+2. `crates/context-graph-embeddings/src/config/mod.rs` - Exports FusionConfig
+3. `crates/context-graph-mcp/src/adapters/embedding_adapter.rs` - Uses FusedEmbeddingProvider
+4. `crates/context-graph-mcp/src/adapters/mod.rs` - Exports adapter
+
+**Storage/binary files with fusion references:**
+- `crates/context-graph-embeddings/src/storage/binary/*.rs` (7 files)
+- `crates/context-graph-embeddings/src/storage/gds/*.rs` (4 files)
+- `crates/context-graph-embeddings/src/storage/batch/*.rs` (2 files)
 
 ## Description
 
-Completely remove all 36 fusion-related files from the codebase. This is a CLEAN BREAK with no backwards compatibility. The Multi-Array Teleological Fingerprint architecture fundamentally replaces fusion.
+**CRITICAL CONTEXT**: The Multi-Array Teleological Fingerprint architecture stores ALL 13 embeddings (E1-E13) without fusion. FuseMoE with top-k=4 loses 67% of information. The array IS the representation.
 
-**NO FUSION - The array IS the representation. Store all 12 embeddings.**
+**WHAT THIS TASK DOES**: Completely remove the FuseMoE architecture that combines 12 embeddings into a single 1536D vector. The new architecture stores all 13 embeddings separately (~17KB quantized per memory).
 
-Files must be removed in dependency order to prevent compilation errors during the removal process.
+**NO BACKWARDS COMPATIBILITY. NO WORKAROUNDS. NO FALLBACKS.**
+
+If something breaks after removal, it must error with clear diagnostics - do not create compatibility shims.
 
 ## Acceptance Criteria
 
-- [ ] All files matching patterns `fuse*`, `fusion*`, `gating*`, `expert_select*` deleted
-- [ ] No imports of removed modules in remaining code
-- [ ] Cargo.toml dependencies for fusion crates removed
-- [ ] All fusion-related tests deleted
-- [ ] No compilation errors after removal
-- [ ] No dead code warnings related to fusion
-- [ ] Git commit with removal for audit trail
+- [ ] All 29 files in `fusion/` directory deleted
+- [ ] `config/fusion.rs` deleted
+- [ ] `provider/fused.rs` deleted
+- [ ] `types/dimensions/fusemoe.rs` deleted
+- [ ] `lib.rs` updated: remove `pub mod fusion;` and all fusion exports
+- [ ] `config/mod.rs` updated: remove FusionConfig export
+- [ ] All `use.*fusion` imports removed from remaining files
+- [ ] EmbeddingProviderAdapter in MCP crate updated to use new multi-array provider
+- [ ] `cargo check --all` passes with ZERO fusion references
+- [ ] `cargo test --all` passes
+- [ ] `cargo clippy --all -- -D warnings` passes
+- [ ] Git commit with full removal for audit trail
 
-## Implementation Steps
+## Implementation Steps (EXACT ORDER)
 
-### Phase 1: Identify Files (Analysis)
-1. Run grep/ripgrep to find all fusion-related files:
-   ```bash
-   rg -l "fuse|fusion|gating|expert_select" --type rust
-   ```
-2. Document exact file list (may differ from spec estimates)
-3. Map file dependencies to determine removal order
+### Phase 1: Pre-Flight Verification
+```bash
+# Document current state BEFORE any changes
+git status
+cargo check --all  # Must pass before starting
+cargo test --all   # Must pass before starting
 
-### Phase 2: Remove Tests First (Lowest Risk)
-Delete in order:
-1. `tests/fusion_tests.rs` (if exists)
-2. `tests/integration/fusion_integration_tests.rs` (if exists)
-3. `benches/fusion_bench.rs` (if exists)
-4. Any `**/tests_fusion*.rs` files
-5. Any `**/tests_gating*.rs` files
+# Count fusion files (should be 29 in fusion/ + 3 additional)
+find crates/context-graph-embeddings/src/fusion -type f -name "*.rs" | wc -l
+# Expected: 29
 
-### Phase 3: Remove MCP/Handler Files
-Delete:
-1. `src/mcp/handlers/fused_search.rs` (if exists)
-2. `src/mcp/handlers/fusion_query.rs` (if exists)
+# Count files with fusion references
+rg -l "fuse|fusion|gating|FuseMoE|GatingNetwork|ExpertPool|FusedEmbedding" --type rust | wc -l
+# Document this number - it's your baseline
+```
 
-### Phase 4: Remove Search Components
-Delete:
-1. `src/search/fused_similarity.rs` (if exists)
-2. `src/search/gated_retrieval.rs` (if exists)
+### Phase 2: Delete Fusion Directory (29 files)
+```bash
+# Delete entire fusion directory tree
+rm -rf crates/context-graph-embeddings/src/fusion/
 
-### Phase 5: Remove Storage Components
-Delete:
-1. `src/storage/fused_vector_store.rs` (if exists)
-2. `src/storage/fusion_cache.rs` (if exists)
+# Verify deletion
+ls crates/context-graph-embeddings/src/fusion/ 2>/dev/null && echo "ERROR: fusion dir still exists" || echo "OK: fusion dir deleted"
+```
 
-### Phase 6: Remove Embedding Pipeline
-Delete:
-1. `src/embeddings/fusion_pipeline.rs` (if exists)
-2. `src/embeddings/fused_embedding.rs` (if exists)
-3. `src/embeddings/vector_1536.rs` (if exists - legacy single-vector)
+### Phase 3: Delete Additional Fusion Files (3 files)
+```bash
+# Delete FusionConfig
+rm crates/context-graph-embeddings/src/config/fusion.rs
 
-### Phase 7: Remove Core Fusion (Highest Risk)
-Delete in order:
-1. `src/fusion/expert_selector.rs` (if exists)
-2. `src/fusion/gating.rs` (if exists)
-3. `src/fusion/fusion_config.rs` (if exists)
-4. `src/fusion/fuse_moe.rs` (if exists)
-5. `src/fusion/mod.rs` (if exists)
+# Delete FusedEmbeddingProvider
+rm crates/context-graph-embeddings/src/provider/fused.rs
 
-### Phase 8: Remove Configuration Files
-Delete:
-1. `config/fusion.toml` (if exists)
-2. `config/gating_weights.yaml` (if exists)
-3. `config/expert_routing.yaml` (if exists)
+# Delete FuseMoE dimensions
+rm crates/context-graph-embeddings/src/types/dimensions/fusemoe.rs
+```
 
-### Phase 9: Remove Type Files
-Delete:
-1. `src/types/fused_types.rs` (if exists)
-2. `src/types/gating_types.rs` (if exists)
+### Phase 4: Update lib.rs
+Edit `crates/context-graph-embeddings/src/lib.rs`:
 
-### Phase 10: Clean Up References
-1. Remove `pub mod fusion;` from lib.rs files
-2. Remove fusion-related imports from remaining files
-3. Remove fusion crate dependencies from Cargo.toml
-4. Run `cargo check` to find any remaining references
-5. Fix all compilation errors
+**REMOVE these lines:**
+```rust
+pub mod fusion;  // Line ~58
 
-### Phase 11: Verification
-1. Run full test suite: `cargo test --all`
-2. Run clippy: `cargo clippy --all -- -D warnings`
-3. Search for any remaining fusion references
+// Remove from pub use config:
+FusionConfig,
 
-## Files Affected
+// Remove from pub use provider:
+FusedEmbeddingProvider, FusedProviderConfig, ProjectionLayer,
 
-### Files to Delete (Estimated - Verify During Analysis)
-Based on projectionplan1.md Section 15.1, expect ~36 files. Actual count may vary.
+// Remove from pub use fusion:
+pub use fusion::{Activation, Expert, ExpertPool, GatingNetwork, LayerNorm, Linear};
 
-**Core Fusion Module:**
-- `crates/*/src/fusion/**/*.rs`
+// Remove these constants:
+pub const DEFAULT_DIMENSION: usize = 1536;
+pub const CONCATENATED_DIMENSION: usize = 8320;
 
-**Embedding Fusion:**
-- `crates/*/src/embeddings/*fuse*.rs`
-- `crates/*/src/embeddings/*fusion*.rs`
+// Remove doc examples mentioning FuseMoE
+```
 
-**Storage Fusion:**
-- `crates/*/src/storage/*fuse*.rs`
+### Phase 5: Update config/mod.rs
+Edit `crates/context-graph-embeddings/src/config/mod.rs`:
 
-**Search Fusion:**
-- `crates/*/src/search/*fuse*.rs`
+**REMOVE:**
+```rust
+mod fusion;  // Remove this module declaration
+pub use fusion::FusionConfig;  // Remove this export
+```
 
-**Tests:**
-- `crates/*/tests/*fusion*.rs`
-- `crates/*/benches/*fusion*.rs`
+### Phase 6: Update types/dimensions/mod.rs
+Edit `crates/context-graph-embeddings/src/types/dimensions/mod.rs`:
 
-**Config:**
-- `config/*fusion*`
-- `config/*gating*`
+**REMOVE:**
+```rust
+mod fusemoe;  // Remove module declaration
+pub use fusemoe::*;  // Remove re-export
+// Remove any TOTAL_CONCATENATED, FUSED_OUTPUT, TOP_K_EXPERTS references
+```
 
-### Files to Modify
-- All `mod.rs` files that export fusion modules
-- All `lib.rs` files that declare fusion modules
-- All `Cargo.toml` files with fusion dependencies
-- Any file that imports fusion types (fix imports)
+### Phase 7: Update provider/mod.rs
+Edit `crates/context-graph-embeddings/src/provider/mod.rs`:
+
+**REMOVE:**
+```rust
+mod fused;
+pub use fused::{FusedEmbeddingProvider, FusedProviderConfig, ProjectionLayer};
+```
+
+### Phase 8: Fix Storage Module References
+Files to modify (remove FusedEmbedding imports/usage):
+- `crates/context-graph-embeddings/src/storage/binary/types.rs`
+- `crates/context-graph-embeddings/src/storage/binary/encode.rs`
+- `crates/context-graph-embeddings/src/storage/binary/decode.rs`
+- `crates/context-graph-embeddings/src/storage/binary/mod.rs`
+- `crates/context-graph-embeddings/src/storage/binary/reference.rs`
+- `crates/context-graph-embeddings/src/storage/binary/tests.rs`
+- `crates/context-graph-embeddings/src/storage/gds/*.rs`
+- `crates/context-graph-embeddings/src/storage/batch/*.rs`
+
+### Phase 9: Update MCP Adapter
+Edit `crates/context-graph-mcp/src/adapters/embedding_adapter.rs`:
+
+**This file currently wraps FusedEmbeddingProvider.** It must be:
+1. Either deleted entirely (if MCP doesn't need embeddings yet)
+2. Or updated to use the new MultiArrayEmbeddingProvider (TASK-F007)
+
+**DECISION REQUIRED**: If MultiArrayEmbeddingProvider doesn't exist yet, delete the adapter and mark MCP embedding integration as blocked until TASK-F007 completes.
+
+### Phase 10: Update error/types.rs
+Remove fusion-related error variants if they exist.
+
+### Phase 11: Update warm/ Module
+Check and fix:
+- `crates/context-graph-embeddings/src/warm/loader.rs`
+- `crates/context-graph-embeddings/src/warm/memory_pool.rs`
+- `crates/context-graph-embeddings/src/warm/cuda_alloc.rs`
+
+### Phase 12: Iterative Compilation Fix
+```bash
+# First check - will show all errors
+cargo check -p context-graph-embeddings 2>&1 | tee /tmp/fusion-errors.txt
+
+# Count errors
+grep -c "^error" /tmp/fusion-errors.txt
+
+# Fix each error. Do NOT create stubs or workarounds.
+# If something depends on fusion, that dependency must be removed or the dependent code deleted.
+```
+
+### Phase 13: Clean Up Tests
+```bash
+# Find and delete any remaining fusion tests outside fusion/ directory
+rg -l "fusion|FuseMoE|GatingNetwork" crates/context-graph-embeddings/src/**/*test*.rs --type rust
+
+# Delete any test files that only test fusion functionality
+```
 
 ## Code Signature (Definition of Done)
 
-After completion:
+After completion, ALL of these commands must succeed:
+
 ```bash
-# Should return no results
-rg -l "fuse|fusion|gating|expert_select|FuseMoE|GatingNetwork" --type rust
+# 1. No fusion files exist
+test ! -d crates/context-graph-embeddings/src/fusion && echo "PASS: fusion dir gone"
 
-# Should return no results
-rg "mod fusion|use.*fusion|use.*fuse" --type rust
+# 2. No fusion patterns in Rust files
+rg -l "fuse|fusion|gating|FuseMoE|GatingNetwork|ExpertPool|FusedEmbedding|expert_select|Vector1536" --type rust
+# Expected: NO OUTPUT (exit code 1)
 
-# Should compile cleanly
+# 3. No fusion module declarations
+rg "pub mod fusion|mod fusion" --type rust
+# Expected: NO OUTPUT
+
+# 4. No fusion imports
+rg "use.*fusion|use.*fuse|use.*FuseMoE|use.*Gating" --type rust
+# Expected: NO OUTPUT
+
+# 5. Compilation succeeds
 cargo check --all
+# Expected: exit code 0
 
-# Should pass all tests
+# 6. All tests pass
 cargo test --all
+# Expected: exit code 0
+
+# 7. No warnings
+cargo clippy --all -- -D warnings
+# Expected: exit code 0
+
+# 8. Documentation builds without fusion references
+cargo doc -p context-graph-embeddings --no-deps 2>&1 | grep -i fusion
+# Expected: NO OUTPUT
 ```
 
-## Testing Requirements
+## Full State Verification (MANDATORY)
 
-### Verification Tests
-- `cargo check --all` - No compilation errors
-- `cargo test --all` - All remaining tests pass
-- `cargo clippy --all -- -D warnings` - No warnings
+### Source of Truth Definition
+After removal, the "source of truth" is:
+1. **File System**: No fusion files exist in `crates/context-graph-embeddings/src/fusion/`
+2. **Cargo Check**: Compilation succeeds without fusion modules
+3. **Grep Verification**: Zero matches for fusion patterns
 
-### Search Verification
+### Execute & Inspect Protocol
 ```bash
-# These must all return empty
-rg "FuseMoE" --type rust
-rg "GatingNetwork" --type rust
-rg "ExpertSelector" --type rust
-rg "fused_embedding" --type rust
-rg "fusion_pipeline" --type rust
-rg "Vector1536" --type rust
+# After making changes, immediately verify:
+echo "=== SOURCE OF TRUTH VERIFICATION ==="
+
+# Check 1: File system state
+echo "--- File System Check ---"
+ls -la crates/context-graph-embeddings/src/fusion/ 2>/dev/null
+echo "Exit code: $? (should be 2 = directory not found)"
+
+# Check 2: Pattern search
+echo "--- Pattern Search ---"
+FUSION_COUNT=$(rg -c "FuseMoE|GatingNetwork|FusedEmbedding|ExpertPool" --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum}')
+echo "Fusion pattern occurrences: $FUSION_COUNT (should be 0)"
+
+# Check 3: Compilation state
+echo "--- Compilation Check ---"
+cargo check -p context-graph-embeddings 2>&1 | tail -5
+
+# Check 4: Module resolution
+echo "--- Module Resolution ---"
+cargo metadata --format-version=1 | jq '.packages[] | select(.name=="context-graph-embeddings") | .targets[].name'
 ```
 
-## Verification
+### Boundary & Edge Case Audit (MANDATORY - Execute These 3 Tests)
+
+**Edge Case 1: Empty fusion directory (simulate incomplete deletion)**
+```bash
+# Before: Create edge case
+mkdir -p /tmp/test-edge1
+echo "If this test fails, deletion was incomplete"
+
+# Test: Verify rm -rf handles nested directories
+rm -rf crates/context-graph-embeddings/src/fusion/
+RESULT=$(find crates/context-graph-embeddings/src -name "*fusion*" -type f 2>/dev/null | wc -l)
+
+# After: Log state
+echo "Edge Case 1 - Files remaining: $RESULT (expected: 0)"
+```
+
+**Edge Case 2: Dangling imports after deletion**
+```bash
+# Before: Document import count
+BEFORE_IMPORTS=$(rg -c "use.*fusion" --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum}')
+echo "Before: $BEFORE_IMPORTS fusion imports"
+
+# Test: After deletion, check for unresolved imports
+cargo check -p context-graph-embeddings 2>&1 | grep -c "unresolved import"
+
+# After: Log state
+AFTER_IMPORTS=$(rg -c "use.*fusion" --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum}')
+echo "After: $AFTER_IMPORTS fusion imports (expected: 0)"
+```
+
+**Edge Case 3: Config deserialization without FusionConfig**
+```bash
+# Before: Check if any config files reference fusion
+FUSION_CONFIGS=$(rg -l "fusion" config/ tests/fixtures/ 2>/dev/null | wc -l)
+echo "Before: $FUSION_CONFIGS config files reference fusion"
+
+# Test: Verify config loading doesn't fail
+cargo test -p context-graph-embeddings config:: 2>&1 | tail -10
+
+# After: Log state
+echo "Config tests exit code: $? (expected: 0)"
+```
+
+### Evidence of Success (MANDATORY LOG)
+Create this file after completion: `docs2/projection/specs/tasks/foundation/TASK-F006-completion-evidence.log`
 
 ```bash
-# Full verification script
-echo "=== Checking for fusion references ===" && \
-rg -c "fuse|fusion|gating|expert_select" --type rust || echo "No fusion references found" && \
-echo "=== Checking compilation ===" && \
-cargo check --all && \
-echo "=== Running tests ===" && \
-cargo test --all && \
-echo "=== Running clippy ===" && \
-cargo clippy --all -- -D warnings && \
-echo "=== VERIFICATION COMPLETE ==="
+# Generate evidence log
+{
+  echo "=== TASK-F006 COMPLETION EVIDENCE ==="
+  echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "Git Commit: $(git rev-parse HEAD)"
+  echo ""
+  echo "=== FILE SYSTEM STATE ==="
+  echo "Fusion directory exists: $(test -d crates/context-graph-embeddings/src/fusion && echo YES || echo NO)"
+  echo "fusion.rs exists: $(test -f crates/context-graph-embeddings/src/config/fusion.rs && echo YES || echo NO)"
+  echo "fused.rs exists: $(test -f crates/context-graph-embeddings/src/provider/fused.rs && echo YES || echo NO)"
+  echo "fusemoe.rs exists: $(test -f crates/context-graph-embeddings/src/types/dimensions/fusemoe.rs && echo YES || echo NO)"
+  echo ""
+  echo "=== PATTERN SEARCH ==="
+  echo "FuseMoE occurrences: $(rg -c FuseMoE --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')"
+  echo "GatingNetwork occurrences: $(rg -c GatingNetwork --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')"
+  echo "FusedEmbedding occurrences: $(rg -c FusedEmbedding --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')"
+  echo "fusion import occurrences: $(rg -c 'use.*fusion' --type rust 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')"
+  echo ""
+  echo "=== COMPILATION ==="
+  cargo check --all 2>&1 | tail -3
+  echo "Exit code: $?"
+  echo ""
+  echo "=== TESTS ==="
+  cargo test --all 2>&1 | tail -5
+  echo "Exit code: $?"
+  echo ""
+  echo "=== CLIPPY ==="
+  cargo clippy --all -- -D warnings 2>&1 | tail -3
+  echo "Exit code: $?"
+} | tee docs2/projection/specs/tasks/foundation/TASK-F006-completion-evidence.log
 ```
 
-## Constraints
+## Sherlock-Holmes Final Verification (MANDATORY)
 
-- **NO BACKWARDS COMPATIBILITY** - This is intentional per projectionplan1.md
-- Remove files in dependency order to minimize intermediate compilation errors
-- Commit removal as single atomic commit for easy revert if needed
-- Do not create any "compatibility shim" or "migration helper"
-- Do not add `#[deprecated]` markers - just delete
+After completing all implementation steps, spawn a `sherlock-holmes` agent with this prompt:
+
+```
+FORENSIC INVESTIGATION: TASK-F006 Fusion Removal Verification
+
+CONTEXT: TASK-F006 required removing ALL fusion-related code from context-graph-embeddings.
+The removal should have deleted 29+ files and updated 80+ file references.
+
+YOUR MISSION:
+1. Verify the fusion/ directory no longer exists
+2. Search for ANY remaining fusion patterns: FuseMoE, GatingNetwork, ExpertPool, FusedEmbedding, gating, expert_select, Vector1536
+3. Verify cargo check --all passes
+4. Verify cargo test --all passes
+5. Check for orphaned imports or dead code
+6. Verify no fusion types are exported from lib.rs
+7. Check that the MCP adapter was properly updated or removed
+
+EVIDENCE REQUIRED:
+- List every file you checked
+- For each potential issue, provide file path and line number
+- Confirm or deny completion with specific evidence
+
+GUILTY UNTIL PROVEN INNOCENT: Assume the removal was incomplete until you prove otherwise.
+```
+
+Any issues identified by sherlock-holmes MUST be fixed before marking this task complete.
+
+## Constraints (NON-NEGOTIABLE)
+
+- **NO BACKWARDS COMPATIBILITY** - per projectionplan1.md and constitution.yaml
+- **NO COMPATIBILITY SHIMS** - delete, don't deprecate
+- **NO STUB IMPLEMENTATIONS** - if code needs fusion, delete that code
+- **NO WORKAROUNDS** - if something breaks, it breaks loudly with clear errors
+- **FAIL FAST** - any remaining fusion reference should cause compilation failure
+- Remove files in dependency order to minimize intermediate errors
+- Commit as single atomic commit for easy revert if needed
 
 ## Git Commit Message
 
 ```
-refactor: remove all fusion-related code (Multi-Array Architecture)
+refactor!: remove all fusion-related code (TASK-F006)
 
 BREAKING CHANGE: Complete removal of FuseMoE, gating networks, and
 single-vector fusion. The Multi-Array Teleological Fingerprint
-architecture stores all 12 embeddings without fusion.
+architecture stores all 13 embeddings without fusion.
 
 Removed:
-- src/fusion/ module and all submodules
-- Fusion-related embedding types
-- Fused similarity search
-- Gating network configurations
-- ~36 files total
+- crates/context-graph-embeddings/src/fusion/ (29 files)
+- crates/context-graph-embeddings/src/config/fusion.rs
+- crates/context-graph-embeddings/src/provider/fused.rs
+- crates/context-graph-embeddings/src/types/dimensions/fusemoe.rs
+
+Modified:
+- lib.rs: removed fusion exports
+- config/mod.rs: removed FusionConfig
+- provider/mod.rs: removed FusedEmbeddingProvider
+- storage/*: removed fusion type references
+- MCP adapter: [deleted|updated] for new architecture
 
 No migration path provided (per specification).
+All 13 embeddings now stored as SemanticFingerprint array.
 
 Traces To: TS-601, FR-601, FR-602
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
 
-## Notes
+## Why This Removal is Correct
 
-**WHY REMOVE?**
-- FuseMoE with top-k=4 loses 67% of information
-- Gating adds complexity without benefit when storing all embeddings
-- Single-vector representation loses cross-space relationships
-- "The pattern across embedding spaces reveals purpose" - can't see pattern with fusion
+| Old Architecture | New Architecture | Benefit |
+|-----------------|------------------|---------|
+| FuseMoE top-k=4 | Store all 13 embeddings | 100% vs 33% information retention |
+| 1536D single vector | 13× separate vectors | Cross-space pattern visibility |
+| Gating complexity | Simple array storage | Reduced failure modes |
+| Single similarity metric | RRF across 13 spaces | Better retrieval quality |
 
-**RISK MITIGATION:**
+**"The pattern across embedding spaces reveals purpose"** - you can't see the pattern with fusion.
+
+## Risk Mitigation
+
 - Removal is reversible via git
 - No production data depends on fusion (new architecture)
 - Tests verify remaining code still works
+- Compilation will fail if any fusion code remains (desired behavior)
 
-This task CAN run in parallel with TASK-F001 through TASK-F005 since they create new files while this removes old ones.
+## Related Tasks
+
+- **TASK-F001**: SemanticFingerprint (13 embeddings) - COMPLETED
+- **TASK-F003**: JohariFingerprint (13 embedders) - COMPLETED
+- **TASK-F004**: Storage Schema (8 CFs) - COMPLETED
+- **TASK-F007**: MultiArrayEmbeddingProvider trait - PENDING (needed to replace FusedProvider)
+- **TASK-S007**: Remove Fused MCP Handlers - PENDING (depends on this task)
 
 Reference: projectionplan1.md Section 15.1, constitution.yaml embeddings.paradigm

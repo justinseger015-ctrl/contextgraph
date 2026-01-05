@@ -5,7 +5,7 @@
 //! 1. **Config Tests**: WarmConfig defaults, environment loading, validation
 //! 2. **Error Tests**: Exit codes 101-110, error categories, fatal vs non-fatal
 //! 3. **State Machine Tests**: WarmModelState transitions and predicates
-//! 4. **Registry Tests**: WarmModelRegistry with all 13 models
+//! 4. **Registry Tests**: WarmModelRegistry with all 12 models
 //! 5. **Memory Pool Tests**: WarmMemoryPools dual-pool architecture
 //! 6. **Validation Tests**: WarmValidator dimension/weight/inference validation
 //! 7. **Handle Tests**: ModelHandle VRAM pointer tracking
@@ -24,7 +24,7 @@ use super::error::{WarmError, WarmResult};
 use super::handle::ModelHandle;
 use super::memory_pool::WarmMemoryPools;
 use super::registry::{
-    WarmModelRegistry, EMBEDDING_MODEL_IDS, FUSEMOE_MODEL_ID, TOTAL_MODEL_COUNT,
+    WarmModelRegistry, EMBEDDING_MODEL_IDS, TOTAL_MODEL_COUNT,
 };
 use super::state::WarmModelState;
 use super::validation::{TestInferenceConfig, TestInput, ValidationResult, WarmValidator};
@@ -552,12 +552,11 @@ mod registry_tests {
     #[test]
     fn test_embedding_model_ids_count() {
         assert_eq!(EMBEDDING_MODEL_IDS.len(), 12);
-        assert_eq!(FUSEMOE_MODEL_ID, "FuseMoE");
-        assert_eq!(TOTAL_MODEL_COUNT, 13);
+        assert_eq!(TOTAL_MODEL_COUNT, 12);
     }
 
     #[test]
-    fn test_register_all_13_models() {
+    fn test_register_all_12_models() {
         let mut registry = WarmModelRegistry::new();
 
         for (i, model_id) in EMBEDDING_MODEL_IDS.iter().enumerate() {
@@ -565,9 +564,6 @@ mod registry_tests {
                 .register_model(*model_id, (i + 1) * 100 * MB, 768)
                 .unwrap();
         }
-        registry
-            .register_model(FUSEMOE_MODEL_ID, 2 * GB, 768)
-            .unwrap();
 
         assert_eq!(registry.model_count(), TOTAL_MODEL_COUNT);
     }
@@ -1174,17 +1170,6 @@ mod validation_tests {
     }
 
     #[test]
-    fn test_test_inference_config_for_fusemoe() {
-        let config = TestInferenceConfig::for_fusemoe(2048);
-
-        assert_eq!(config.model_id, "FuseMoE");
-        assert_eq!(config.expected_dimension, 2048);
-        assert!(matches!(config.test_input, TestInput::Tokens(_)));
-        assert!(config.reference_output.is_none());
-        assert_eq!(config.max_inference_ms, 2000);
-    }
-
-    #[test]
     fn test_test_input_types() {
         assert_eq!(TestInput::Text("hello".to_string()).description(), "text");
         assert_eq!(TestInput::Tokens(vec![1, 2, 3]).description(), "tokens");
@@ -1382,20 +1367,16 @@ mod loader_integration_tests {
     }
 
     #[test]
-    fn test_loader_all_13_models_fit_in_24gb() {
+    fn test_loader_all_12_models_fit_in_24gb() {
         let mut registry = WarmModelRegistry::new();
         let mut pools = WarmMemoryPools::rtx_5090();
 
-        // Each model ~1.5GB (12 * 1.5GB + 2GB FuseMoE = 20GB < 24GB)
+        // Each model ~1.5GB (12 * 1.5GB = 18GB < 24GB)
         let model_size = (1536) * MB;
-        let fusemoe_size = 2 * GB;
 
         for model_id in EMBEDDING_MODEL_IDS {
             registry.register_model(model_id, model_size, 768).unwrap();
         }
-        registry
-            .register_model(FUSEMOE_MODEL_ID, fusemoe_size, 768)
-            .unwrap();
 
         assert_eq!(registry.model_count(), TOTAL_MODEL_COUNT);
 
@@ -1690,11 +1671,10 @@ mod integration_tests {
         let mut pools = WarmMemoryPools::new(config.clone());
         let validator = WarmValidator::new();
 
-        // Register all 13 models with realistic sizes
+        // Register all 12 models with realistic sizes
         let model_sizes: Vec<(&str, usize)> = EMBEDDING_MODEL_IDS
             .iter()
             .map(|id| (*id, 600 * MB))
-            .chain(std::iter::once((FUSEMOE_MODEL_ID, 2 * GB)))
             .collect();
 
         for (model_id, size) in &model_sizes {
@@ -1749,7 +1729,6 @@ mod integration_tests {
                 model_id
             );
         }
-        assert!(registry.get_handle(FUSEMOE_MODEL_ID).is_some());
     }
 
     #[test]

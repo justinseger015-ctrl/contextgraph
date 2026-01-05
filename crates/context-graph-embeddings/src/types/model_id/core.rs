@@ -85,7 +85,7 @@ impl ModelId {
         }
     }
 
-    /// Returns the projected dimension used after normalization (for FuseMoE input).
+    /// Returns the projected dimension used after normalization (for multi-array storage input).
     ///
     /// All models are normalized to these dimensions before concatenation:
     /// - Most models: native dimension (no projection needed)

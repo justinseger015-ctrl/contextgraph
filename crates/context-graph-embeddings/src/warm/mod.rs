@@ -1,6 +1,6 @@
 //! Warm Model Loading System
 //!
-//! Pre-loads all 12 embedding models + FuseMoE into VRAM at startup.
+//! Pre-loads all 12 embedding models into VRAM at startup.
 //!
 //! This module is under active development. Currently implemented:
 //! - `error`: WarmError types and exit codes
@@ -52,7 +52,7 @@ pub use handle::ModelHandle;
 // Re-export registry types for convenient access
 pub use registry::{
     SharedWarmRegistry, WarmModelEntry, WarmModelRegistry,
-    EMBEDDING_MODEL_IDS, FUSEMOE_MODEL_ID, TOTAL_MODEL_COUNT,
+    EMBEDDING_MODEL_IDS, TOTAL_MODEL_COUNT,
 };
 
 // Re-export validation types for convenient access

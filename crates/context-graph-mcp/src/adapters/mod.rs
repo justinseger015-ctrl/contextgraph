@@ -13,10 +13,12 @@
 //! # Available Adapters
 //!
 //! - [`UtlProcessorAdapter`]: Bridges `context_graph_utl::UtlProcessor` to core trait
-//! - [`EmbeddingProviderAdapter`]: Bridges `context_graph_embeddings::FusedEmbeddingProvider` to core trait
+//!
+//! # Blocked Adapters
+//!
+//! - `EmbeddingProviderAdapter`: Removed with FusedEmbeddingProvider (TASK-F006).
+//!   MCP embedding integration blocked until TASK-F007 implements multi-array provider.
 
-pub mod embedding_adapter;
 pub mod utl_adapter;
 
-pub use embedding_adapter::EmbeddingProviderAdapter;
 pub use utl_adapter::UtlProcessorAdapter;

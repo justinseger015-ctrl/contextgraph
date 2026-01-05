@@ -11,7 +11,7 @@ use thiserror::Error;
 /// |----------|----------|-------------------|
 /// | Model | ModelNotFound, ModelLoadError, NotInitialized | Retry with different config |
 /// | Validation | InvalidDimension, InvalidValue, EmptyInput, InputTooLong | Fix input data |
-/// | Processing | BatchError, FusionError, TokenizationError | Retry or fallback model |
+/// | Processing | BatchError, TokenizationError | Retry or fallback model |
 /// | Infrastructure | GpuError, CacheError, IoError, Timeout | Retry or degrade |
 /// | Configuration | ConfigError, UnsupportedModality | Fix configuration |
 /// | Serialization | SerializationError | Fix data format |
@@ -87,10 +87,6 @@ pub enum EmbeddingError {
     #[error("Batch processing error: {message}")]
     BatchError { message: String },
 
-    /// FuseMoE fusion failed (expert routing, gating, aggregation).
-    #[error("Fusion error: {message}")]
-    FusionError { message: String },
-
     /// Tokenization failed (unknown tokens, encoding error).
     #[error("Tokenization error for {model_id:?}: {message}")]
     TokenizationError { model_id: ModelId, message: String },
@@ -128,11 +124,6 @@ pub enum EmbeddingError {
     /// Serialization/deserialization failed (JSON, binary, protobuf).
     #[error("Serialization error: {message}")]
     SerializationError { message: String },
-
-    // === Expert Routing Errors ===
-    /// Invalid expert index in FuseMoE routing.
-    #[error("Invalid expert index: {index} (max: {max})")]
-    InvalidExpertIndex { index: usize, max: usize },
 
     /// Dimension mismatch between expected and actual values.
     #[error("Dimension mismatch: expected {expected}, got {got}")]

@@ -31,11 +31,6 @@
 //! max_batch_size = 32
 //! max_wait_ms = 50
 //!
-//! [fusion]
-//! num_experts = 8
-//! top_k = 4
-//! output_dim = 1536
-//!
 //! [cache]
 //! enabled = true
 //! max_entries = 100000
@@ -53,17 +48,15 @@
 
 mod batch;
 mod cache;
-mod fusion;
 mod gpu;
 mod models;
 
-#[cfg(test)]
-mod tests;
+// NOTE: config/tests.rs removed with FusionConfig (TASK-F006)
+// Tests for remaining configs live in their respective modules
 
-// Re-export all public types for backwards compatibility
+// Re-export all public types
 pub use batch::{BatchConfig, PaddingStrategy};
 pub use cache::{CacheConfig, EvictionPolicy};
-pub use fusion::FusionConfig;
 pub use gpu::GpuConfig;
 pub use models::ModelPathConfig;
 
@@ -107,10 +100,6 @@ pub struct EmbeddingConfig {
     /// Batch processing configuration
     #[serde(default)]
     pub batch: BatchConfig,
-
-    /// FuseMoE fusion layer configuration
-    #[serde(default)]
-    pub fusion: FusionConfig,
 
     /// Embedding cache configuration
     #[serde(default)]
@@ -187,12 +176,6 @@ impl EmbeddingConfig {
             .validate()
             .map_err(|e| EmbeddingError::ConfigError {
                 message: format!("[batch] {}", e),
-            })?;
-
-        self.fusion
-            .validate()
-            .map_err(|e| EmbeddingError::ConfigError {
-                message: format!("[fusion] {}", e),
             })?;
 
         self.cache

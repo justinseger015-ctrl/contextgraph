@@ -109,44 +109,41 @@ fn test_all_17_variants_can_be_created() {
         max: 50,
     };
 
-    // Processing Errors (3)
+    // Processing Errors (2) - FusionError removed (TASK-F006)
     let _e8 = EmbeddingError::BatchError {
         message: "test".to_string(),
     };
-    let _e9 = EmbeddingError::FusionError {
-        message: "test".to_string(),
-    };
-    let _e10 = EmbeddingError::TokenizationError {
+    let _e9 = EmbeddingError::TokenizationError {
         model_id: ModelId::Semantic,
         message: "test".to_string(),
     };
 
     // Infrastructure Errors (4)
-    let _e11 = EmbeddingError::GpuError {
+    let _e10 = EmbeddingError::GpuError {
         message: "test".to_string(),
     };
-    let _e12 = EmbeddingError::CacheError {
+    let _e11 = EmbeddingError::CacheError {
         message: "test".to_string(),
     };
-    let _e13 = EmbeddingError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "test"));
-    let _e14 = EmbeddingError::Timeout { timeout_ms: 1000 };
+    let _e12 = EmbeddingError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "test"));
+    let _e13 = EmbeddingError::Timeout { timeout_ms: 1000 };
 
     // Configuration Errors (2)
-    let _e15 = EmbeddingError::UnsupportedModality {
+    let _e14 = EmbeddingError::UnsupportedModality {
         model_id: ModelId::Semantic,
         input_type: InputType::Image,
     };
-    let _e16 = EmbeddingError::ConfigError {
+    let _e15 = EmbeddingError::ConfigError {
         message: "test".to_string(),
     };
 
     // Serialization Errors (1)
-    let _e17 = EmbeddingError::SerializationError {
+    let _e16 = EmbeddingError::SerializationError {
         message: "test".to_string(),
     };
 
-    // All 17 variants created successfully
-    println!("All 17 error variants created successfully!");
+    // All variants created successfully (FusionError and InvalidExpertIndex removed in TASK-F006)
+    println!("All error variants created successfully!");
 }
 
 // ============================================================

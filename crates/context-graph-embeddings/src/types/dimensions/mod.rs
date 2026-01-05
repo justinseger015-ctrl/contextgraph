@@ -1,10 +1,9 @@
 //! Compile-time dimension constants for the 12-model embedding pipeline.
 //!
-//! These constants define the exact dimensions used throughout the fusion process:
+//! These constants define the exact dimensions used throughout the embedding pipeline:
 //! - Native dimensions: Raw model output sizes
-//! - Projected dimensions: Normalized sizes for FuseMoE input
-//! - TOTAL_CONCATENATED: Sum of all projected dimensions
-//! - FUSED_OUTPUT: Final FuseMoE output (1536D)
+//! - Projected dimensions: Normalized sizes for concatenated embedding
+//! - TOTAL_CONCATENATED: Sum of all projected dimensions (8320D)
 //!
 //! # Usage
 //!
@@ -22,11 +21,10 @@
 mod aggregates;
 mod arrays;
 mod constants;
-mod fusemoe;
 mod helpers;
 
 // =============================================================================
-// RE-EXPORTS FOR BACKWARDS COMPATIBILITY
+// RE-EXPORTS
 // =============================================================================
 
 // Native dimensions
@@ -42,11 +40,8 @@ pub use constants::{
     TEMPORAL_PERIODIC, TEMPORAL_POSITIONAL, TEMPORAL_RECENT,
 };
 
-// FuseMoE configuration
-pub use fusemoe::{COLBERT_V3_DIM, NUM_EXPERTS, TOP_K_EXPERTS};
-
 // Aggregate dimensions
-pub use aggregates::{FUSED_OUTPUT, MODEL_COUNT, TOTAL_CONCATENATED};
+pub use aggregates::{MODEL_COUNT, TOTAL_CONCATENATED};
 
 // Helper functions
 pub use helpers::{native_dimension_by_index, offset_by_index, projected_dimension_by_index};
@@ -81,10 +76,6 @@ mod tests {
         assert_eq!(TOTAL_CONCATENATED, 8320);
     }
 
-    #[test]
-    fn test_fused_output_dimension() {
-        assert_eq!(FUSED_OUTPUT, 1536);
-    }
 
     #[test]
     fn test_model_count() {

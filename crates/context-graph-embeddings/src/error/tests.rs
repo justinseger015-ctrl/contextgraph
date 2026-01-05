@@ -87,7 +87,7 @@ fn test_input_too_long_shows_limits() {
 }
 
 // ============================================================
-// PROCESSING ERROR CREATION TESTS (3 tests)
+// PROCESSING ERROR CREATION TESTS (2 tests)
 // ============================================================
 
 #[test]
@@ -100,15 +100,7 @@ fn test_batch_error_shows_message() {
     assert!(msg.contains("queue overflow"));
 }
 
-#[test]
-fn test_fusion_error_shows_message() {
-    let err = EmbeddingError::FusionError {
-        message: "expert routing failed".to_string(),
-    };
-    let msg = format!("{}", err);
-    assert!(msg.contains("Fusion"));
-    assert!(msg.contains("expert routing failed"));
-}
+// NOTE: test_fusion_error_shows_message removed (TASK-F006)
 
 #[test]
 fn test_tokenization_error_shows_message() {

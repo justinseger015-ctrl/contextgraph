@@ -80,7 +80,7 @@ const GB: usize = 1024 * 1024 * 1024;
 /// and timestamp for diagnostics and lifecycle management.
 #[derive(Debug, Clone)]
 pub struct ModelAllocation {
-    /// Unique model identifier (e.g., "E1_Semantic", "FuseMoE").
+    /// Unique model identifier (e.g., "E1_Semantic").
     pub model_id: String,
     /// Raw VRAM pointer from CUDA allocation.
     ///

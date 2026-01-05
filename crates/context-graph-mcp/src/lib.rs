@@ -11,7 +11,11 @@
 //! and core traits. Notable adapters:
 //!
 //! - [`UtlProcessorAdapter`]: Bridges the real UTL processor to the core trait interface
-//! - [`EmbeddingProviderAdapter`]: Bridges the embeddings provider to the core trait interface
+//!
+//! # Blocked Adapters
+//!
+//! - `EmbeddingProviderAdapter`: Removed with FusedEmbeddingProvider (TASK-F006).
+//!   MCP embedding integration blocked until TASK-F007 implements multi-array provider.
 
 pub mod adapters;
 pub mod handlers;
@@ -21,4 +25,4 @@ pub mod server;
 pub mod tools;
 
 // Re-export adapters for convenient access
-pub use adapters::{EmbeddingProviderAdapter, UtlProcessorAdapter};
+pub use adapters::UtlProcessorAdapter;

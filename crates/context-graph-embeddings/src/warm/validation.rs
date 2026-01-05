@@ -35,7 +35,7 @@ use super::handle::ModelHandle;
 /// ```
 #[derive(Debug, Clone)]
 pub struct TestInferenceConfig {
-    /// Model identifier (e.g., "E1_Semantic", "FuseMoE").
+    /// Model identifier (e.g., "E1_Semantic").
     pub model_id: String,
     /// Expected output dimension from the model.
     pub expected_dimension: usize,
@@ -73,32 +73,6 @@ impl TestInferenceConfig {
             test_input: TestInput::Text("The quick brown fox jumps over the lazy dog.".to_string()),
             reference_output: None,
             max_inference_ms: 1000, // 1 second timeout for embedding
-        }
-    }
-
-    /// Create a test inference config for the FuseMoE model.
-    ///
-    /// Uses token-based input appropriate for the fusion model.
-    ///
-    /// # Arguments
-    ///
-    /// * `expected_dimension` - Expected fused embedding dimension
-    ///
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// let config = TestInferenceConfig::for_fusemoe(2048);
-    /// assert!(matches!(config.test_input, TestInput::Tokens(_)));
-    /// ```
-    #[must_use]
-    pub fn for_fusemoe(expected_dimension: usize) -> Self {
-        Self {
-            model_id: "FuseMoE".to_string(),
-            expected_dimension,
-            // Standard test tokens for FuseMoE validation
-            test_input: TestInput::Tokens(vec![101, 2023, 2003, 1037, 3231, 102]),
-            reference_output: None,
-            max_inference_ms: 2000, // 2 second timeout for fusion
         }
     }
 
@@ -793,17 +767,6 @@ mod tests {
     }
 
     #[test]
-    fn test_config_for_fusemoe() {
-        let config = TestInferenceConfig::for_fusemoe(2048);
-
-        assert_eq!(config.model_id, "FuseMoE");
-        assert_eq!(config.expected_dimension, 2048);
-        assert!(matches!(config.test_input, TestInput::Tokens(_)));
-        assert!(config.reference_output.is_none());
-        assert_eq!(config.max_inference_ms, 2000);
-    }
-
-    #[test]
     fn test_config_with_reference() {
         let reference = vec![0.1, 0.2, 0.3];
         let config = TestInferenceConfig::with_reference(
@@ -1188,7 +1151,7 @@ mod tests {
     #[test]
     fn test_validate_model_with_inf() {
         let v = WarmValidator::new();
-        let config = TestInferenceConfig::for_fusemoe(3);
+        let config = TestInferenceConfig::for_embedding_model("TestModel", 3);
         let handle = ModelHandle::new(0x2000, 3 * 4, 0, 0x1234);
         let output = vec![0.1, f32::INFINITY, 0.3];
 

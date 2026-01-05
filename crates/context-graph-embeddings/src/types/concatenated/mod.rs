@@ -1,7 +1,7 @@
-//! Aggregated embedding from all 12 models for FuseMoE input.
+//! Aggregated embedding from all 12 models for multi-array storage.
 //!
 //! The `ConcatenatedEmbedding` struct collects individual `ModelEmbedding` outputs
-//! and concatenates them into a single 8320-dimensional vector for FuseMoE processing.
+//! and concatenates them into a single 8320-dimensional vector for storage and retrieval.
 //!
 //! # Pipeline Position
 //!
@@ -12,9 +12,7 @@
 //!          ↓
 //!     ConcatenatedEmbedding (this module) ← collects all 12
 //!          ↓
-//!     FuseMoE (8320D → 1536D)
-//!          ↓
-//!     FusedEmbedding (final output)
+//!     Multi-Array Storage (all 12 embeddings preserved)
 //! ```
 //!
 //! # Module Structure

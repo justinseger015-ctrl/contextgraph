@@ -86,7 +86,7 @@ fn default_max_bytes() -> usize {
 ///
 /// # Capacity Calculation
 /// ```text
-/// Single FusedEmbedding: 1536 * 4 bytes = 6,144 bytes
+/// Single concatenated embedding: 8320 * 4 bytes = 33,280 bytes
 /// 100K entries: 100,000 * 6,144 = 614,400,000 bytes (~614 MB)
 /// With metadata overhead: ~1 GB
 /// ```

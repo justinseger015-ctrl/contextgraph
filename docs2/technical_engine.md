@@ -938,61 +938,81 @@ pub type CodeKernel = embedding_kernel<1536, 24>;
 
 ---
 
-## 2. FuseMoE + CAME-AB Fusion
+## 2. Multi-Array Teleological Storage (Replaces FuseMoE)
 
-### 2.1 FuseMoE Architecture
+> **IMPORTANT**: FuseMoE embedding fusion is DEPRECATED. The system now uses Multi-Array
+> Teleological Storage where all 13 embeddings (E1-E12 + E13 SPLADE) are stored SEPARATELY.
+> NO concatenation or fusion of embeddings occurs. The 13-embedding array IS the teleological vector.
+
+### 2.1 Multi-Array Storage Architecture
 
 ```rust
-/// Mixture of Experts for embedding fusion
-/// Laplace-smoothed gating with top-k routing
-pub struct FuseMoE {
-    /// Number of expert embeddings (12 models)
-    num_experts: usize,
-    /// Top-k experts to route to (default: 4)
-    top_k: usize,
-    /// Gating network weights
-    gate_weights: Tensor2D<f32>,
-    /// Laplace smoothing factor
-    laplace_alpha: f32,
+/// Multi-Array Teleological Storage
+/// All 13 embeddings stored separately - NO fusion/concatenation
+/// The 13-embedding array IS the teleological vector (Royse 2026)
+pub struct SemanticFingerprint {
+    /// E1: Semantic embedding (1024D, Matryoshka-truncatable)
+    pub semantic: Vector1024,
+    /// E2-E4: Temporal embeddings (512D each)
+    pub temporal_recent: Vector512,
+    pub temporal_periodic: Vector512,
+    pub temporal_positional: Vector512,
+    /// E5: Causal embedding (768D, asymmetric similarity)
+    pub causal: CausalEmbedding,
+    /// E6: Sparse activations (~30K, 5% active)
+    pub sparse: SparseVector,
+    /// E7: Code embedding (1536D)
+    pub code: Vector1536,
+    /// E8: Graph structure (384D)
+    pub graph: Vector384,
+    /// E9: HDC binary (10K-bit → 1024 packed)
+    pub hdc: BitVector,
+    /// E10: Multimodal (768D)
+    pub multimodal: Vector768,
+    /// E11: Entity/Knowledge Graph (384D)
+    pub entity: Vector384,
+    /// E12: Late Interaction (128D per token)
+    pub late_interaction: Vec<Vector128>,
+    /// E13: SPLADE sparse (~30K vocab)
+    pub splade: SpladeVector,
 }
 
-impl FuseMoE {
-    /// Fuse 12 embeddings into unified representation
-    pub fn fuse(&self, embeddings: &[Vector1536; 12]) -> (Vector1536, [f32; 12]) {
-        // Compute gating scores
-        let concat = self.concatenate_embeddings(embeddings);
-        let logits = self.gate_weights.matmul(&concat);
+/// RRF (Reciprocal Rank Fusion) for multi-space similarity
+/// Fuses SCORES from per-space similarity - NOT vector concatenation
+pub fn rrf_similarity(
+    query: &SemanticFingerprint,
+    candidate: &SemanticFingerprint,
+    weights: &QueryTypeWeights,
+) -> f32 {
+    const K: f32 = 60.0;
 
-        // Laplace-smoothed softmax for top-k selection
-        let weights = self.laplace_top_k_softmax(&logits, self.top_k);
+    // Compute per-space similarities (each space uses appropriate metric)
+    let sims = [
+        cosine_sim(&query.semantic, &candidate.semantic),
+        cosine_sim(&query.temporal_recent, &candidate.temporal_recent),
+        cosine_sim(&query.temporal_periodic, &candidate.temporal_periodic),
+        cosine_sim(&query.temporal_positional, &candidate.temporal_positional),
+        asymmetric_causal_sim(&query.causal, &candidate.causal), // Asymmetric!
+        jaccard_weighted(&query.sparse, &candidate.sparse),
+        cosine_sim(&query.code, &candidate.code),
+        cosine_sim(&query.graph, &candidate.graph),
+        hamming_sim(&query.hdc, &candidate.hdc),
+        cosine_sim(&query.multimodal, &candidate.multimodal),
+        transe_score(&query.entity, &candidate.entity),
+        maxsim_score(&query.late_interaction, &candidate.late_interaction),
+        sparse_dot(&query.splade, &candidate.splade),
+    ];
 
-        // Weighted combination of top-k experts
-        let mut fused = Vector1536::zeros();
-        for (i, &w) in weights.iter().enumerate() {
-            if w > 0.0 {
-                fused = fused.add(&embeddings[i].scale(w));
-            }
-        }
+    // Convert to ranks and apply RRF formula
+    let mut indexed: Vec<(usize, f32)> = sims.iter().enumerate()
+        .map(|(i, &s)| (i, s))
+        .collect();
+    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-        (fused.normalize(), weights)
-    }
-
-    fn laplace_top_k_softmax(&self, logits: &[f32; 12], k: usize) -> [f32; 12] {
-        // Find top-k indices
-        let mut indexed: Vec<_> = logits.iter().enumerate().collect();
-        indexed.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
-
-        let mut weights = [0.0f32; 12];
-        let top_k_sum: f32 = indexed[..k].iter()
-            .map(|(_, &v)| (v + self.laplace_alpha).exp())
-            .sum();
-
-        for (idx, &logit) in &indexed[..k] {
-            weights[*idx] = (logit + self.laplace_alpha).exp() / top_k_sum;
-        }
-
-        weights
-    }
+    // RRF with query-type weights: RRF(d) = Σᵢ wᵢ/(k + rankᵢ)
+    indexed.iter().enumerate()
+        .map(|(rank, (space_idx, _))| weights[*space_idx] / (K + (rank + 1) as f32))
+        .sum()
 }
 ```
 

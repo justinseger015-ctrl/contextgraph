@@ -65,7 +65,7 @@ pub const REQUIRED_COMPUTE_MINOR: u32 = 0;
 /// Minimum VRAM required in bytes (32GB for RTX 5090).
 ///
 /// This is the total VRAM on an RTX 5090. We require the full amount
-/// to ensure all 12 embedding models + FuseMoE can be loaded.
+/// to ensure all 12 embedding models can be loaded.
 pub const MINIMUM_VRAM_BYTES: usize = 32 * 1024 * 1024 * 1024;
 
 /// One gigabyte in bytes.

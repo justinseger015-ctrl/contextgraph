@@ -1,6 +1,6 @@
 //! Warm Model Registry
 //!
-//! Tracks the loading state and VRAM handles for all 12 embedding models plus FuseMoE.
+//! Tracks the loading state and VRAM handles for all 12 embedding models.
 //!
 //! # Overview
 //!
@@ -16,7 +16,7 @@
 //!
 //! # Model Components
 //!
-//! The registry tracks 13 components (12 embedding models + 1 FuseMoE layer):
+//! The registry tracks 12 embedding models:
 //!
 //! | Model ID | Description |
 //! |----------|-------------|
@@ -32,7 +32,6 @@
 //! | `E10_Multimodal` | Multimodal fusion embeddings |
 //! | `E11_Entity` | Named entity embeddings |
 //! | `E12_LateInteraction` | Late interaction embeddings |
-//! | `FuseMoE` | Mixture of Experts fusion layer |
 //!
 //! # State Transitions
 //!
@@ -76,7 +75,6 @@
 //! # Requirements Fulfilled
 //!
 //! - **REQ-WARM-001**: Track all 12 embedding models
-//! - **REQ-WARM-002**: Track FuseMoE layer
 //! - **REQ-WARM-004**: Maintain VRAM residency via ModelHandle
 //!
 //! # Example
@@ -128,11 +126,8 @@ pub const EMBEDDING_MODEL_IDS: [&str; 12] = [
     "E12_LateInteraction",
 ];
 
-/// The FuseMoE layer ID.
-pub const FUSEMOE_MODEL_ID: &str = "FuseMoE";
-
-/// Total number of model components (12 embeddings + 1 FuseMoE).
-pub const TOTAL_MODEL_COUNT: usize = 13;
+/// Total number of model components (12 embeddings).
+pub const TOTAL_MODEL_COUNT: usize = 12;
 
 /// Thread-safe shared registry for concurrent access.
 ///
@@ -180,8 +175,7 @@ impl WarmModelEntry {
 /// Registry for tracking warm model loading state.
 ///
 /// Maintains a HashMap of [`WarmModelEntry`] keyed by model ID.
-/// All 13 model components (12 embeddings + FuseMoE) should be registered
-/// before loading begins.
+/// All 12 embedding models should be registered before loading begins.
 ///
 /// # Invariants
 ///
@@ -199,7 +193,7 @@ impl WarmModelRegistry {
     /// Create a new empty registry.
     ///
     /// The registry starts with no registered models. Use [`register_model`](Self::register_model)
-    /// to add entries for each of the 13 model components.
+    /// to add entries for each of the 12 embedding models.
     ///
     /// # Example
     ///
@@ -218,7 +212,7 @@ impl WarmModelRegistry {
     ///
     /// # Arguments
     ///
-    /// * `model_id` - Unique identifier (e.g., "E1_Semantic", "FuseMoE")
+    /// * `model_id` - Unique identifier (e.g., "E1_Semantic", "E12_LateInteraction")
     /// * `expected_bytes` - Expected size of model weights in bytes
     /// * `expected_dimension` - Expected output embedding dimension
     ///
@@ -579,7 +573,7 @@ impl WarmModelRegistry {
 
     /// Get the total number of registered models.
     ///
-    /// Expected to be 13 when all components are registered.
+    /// Expected to be 12 when all components are registered.
     #[must_use]
     pub fn model_count(&self) -> usize {
         self.entries.len()
@@ -696,11 +690,6 @@ mod tests {
                 .register_model(*model_id, (i + 1) * 100 * 1024 * 1024, 768)
                 .unwrap();
         }
-
-        // Register FuseMoE
-        registry
-            .register_model(FUSEMOE_MODEL_ID, 2 * 1024 * 1024 * 1024, 768)
-            .unwrap();
 
         assert_eq!(registry.model_count(), TOTAL_MODEL_COUNT);
     }
@@ -1101,7 +1090,7 @@ mod tests {
             ("E2_TemporalRecent", 200),
             ("E3_TemporalPeriodic", 300),
             ("E4_TemporalPositional", 150),
-            ("FuseMoE", 2000),
+            ("E10_Multimodal", 800),
         ];
 
         for (id, size_mb) in model_sizes {
@@ -1112,8 +1101,8 @@ mod tests {
 
         let order = registry.loading_order();
 
-        // FuseMoE is largest, should be first
-        assert_eq!(order[0], "FuseMoE");
+        // E10_Multimodal is largest, should be first
+        assert_eq!(order[0], "E10_Multimodal");
         // E1_Semantic is second largest
         assert_eq!(order[1], "E1_Semantic");
         // E4_TemporalPositional is smallest, should be last

@@ -185,7 +185,7 @@ pub trait EmbeddingModel: Send + Sync {
         self.model_id().dimension()
     }
 
-    /// Returns the projected dimension for FuseMoE input.
+    /// Returns the projected dimension for the concatenated embedding.
     ///
     /// Some models (Sparse, Code, HDC) project their outputs to
     /// different dimensions for the fusion pipeline.

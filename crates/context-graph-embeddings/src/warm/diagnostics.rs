@@ -412,7 +412,6 @@ impl WarmDiagnostics {
 
         for model_id in super::registry::EMBEDDING_MODEL_IDS
             .iter()
-            .chain(std::iter::once(&super::registry::FUSEMOE_MODEL_ID))
         {
             if let Some(entry) = registry.get_entry(model_id) {
                 let handle_info = entry.handle.as_ref().map(|h| {
@@ -609,8 +608,8 @@ impl WarmDiagnostics {
 
     /// Generate a minimal status line for quick monitoring.
     ///
-    /// Format: `WARM: 13/13 models | 24.0GB/24.0GB VRAM | OK`
-    /// Or on error: `WARM: 12/13 models | 23.5GB/24.0GB VRAM | ERRORS: 1`
+    /// Format: `WARM: 12/12 models | 24.0GB/24.0GB VRAM | OK`
+    /// Or on error: `WARM: 11/12 models | 23.5GB/24.0GB VRAM | ERRORS: 1`
     ///
     /// # Arguments
     ///
@@ -682,7 +681,7 @@ mod tests {
     use super::*;
     use crate::warm::config::WarmConfig;
     use crate::warm::handle::ModelHandle;
-    use crate::warm::registry::{EMBEDDING_MODEL_IDS, FUSEMOE_MODEL_ID, TOTAL_MODEL_COUNT};
+    use crate::warm::registry::{EMBEDDING_MODEL_IDS, TOTAL_MODEL_COUNT};
 
     /// Create a test config that doesn't require real files.
     fn test_config() -> WarmConfig {
@@ -863,7 +862,7 @@ mod tests {
         assert!(status.contains("VRAM"));
 
         // Initial state should show LOADING since nothing is warm yet
-        assert!(status.contains("LOADING: 0/13"));
+        assert!(status.contains("LOADING: 0/12"));
     }
 
     // ========================================================================
@@ -978,7 +977,7 @@ mod tests {
         // Manually transition all models to Warm for testing
         {
             let mut registry = loader.registry().write().unwrap();
-            for model_id in EMBEDDING_MODEL_IDS.iter().chain(std::iter::once(&FUSEMOE_MODEL_ID)) {
+            for model_id in EMBEDDING_MODEL_IDS.iter() {
                 registry.start_loading(model_id).unwrap();
                 registry.mark_validating(model_id).unwrap();
                 let handle = ModelHandle::new(0x1000, 1024, 0, 0xDEAD);
@@ -995,7 +994,7 @@ mod tests {
         // Verify status line shows OK
         let status = WarmDiagnostics::status_line(&loader);
         assert!(status.contains("OK"));
-        assert!(status.contains("13/13"));
+        assert!(status.contains("12/12"));
     }
 
     #[test]
