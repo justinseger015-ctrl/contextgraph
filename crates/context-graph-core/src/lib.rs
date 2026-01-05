@@ -10,6 +10,7 @@
 //! - Core traits (`TeleologicalMemoryStore`, `MultiArrayEmbeddingProvider`, `NervousLayer`, etc.)
 //! - Error types and result aliases
 //! - Configuration structures
+//! - Goal alignment computation (`GoalAlignmentCalculator`, `GoalAlignmentScore`, etc.)
 //!
 //! # Example
 //!
@@ -22,6 +23,7 @@
 //! assert_eq!(options.top_k, 10);
 //! ```
 
+pub mod alignment;
 pub mod config;
 pub mod error;
 pub mod marblestone;
