@@ -1,5 +1,8 @@
 //! MCP tool call handlers.
 //!
+//! TASK-S001: Updated to use TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
+//! NO BACKWARDS COMPATIBILITY with legacy MemoryStore.
+//!
 //! All tool responses include `_cognitive_pulse` with live UTL metrics.
 //! This provides real-time cognitive state in every MCP response.
 //!
@@ -12,10 +15,14 @@
 //! - Unknown: delta_s > 0.5, delta_c > 0.5 -> EpistemicAction
 
 use serde_json::json;
-use tracing::{debug, warn};
+use sha2::{Digest, Sha256};
+use tracing::{debug, error, warn};
 
-use context_graph_core::traits::SearchOptions;
-use context_graph_core::types::{MemoryNode, UtlContext};
+use context_graph_core::traits::TeleologicalSearchOptions;
+use context_graph_core::types::UtlContext;
+use context_graph_core::types::fingerprint::{
+    JohariFingerprint, PurposeVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+};
 
 use crate::middleware::CognitivePulse;
 use crate::protocol::{error_codes, JsonRpcId, JsonRpcResponse};
@@ -123,7 +130,7 @@ impl Handlers {
             Ok(p) => p,
             Err(e) => {
                 // FAIL FAST - no fallbacks
-                tracing::error!(
+                error!(
                     error = %e,
                     "CognitivePulse computation FAILED - tool call rejected"
                 );
@@ -201,6 +208,8 @@ impl Handlers {
 
     /// inject_context tool implementation.
     ///
+    /// TASK-S001: Updated to use TeleologicalMemoryStore with 13-embedding fingerprint.
+    ///
     /// Injects context into the memory graph with UTL metrics computation.
     /// Response includes `_cognitive_pulse` with live system state.
     pub(super) async fn call_inject_context(
@@ -209,12 +218,13 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         let content = match args.get("content").and_then(|v| v.as_str()) {
-            Some(c) => c.to_string(),
+            Some(c) if !c.is_empty() => c.to_string(),
+            Some(_) => return self.tool_error_with_pulse(id, "Content cannot be empty"),
             None => return self.tool_error_with_pulse(id, "Missing 'content' parameter"),
         };
 
         let rationale = args.get("rationale").and_then(|v| v.as_str()).unwrap_or("");
-        let importance = args
+        let _importance = args
             .get("importance")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.5);
@@ -223,29 +233,48 @@ impl Handlers {
         let context = UtlContext::default();
         let metrics = match self.utl_processor.compute_metrics(&content, &context).await {
             Ok(m) => m,
-            Err(e) => return self.tool_error_with_pulse(id, &format!("UTL processing failed: {}", e)),
+            Err(e) => {
+                error!(error = %e, "inject_context: UTL processing FAILED");
+                return self.tool_error_with_pulse(id, &format!("UTL processing failed: {}", e));
+            }
         };
 
-        // Generate embedding using the embedding provider
-        let embedding_output = match self.embedding_provider.embed(&content).await {
+        // Generate all 13 embeddings using MultiArrayEmbeddingProvider
+        let embedding_output = match self.multi_array_provider.embed_all(&content).await {
             Ok(output) => output,
-            Err(e) => return self.tool_error_with_pulse(id, &format!("Embedding failed: {}", e)),
+            Err(e) => {
+                error!(error = %e, "inject_context: Multi-array embedding FAILED");
+                return self.tool_error_with_pulse(id, &format!("Embedding failed: {}", e));
+            }
         };
 
-        // Create and store the memory node
-        let mut node = MemoryNode::new(content, embedding_output.vector);
-        node.importance = importance as f32;
-        let node_id = node.id;
+        // Compute content hash
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        let content_hash: [u8; 32] = hasher.finalize().into();
 
-        if let Err(e) = self.memory_store.store(node).await {
+        // Create TeleologicalFingerprint with default purpose (will be computed later)
+        let fingerprint = TeleologicalFingerprint::new(
+            embedding_output.fingerprint,
+            PurposeVector::default(),
+            JohariFingerprint::zeroed(),
+            content_hash,
+        );
+        let fingerprint_id = fingerprint.id;
+
+        // Store in TeleologicalMemoryStore
+        if let Err(e) = self.teleological_store.store(fingerprint).await {
+            error!(error = %e, "inject_context: Storage FAILED");
             return self.tool_error_with_pulse(id, &format!("Storage failed: {}", e));
         }
 
         self.tool_result_with_pulse(
             id,
             json!({
-                "nodeId": node_id.to_string(),
+                "fingerprintId": fingerprint_id.to_string(),
                 "rationale": rationale,
+                "embedderCount": NUM_EMBEDDERS,
+                "embeddingLatencyMs": embedding_output.total_latency.as_millis(),
                 "utl": {
                     "learningScore": metrics.learning_score,
                     "entropy": metrics.entropy,
@@ -258,6 +287,8 @@ impl Handlers {
 
     /// store_memory tool implementation.
     ///
+    /// TASK-S001: Updated to use TeleologicalMemoryStore with 13-embedding fingerprint.
+    ///
     /// Stores content in the memory graph.
     /// Response includes `_cognitive_pulse` with live system state.
     pub(super) async fn call_store_memory(
@@ -266,35 +297,61 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         let content = match args.get("content").and_then(|v| v.as_str()) {
-            Some(c) => c.to_string(),
+            Some(c) if !c.is_empty() => c.to_string(),
+            Some(_) => return self.tool_error_with_pulse(id, "Content cannot be empty"),
             None => return self.tool_error_with_pulse(id, "Missing 'content' parameter"),
         };
 
-        let importance = args
+        let _importance = args
             .get("importance")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.5);
 
-        // Generate embedding using the embedding provider
-        let embedding_output = match self.embedding_provider.embed(&content).await {
+        // Generate all 13 embeddings using MultiArrayEmbeddingProvider
+        let embedding_output = match self.multi_array_provider.embed_all(&content).await {
             Ok(output) => output,
-            Err(e) => return self.tool_error_with_pulse(id, &format!("Embedding failed: {}", e)),
+            Err(e) => {
+                error!(error = %e, "store_memory: Multi-array embedding FAILED");
+                return self.tool_error_with_pulse(id, &format!("Embedding failed: {}", e));
+            }
         };
 
-        let mut node = MemoryNode::new(content, embedding_output.vector);
-        node.importance = importance as f32;
-        let node_id = node.id;
+        // Compute content hash
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        let content_hash: [u8; 32] = hasher.finalize().into();
 
-        match self.memory_store.store(node).await {
-            Ok(_) => self.tool_result_with_pulse(id, json!({ "nodeId": node_id.to_string() })),
-            Err(e) => self.tool_error_with_pulse(id, &format!("Storage failed: {}", e)),
+        // Create TeleologicalFingerprint
+        let fingerprint = TeleologicalFingerprint::new(
+            embedding_output.fingerprint,
+            PurposeVector::default(),
+            JohariFingerprint::zeroed(),
+            content_hash,
+        );
+        let fingerprint_id = fingerprint.id;
+
+        match self.teleological_store.store(fingerprint).await {
+            Ok(_) => self.tool_result_with_pulse(
+                id,
+                json!({
+                    "fingerprintId": fingerprint_id.to_string(),
+                    "embedderCount": NUM_EMBEDDERS,
+                    "embeddingLatencyMs": embedding_output.total_latency.as_millis()
+                }),
+            ),
+            Err(e) => {
+                error!(error = %e, "store_memory: Storage FAILED");
+                self.tool_error_with_pulse(id, &format!("Storage failed: {}", e))
+            }
         }
     }
 
     /// get_memetic_status tool implementation.
     ///
+    /// TASK-S001: Updated to use TeleologicalMemoryStore count.
+    ///
     /// Returns comprehensive system status including:
-    /// - Node count from memory store
+    /// - Fingerprint count from TeleologicalMemoryStore
     /// - Live UTL metrics from UtlProcessor (NOT hardcoded)
     /// - 5-layer bio-nervous system status
     /// - `_cognitive_pulse` with live system state
@@ -303,7 +360,7 @@ impl Handlers {
     /// - UTL formula: constitution.yaml:152
     /// - Johari quadrant actions: constitution.yaml:159-163
     pub(super) async fn call_get_memetic_status(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
-        let node_count = self.memory_store.count().await.unwrap_or(0);
+        let fingerprint_count = self.teleological_store.count().await.unwrap_or(0);
 
         // Get LIVE UTL status from the processor
         let utl_status = self.utl_processor.get_status();
@@ -351,11 +408,23 @@ impl Handlers {
             _ => "continue",
         };
 
+        // Get quadrant counts from teleological store
+        let quadrant_counts = self.teleological_store.count_by_quadrant().await.unwrap_or([0; 4]);
+
         self.tool_result_with_pulse(
             id,
             json!({
                 "phase": lifecycle_phase,
-                "nodeCount": node_count,
+                "fingerprintCount": fingerprint_count,
+                "embedderCount": NUM_EMBEDDERS,
+                "storageBackend": self.teleological_store.backend_type().to_string(),
+                "storageSizeBytes": self.teleological_store.storage_size_bytes(),
+                "quadrantCounts": {
+                    "open": quadrant_counts[0],
+                    "hidden": quadrant_counts[1],
+                    "blind": quadrant_counts[2],
+                    "unknown": quadrant_counts[3]
+                },
                 "utl": {
                     "entropy": entropy,
                     "coherence": coherence,
@@ -384,6 +453,8 @@ impl Handlers {
             id,
             json!({
                 "architecture": "5-layer-bio-nervous",
+                "fingerprintType": "TeleologicalFingerprint",
+                "embedderCount": NUM_EMBEDDERS,
                 "layers": [
                     {
                         "name": "Perception",
@@ -392,7 +463,7 @@ impl Handlers {
                     },
                     {
                         "name": "Memory",
-                        "description": "Episodic and semantic memory storage with vector embeddings",
+                        "description": "Teleological memory with 13-embedding semantic fingerprints",
                         "status": "active"
                     },
                     {
@@ -414,12 +485,19 @@ impl Handlers {
                 "utl": {
                     "description": "Universal Transfer Learning - measures learning potential",
                     "formula": "L(x) = H(P) - H(P|x) + alpha * C(x)"
+                },
+                "teleological": {
+                    "description": "Purpose-aware retrieval with North Star alignment",
+                    "purposeVectorDimension": NUM_EMBEDDERS,
+                    "johariQuadrants": ["Open", "Hidden", "Blind", "Unknown"]
                 }
             }),
         )
     }
 
     /// search_graph tool implementation.
+    ///
+    /// TASK-S001: Updated to use TeleologicalMemoryStore search_semantic.
     ///
     /// Searches the memory graph for matching content.
     /// Response includes `_cognitive_pulse` with live system state.
@@ -429,23 +507,34 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         let query = match args.get("query").and_then(|v| v.as_str()) {
-            Some(q) => q,
+            Some(q) if !q.is_empty() => q,
+            Some(_) => return self.tool_error_with_pulse(id, "Query cannot be empty"),
             None => return self.tool_error_with_pulse(id, "Missing 'query' parameter"),
         };
 
         let top_k = args.get("topK").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
-        let options = SearchOptions::new(top_k);
+        let options = TeleologicalSearchOptions::quick(top_k);
 
-        match self.memory_store.search_text(query, options).await {
+        // Generate query embedding
+        let query_embedding = match self.multi_array_provider.embed_all(query).await {
+            Ok(output) => output.fingerprint,
+            Err(e) => {
+                error!(error = %e, "search_graph: Query embedding FAILED");
+                return self.tool_error_with_pulse(id, &format!("Query embedding failed: {}", e));
+            }
+        };
+
+        match self.teleological_store.search_semantic(&query_embedding, options).await {
             Ok(results) => {
                 let results_json: Vec<_> = results
                     .iter()
-                    .map(|(node, score)| {
+                    .map(|r| {
                         json!({
-                            "nodeId": node.id.to_string(),
-                            "content": node.content,
-                            "score": score,
-                            "importance": node.importance
+                            "fingerprintId": r.fingerprint.id.to_string(),
+                            "similarity": r.similarity,
+                            "purposeAlignment": r.purpose_alignment,
+                            "dominantEmbedder": r.dominant_embedder(),
+                            "thetaToNorthStar": r.fingerprint.theta_to_north_star
                         })
                     })
                     .collect();
@@ -455,7 +544,10 @@ impl Handlers {
                     json!({ "results": results_json, "count": results_json.len() }),
                 )
             }
-            Err(e) => self.tool_error_with_pulse(id, &format!("Search failed: {}", e)),
+            Err(e) => {
+                error!(error = %e, "search_graph: Search FAILED");
+                self.tool_error_with_pulse(id, &format!("Search failed: {}", e))
+            }
         }
     }
 

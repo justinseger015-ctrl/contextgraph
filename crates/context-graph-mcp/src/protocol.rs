@@ -81,6 +81,8 @@ impl JsonRpcResponse {
 }
 
 /// Standard JSON-RPC error codes.
+///
+/// TASK-S001: Added teleological-specific error codes for TeleologicalMemoryStore operations.
 #[allow(dead_code)]
 pub mod error_codes {
     // Standard JSON-RPC 2.0 error codes
@@ -98,6 +100,26 @@ pub mod error_codes {
     pub const EMBEDDING_ERROR: i32 = -32005;
     pub const TOOL_NOT_FOUND: i32 = -32006;
     pub const LAYER_TIMEOUT: i32 = -32007;
+
+    // Teleological-specific error codes (-32010 to -32019) - TASK-S001
+    /// TeleologicalFingerprint not found by UUID
+    pub const FINGERPRINT_NOT_FOUND: i32 = -32010;
+    /// Multi-array embedding provider not ready (13 embedders)
+    pub const EMBEDDER_NOT_READY: i32 = -32011;
+    /// Purpose vector computation failed
+    pub const PURPOSE_COMPUTATION_ERROR: i32 = -32012;
+    /// Johari quadrant classification failed
+    pub const JOHARI_CLASSIFICATION_ERROR: i32 = -32013;
+    /// Sparse search (SPLADE E13) failed
+    pub const SPARSE_SEARCH_ERROR: i32 = -32014;
+    /// Semantic search (13-embedding) failed
+    pub const SEMANTIC_SEARCH_ERROR: i32 = -32015;
+    /// Purpose alignment search failed
+    pub const PURPOSE_SEARCH_ERROR: i32 = -32016;
+    /// Checkpoint/restore operation failed
+    pub const CHECKPOINT_ERROR: i32 = -32017;
+    /// Batch operation failed
+    pub const BATCH_OPERATION_ERROR: i32 = -32018;
 }
 
 /// MCP method names.

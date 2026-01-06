@@ -1,31 +1,49 @@
 //! Core Handlers struct and dispatch logic.
+//!
+//! TASK-S001: Updated to use TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
+//! NO BACKWARDS COMPATIBILITY with legacy MemoryStore trait.
 
 use std::sync::Arc;
 
 use tracing::debug;
 
-use context_graph_core::traits::{EmbeddingProvider, MemoryStore, UtlProcessor};
+use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor};
 
 use crate::protocol::{error_codes, methods, JsonRpcRequest, JsonRpcResponse};
 
-/// Request handlers.
+/// Request handlers for MCP protocol.
+///
+/// Uses TeleologicalMemoryStore for 13-embedding fingerprint storage
+/// and MultiArrayEmbeddingProvider for generating all 13 embeddings.
 pub struct Handlers {
-    pub(super) memory_store: Arc<dyn MemoryStore>,
+    /// Teleological memory store - stores TeleologicalFingerprint with 13 embeddings.
+    /// NO legacy MemoryStore support.
+    pub(super) teleological_store: Arc<dyn TeleologicalMemoryStore>,
+
+    /// UTL processor for computing learning metrics.
     pub(super) utl_processor: Arc<dyn UtlProcessor>,
-    pub(super) embedding_provider: Arc<dyn EmbeddingProvider>,
+
+    /// Multi-array embedding provider - generates all 13 embeddings per content.
+    /// NO legacy single-embedding support.
+    pub(super) multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
 }
 
 impl Handlers {
-    /// Create new handlers with the given dependencies.
+    /// Create new handlers with teleological dependencies.
+    ///
+    /// # Arguments
+    /// * `teleological_store` - Store for TeleologicalFingerprint (TASK-F008)
+    /// * `utl_processor` - UTL metrics computation
+    /// * `multi_array_provider` - 13-embedding generator (TASK-F007)
     pub fn new(
-        memory_store: Arc<dyn MemoryStore>,
+        teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
-        embedding_provider: Arc<dyn EmbeddingProvider>,
+        multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
     ) -> Self {
         Self {
-            memory_store,
+            teleological_store,
             utl_processor,
-            embedding_provider,
+            multi_array_provider,
         }
     }
 

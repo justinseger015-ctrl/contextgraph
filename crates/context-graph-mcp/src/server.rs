@@ -1,4 +1,7 @@
 //! MCP Server implementation.
+//!
+//! TASK-S001: Updated to use TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
+//! NO BACKWARDS COMPATIBILITY with legacy MemoryStore.
 
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
@@ -8,48 +11,60 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use context_graph_core::config::Config;
-use context_graph_core::stubs::{InMemoryStore, StubEmbeddingProvider, StubUtlProcessor};
-use context_graph_core::traits::{EmbeddingProvider, MemoryStore, UtlProcessor};
+use context_graph_core::stubs::{InMemoryTeleologicalStore, StubMultiArrayProvider, StubUtlProcessor};
+use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor};
 
 use crate::handlers::Handlers;
 use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 
 /// MCP Server state.
+///
+/// TASK-S001: Uses TeleologicalMemoryStore for 13-embedding fingerprint storage.
 #[allow(dead_code)]
 pub struct McpServer {
     config: Config,
-    memory_store: Arc<dyn MemoryStore>,
+    /// Teleological memory store - stores TeleologicalFingerprint with 13 embeddings.
+    teleological_store: Arc<dyn TeleologicalMemoryStore>,
     utl_processor: Arc<dyn UtlProcessor>,
-    embedding_provider: Arc<dyn EmbeddingProvider>,
+    /// Multi-array embedding provider - generates all 13 embeddings.
+    multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
     handlers: Handlers,
     initialized: Arc<RwLock<bool>>,
 }
 
 impl McpServer {
     /// Create a new MCP server with the given configuration.
+    ///
+    /// TASK-S001: Creates TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
     pub async fn new(config: Config) -> Result<Self> {
-        info!("Initializing MCP Server components...");
+        info!("Initializing MCP Server with TeleologicalMemoryStore...");
 
-        // Create stub implementations for Ghost System phase
-        let memory_store: Arc<dyn MemoryStore> = Arc::new(InMemoryStore::new());
+        // Create teleological store (in-memory stub for Ghost System phase)
+        let teleological_store: Arc<dyn TeleologicalMemoryStore> =
+            Arc::new(InMemoryTeleologicalStore::new());
+        info!("Created InMemoryTeleologicalStore (13-embedding fingerprint storage)");
+
+        // Create UTL processor
         let utl_processor: Arc<dyn UtlProcessor> = Arc::new(StubUtlProcessor::new());
 
-        // BLOCKED: Waiting for TASK-F007 to implement multi-array embedding provider.
-        // Using StubEmbeddingProvider until then.
-        // TODO(TASK-F007): Replace with real multi-array embedding provider
-        let embedding_provider: Arc<dyn EmbeddingProvider> = Arc::new(StubEmbeddingProvider::new());
+        // Create multi-array embedding provider (generates all 13 embeddings)
+        let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> =
+            Arc::new(StubMultiArrayProvider::new());
+        info!("Created StubMultiArrayProvider (13 embedder slots)");
 
         let handlers = Handlers::new(
-            Arc::clone(&memory_store),
+            Arc::clone(&teleological_store),
             Arc::clone(&utl_processor),
-            Arc::clone(&embedding_provider),
+            Arc::clone(&multi_array_provider),
         );
+
+        info!("MCP Server initialization complete - TeleologicalFingerprint mode active");
 
         Ok(Self {
             config,
-            memory_store,
+            teleological_store,
             utl_processor,
-            embedding_provider,
+            multi_array_provider,
             handlers,
             initialized: Arc::new(RwLock::new(false)),
         })
@@ -61,7 +76,7 @@ impl McpServer {
         let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
-        info!("Server ready, waiting for requests...");
+        info!("Server ready, waiting for requests (TeleologicalMemoryStore mode)...");
 
         for line in stdin.lock().lines() {
             let line = match line {

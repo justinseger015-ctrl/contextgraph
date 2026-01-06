@@ -62,12 +62,12 @@ async fn test_tools_call_inject_context_valid() {
         .expect("isError must be a boolean");
     assert!(!is_error, "isError must be false for successful tool calls");
 
-    // Verify nodeId is present in the response text
+    // TASK-S001: Verify fingerprintId is present in the response text (replaces nodeId)
     let parsed_text: serde_json::Value =
         serde_json::from_str(text).expect("Content text should be valid JSON");
     assert!(
-        parsed_text.get("nodeId").is_some(),
-        "Response must contain nodeId"
+        parsed_text.get("fingerprintId").is_some(),
+        "Response must contain fingerprintId"
     );
 }
 
@@ -128,14 +128,14 @@ async fn test_tools_call_get_memetic_status() {
     let text = content[0].get("text").unwrap().as_str().unwrap();
     let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
-    // Verify expected fields
+    // TASK-S001: Verify expected fields using TeleologicalMemoryStore terminology
     assert!(
         parsed_text.get("phase").is_some(),
         "Response must contain phase"
     );
     assert!(
-        parsed_text.get("nodeCount").is_some(),
-        "Response must contain nodeCount"
+        parsed_text.get("fingerprintCount").is_some(),
+        "Response must contain fingerprintCount"
     );
     assert!(
         parsed_text.get("utl").is_some(),
@@ -364,9 +364,10 @@ async fn test_tools_call_store_memory_valid() {
     let text = content[0].get("text").unwrap().as_str().unwrap();
     let parsed_text: serde_json::Value = serde_json::from_str(text).unwrap();
 
+    // TASK-S001: Verify fingerprintId is present (replaces nodeId)
     assert!(
-        parsed_text.get("nodeId").is_some(),
-        "Response must contain nodeId"
+        parsed_text.get("fingerprintId").is_some(),
+        "Response must contain fingerprintId"
     );
 }
 
