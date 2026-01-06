@@ -24,7 +24,7 @@ The `sparse_projection.safetensors` file must be trained separately. This task d
 |-------|-------|
 | **Task ID** | TASK-EMB-009 |
 | **Title** | Create Weight File Specification Documentation |
-| **Status** | ready |
+| **Status** | complete |
 | **Layer** | foundation |
 | **Sequence** | 9 |
 | **Implements** | REQ-EMB-001 |

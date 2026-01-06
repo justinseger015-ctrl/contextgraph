@@ -71,9 +71,28 @@ logs/
 # Test coverage
 coverage/
 *.lcov
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+tarpaulin-report.html
+tarpaulin-report.json
 
 # ML Models (large files - download with scripts/download_models.py)
-models/
+# Keep README.md and config files but ignore model weight files
+models/*
+!models/README.md
+!models/models_config.toml
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pt
+models/**/*.onnx
+models/**/*.h5
+models/**/*.pb
+models/**/*.tflite
+models/**/*.pth
+models/**/*.ckpt
+models/**/*.msgpack
 
 # Python cache
 __pycache__/
@@ -83,6 +102,18 @@ __pycache__/
 .Python
 *.so
 
-# HuggingFace cache
-.cache/huggingface/
+# HuggingFace cache and ML training artifacts
+.cache/
+huggingface_hub/
+wandb/
+mlruns/
+lightning_logs/
+checkpoints/
 tmp/
+
+# Rust benchmark and debug artifacts
+criterion/
+flamegraph.svg
+perf.data
+perf.data.old
+*.rlib
