@@ -16,7 +16,17 @@ impl Handlers {
     pub(super) async fn handle_initialize(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
         info!("Handling initialize request");
 
-        let pulse = CognitivePulse::new(0.5, 0.8, 0.0, 1.0, SuggestedAction::Ready, None);
+        // Initialize defaults - system hasn't processed any data yet
+        // These will be updated with real values after first operations
+        // Note: parameters are (entropy, coherence, coherence_delta, emotional_weight, action, source_layer)
+        let pulse = CognitivePulse::new(
+            0.5,  // entropy: neutral starting point
+            0.5,  // coherence: neutral starting point (not fake 0.8)
+            0.0,  // coherence_delta: no change yet (not fake 1.0)
+            0.5,  // emotional_weight: neutral starting point
+            SuggestedAction::Ready,
+            None,  // source_layer: None during initialization (no layer has processed yet)
+        );
 
         // MCP-compliant initialize response
         JsonRpcResponse::success(

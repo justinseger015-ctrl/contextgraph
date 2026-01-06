@@ -73,11 +73,17 @@ fn test_transition_trigger_hash_consistency() {
 
 #[test]
 fn test_johari_transition_new() {
+    let memory_id = uuid::Uuid::new_v4();
+    let embedder_idx = 5;
     let transition = JohariTransition::new(
+        memory_id,
+        embedder_idx,
         JohariQuadrant::Hidden,
         JohariQuadrant::Open,
         TransitionTrigger::ExplicitShare,
     );
+    assert_eq!(transition.memory_id, memory_id);
+    assert_eq!(transition.embedder_idx, embedder_idx);
     assert_eq!(transition.from, JohariQuadrant::Hidden);
     assert_eq!(transition.to, JohariQuadrant::Open);
     assert_eq!(transition.trigger, TransitionTrigger::ExplicitShare);
@@ -88,13 +94,18 @@ fn test_johari_transition_new() {
 
 #[test]
 fn test_johari_transition_serde_roundtrip() {
+    let memory_id = uuid::Uuid::new_v4();
     let transition = JohariTransition::new(
+        memory_id,
+        3,
         JohariQuadrant::Hidden,
         JohariQuadrant::Open,
         TransitionTrigger::ExplicitShare,
     );
     let json = serde_json::to_string(&transition).expect("serialize failed");
     let parsed: JohariTransition = serde_json::from_str(&json).expect("deserialize failed");
+    assert_eq!(transition.memory_id, parsed.memory_id);
+    assert_eq!(transition.embedder_idx, parsed.embedder_idx);
     assert_eq!(transition.from, parsed.from);
     assert_eq!(transition.to, parsed.to);
     assert_eq!(transition.trigger, parsed.trigger);
@@ -104,12 +115,17 @@ fn test_johari_transition_serde_roundtrip() {
 
 #[test]
 fn test_johari_transition_is_clone_not_copy() {
+    let memory_id = uuid::Uuid::new_v4();
     let original = JohariTransition::new(
+        memory_id,
+        7,
         JohariQuadrant::Open,
         JohariQuadrant::Hidden,
         TransitionTrigger::Privatize,
     );
     let cloned = original.clone();
+    assert_eq!(original.memory_id, cloned.memory_id);
+    assert_eq!(original.embedder_idx, cloned.embedder_idx);
     assert_eq!(original.from, cloned.from);
     assert_eq!(original.to, cloned.to);
     assert_eq!(original.trigger, cloned.trigger);

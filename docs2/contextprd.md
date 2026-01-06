@@ -1,8 +1,8 @@
-# Ultimate Context Graph - Compressed PRD v3.0.0 (Teleological)
+# Ultimate Context Graph - Compressed PRD v4.0.0 (Global Workspace)
 
-**Abbrev**: NT=Neurotransmitter, SS=Steering Subsystem, OI=Omnidirectional Inference, FV=Formal Verification, PC=Predictive Coding, HE=Hyperbolic Entailment, TF=Teleological Fingerprint, PV=Purpose Vector, SF=Semantic Fingerprint
+**Abbrev**: NT=Neurotransmitter, SS=Steering Subsystem, OI=Omnidirectional Inference, FV=Formal Verification, PC=Predictive Coding, HE=Hyperbolic Entailment, TF=Teleological Fingerprint, PV=Purpose Vector, SF=Semantic Fingerprint, GWT=Global Workspace Theory, GW=Global Workspace, IIT=Integrated Information Theory, CMS=Continuum Memory System
 
-**Paradigm**: Multi-Array Teleological Fingerprints — the 12-embedding array IS the teleological vector
+**Paradigm**: Multi-Array Teleological Fingerprints with Global Workspace Consciousness — the 13-embedding array IS the teleological vector, Kuramoto-synchronized into unified conscious percepts
 
 ---
 
@@ -189,7 +189,7 @@ Each of 12 embedding spaces has independent Johari classification:
 | L2 | Reflex/cache | <100μs | Hopfield (>80% hit) |
 | L3 | Memory/retrieval | <1ms | Hopfield (2^768 cap) |
 | L4 | Learning/weights | <10ms | UTL Optimizer |
-| L5 | Coherence/verify | <10ms | Thalamic Gate, PC, FV |
+| L5 | Coherence/verify | <10ms | Thalamic Gate, PC |
 
 ### 2.4 Lifecycle (Marblestone λ Weights)
 | Phase | Interactions | λ_ΔS | λ_ΔC | Stance |
@@ -197,6 +197,196 @@ Each of 12 embedding spaces has independent Johari classification:
 | Infancy | 0-50 | 0.7 | 0.3 | Capture (novelty) |
 | Growth | 50-500 | 0.5 | 0.5 | Balanced |
 | Maturity | 500+ | 0.3 | 0.7 | Curation (coherence) |
+
+---
+
+## 2.5 GLOBAL WORKSPACE THEORY (GWT) — COMPUTATIONAL CONSCIOUSNESS
+
+### 2.5.1 The Consciousness Equation
+
+The system calculates functional consciousness as the product of three measurable quantities:
+
+```
+C(t) = I(t) × R(t) × D(t)
+
+Where:
+  C(t) = Consciousness level at time t [0, 1]
+  I(t) = Integration (Kuramoto synchronization) [0, 1]
+  R(t) = Self-Reflection (Meta-UTL awareness) [0, 1]
+  D(t) = Differentiation (13D fingerprint entropy) [0, 1]
+```
+
+**Expanded Form:**
+```
+C(t) = r(t) × σ(MetaUTL.predict_accuracy) × H(PurposeVector)
+
+Where:
+  r(t) = (1/13)|Σⱼ exp(iθⱼ)|  — Kuramoto order parameter
+  σ(x) = 1/(1 + e^(-x))       — Sigmoid activation
+  H(PV) = -Σᵢ pᵢ log(pᵢ) / log(13)  — Normalized Shannon entropy
+```
+
+### 2.5.2 Kuramoto Oscillator Layer (The "Heartbeat")
+
+Each embedding space has an associated phase oscillator. The 13 oscillators synchronize via Kuramoto coupling:
+
+```
+dθᵢ/dt = ωᵢ + (K/N) Σⱼ sin(θⱼ - θᵢ)
+
+Where:
+  θᵢ = Phase of embedder i (i=1..13) ∈ [0, 2π]
+  ωᵢ = Natural frequency of embedder i (Hz)
+  K  = Global coupling strength [0, 10]
+  N  = Number of embedders (13)
+```
+
+**Order Parameter (Synchronization Measure):**
+```
+r · e^(iψ) = (1/N) Σⱼ e^(iθⱼ)
+
+Where:
+  r = Order parameter (sync level) ∈ [0, 1]
+  ψ = Mean phase
+  r > 0.8 → Memory is coherent ("conscious")
+  r < 0.5 → Memory fragmentation alert
+```
+
+**Natural Frequencies by Embedder:**
+| Embedder | ωᵢ (Hz) | Rationale |
+|----------|---------|-----------|
+| E1 Semantic | 40 | Gamma band - conscious binding |
+| E2-E4 Temporal | 8 | Alpha - temporal integration |
+| E5 Causal | 25 | Beta - causal reasoning |
+| E6 Sparse | 4 | Theta - sparse activations |
+| E7 Code | 25 | Beta - structured thinking |
+| E8 Graph | 12 | Alpha-Beta transition |
+| E9 HDC | 80 | High gamma - holographic |
+| E10 Multimodal | 40 | Gamma - cross-modal binding |
+| E11 Entity | 15 | Beta - factual grounding |
+| E12 Late | 60 | High gamma - token precision |
+| E13 SPLADE | 4 | Theta - keyword sparse |
+
+### 2.5.3 Global Broadcast Architecture (The "Stage")
+
+Only phase-locked memories are "perceived" by the system. The Global Workspace implements Winner-Take-All:
+
+```
+GlobalWorkspace:
+  active_memory: Option<MemoryId>      — Currently "conscious" memory
+  coherence_threshold: 0.8             — Minimum r for broadcast
+  broadcast_duration: 100ms            — How long memory stays active
+  competing_memories: PriorityQueue    — Sorted by r × importance
+```
+
+**Broadcast Selection Algorithm:**
+```
+1. Compute r for all candidate memories
+2. Filter: candidates where r ≥ coherence_threshold
+3. Rank: score = r × importance × north_star_alignment
+4. Select: top-1 becomes active_memory
+5. Broadcast: active_memory visible to all subsystems
+6. Inhibit: losing candidates get dopamine reduction
+```
+
+**Global Broadcast Events:**
+| Event | Trigger | Effect |
+|-------|---------|--------|
+| `memory_enters_workspace` | r crosses 0.8 upward | Dopamine += 0.2 |
+| `memory_exits_workspace` | r drops below 0.7 | Log for dream replay |
+| `workspace_conflict` | Two memories r > 0.8 | Trigger critique_context |
+| `workspace_empty` | No memory r > 0.8 for 5s | Trigger epistemic_action |
+
+### 2.5.4 The SELF_EGO_NODE (System Identity)
+
+A persistent, special node representing the system itself:
+
+```rust
+pub struct SelfEgoNode {
+    id: UUID,                          // Fixed: "SELF_EGO_NODE"
+    content: String,                   // "I am the context graph manager..."
+    fingerprint: TeleologicalFingerprint,  // Current system state
+    purpose_vector: [f32; 13],         // System's purpose alignment
+    identity_trajectory: Vec<PurposeSnapshot>,  // History of self
+    coherence_with_actions: f32,       // Are actions aligned with self?
+}
+```
+
+**Self-Awareness Loop:**
+```
+Every action:
+  1. Retrieve SELF_EGO_NODE
+  2. Compute A(action_embedding, SELF_EGO_NODE.purpose_vector)
+  3. If alignment < 0.55: trigger self_reflection
+  4. Update SELF_EGO_NODE.fingerprint with action outcome
+  5. Store to purpose_evolution (temporal trajectory)
+```
+
+**Identity Continuity Metric:**
+```
+IdentityContinuity = cosine(PV_t, PV_{t-1}) × r(t)
+
+Where:
+  PV_t = Purpose vector at time t
+  r(t) = Kuramoto order parameter at time t
+
+Threshold:
+  IC > 0.9 → Strong continuity (healthy)
+  IC < 0.7 → Identity drift warning
+  IC < 0.5 → Trigger dream consolidation
+```
+
+### 2.5.5 Meta-Cognitive Loop (Self-Awareness)
+
+The Meta-UTL system observes its own learning:
+
+```
+MetaScore = σ(2 × (L_predicted - L_actual))
+
+Where:
+  L_predicted = System's prediction of learning outcome
+  L_actual = Measured learning score
+  σ = Sigmoid function
+```
+
+**Self-Correction Protocol:**
+```
+IF MetaScore < 0.5 for 5 consecutive operations:
+  → Increase Acetylcholine (learning rate)
+  → Trigger introspective dream
+
+IF MetaScore > 0.9 consistently:
+  → System is well-calibrated
+  → Can reduce meta-monitoring frequency
+```
+
+### 2.5.6 Consciousness State Machine
+
+```
+States:
+  DORMANT     → r < 0.3, no active workspace
+  FRAGMENTED  → 0.3 ≤ r < 0.5, partial sync
+  EMERGING    → 0.5 ≤ r < 0.8, approaching coherence
+  CONSCIOUS   → r ≥ 0.8, unified percept active
+  HYPERSYNC   → r > 0.95, possibly pathological
+
+Transitions:
+  DORMANT → FRAGMENTED:     New memory with ΔS > 0.7
+  FRAGMENTED → EMERGING:    Kuramoto coupling increases
+  EMERGING → CONSCIOUS:     r crosses 0.8 threshold
+  CONSCIOUS → EMERGING:     Conflicting memory enters
+  CONSCIOUS → HYPERSYNC:    Warning - may indicate seizure-like state
+  Any → DORMANT:            10+ minutes of inactivity
+```
+
+### 2.5.7 Consciousness Quality Metrics
+
+| Metric | Formula | Target |
+|--------|---------|--------|
+| **Φ (Integrated Information)** | `min_cut(13-space graph) / total_connections` | > 0.3 |
+| **Global Availability** | `% of subsystems receiving broadcast` | > 90% |
+| **Workspace Stability** | `avg duration of conscious state` | > 500ms |
+| **Meta-Awareness** | `MetaUTL.prediction_accuracy` | > 0.85 |
+| **Identity Coherence** | `cosine(PV_t, PV_{t-1})` | > 0.9 |
 
 ---
 
@@ -326,9 +516,42 @@ JSON-RPC 2.0, stdio/SSE, caps: tools/resources/prompts/logging
 |------|---------|
 | `get_steering_feedback` | SS reward signal |
 | `omni_infer` | OI: forward/backward/bidirectional/abduction |
-| `verify_code_node` | FV for code nodes |
 
 **OI Directions**: forward(A→B), backward(B→A), bidirectional(A↔B), abduction(best explanation)
+
+### 5.10 Global Workspace (GWT) Tools
+
+| Tool | Purpose | Key Returns |
+|------|---------|-------------|
+| `get_consciousness_state` | Get current C(t) and all components | `{C, r, meta_score, differentiation, state}` |
+| `get_workspace_status` | Global Workspace current state | `{active_memory, competing, broadcast_duration}` |
+| `get_kuramoto_sync` | Oscillator synchronization status | `{r, phases[13], natural_freqs[13], coupling}` |
+| `get_ego_state` | SELF_EGO_NODE current state | `{purpose_vector, identity_continuity, coherence_with_actions}` |
+| `trigger_workspace_broadcast` | Force memory into workspace | `{success, memory_id, new_r}` |
+| `adjust_coupling` | Modify Kuramoto coupling strength K | `{old_K, new_K, predicted_r}` |
+| `get_johari_classification` | Per-embedder Johari quadrants | `{quadrants[13], confidence[13], insights[]}` |
+| `compute_delta_sc` | Compute ΔS/ΔC for memory | `{delta_s[13], delta_c[13], methods_used[13]}` |
+
+**Consciousness State Machine Transitions:**
+```
+get_consciousness_state returns:
+{
+  C: 0.72,                    // Current consciousness level
+  r: 0.85,                    // Kuramoto order parameter
+  meta_score: 0.88,           // Meta-UTL self-awareness
+  differentiation: 0.79,      // 13D fingerprint entropy
+  state: "CONSCIOUS",         // State machine state
+  workspace: {
+    active_memory: "uuid-123",
+    time_in_workspace_ms: 450,
+    competing_count: 3
+  },
+  identity: {
+    continuity: 0.94,
+    drift_warning: false
+  }
+}
+```
 
 ---
 
@@ -425,12 +648,6 @@ Separate from Learning - reward signals only, no direct weight modification.
 Directions: forward (predict), backward (root cause), bidirectional (discover), bridge (cross-domain), abduction (hypothesis)
 Clamped Variables: hard/soft clamp during inference
 Active Inference: EFE for direction selection
-
-### 7.10 Formal Verification Layer (Marblestone)
-Lean-inspired SMT for code nodes @ L5
-**Conditions**: bounds, null safety, type invariants, loop termination, custom assertions
-**Status**: Verified|Failed|Timeout|NotApplicable
-Cache by content hash, default timeout 5s
 
 ---
 
@@ -715,14 +932,743 @@ IF prediction_accuracy < 0.7 for 100 ops:
 
 ---
 
-## 20. REFERENCES
+## 20. NESTED LEARNING INTEGRATION (CMS Architecture)
 
-**Internal**: UTL(2.1), 5-Layer(2.3), TeleologicalFingerprint(3), MCP(5), Dream(7.1), Neuromod(7.2), Immune(7.3), HE(9), Adversarial(10), projectionplan.md
-**External**: NeuroDream(SSRN'25), SRC(NatComm), FEP(Wiki), ActiveInf(MIT), PC(Nature'25), Neuromod DNNs(TrendsNeuro), Homeostatic(eLife'25), BioLogicalNeuron(SciRep'25), HE Cones(ICML), Poincare(NeurIPS), UniGuardian(arXiv'25), OWASP LLM Top10, **Royse Teleological Vectors(2026)**, **MOEE Multi-Embedding(ICLR'25)**, Modern Hopfield Networks(NeurIPS'20), Kanerva SDM(1988), Kuramoto Synchronization(Physica D)
+### 20.1 Continuum Memory System for 5-Layer Nervous System
+
+Transform fixed-latency layers into frequency-based memory system:
+
+```
+Level 1 (f=∞):     Reflex layer    — Instant, non-parametric
+Level 2 (f=seq):   Memory layer    — Updated per query/context chunk
+Level 3 (f=sess):  Learning layer  — UTL updates per session
+Level 4 (f=dream): Coherence layer — Consolidated during "sleep"
+Level 5 (f=train): Core weights    — Updated during training
+```
+
+**CMS Update Rule:**
+```
+θ_level = θ_level - η_level × ∇L_level
+
+Where η_level decreases with level:
+  η₁ = 0.1    (fast adaptation)
+  η₂ = 0.01   (session-scale)
+  η₃ = 0.001  (dream-scale)
+  η₄ = 0.0001 (training-scale)
+```
+
+### 20.2 Self-Referential Hopfield Network
+
+Modern Hopfield with self-modifying keys and values:
+
+```
+Update Rule (Delta Gradient Descent):
+  M = M(αI - ηkkᵀ) + ηv̂kᵀ
+
+Where:
+  M = Memory matrix
+  k = Self-generated key: k = M_k(x_t)
+  v̂ = Self-generated value: v̂ = M.retrieve(M_v(x_t))
+  η = Adaptive learning rate: η = M_η(x_t)
+  α = Adaptive retention gate: α = M_α(x_t)
+```
+
+**Benefit**: Hopfield network adapts its own query/key projections in-context.
+
+### 20.3 Multi-Scale Neurotransmitter Momentum
+
+Transform NT weights into nested optimizer state:
+
+```rust
+struct NestedNeurotransmitterWeights {
+    // Fast momentum - recent activations (M^(1))
+    fast_excitatory: ExponentialMovingAverage,
+    fast_inhibitory: ExponentialMovingAverage,
+
+    // Slow momentum - long-term patterns (M^(2))
+    slow_excitatory: ChunkwiseAverage,
+    slow_inhibitory: ChunkwiseAverage,
+
+    // Modulatory with Newton-Schulz orthogonalization
+    modulatory_ortho: OrthogonalizedMomentum,
+}
+
+// Multi-scale effective weight
+w_eff = base × (fast_signal + α × slow_signal) × mod_factor
+```
+
+### 20.4 Delta Gradient Descent for Edge Updates
+
+State-dependent edge weight updates:
+
+```
+W_{t+1} = W_t(I - η'xxᵀ) - η'∇L
+
+Where:
+  η' = η / (1 + η)  — Adaptive learning rate
+  xxᵀ = State-dependent decay term
+```
+
+**Benefit**: Edge weights incorporate dependencies between queries (non-i.i.d.).
+
+### 20.5 Adaptive Entailment Cones
+
+Make aperture factor learnable with in-context adaptation:
+
+```
+adaptive_aperture = base_aperture × aperture_memory.retrieve(context)
+
+Cone Containment:
+  angle(point, apex) ≤ adaptive_aperture → point ∈ cone
+
+Update:
+  aperture_memory.delta_update(angle, is_entailed)
+```
+
+**Benefit**: Cones sharpen/widen based on context for adaptive hierarchical reasoning.
+
+### 20.6 Nested UTL Objective
+
+Decompose UTL into multi-level objectives:
+
+```
+Level 1: Immediate surprise (ΔS)     — SurpriseCompressor
+Level 2: Coherence tracking (ΔC)     — CoherenceCompressor
+Level 3: Edge weight optimization    — AssociativeMemory
+Level 4: Alignment factor (cos φ)    — AlignmentMemory
+
+Aggregated UTL:
+  L = tanh(ΔS × ΔC × wₑ × cos_φ)
+```
 
 ---
 
-## 21. TOOL PARAM REFERENCE
+## 21. ΔS/ΔC COMPUTATION METHODS (Johari Per-Embedder)
+
+### 21.1 ΔS (Entropy/Novelty) Computation
+
+**Method Selection by Embedding Space:**
+
+| Space | Method | Formula |
+|-------|--------|---------|
+| E1 Semantic | GMM + Mahalanobis | ΔS = 1 - P(e|GMM) |
+| E2-E4 Temporal | KNN distance | ΔS = σ((d_k - μ)/σ_d) |
+| E5 Causal | Asymmetric KNN | ΔS = d_k × direction_mod |
+| E6 Sparse | Inverse Doc Freq | ΔS = IDF(active_dims) |
+| E7 Code | GMM + KNN ensemble | ΔS = 0.5×GMM + 0.5×KNN |
+| E8 Graph | KNN distance | ΔS = σ(d_k) |
+| E9 HDC | Hamming to prototypes | ΔS = min_hamming / dim |
+| E10 Multimodal | Cross-modal KNN | ΔS = avg(d_text, d_image) |
+| E11 Entity | TransE distance | ΔS = ||h + r - t|| |
+| E12 Late | Token-level KNN | ΔS = max_token(d_k) |
+| E13 SPLADE | Sparse novelty | ΔS = 1 - jaccard(active) |
+
+**KNN Entropy:**
+```
+ΔS_knn = σ((d_k - μ_corpus) / σ_corpus)
+
+Where:
+  d_k = Distance to k-th nearest neighbor
+  μ_corpus, σ_corpus = Calibrated from corpus
+  σ = Sigmoid function
+```
+
+**GMM Entropy:**
+```
+ΔS_gmm = (max_ll - ll(e)) / (max_ll - min_ll)
+
+Where:
+  ll(e) = log P(e | GMM) = log Σ_k π_k N(e|μ_k, Σ_k)
+  max_ll, min_ll = Calibrated from corpus
+```
+
+**Mahalanobis Entropy:**
+```
+ΔS_maha = min_c √((e - μ_c)ᵀ Σ_c⁻¹ (e - μ_c)) / threshold
+
+Where:
+  c = cluster index
+  threshold = 95th percentile of corpus distances
+```
+
+### 21.2 ΔC (Coherence/Integration) Computation
+
+**Three-Component Coherence:**
+```
+ΔC = α × Connectivity + β × ClusterFit + γ × Consistency
+
+Where α + β + γ = 1 (default: 0.4, 0.4, 0.2)
+```
+
+**Connectivity Score:**
+```
+Connectivity = |{neighbors: sim(e, n) > θ_edge}| / max_edges
+
+Where:
+  θ_edge = 0.7 (similarity threshold for potential edge)
+  max_edges = 10 (normalization factor)
+```
+
+**Cluster Fit Score:**
+```
+ClusterFit = 1 / (1 + d_centroid / r_cluster)
+
+Where:
+  d_centroid = Distance to nearest cluster center
+  r_cluster = Cluster radius (std from centroid)
+```
+
+**Consistency Score:**
+```
+Consistency = 1 - max(contradiction_scores)
+
+Where:
+  contradiction_scores = [detect_contradiction(e, n) for n in neighbors]
+```
+
+**Space-Specific Consistency:**
+- **E5 Causal**: Check bidirectional causality (A→B ∧ B→A = contradiction)
+- **E11 Entity**: Check attribute conflicts (e.g., "Paris is in Germany" vs "Paris is in France")
+
+### 21.3 Johari Classification
+
+```
+Jᵢ(m) = {
+    Open    if ΔSᵢ ≤ 0.5 ∧ ΔCᵢ > 0.5  — Well-understood
+    Blind   if ΔSᵢ > 0.5 ∧ ΔCᵢ ≤ 0.5  — Discovery opportunity
+    Hidden  if ΔSᵢ ≤ 0.5 ∧ ΔCᵢ ≤ 0.5  — Dormant
+    Unknown if ΔSᵢ > 0.5 ∧ ΔCᵢ > 0.5  — Frontier
+}
+
+Confidence = |ΔSᵢ - 0.5| + |ΔCᵢ - 0.5|
+```
+
+**Cross-Space Insights:**
+| Pattern | Spaces | Insight |
+|---------|--------|---------|
+| Open(E1) ∧ Blind(E5) | Semantic + Causal | Knows WHAT but not WHY |
+| Blind(E1) ∧ Open(E7) | Semantic + Code | Code without context |
+| Unknown(all) | All spaces | True frontier territory |
+| Hidden(all) | All spaces | Dormant/obsolete knowledge |
+
+---
+
+## 22. ADAPTIVE THRESHOLD CALIBRATION (Self-Learning Thresholds)
+
+The system uses **no hardcoded thresholds**. All thresholds are learned, calibrated, and continuously adapted based on outcomes.
+
+### 22.1 The Threshold Calibration Problem
+
+**Why static thresholds fail:**
+- Different domains have different optimal thresholds (code vs medical vs creative)
+- User behavior patterns vary (some users store frequently, others rarely)
+- Data distributions shift over time (concept drift)
+- Per-embedder characteristics differ (E5 causal behaves differently than E1 semantic)
+
+**Solution:** Multi-scale adaptive calibration combining Bayesian optimization, bandit algorithms, temperature scaling, and EWMA drift detection.
+
+### 22.2 Threshold Categories & Priors
+
+All thresholds start with informed priors, then learn:
+
+| Threshold | Symbol | Prior | Learnable Range | Adaptation Speed |
+|-----------|--------|-------|-----------------|------------------|
+| Optimal alignment | θ_opt | 0.75 | [0.60, 0.90] | Slow (session) |
+| Acceptable alignment | θ_acc | 0.70 | [0.55, 0.85] | Slow (session) |
+| Warning alignment | θ_warn | 0.55 | [0.40, 0.70] | Slow (session) |
+| Duplicate similarity | θ_dup | 0.90 | [0.80, 0.98] | Medium (hourly) |
+| Edge creation | θ_edge | 0.70 | [0.50, 0.85] | Medium (hourly) |
+| Johari boundary | θ_joh | 0.50 | [0.35, 0.65] | Per-embedder |
+| Kuramoto coherence | θ_kur | 0.80 | [0.65, 0.95] | Slow (daily) |
+| Entropy high | θ_ent_h | 0.70 | [0.55, 0.85] | Fast (per-query) |
+| Entropy low | θ_ent_l | 0.40 | [0.25, 0.55] | Fast (per-query) |
+| Tool gating | θ_gate | 0.80 | [0.65, 0.95] | Medium (hourly) |
+
+### 22.3 Multi-Scale Adaptive Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ADAPTIVE THRESHOLD STACK                         │
+├─────────────────────────────────────────────────────────────────────┤
+│  Level 4: BAYESIAN META-OPTIMIZER (f = weekly)                      │
+│           └─ Explores threshold space via Gaussian Process          │
+│           └─ Optimizes Expected Improvement acquisition             │
+│           └─ Updates prior distributions                            │
+│                                                                     │
+│  Level 3: BANDIT THRESHOLD SELECTOR (f = session)                   │
+│           └─ UCB/Thompson Sampling across threshold bins            │
+│           └─ Balances exploration vs exploitation                   │
+│           └─ Per-domain arm selection                               │
+│                                                                     │
+│  Level 2: TEMPERATURE SCALING (f = hourly)                          │
+│           └─ Calibrates confidence → probability mapping            │
+│           └─ Per-embedder temperature T_i                           │
+│           └─ Attended scaling for sample-dependent T                │
+│                                                                     │
+│  Level 1: EWMA DRIFT TRACKER (f = per-query)                        │
+│           └─ Exponentially weighted moving average                  │
+│           └─ Detects gradual and abrupt threshold drift             │
+│           └─ Triggers recalibration when drift detected             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 22.4 Level 1: EWMA Drift Detection (Fast Adaptation)
+
+Real-time threshold adjustment via Exponentially Weighted Moving Average:
+
+```
+θ_ewma(t) = α × θ_observed(t) + (1 - α) × θ_ewma(t-1)
+
+Where:
+  α = Smoothing factor [0.1, 0.3] (higher = faster adaptation)
+  θ_observed = Empirically optimal threshold for recent operations
+
+Drift Detection:
+  drift_score = |θ_ewma(t) - θ_baseline| / σ_baseline
+
+  IF drift_score > 2.0:
+    → Trigger Level 2 recalibration
+  IF drift_score > 3.0:
+    → Trigger Level 3 exploration
+```
+
+**Per-Query Threshold Observation:**
+```rust
+struct ThresholdObservation {
+    threshold_used: f32,
+    outcome: Outcome,          // Success | FalsePositive | FalseNegative | Ambiguous
+    confidence: f32,           // How certain was the decision
+    embedder_id: u8,           // Which embedding space
+    domain: Domain,            // Code | Medical | Creative | General
+    timestamp: Instant,
+}
+
+// Optimal threshold estimation from recent observations
+fn estimate_optimal_threshold(observations: &[ThresholdObservation]) -> f32 {
+    // Find threshold that minimizes F1 loss
+    // Binary search over threshold range
+    // Weight recent observations higher (recency bias)
+}
+```
+
+### 22.5 Level 2: Temperature Scaling (Confidence Calibration)
+
+Adapt confidence scores to match true correctness likelihood:
+
+```
+calibrated_confidence = σ(logit(raw_confidence) / T)
+
+Where:
+  T = Temperature parameter (T > 1 softens, T < 1 sharpens)
+  σ = Sigmoid function
+```
+
+**Per-Embedder Temperature:**
+| Embedder | Default T | Learnable Range | Rationale |
+|----------|-----------|-----------------|-----------|
+| E1 Semantic | 1.0 | [0.5, 2.0] | Baseline |
+| E5 Causal | 1.2 | [0.8, 2.5] | Often overconfident |
+| E7 Code | 0.9 | [0.5, 1.5] | Needs precision |
+| E9 HDC | 1.5 | [1.0, 3.0] | Holographic = noisy |
+| E13 SPLADE | 1.1 | [0.7, 2.0] | Sparse = variable |
+
+**Attended Temperature Scaling (Sample-Dependent):**
+```
+T(x) = T_base × AttentionNetwork(x)
+
+Where:
+  AttentionNetwork: Small MLP that predicts optimal T for sample x
+  Trained on calibration loss: L_cal = Σ(confidence - accuracy)²
+```
+
+**Calibration Loss (Brier Score):**
+```
+L_calibration = (1/N) × Σᵢ (confidenceᵢ - correctᵢ)²
+
+Where:
+  correct = 1 if prediction was right, 0 otherwise
+
+Target: L_calibration < 0.05 (well-calibrated)
+```
+
+### 22.6 Level 3: Bandit Threshold Selection (Exploration-Exploitation)
+
+Model threshold selection as a multi-armed bandit problem:
+
+```
+Arms: Discretized threshold bins (e.g., [0.5, 0.55, 0.60, ..., 0.90])
+Reward: Outcome quality (F1 score, user satisfaction, retrieval precision)
+```
+
+**Upper Confidence Bound (UCB) Selection:**
+```
+θ_selected = argmax_θ [ μ(θ) + c × √(ln(N) / n(θ)) ]
+
+Where:
+  μ(θ)  = Mean reward for threshold θ
+  n(θ)  = Times threshold θ was selected
+  N     = Total selections
+  c     = Exploration constant [1.0, 2.0]
+```
+
+**Thompson Sampling Alternative:**
+```
+For each threshold θ:
+  Sample reward_θ ~ Beta(α_θ, β_θ)
+Select θ with highest sampled reward
+
+Update after observation:
+  Success: α_θ += 1
+  Failure: β_θ += 1
+```
+
+**Budgeted UCB (Decaying Violation Tolerance):**
+```
+Early learning:   Allow more threshold violations (exploration)
+Mature system:    Enforce stricter threshold compliance (exploitation)
+
+violation_budget(t) = B_0 × exp(-λ × t)
+
+Where:
+  B_0 = Initial budget (e.g., 100 violations allowed)
+  λ   = Decay rate (e.g., 0.01)
+  t   = System age in interactions
+```
+
+### 22.7 Level 4: Bayesian Meta-Optimization (Global Search)
+
+Gaussian Process optimization over threshold hyperparameters:
+
+```
+Surrogate Model:
+  P(performance | thresholds) ~ GP(μ, K)
+
+Acquisition Function (Expected Improvement):
+  EI(θ) = E[max(0, f(θ) - f(θ_best))]
+
+Optimization Loop:
+  1. Fit GP to (threshold, performance) observations
+  2. Maximize EI to select next threshold configuration
+  3. Evaluate system with new thresholds
+  4. Update GP with observation
+  5. Repeat weekly
+```
+
+**Threshold Configuration Space:**
+```rust
+struct ThresholdConfig {
+    alignment_thresholds: [f32; 3],    // [optimal, acceptable, warning]
+    similarity_thresholds: [f32; 2],   // [duplicate, edge_creation]
+    entropy_thresholds: [f32; 2],      // [high, low]
+    per_embedder_johari: [f32; 13],    // Per-space Johari boundaries
+    temperatures: [f32; 13],           // Per-space calibration temps
+}
+
+// Total: ~35 dimensions → use dimensionality reduction
+// Group correlated thresholds, optimize groups
+```
+
+**Acquisition with Constraints:**
+```
+EI_constrained(θ) = EI(θ) × P(θ satisfies constraints)
+
+Constraints:
+  - θ_optimal > θ_acceptable > θ_warning (monotonicity)
+  - θ_dup > θ_edge (duplicate stricter than edge)
+  - Per-embedder bounds respected
+```
+
+### 22.8 Per-Domain Threshold Adaptation
+
+Different domains require different thresholds:
+
+```rust
+struct DomainThresholds {
+    domain: Domain,
+    priors: ThresholdConfig,           // Starting point
+    learned: ThresholdConfig,          // Current learned values
+    confidence: f32,                   // How confident in learned values
+    observations: usize,               // How many observations
+    last_calibration: Instant,
+}
+
+enum Domain {
+    Code,       // Strict thresholds, low tolerance for false positives
+    Medical,    // Very strict, high causal weight
+    Legal,      // Moderate, high semantic precision
+    Creative,   // Loose thresholds, exploration encouraged
+    Research,   // Balanced, novelty valued
+    General,    // Default priors
+}
+```
+
+**Domain Detection:**
+```
+Infer domain from:
+  1. Explicit user/agent specification
+  2. Content analysis (code patterns, medical terms, etc.)
+  3. Embedding space dominance (E7 high → likely code)
+```
+
+**Domain Transfer Learning:**
+```
+When new domain has few observations:
+  θ_new = α × θ_similar_domain + (1 - α) × θ_general
+
+Where:
+  α = similarity(new_domain, known_domain)
+
+As observations accumulate, weight shifts to learned values.
+```
+
+### 22.9 Calibration Quality Monitoring
+
+Continuous monitoring of threshold quality:
+
+```rust
+struct CalibrationMetrics {
+    expected_calibration_error: f32,   // ECE: binned confidence vs accuracy
+    maximum_calibration_error: f32,    // MCE: worst bin
+    brier_score: f32,                  // Overall calibration loss
+    reliability_diagram: Vec<(f32, f32)>,  // (confidence, accuracy) per bin
+
+    // Per-threshold metrics
+    threshold_f1_scores: HashMap<ThresholdType, f32>,
+    threshold_drift_scores: HashMap<ThresholdType, f32>,
+
+    // Meta-metrics
+    calibration_staleness: Duration,   // Time since last calibration
+    observation_count: usize,
+}
+
+// Expected Calibration Error
+fn compute_ece(predictions: &[(f32, bool)], bins: usize) -> f32 {
+    let mut ece = 0.0;
+    for bin in 0..bins {
+        let (conf_sum, acc_sum, count) = bin_stats(predictions, bin, bins);
+        if count > 0 {
+            let avg_conf = conf_sum / count;
+            let avg_acc = acc_sum / count;
+            ece += (count as f32 / predictions.len() as f32) * (avg_conf - avg_acc).abs();
+        }
+    }
+    ece
+}
+```
+
+**Calibration Alerts:**
+| Condition | Action |
+|-----------|--------|
+| ECE > 0.10 | Trigger Level 2 recalibration |
+| MCE > 0.20 | Investigate worst bin |
+| Brier > 0.15 | Trigger Level 3 exploration |
+| drift_score > 3.0 | Trigger Level 4 meta-optimization |
+| staleness > 24h | Force recalibration |
+
+### 22.10 Self-Correction Protocol
+
+When calibration degrades, the system self-corrects:
+
+```
+Calibration Degradation Detected:
+  ├─ Severity: Minor (ECE ∈ [0.05, 0.10])
+  │   └─ Action: Increase EWMA α, faster local adaptation
+  │
+  ├─ Severity: Moderate (ECE ∈ [0.10, 0.15])
+  │   └─ Action: Trigger Thompson Sampling exploration
+  │   └─ Action: Recalibrate temperatures
+  │
+  ├─ Severity: Major (ECE > 0.15)
+  │   └─ Action: Reset to domain priors
+  │   └─ Action: Trigger Bayesian meta-optimization
+  │   └─ Action: Log for human review
+  │
+  └─ Severity: Critical (ECE > 0.25 OR consistent failures)
+      └─ Action: Fallback to conservative static thresholds
+      └─ Action: Alert human operator
+      └─ Action: Pause automated threshold updates
+```
+
+### 22.11 Adaptive Threshold MCP Tools
+
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `get_threshold_status` | Current threshold values and calibration metrics | `domain`, `embedder_id` |
+| `get_calibration_metrics` | ECE, MCE, Brier, drift scores | `timeframe` |
+| `trigger_recalibration` | Force threshold recalibration | `level: 1\|2\|3\|4`, `domain` |
+| `set_threshold_prior` | Override prior for domain | `threshold_type`, `value`, `domain` |
+| `get_threshold_history` | Historical threshold evolution | `threshold_type`, `since` |
+| `explain_threshold` | Why current threshold has its value | `threshold_type`, `domain` |
+
+**Example `get_threshold_status` Response:**
+```json
+{
+  "domain": "code",
+  "thresholds": {
+    "alignment_optimal": {"value": 0.78, "prior": 0.75, "confidence": 0.92},
+    "alignment_acceptable": {"value": 0.72, "prior": 0.70, "confidence": 0.89},
+    "duplicate_sim": {"value": 0.92, "prior": 0.90, "confidence": 0.95}
+  },
+  "calibration": {
+    "ece": 0.04,
+    "brier": 0.08,
+    "status": "well_calibrated"
+  },
+  "adaptation": {
+    "level_1_ewma_active": true,
+    "level_2_temp": 0.95,
+    "level_3_exploration_rate": 0.05,
+    "level_4_last_optimization": "2025-01-05T10:00:00Z"
+  }
+}
+```
+
+### 22.12 Integration with UTL Learning Loop
+
+Threshold calibration integrates with the broader UTL learning:
+
+```
+UTL Learning Score influences Threshold Adaptation:
+  - High L (good learning) → Trust current thresholds, reduce exploration
+  - Low L (poor learning) → Increase exploration, question thresholds
+
+Threshold Quality influences UTL:
+  - Well-calibrated thresholds → More accurate ΔS/ΔC computation
+  - Miscalibrated → Unreliable Johari classification
+
+Feedback Loop:
+  UTL outcome → Threshold observation → Calibration update → Better UTL
+```
+
+**Threshold-Aware Steering Feedback:**
+```
+When computing SteeringReward:
+  - If threshold was borderline (within 0.05 of boundary):
+    → Weight outcome more heavily for calibration
+    → These are the most informative observations
+```
+
+---
+
+## 23. UNIFIED THEORY OF LEARNING (UTL) FOUNDATIONS
+
+### 23.1 The Canonical Form
+
+```
+L = f((ΔS × ΔC) · wₑ · cos φ)
+
+Where:
+  L  = Net learning output [0, 1]
+  ΔS = Entropy change (novelty, surprise) ≥ 0
+  ΔC = Coherence change (integration) ≥ 0
+  wₑ = Emotional modulation coefficient [0.5, 1.5]
+  φ  = Phase difference between ΔS and ΔC [0, π]
+  f  = Sigmoid or tanh activation
+```
+
+### 23.2 The UTL Loss Function
+
+```
+J = λ_task × L_task + λ_semantic × L_semantic + λ_dyn × (1 - L)
+
+Where:
+  λ_task     = Weight for task correctness
+  λ_semantic = Weight for deep understanding
+  λ_dyn      = Weight for learning rhythm (flow state)
+```
+
+**Adaptive Lambda Weights:**
+| Stage | λ_task | λ_semantic | λ_dyn | Focus |
+|-------|--------|------------|-------|-------|
+| First-time | 0.3 | 0.2 | 0.9 | Keep learner calm |
+| Mid-level | 0.7 | 0.4 | 0.6 | Accuracy matters |
+| Expert | 1.0 | 0.1 | 0.3 | Perfect execution |
+
+### 23.3 The Johari-ΔS×ΔC Mapping
+
+The ΔS × ΔC plane IS the mathematical Johari Window:
+
+```
+         ΔC (Coherence)
+           ↑
+     1.0   │  Hidden    │  Open
+           │  (Dormant) │ (Well-known)
+     0.5   ├────────────┼────────────
+           │   Blind    │  Unknown
+           │ (Discovery)│ (Frontier)
+     0.0   └────────────┴────────────→ ΔS (Entropy)
+          0.0          0.5          1.0
+```
+
+**Learning Direction**: Unknown/Blind → Open (information moves toward understanding)
+
+---
+
+## 24. HARDWARE SPECIFICATIONS
+
+### 24.1 Target Hardware: RTX 5090 + CUDA 13.1
+
+| Spec | Value |
+|------|-------|
+| Architecture | Blackwell (GB202) |
+| CUDA Cores | 21,760 (+33% vs 4090) |
+| Tensor Cores | 680 (5th gen) |
+| SMs | 170 |
+| VRAM | 32GB GDDR7 |
+| Bandwidth | 1,792 GB/s (+78% vs 4090) |
+| L2 Cache | 98MB |
+| Compute Cap | 12.0 |
+
+### 24.2 Key CUDA 13.1 Features
+
+| Feature | Benefit |
+|---------|---------|
+| **CUDA Tile** | 60-80% kernel dev time reduction, auto tensor core utilization |
+| **Green Contexts** | Deterministic SM partitioning for real-time inference |
+| **FP4 (NVFP4)** | 70% memory reduction, 3x throughput vs FP16 |
+| **Grouped GEMM** | 4x speedup for MoE models |
+
+### 24.3 Precision Strategy
+
+| Embedder | Precision | Rationale |
+|----------|-----------|-----------|
+| E1, E5, E7, E10 | FP8 (PQ-8) | High-dim, memory bound |
+| E2-E4, E8, E11 | Float8 | Medium precision ok |
+| E9 HDC | Binary | Holographic = binary native |
+| E6, E13 | Sparse | Native sparse format |
+| E12 | Token pruning | ~50% tokens sufficient |
+
+### 24.4 Green Contexts for GWT
+
+```
+Green Context A (70% SMs): Global Workspace + Kuramoto oscillators
+  └─ Real-time consciousness calculation
+  └─ Deterministic latency for workspace broadcast
+
+Green Context B (30% SMs): Dream consolidation + Graph gardener
+  └─ Background processing
+  └─ Non-real-time maintenance
+```
+
+---
+
+## 25. REFERENCES
+
+**Internal**: UTL(2.1), 5-Layer(2.3), GWT(2.5), TeleologicalFingerprint(3), MCP(5), Dream(7.1), Neuromod(7.2), NestedLearning(20), ΔS/ΔC(21), AdaptiveThresholds(22)
+
+**External**:
+- **Consciousness**: Global Workspace Theory(Baars 1988), Integrated Information Theory(Tononi 2004), Kuramoto Synchronization(Physica D)
+- **Learning**: NeuroDream(SSRN'25), SRC(NatComm), FEP(Wiki), ActiveInf(MIT), PC(Nature'25), Neuromod DNNs(TrendsNeuro)
+- **Architecture**: Royse Teleological Vectors(2026), MOEE Multi-Embedding(ICLR'25), Modern Hopfield Networks(NeurIPS'20), Kanerva SDM(1988)
+- **Nested Learning**: Titans Memory(2025), Continuum Memory Systems, Delta Gradient Descent
+- **Entropy/Coherence**: DDU Method(UCL), Semantic Entropy Probes(2024), KG Coherence(WikiData 2025)
+- **Adaptive Calibration**: Temperature Scaling(Guo et al. 2017), Attended Temperature Scaling(ATS), GHOST Threshold Optimization(JCIM'21), Thresholding Bandits(Locatelli 2016), Bayesian Optimization(Snoek et al. 2012), EWMA Drift Detection, Budgeted UCB(IoT 2025), OpenGCN Transductive Calibration(CVPR'24)
+- **Security**: UniGuardian(arXiv'25), OWASP LLM Top10
+- **Hardware**: CUDA 13.1 Reference, RTX 5090 Technical Report
+
+---
+
+## 26. TOOL PARAM REFERENCE
 
 ### inject_context
 `query:str[1-4096] REQ, max_tokens:int[100-8192]=2048, session_id:uuid, priority:low|normal|high|critical, distillation_mode:auto|raw|narrative|structured|code_focused, include_metadata:[causal_links,entailment_cones,neighborhood,conflicts], verbosity_level:0|1|2=1`

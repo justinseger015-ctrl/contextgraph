@@ -5,10 +5,13 @@
 //! - Validates all transitions via JohariQuadrant state machine
 //! - Implements blind spot discovery algorithm
 //! - Supports batch operations with all-or-nothing semantics
+//! - Persists transition history in-memory for stats and history queries
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use tokio::sync::RwLock;
 
 use crate::traits::{TeleologicalMemoryStore, TeleologicalSearchOptions};
 use crate::types::fingerprint::{JohariFingerprint, SemanticFingerprint, NUM_EMBEDDERS};
@@ -27,6 +30,7 @@ use super::stats::TransitionStats;
 /// - Stores transitions implicitly in JohariFingerprint state
 /// - Uses existing classification methods from JohariFingerprint
 /// - Validates transitions using JohariQuadrant::can_transition_to()
+/// - Persists transition history for stats and history queries
 pub struct DefaultJohariManager<S: TeleologicalMemoryStore> {
     /// The storage backend for teleological fingerprints
     store: Arc<S>,
@@ -35,8 +39,11 @@ pub struct DefaultJohariManager<S: TeleologicalMemoryStore> {
     blind_spot_threshold: f32,
 
     /// Maximum transition history per memory (default: 100)
-    #[allow(dead_code)]
     max_history_per_memory: usize,
+
+    /// In-memory transition history storage
+    /// Stored in reverse chronological order (newest first)
+    transitions: Arc<RwLock<Vec<JohariTransition>>>,
 }
 
 impl<S: TeleologicalMemoryStore> DefaultJohariManager<S> {
@@ -46,6 +53,7 @@ impl<S: TeleologicalMemoryStore> DefaultJohariManager<S> {
             store,
             blind_spot_threshold: 0.5,
             max_history_per_memory: 100,
+            transitions: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -60,6 +68,15 @@ impl<S: TeleologicalMemoryStore> DefaultJohariManager<S> {
         );
         self.blind_spot_threshold = threshold;
         self
+    }
+
+    /// Record a transition in the history.
+    async fn record_transition(&self, transition: JohariTransition) {
+        let mut transitions = self.transitions.write().await;
+        // Insert at beginning (newest first)
+        transitions.insert(0, transition);
+        // TODO: In a production system, we might want to limit the size
+        // or persist to disk. For now we keep all transitions in memory.
     }
 }
 
@@ -93,8 +110,11 @@ pub struct DynDefaultJohariManager {
     blind_spot_threshold: f32,
 
     /// Maximum transition history per memory (default: 100)
-    #[allow(dead_code)]
     max_history_per_memory: usize,
+
+    /// In-memory transition history storage
+    /// Stored in reverse chronological order (newest first)
+    transitions: Arc<RwLock<Vec<JohariTransition>>>,
 }
 
 impl DynDefaultJohariManager {
@@ -104,6 +124,7 @@ impl DynDefaultJohariManager {
             store,
             blind_spot_threshold: 0.5,
             max_history_per_memory: 100,
+            transitions: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -116,6 +137,13 @@ impl DynDefaultJohariManager {
         );
         self.blind_spot_threshold = threshold;
         self
+    }
+
+    /// Record a transition in the history.
+    async fn record_transition(&self, transition: JohariTransition) {
+        let mut transitions = self.transitions.write().await;
+        // Insert at beginning (newest first)
+        transitions.insert(0, transition);
     }
 }
 
@@ -184,8 +212,7 @@ impl<S: TeleologicalMemoryStore + 'static> JohariTransitionManager for DefaultJo
         }
 
         // Validate trigger is valid for this transition
-        let valid_transition = current_quadrant.transition_to(to_quadrant, trigger);
-        if valid_transition.is_err() {
+        if current_quadrant.transition_to(to_quadrant, trigger).is_err() {
             return Err(JohariError::InvalidTrigger {
                 from: current_quadrant,
                 to: to_quadrant,
@@ -204,6 +231,16 @@ impl<S: TeleologicalMemoryStore + 'static> JohariTransitionManager for DefaultJo
             .update(updated)
             .await
             .map_err(|e| JohariError::StorageError(e.to_string()))?;
+
+        // Record the transition in history
+        let transition_record = JohariTransition::new(
+            memory_id,
+            embedder_idx,
+            current_quadrant,
+            to_quadrant,
+            trigger,
+        );
+        self.record_transition(transition_record).await;
 
         Ok(johari)
     }
@@ -261,9 +298,24 @@ impl<S: TeleologicalMemoryStore + 'static> JohariTransitionManager for DefaultJo
             }
         }
 
-        // Apply all transitions (all validated)
-        for (embedder_idx, to_quadrant, _trigger) in transitions {
+        // Collect transition records before applying
+        // We need to capture current quadrants before applying the transitions
+        let original_johari = current.johari.clone();
+        let mut transition_records = Vec::with_capacity(transitions.len());
+
+        // Apply all transitions (all validated) and record them
+        for (embedder_idx, to_quadrant, trigger) in transitions {
+            let from_quadrant = original_johari.dominant_quadrant(embedder_idx);
             set_quadrant_weights(&mut johari, embedder_idx, to_quadrant);
+
+            // Create transition record
+            transition_records.push(JohariTransition::new(
+                memory_id,
+                embedder_idx,
+                from_quadrant,
+                to_quadrant,
+                trigger,
+            ));
         }
 
         // Persist
@@ -274,6 +326,11 @@ impl<S: TeleologicalMemoryStore + 'static> JohariTransitionManager for DefaultJo
             .update(updated)
             .await
             .map_err(|e| JohariError::StorageError(e.to_string()))?;
+
+        // Record all transitions in history
+        for record in transition_records {
+            self.record_transition(record).await;
+        }
 
         Ok(johari)
     }
@@ -361,21 +418,42 @@ impl<S: TeleologicalMemoryStore + 'static> JohariTransitionManager for DefaultJo
 
     async fn get_transition_stats(
         &self,
-        _time_range: TimeRange,
+        time_range: TimeRange,
     ) -> Result<TransitionStats, JohariError> {
-        // In a full implementation, this would query a transitions log table
-        // For now, return empty stats (transitions aren't persisted to a log yet)
-        Ok(TransitionStats::default())
+        let transitions = self.transitions.read().await;
+        let mut stats = TransitionStats::new();
+        let mut affected_memories: HashSet<MemoryId> = HashSet::new();
+
+        for t in transitions.iter() {
+            // Filter by time range
+            if t.timestamp >= time_range.start && t.timestamp < time_range.end {
+                stats.record(t.from, t.to, t.trigger, t.embedder_idx);
+                affected_memories.insert(t.memory_id);
+            }
+        }
+
+        stats.memories_affected = affected_memories.len() as u64;
+        stats.finalize();
+
+        Ok(stats)
     }
 
     async fn get_transition_history(
         &self,
-        _memory_id: MemoryId,
-        _limit: usize,
+        memory_id: MemoryId,
+        limit: usize,
     ) -> Result<Vec<JohariTransition>, JohariError> {
-        // In a full implementation, this would query stored transitions
-        // For now, return empty (transitions aren't persisted to history yet)
-        Ok(Vec::new())
+        let transitions = self.transitions.read().await;
+
+        // Filter by memory_id, take up to limit (already sorted by newest first)
+        let history: Vec<JohariTransition> = transitions
+            .iter()
+            .filter(|t| t.memory_id == memory_id)
+            .take(limit)
+            .cloned()
+            .collect();
+
+        Ok(history)
     }
 }
 
@@ -448,8 +526,7 @@ impl JohariTransitionManager for DynDefaultJohariManager {
         }
 
         // Validate trigger is valid for this transition
-        let valid_transition = current_quadrant.transition_to(to_quadrant, trigger);
-        if valid_transition.is_err() {
+        if current_quadrant.transition_to(to_quadrant, trigger).is_err() {
             return Err(JohariError::InvalidTrigger {
                 from: current_quadrant,
                 to: to_quadrant,
@@ -468,6 +545,16 @@ impl JohariTransitionManager for DynDefaultJohariManager {
             .update(updated)
             .await
             .map_err(|e| JohariError::StorageError(e.to_string()))?;
+
+        // Record the transition in history
+        let transition_record = JohariTransition::new(
+            memory_id,
+            embedder_idx,
+            current_quadrant,
+            to_quadrant,
+            trigger,
+        );
+        self.record_transition(transition_record).await;
 
         Ok(johari)
     }
@@ -525,9 +612,22 @@ impl JohariTransitionManager for DynDefaultJohariManager {
             }
         }
 
-        // Apply all transitions (all validated)
-        for (embedder_idx, to_quadrant, _trigger) in transitions {
+        // Collect transition records before applying
+        let original_johari = current.johari.clone();
+        let mut transition_records = Vec::with_capacity(transitions.len());
+
+        // Apply all transitions (all validated) and record them
+        for (embedder_idx, to_quadrant, trigger) in transitions {
+            let from_quadrant = original_johari.dominant_quadrant(embedder_idx);
             set_quadrant_weights(&mut johari, embedder_idx, to_quadrant);
+
+            transition_records.push(JohariTransition::new(
+                memory_id,
+                embedder_idx,
+                from_quadrant,
+                to_quadrant,
+                trigger,
+            ));
         }
 
         // Persist
@@ -538,6 +638,11 @@ impl JohariTransitionManager for DynDefaultJohariManager {
             .update(updated)
             .await
             .map_err(|e| JohariError::StorageError(e.to_string()))?;
+
+        // Record all transitions in history
+        for record in transition_records {
+            self.record_transition(record).await;
+        }
 
         Ok(johari)
     }
@@ -625,21 +730,42 @@ impl JohariTransitionManager for DynDefaultJohariManager {
 
     async fn get_transition_stats(
         &self,
-        _time_range: TimeRange,
+        time_range: TimeRange,
     ) -> Result<TransitionStats, JohariError> {
-        // In a full implementation, this would query a transitions log table
-        // For now, return empty stats (transitions aren't persisted to a log yet)
-        Ok(TransitionStats::default())
+        let transitions = self.transitions.read().await;
+        let mut stats = TransitionStats::new();
+        let mut affected_memories: HashSet<MemoryId> = HashSet::new();
+
+        for t in transitions.iter() {
+            // Filter by time range
+            if t.timestamp >= time_range.start && t.timestamp < time_range.end {
+                stats.record(t.from, t.to, t.trigger, t.embedder_idx);
+                affected_memories.insert(t.memory_id);
+            }
+        }
+
+        stats.memories_affected = affected_memories.len() as u64;
+        stats.finalize();
+
+        Ok(stats)
     }
 
     async fn get_transition_history(
         &self,
-        _memory_id: MemoryId,
-        _limit: usize,
+        memory_id: MemoryId,
+        limit: usize,
     ) -> Result<Vec<JohariTransition>, JohariError> {
-        // In a full implementation, this would query stored transitions
-        // For now, return empty (transitions aren't persisted to history yet)
-        Ok(Vec::new())
+        let transitions = self.transitions.read().await;
+
+        // Filter by memory_id, take up to limit (already sorted by newest first)
+        let history: Vec<JohariTransition> = transitions
+            .iter()
+            .filter(|t| t.memory_id == memory_id)
+            .take(limit)
+            .cloned()
+            .collect();
+
+        Ok(history)
     }
 }
 
@@ -1106,5 +1232,154 @@ mod tests {
         ));
 
         println!("[VERIFIED] test_matches_pattern_at_least: AtLeast pattern matching works correctly");
+    }
+
+    // ==================== TRANSITION HISTORY TESTS (Critical Bug Fix) ====================
+
+    #[tokio::test]
+    async fn test_transition_history_recorded() {
+        let store = create_test_store();
+        let manager = DefaultJohariManager::new(store.clone());
+
+        // Store a fingerprint with Hidden quadrant
+        let mut fp = create_test_fingerprint();
+        fp.johari.set_quadrant(0, 0.0, 1.0, 0.0, 0.0, 1.0); // Hidden
+        let id = store.store(fp).await.unwrap();
+
+        // Perform a transition
+        let _result = manager
+            .transition(id, 0, JohariQuadrant::Open, TransitionTrigger::ExplicitShare)
+            .await
+            .unwrap();
+
+        // Get transition history
+        let history = manager.get_transition_history(id, 10).await.unwrap();
+
+        // [VERIFY] Transition was recorded
+        assert_eq!(history.len(), 1, "Expected 1 transition in history");
+        assert_eq!(history[0].memory_id, id);
+        assert_eq!(history[0].embedder_idx, 0);
+        assert_eq!(history[0].from, JohariQuadrant::Hidden);
+        assert_eq!(history[0].to, JohariQuadrant::Open);
+        assert_eq!(history[0].trigger, TransitionTrigger::ExplicitShare);
+
+        println!("[VERIFIED] test_transition_history_recorded: Transition correctly recorded in history");
+    }
+
+    #[tokio::test]
+    async fn test_transition_stats_computed() {
+        let store = create_test_store();
+        let manager = DefaultJohariManager::new(store.clone());
+
+        // Store a fingerprint with Hidden quadrant
+        let mut fp = create_test_fingerprint();
+        fp.johari.set_quadrant(0, 0.0, 1.0, 0.0, 0.0, 1.0); // Hidden
+        let id = store.store(fp).await.unwrap();
+
+        // Perform a transition
+        let _result = manager
+            .transition(id, 0, JohariQuadrant::Open, TransitionTrigger::ExplicitShare)
+            .await
+            .unwrap();
+
+        // Get transition stats for last 24 hours
+        let time_range = TimeRange::last_hours(24);
+        let stats = manager.get_transition_stats(time_range).await.unwrap();
+
+        // [VERIFY] Stats are computed from real transitions
+        assert_eq!(stats.total_transitions, 1, "Expected 1 total transition");
+        assert_eq!(stats.memories_affected, 1, "Expected 1 memory affected");
+        assert_eq!(
+            stats.count_for_path(JohariQuadrant::Hidden, JohariQuadrant::Open),
+            1,
+            "Expected 1 Hidden->Open transition"
+        );
+        assert_eq!(
+            stats.count_for_trigger(TransitionTrigger::ExplicitShare),
+            1,
+            "Expected 1 ExplicitShare trigger"
+        );
+        assert_eq!(stats.count_for_embedder(0), 1, "Expected 1 transition on E1");
+
+        println!("[VERIFIED] test_transition_stats_computed: Stats correctly computed from real transitions");
+    }
+
+    #[tokio::test]
+    async fn test_batch_transitions_recorded_in_history() {
+        let store = create_test_store();
+        let manager = DefaultJohariManager::new(store.clone());
+
+        // Store with multiple Unknown embedders
+        let mut fp = create_test_fingerprint();
+        for i in 0..5 {
+            fp.johari.set_quadrant(i, 0.0, 0.0, 0.0, 1.0, 1.0); // Unknown
+        }
+        let id = store.store(fp).await.unwrap();
+
+        // Perform batch transitions
+        let transitions = vec![
+            (0, JohariQuadrant::Open, TransitionTrigger::DreamConsolidation),
+            (1, JohariQuadrant::Hidden, TransitionTrigger::DreamConsolidation),
+            (2, JohariQuadrant::Blind, TransitionTrigger::ExternalObservation),
+        ];
+        let _result = manager.transition_batch(id, transitions).await.unwrap();
+
+        // Get transition history
+        let history = manager.get_transition_history(id, 10).await.unwrap();
+
+        // [VERIFY] All batch transitions were recorded
+        assert_eq!(history.len(), 3, "Expected 3 transitions in history");
+
+        // History is in reverse chronological order, so newest first
+        // Transitions are inserted in order, so embedder 2 is newest
+        let t0 = history.iter().find(|t| t.embedder_idx == 0).expect("Missing E1 transition");
+        let t1 = history.iter().find(|t| t.embedder_idx == 1).expect("Missing E2 transition");
+        let t2 = history.iter().find(|t| t.embedder_idx == 2).expect("Missing E3 transition");
+
+        assert_eq!(t0.from, JohariQuadrant::Unknown);
+        assert_eq!(t0.to, JohariQuadrant::Open);
+        assert_eq!(t1.from, JohariQuadrant::Unknown);
+        assert_eq!(t1.to, JohariQuadrant::Hidden);
+        assert_eq!(t2.from, JohariQuadrant::Unknown);
+        assert_eq!(t2.to, JohariQuadrant::Blind);
+
+        println!("[VERIFIED] test_batch_transitions_recorded_in_history: All batch transitions recorded");
+    }
+
+    #[tokio::test]
+    async fn test_history_filtered_by_memory_id() {
+        let store = create_test_store();
+        let manager = DefaultJohariManager::new(store.clone());
+
+        // Store two fingerprints
+        let mut fp1 = create_test_fingerprint();
+        fp1.johari.set_quadrant(0, 0.0, 1.0, 0.0, 0.0, 1.0); // Hidden
+        let id1 = store.store(fp1).await.unwrap();
+
+        let mut fp2 = create_test_fingerprint();
+        fp2.johari.set_quadrant(0, 0.0, 1.0, 0.0, 0.0, 1.0); // Hidden
+        let id2 = store.store(fp2).await.unwrap();
+
+        // Perform transitions on both
+        let _result = manager
+            .transition(id1, 0, JohariQuadrant::Open, TransitionTrigger::ExplicitShare)
+            .await
+            .unwrap();
+        let _result = manager
+            .transition(id2, 0, JohariQuadrant::Open, TransitionTrigger::ExplicitShare)
+            .await
+            .unwrap();
+
+        // Get history for just id1
+        let history1 = manager.get_transition_history(id1, 10).await.unwrap();
+        let history2 = manager.get_transition_history(id2, 10).await.unwrap();
+
+        // [VERIFY] Each memory has only its own transitions
+        assert_eq!(history1.len(), 1);
+        assert_eq!(history1[0].memory_id, id1);
+        assert_eq!(history2.len(), 1);
+        assert_eq!(history2[0].memory_id, id2);
+
+        println!("[VERIFIED] test_history_filtered_by_memory_id: History correctly filtered per memory");
     }
 }

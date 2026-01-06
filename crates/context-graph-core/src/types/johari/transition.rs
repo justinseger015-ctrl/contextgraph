@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use uuid::Uuid;
 
 use super::quadrant::JohariQuadrant;
 
@@ -69,9 +70,13 @@ impl fmt::Display for TransitionTrigger {
 /// Record of a Johari quadrant transition.
 ///
 /// Captures the complete context of a knowledge reclassification event,
-/// including source/target quadrants, trigger, and timestamp.
+/// including source/target quadrants, trigger, timestamp, memory ID, and embedder index.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JohariTransition {
+    /// Memory ID this transition belongs to.
+    pub memory_id: Uuid,
+    /// Embedder index (0-12) that transitioned.
+    pub embedder_idx: usize,
     /// Starting quadrant.
     pub from: JohariQuadrant,
     /// Ending quadrant.
@@ -86,23 +91,39 @@ impl JohariTransition {
     /// Create a new transition record with current UTC timestamp.
     ///
     /// # Arguments
+    /// * `memory_id` - UUID of the memory this transition belongs to
+    /// * `embedder_idx` - Embedder index (0-12) that transitioned
     /// * `from` - Source quadrant
     /// * `to` - Target quadrant
     /// * `trigger` - Event that caused the transition
     ///
     /// # Example
     /// ```
+    /// use uuid::Uuid;
     /// use context_graph_core::types::{JohariQuadrant, TransitionTrigger, JohariTransition};
+    /// let memory_id = Uuid::new_v4();
     /// let t = JohariTransition::new(
+    ///     memory_id,
+    ///     0,
     ///     JohariQuadrant::Hidden,
     ///     JohariQuadrant::Open,
     ///     TransitionTrigger::ExplicitShare
     /// );
+    /// assert_eq!(t.memory_id, memory_id);
+    /// assert_eq!(t.embedder_idx, 0);
     /// assert_eq!(t.from, JohariQuadrant::Hidden);
     /// assert_eq!(t.to, JohariQuadrant::Open);
     /// ```
-    pub fn new(from: JohariQuadrant, to: JohariQuadrant, trigger: TransitionTrigger) -> Self {
+    pub fn new(
+        memory_id: Uuid,
+        embedder_idx: usize,
+        from: JohariQuadrant,
+        to: JohariQuadrant,
+        trigger: TransitionTrigger,
+    ) -> Self {
         Self {
+            memory_id,
+            embedder_idx,
             from,
             to,
             trigger,

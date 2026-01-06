@@ -360,7 +360,17 @@ impl Handlers {
     /// - UTL formula: constitution.yaml:152
     /// - Johari quadrant actions: constitution.yaml:159-163
     pub(super) async fn call_get_memetic_status(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
-        let fingerprint_count = self.teleological_store.count().await.unwrap_or(0);
+        let fingerprint_count = match self.teleological_store.count().await {
+            Ok(count) => count,
+            Err(e) => {
+                error!(error = %e, "get_memetic_status: TeleologicalStore.count() FAILED");
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::STORAGE_ERROR,
+                    format!("Failed to get fingerprint count: {}", e),
+                );
+            }
+        };
 
         // Get LIVE UTL status from the processor
         let utl_status = self.utl_processor.get_status();
@@ -409,7 +419,17 @@ impl Handlers {
         };
 
         // Get quadrant counts from teleological store
-        let quadrant_counts = self.teleological_store.count_by_quadrant().await.unwrap_or([0; 4]);
+        let quadrant_counts = match self.teleological_store.count_by_quadrant().await {
+            Ok(counts) => counts,
+            Err(e) => {
+                error!(error = %e, "get_memetic_status: count_by_quadrant() FAILED");
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::STORAGE_ERROR,
+                    format!("Failed to get quadrant counts: {}", e),
+                );
+            }
+        };
 
         self.tool_result_with_pulse(
             id,

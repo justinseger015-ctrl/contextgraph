@@ -5,7 +5,6 @@ use std::fmt;
 use std::str::FromStr;
 
 use super::transition::TransitionTrigger;
-use super::JohariTransition;
 
 /// Represents the four quadrants of the Johari Window model for memory classification.
 ///
@@ -169,10 +168,10 @@ impl JohariQuadrant {
         self.valid_transitions().iter().any(|(t, _)| *t == target)
     }
 
-    /// Attempt to transition to a target quadrant with the given trigger.
+    /// Validate if a transition to a target quadrant with the given trigger is valid.
     ///
     /// # Returns
-    /// - `Ok(JohariTransition)` if the transition is valid for this trigger
+    /// - `Ok(())` if the transition is valid for this trigger
     /// - `Err(String)` with descriptive message if transition is invalid
     ///
     /// # Errors
@@ -183,7 +182,7 @@ impl JohariQuadrant {
         &self,
         target: JohariQuadrant,
         trigger: TransitionTrigger,
-    ) -> Result<JohariTransition, String> {
+    ) -> Result<(), String> {
         if *self == target {
             return Err(format!("Cannot transition to same quadrant: {:?}", self));
         }
@@ -194,7 +193,7 @@ impl JohariQuadrant {
             .any(|(t, tr)| *t == target && *tr == trigger);
 
         if is_valid {
-            Ok(JohariTransition::new(*self, target, trigger))
+            Ok(())
         } else {
             Err(format!(
                 "Invalid transition: {:?} -> {:?} via {:?}. Valid transitions from {:?}: {:?}",

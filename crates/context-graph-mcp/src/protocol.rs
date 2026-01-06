@@ -142,6 +142,20 @@ pub mod error_codes {
     pub const JOHARI_TRANSITION_ERROR: i32 = -32033;
     /// Batch transition failed (all-or-nothing)
     pub const JOHARI_BATCH_ERROR: i32 = -32034;
+
+    // Meta-UTL error codes (-32040 to -32049) - TASK-S005
+    /// Prediction not found for validation
+    pub const META_UTL_PREDICTION_NOT_FOUND: i32 = -32040;
+    /// Meta-UTL not initialized
+    pub const META_UTL_NOT_INITIALIZED: i32 = -32041;
+    /// Insufficient data for prediction
+    pub const META_UTL_INSUFFICIENT_DATA: i32 = -32042;
+    /// Invalid outcome format
+    pub const META_UTL_INVALID_OUTCOME: i32 = -32043;
+    /// Trajectory computation failed
+    pub const META_UTL_TRAJECTORY_ERROR: i32 = -32044;
+    /// Health metrics failed
+    pub const META_UTL_HEALTH_ERROR: i32 = -32045;
 }
 
 /// MCP method names.
@@ -206,6 +220,20 @@ pub mod methods {
     pub const JOHARI_CROSS_SPACE_ANALYSIS: &str = "johari/cross_space_analysis";
     /// Get transition probability matrix
     pub const JOHARI_TRANSITION_PROBABILITIES: &str = "johari/transition_probabilities";
+
+    // Meta-UTL operations (TASK-S005)
+    /// Get per-embedder learning trajectory and accuracy trends
+    pub const META_UTL_LEARNING_TRAJECTORY: &str = "meta_utl/learning_trajectory";
+    /// Get system health metrics with constitution.yaml targets
+    pub const META_UTL_HEALTH_METRICS: &str = "meta_utl/health_metrics";
+    /// Predict storage impact before committing
+    pub const META_UTL_PREDICT_STORAGE: &str = "meta_utl/predict_storage";
+    /// Predict retrieval quality before querying
+    pub const META_UTL_PREDICT_RETRIEVAL: &str = "meta_utl/predict_retrieval";
+    /// Validate prediction against actual outcome
+    pub const META_UTL_VALIDATE_PREDICTION: &str = "meta_utl/validate_prediction";
+    /// Get meta-learned optimized weights
+    pub const META_UTL_OPTIMIZED_WEIGHTS: &str = "meta_utl/optimized_weights";
 }
 
 #[cfg(test)]
