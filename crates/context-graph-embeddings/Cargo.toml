@@ -68,6 +68,12 @@ candle-nn = { workspace = true, optional = true }
 # HuggingFace tokenizers for BERT-based models
 tokenizers = { version = "0.19", optional = true }
 
+# SafeTensors for loading pre-trained weights (AP-007 compliant - no stub data)
+safetensors = "0.4"
+
+# SHA256 for weight file integrity verification
+sha2 = "0.10"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.10"
