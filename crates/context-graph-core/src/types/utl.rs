@@ -77,6 +77,7 @@ impl UtlMetrics {
 /// UTL computation context.
 ///
 /// Provides the contextual information needed to compute UTL metrics.
+/// Extended to support real UTL computation per constitution.yaml.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UtlContext {
     /// Prior beliefs/expectations (prior entropy)
@@ -88,8 +89,52 @@ pub struct UtlContext {
     /// Emotional state modifier
     pub emotional_state: EmotionalState,
 
-    /// Goal alignment vector
+    /// Goal alignment vector (North Star)
     pub goal_vector: Option<Vec<f32>>,
+
+    /// Input embedding for real UTL computation
+    /// Required for computing ΔS (surprise) via KNN distance
+    pub input_embedding: Option<Vec<f32>>,
+
+    /// Reference embeddings from corpus for KNN computation
+    /// Used to compute k-th nearest neighbor distance for ΔS
+    pub reference_embeddings: Option<Vec<Vec<f32>>>,
+
+    /// Corpus statistics for normalization
+    /// Contains (mean_knn_distance, std_knn_distance) calibrated from corpus
+    pub corpus_stats: Option<CorpusStats>,
+
+    /// Similarity threshold for edge creation (connectivity measure)
+    /// Default: 0.7 per constitution θ_edge prior
+    pub edge_similarity_threshold: Option<f32>,
+
+    /// Maximum edges for connectivity normalization
+    /// Default: 10 per constitution
+    pub max_edges: Option<usize>,
+}
+
+/// Corpus statistics for KNN entropy normalization.
+///
+/// Per constitution: ΔS_knn = σ((d_k - μ_corpus) / σ_corpus)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusStats {
+    /// Mean k-th nearest neighbor distance (μ_corpus)
+    pub mean_knn_distance: f32,
+    /// Standard deviation of KNN distances (σ_corpus)
+    pub std_knn_distance: f32,
+    /// k value used for KNN (typically 5-10)
+    pub k: usize,
+}
+
+impl Default for CorpusStats {
+    fn default() -> Self {
+        Self {
+            // Default values calibrated for normalized embeddings
+            mean_knn_distance: 0.5,
+            std_knn_distance: 0.2,
+            k: 5,
+        }
+    }
 }
 
 /// Represents the cognitive-emotional state of the system.

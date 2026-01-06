@@ -26,6 +26,7 @@
 //! assert!(scores.contains_key(&id2));
 //! ```
 
+use crate::config::constants::similarity;
 use crate::types::fingerprint::{PurposeVector, NUM_EMBEDDERS};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -61,7 +62,8 @@ pub enum AggregationStrategy {
 
 impl Default for AggregationStrategy {
     fn default() -> Self {
-        Self::RRF { k: 60.0 }
+        // k=60 per constitution.yaml embeddings.similarity.rrf_constant
+        Self::RRF { k: similarity::RRF_K }
     }
 }
 

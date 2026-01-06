@@ -35,6 +35,7 @@ use tracing::{debug, error, instrument, warn};
 use uuid::Uuid;
 
 use crate::alignment::{AlignmentConfig, AlignmentResult, GoalAlignmentCalculator};
+use crate::config::constants::estimation;
 use crate::error::{CoreError, CoreResult};
 use crate::johari::{ClassificationContext, JohariTransitionManager};
 use crate::purpose::GoalHierarchy;
@@ -575,7 +576,9 @@ where
                 // Use purpose_alignment if available, otherwise estimate from aggregate_score
                 let purpose_alignment = agg.purpose_alignment.unwrap_or(agg.aggregate_score);
                 // Estimate goal alignment from content similarity
-                let goal_alignment = content_sim * 0.9; // Placeholder estimation
+                // NOTE: This is a placeholder per estimation::CONTENT_TO_GOAL_FACTOR
+                // In production, use proper teleological computation
+                let goal_alignment = content_sim * estimation::CONTENT_TO_GOAL_FACTOR;
 
                 ScoredMemory::new(
                     agg.memory_id,

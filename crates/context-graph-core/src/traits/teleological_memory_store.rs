@@ -32,6 +32,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::config::constants::alignment;
 use crate::error::CoreResult;
 use crate::types::fingerprint::{
     JohariFingerprint, PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
@@ -503,17 +504,21 @@ pub trait TeleologicalMemoryStoreExt: TeleologicalMemoryStore {
         Ok(self.retrieve(id).await?.is_some())
     }
 
-    /// Get fingerprints with optimal alignment (θ ≥ 0.75).
+    /// Get fingerprints with optimal alignment (θ ≥ alignment::OPTIMAL).
+    ///
+    /// Constitution: `teleological.thresholds.optimal`
     async fn get_optimal_aligned(
         &self,
         top_k: usize,
     ) -> CoreResult<Vec<TeleologicalSearchResult>> {
-        let options = TeleologicalSearchOptions::quick(top_k).with_min_alignment(0.75);
+        let options = TeleologicalSearchOptions::quick(top_k).with_min_alignment(alignment::OPTIMAL);
         let query = PurposeVector::default();
         self.search_purpose(&query, options).await
     }
 
-    /// Get fingerprints with critical misalignment (θ < 0.55).
+    /// Get fingerprints with critical misalignment (θ < alignment::CRITICAL).
+    ///
+    /// Constitution: `teleological.thresholds.critical`
     async fn get_critical_misaligned(&self) -> CoreResult<Vec<TeleologicalFingerprint>> {
         // This requires iteration - implementations may override for efficiency
         let options = TeleologicalSearchOptions::quick(1000);
@@ -522,7 +527,7 @@ pub trait TeleologicalMemoryStoreExt: TeleologicalMemoryStore {
 
         Ok(results
             .into_iter()
-            .filter(|r| r.fingerprint.theta_to_north_star < 0.55)
+            .filter(|r| r.fingerprint.theta_to_north_star < alignment::CRITICAL)
             .map(|r| r.fingerprint)
             .collect())
     }

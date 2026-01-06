@@ -1,5 +1,6 @@
 //! Configuration management for the Context Graph system.
 
+pub mod constants;
 mod sub_configs;
 
 #[cfg(test)]

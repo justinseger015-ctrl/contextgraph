@@ -22,6 +22,7 @@
 //! assert!(query.validate().is_ok());
 //! ```
 
+use crate::config::constants::{alignment, pipeline, similarity};
 use crate::error::{CoreError, CoreResult};
 use crate::types::fingerprint::NUM_EMBEDDERS;
 
@@ -86,7 +87,7 @@ impl Default for MultiEmbeddingQuery {
             min_similarity: 0.0,
             include_space_breakdown: false,
             pipeline_config: None,
-            aggregation: AggregationStrategy::RRF { k: 60.0 },
+            aggregation: AggregationStrategy::RRF { k: similarity::RRF_K },
         }
     }
 }
@@ -187,12 +188,17 @@ pub struct PipelineStageConfig {
     /// Default: 20
     pub late_interaction_limit: usize,
 
-    /// RRF k parameter (default: 60 per constitution.yaml).
+    /// RRF k parameter.
+    ///
+    /// Constitution: `embeddings.similarity.rrf_constant`
+    /// Default: 60 (via `similarity::RRF_K`)
     /// Formula: RRF(d) = Σᵢ 1/(k + rankᵢ(d))
     pub rrf_k: f32,
 
     /// Minimum alignment threshold for Stage 4 teleological filter.
-    /// Default: 0.55 (critical threshold per constitution.yaml)
+    ///
+    /// Constitution: `teleological.thresholds.critical`
+    /// Default: 0.55 (via `alignment::CRITICAL`)
     pub min_alignment_threshold: f32,
 }
 
@@ -204,8 +210,8 @@ impl Default for PipelineStageConfig {
             full_search_limit: 100,
             teleological_limit: 50,
             late_interaction_limit: 20,
-            rrf_k: 60.0,
-            min_alignment_threshold: 0.55,
+            rrf_k: pipeline::DEFAULT_RRF_K,
+            min_alignment_threshold: pipeline::DEFAULT_MIN_ALIGNMENT,
         }
     }
 }

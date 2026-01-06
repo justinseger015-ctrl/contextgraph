@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+use crate::config::constants::pipeline;
 use crate::error::{CoreError, CoreResult};
 use crate::stubs::{InMemoryTeleologicalStore, StubMultiArrayProvider};
 use crate::traits::{
@@ -136,6 +137,12 @@ impl InMemoryMultiEmbeddingExecutor {
     }
 
     /// Search using a single embedder index via TeleologicalSearchOptions.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SpaceSearchResult::failure` if:
+    /// - Search operation fails
+    /// - Index count retrieval fails (logged with tracing::error)
     async fn search_single_embedder_space(
         &self,
         space_idx: usize,
@@ -160,7 +167,21 @@ impl InMemoryMultiEmbeddingExecutor {
                     })
                     .collect();
 
-                let index_size = self.store.count().await.unwrap_or(0);
+                // FAIL FAST: Do not hide store count failures - they indicate storage problems
+                let index_size = match self.store.count().await {
+                    Ok(size) => size,
+                    Err(e) => {
+                        tracing::error!(
+                            space_idx = space_idx,
+                            error = %e,
+                            "Failed to retrieve index size from store - storage may be unavailable"
+                        );
+                        return SpaceSearchResult::failure(
+                            space_idx,
+                            format!("Failed to get index size: {}", e),
+                        );
+                    }
+                };
                 SpaceSearchResult::success(space_idx, matches, start.elapsed(), index_size)
             }
             Err(e) => SpaceSearchResult::failure(space_idx, e.to_string()),
@@ -168,6 +189,12 @@ impl InMemoryMultiEmbeddingExecutor {
     }
 
     /// Search sparse embedding space (E6 or E13).
+    ///
+    /// # Errors
+    ///
+    /// Returns `SpaceSearchResult::failure` if:
+    /// - Sparse search operation fails
+    /// - Index count retrieval fails (logged with tracing::error)
     async fn search_sparse_space(
         &self,
         space_idx: usize,
@@ -183,7 +210,21 @@ impl InMemoryMultiEmbeddingExecutor {
                     .map(|(rank, (id, score))| ScoredMatch::new(id, score, rank))
                     .collect();
 
-                let index_size = self.store.count().await.unwrap_or(0);
+                // FAIL FAST: Do not hide store count failures - they indicate storage problems
+                let index_size = match self.store.count().await {
+                    Ok(size) => size,
+                    Err(e) => {
+                        tracing::error!(
+                            space_idx = space_idx,
+                            error = %e,
+                            "Failed to retrieve index size from sparse store - storage may be unavailable"
+                        );
+                        return SpaceSearchResult::failure(
+                            space_idx,
+                            format!("Failed to get index size: {}", e),
+                        );
+                    }
+                };
                 SpaceSearchResult::success(space_idx, matches, start.elapsed(), index_size)
             }
             Err(e) => SpaceSearchResult::failure(space_idx, e.to_string()),
@@ -200,7 +241,7 @@ impl InMemoryMultiEmbeddingExecutor {
             .pipeline_config
             .as_ref()
             .map(|c| c.rrf_k)
-            .unwrap_or(60.0);
+            .unwrap_or(pipeline::DEFAULT_RRF_K);
 
         // Build ranked lists for RRF
         let ranked_lists: Vec<(usize, Vec<Uuid>)> = space_results

@@ -13,6 +13,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
+use crate::config::constants::johari as johari_constants;
 use crate::traits::{TeleologicalMemoryStore, TeleologicalSearchOptions};
 use crate::types::fingerprint::{JohariFingerprint, SemanticFingerprint, NUM_EMBEDDERS};
 use crate::types::{JohariQuadrant, JohariTransition, TransitionTrigger};
@@ -35,7 +36,9 @@ pub struct DefaultJohariManager<S: TeleologicalMemoryStore> {
     /// The storage backend for teleological fingerprints
     store: Arc<S>,
 
-    /// Threshold for blind spot detection (default: 0.5)
+    /// Threshold for blind spot detection.
+    ///
+    /// Constitution: `utl.johari.Blind` - default 0.5 via `johari_constants::BLIND_SPOT_THRESHOLD`
     blind_spot_threshold: f32,
 
     /// Maximum transition history per memory (default: 100)
@@ -51,7 +54,7 @@ impl<S: TeleologicalMemoryStore> DefaultJohariManager<S> {
     pub fn new(store: Arc<S>) -> Self {
         Self {
             store,
-            blind_spot_threshold: 0.5,
+            blind_spot_threshold: johari_constants::BLIND_SPOT_THRESHOLD,
             max_history_per_memory: 100,
             transitions: Arc::new(RwLock::new(Vec::new())),
         }
@@ -106,7 +109,9 @@ pub struct DynDefaultJohariManager {
     /// The storage backend for teleological fingerprints (trait object)
     store: Arc<dyn TeleologicalMemoryStore>,
 
-    /// Threshold for blind spot detection (default: 0.5)
+    /// Threshold for blind spot detection.
+    ///
+    /// Constitution: `utl.johari.Blind` - default 0.5 via `johari_constants::BLIND_SPOT_THRESHOLD`
     blind_spot_threshold: f32,
 
     /// Maximum transition history per memory (default: 100)
@@ -122,7 +127,7 @@ impl DynDefaultJohariManager {
     pub fn new(store: Arc<dyn TeleologicalMemoryStore>) -> Self {
         Self {
             store,
-            blind_spot_threshold: 0.5,
+            blind_spot_threshold: johari_constants::BLIND_SPOT_THRESHOLD,
             max_history_per_memory: 100,
             transitions: Arc::new(RwLock::new(Vec::new())),
         }

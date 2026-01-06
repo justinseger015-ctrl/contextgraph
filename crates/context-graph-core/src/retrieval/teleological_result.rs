@@ -18,6 +18,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::config::constants::alignment;
 use crate::types::JohariQuadrant;
 
 use super::PipelineStageTiming;
@@ -213,11 +214,9 @@ impl ScoredMemory {
         johari_quadrant: JohariQuadrant,
         space_count: usize,
     ) -> Self {
-        // Critical threshold from constitution.yaml
-        const CRITICAL_THRESHOLD: f32 = 0.55;
-
-        let is_misaligned = purpose_alignment < CRITICAL_THRESHOLD
-            || goal_alignment < CRITICAL_THRESHOLD;
+        // Critical threshold from constitution.yaml teleological.thresholds.critical
+        let is_misaligned = purpose_alignment < alignment::CRITICAL
+            || goal_alignment < alignment::CRITICAL;
 
         Self {
             memory_id,
@@ -237,31 +236,39 @@ impl ScoredMemory {
         self
     }
 
-    /// Check if alignment is optimal (≥0.75).
+    /// Check if alignment is optimal (≥ alignment::OPTIMAL).
+    ///
+    /// Constitution: `teleological.thresholds.optimal`
     #[inline]
     pub fn is_optimal(&self) -> bool {
-        self.goal_alignment >= 0.75
+        self.goal_alignment >= alignment::OPTIMAL
     }
 
-    /// Check if alignment is acceptable (≥0.70).
+    /// Check if alignment is acceptable (≥ alignment::ACCEPTABLE).
+    ///
+    /// Constitution: `teleological.thresholds.acceptable`
     #[inline]
     pub fn is_acceptable(&self) -> bool {
-        self.goal_alignment >= 0.70
+        self.goal_alignment >= alignment::ACCEPTABLE
     }
 
-    /// Check if alignment needs attention (between 0.55 and 0.70).
+    /// Check if alignment needs attention (between WARNING and ACCEPTABLE).
+    ///
+    /// Constitution: `teleological.thresholds.warning`
     #[inline]
     pub fn needs_attention(&self) -> bool {
-        self.goal_alignment >= 0.55 && self.goal_alignment < 0.70
+        self.goal_alignment >= alignment::WARNING && self.goal_alignment < alignment::ACCEPTABLE
     }
 
     /// Get alignment threshold classification.
+    ///
+    /// Uses thresholds from constitution.yaml teleological.thresholds.
     pub fn alignment_threshold(&self) -> AlignmentLevel {
-        if self.goal_alignment >= 0.75 {
+        if self.goal_alignment >= alignment::OPTIMAL {
             AlignmentLevel::Optimal
-        } else if self.goal_alignment >= 0.70 {
+        } else if self.goal_alignment >= alignment::ACCEPTABLE {
             AlignmentLevel::Acceptable
-        } else if self.goal_alignment >= 0.55 {
+        } else if self.goal_alignment >= alignment::WARNING {
             AlignmentLevel::Warning
         } else {
             AlignmentLevel::Critical
@@ -274,23 +281,25 @@ impl ScoredMemory {
 /// Thresholds from constitution.yaml teleological.thresholds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlignmentLevel {
-    /// θ ≥ 0.75 - Excellent alignment
+    /// θ ≥ OPTIMAL (0.75) - Excellent alignment
     Optimal,
-    /// θ ∈ [0.70, 0.75) - Good alignment
+    /// θ ∈ [ACCEPTABLE, OPTIMAL) - Good alignment
     Acceptable,
-    /// θ ∈ [0.55, 0.70) - Needs improvement
+    /// θ ∈ [WARNING, ACCEPTABLE) - Needs improvement
     Warning,
-    /// θ < 0.55 - Critical misalignment
+    /// θ < CRITICAL (0.55) - Critical misalignment
     Critical,
 }
 
 impl AlignmentLevel {
     /// Get the minimum threshold for this level.
+    ///
+    /// Uses constants from `crate::config::constants::alignment`.
     pub fn min_threshold(self) -> f32 {
         match self {
-            AlignmentLevel::Optimal => 0.75,
-            AlignmentLevel::Acceptable => 0.70,
-            AlignmentLevel::Warning => 0.55,
+            AlignmentLevel::Optimal => alignment::OPTIMAL,
+            AlignmentLevel::Acceptable => alignment::ACCEPTABLE,
+            AlignmentLevel::Warning => alignment::WARNING,
             AlignmentLevel::Critical => 0.0,
         }
     }
