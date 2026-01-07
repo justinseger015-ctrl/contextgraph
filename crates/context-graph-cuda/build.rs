@@ -177,6 +177,11 @@ fn compile_kernel(nvcc: &std::path::Path, source: &str, name: &str, arch: &str, 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static={}", name);
 
+    // Link CUDA driver library (libcuda.so)
+    // Required for Driver API (cuInit, cuDeviceGetCount) - used instead of Runtime API
+    // to avoid CUDA 13.1 WSL2 segfault bug with cudaGetDeviceCount
+    println!("cargo:rustc-link-lib=cuda");
+
     // Link CUDA runtime library
     // cudart: CUDA runtime API (required for kernel launching)
     println!("cargo:rustc-link-lib=cudart");
@@ -187,6 +192,12 @@ fn compile_kernel(nvcc: &std::path::Path, source: &str, name: &str, arch: &str, 
     // Link C++ standard library for CUDA runtime symbols
     // Required for __cxa_guard_acquire, __cxa_guard_release, __gxx_personality_v0
     println!("cargo:rustc-link-lib=stdc++");
+
+    // Add WSL2 CUDA driver path (libcuda.so lives here, not in /usr/local/cuda)
+    // This is critical for WSL2 where the driver is provided by Windows
+    if PathBuf::from("/usr/lib/wsl/lib").exists() {
+        println!("cargo:rustc-link-search=native=/usr/lib/wsl/lib");
+    }
 
     // Add CUDA library path for cudart
     if let Ok(cuda_path) = env::var("CUDA_PATH") {

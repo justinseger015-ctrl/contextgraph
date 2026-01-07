@@ -6,7 +6,9 @@ use crate::types::fingerprint::SemanticFingerprint;
 use crate::types::fingerprint::NUM_EMBEDDERS;
 
 pub fn make_test_semantic() -> SemanticFingerprint {
-    SemanticFingerprint::default()
+    // Explicitly using zeroed() - this is a test helper where we need placeholder data.
+    // In production, use real embeddings from the embedding pipeline.
+    SemanticFingerprint::zeroed()
 }
 
 pub fn make_test_purpose(alignment: f32) -> PurposeVector {

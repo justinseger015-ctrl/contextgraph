@@ -9,16 +9,18 @@ repository = "https://github.com/contextgraph/contextgraph"
 keywords = ["knowledge-graph", "faiss", "hyperbolic", "vector-search", "gpu"]
 
 [features]
-default = []
-# Enable FAISS GPU support. Requires libfaiss_c to be installed on the system.
-# Without this feature, GPU-related tests will be skipped.
+# GPU is REQUIRED for production. No CPU fallback.
+# Constitution Reference: stack.gpu, AP-007
+default = ["faiss-gpu"]
+# FAISS GPU support. REQUIRED in production.
+# Without this feature, compilation will FAIL with compile_error!
 faiss-gpu = []
 
 [dependencies]
-# Workspace crates
+# Workspace crates - GPU required for all
 context-graph-core = { path = "../context-graph-core" }
-context-graph-cuda = { path = "../context-graph-cuda" }
-context-graph-embeddings = { path = "../context-graph-embeddings" }
+context-graph-cuda = { path = "../context-graph-cuda", features = ["cuda"] }
+context-graph-embeddings = { path = "../context-graph-embeddings", features = ["cuda"] }
 
 # Storage
 rocksdb = "0.22"
@@ -51,6 +53,8 @@ tokio = { version = "1.35", features = ["sync"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.10"
 tokio = { version = "1.35", features = ["full", "test-util"] }
+# Enable test-utils for stubs access in tests (AP-007 compliant)
+context-graph-core = { path = "../context-graph-core", features = ["test-utils"] }
 
 [[bench]]
 name = "benchmark_suite"

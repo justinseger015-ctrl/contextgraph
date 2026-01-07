@@ -106,12 +106,10 @@ fn test_semantic_fingerprint_token_count() {
     assert_eq!(fp.token_count(), 100);
 }
 
-#[test]
-fn test_semantic_fingerprint_default() {
-    let fp1 = SemanticFingerprint::default();
-    let fp2 = SemanticFingerprint::zeroed();
-    assert_eq!(fp1, fp2);
-}
+// NOTE: test_semantic_fingerprint_default was removed because SemanticFingerprint
+// no longer implements Default. This is intentional - all-zero fingerprints
+// pass validation but cause silent failures in search/alignment operations.
+// Use SemanticFingerprint::zeroed() explicitly when placeholder data is needed.
 
 #[test]
 fn test_semantic_fingerprint_partial_eq() {

@@ -164,9 +164,16 @@ fn generate_real_teleological_fingerprint(id: Uuid) -> TeleologicalFingerprint {
     }
 }
 
-fn create_test_store(temp_dir: &TempDir) -> RocksDbTeleologicalStore {
+fn create_test_store_sync(temp_dir: &TempDir) -> RocksDbTeleologicalStore {
     // Use the open method with just path (uses default config)
     RocksDbTeleologicalStore::open(temp_dir.path()).expect("Failed to open RocksDB store")
+}
+
+async fn create_test_store(temp_dir: &TempDir) -> RocksDbTeleologicalStore {
+    // Open store and initialize HNSW indexes (required for store operations)
+    let store = RocksDbTeleologicalStore::open(temp_dir.path()).expect("Failed to open RocksDB store");
+    store.initialize_hnsw().await.expect("Failed to initialize HNSW");
+    store
 }
 
 // =============================================================================
@@ -184,7 +191,7 @@ async fn test_physical_write_read_verification() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     // Generate REAL fingerprint
     let id = Uuid::new_v4();
@@ -250,7 +257,7 @@ async fn test_purpose_vector_cf_verification() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     let id = Uuid::new_v4();
     let fingerprint = generate_real_teleological_fingerprint(id);
@@ -307,7 +314,7 @@ async fn test_e1_matryoshka_truncation_verification() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     let id = Uuid::new_v4();
     let fingerprint = generate_real_teleological_fingerprint(id);
@@ -359,7 +366,7 @@ async fn test_edge_case_minimal_fingerprint() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     let id = Uuid::new_v4();
 
@@ -411,7 +418,7 @@ async fn test_edge_case_maximum_size_fingerprint() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     let id = Uuid::new_v4();
     let mut fingerprint = generate_real_teleological_fingerprint(id);
@@ -477,7 +484,7 @@ async fn test_edge_case_concurrent_access() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = Arc::new(create_test_store(&temp_dir));
+    let store = Arc::new(create_test_store(&temp_dir).await);
 
     let num_tasks = 8;
     let writes_per_task = 10;
@@ -537,7 +544,7 @@ async fn test_update_delete_physical_verification() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     let id = Uuid::new_v4();
     let mut fingerprint = generate_real_teleological_fingerprint(id);
@@ -613,7 +620,7 @@ async fn test_all_17_column_families_populated() {
     println!("================================================================================\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = create_test_store(&temp_dir);
+    let store = create_test_store(&temp_dir).await;
 
     let id = Uuid::new_v4();
     let fingerprint = generate_real_teleological_fingerprint(id);
@@ -713,6 +720,7 @@ async fn test_persistence_across_reopen() {
     {
         let store = RocksDbTeleologicalStore::open(&path)
             .expect("Failed to open store");
+        store.initialize_hnsw().await.expect("Failed to initialize HNSW");
 
         store.store(fingerprint).await.expect("Store failed");
         println!("[1] First session: stored fingerprint {}", id);
@@ -726,6 +734,7 @@ async fn test_persistence_across_reopen() {
     {
         let store = RocksDbTeleologicalStore::open(&path)
             .expect("Failed to reopen store");
+        store.initialize_hnsw().await.expect("Failed to initialize HNSW");
 
         println!("[3] Second session: database reopened");
 

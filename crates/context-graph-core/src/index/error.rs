@@ -52,6 +52,16 @@ pub enum IndexError {
         embedder: EmbedderIndex,
     },
 
+    /// Index is empty - no vectors have been added.
+    ///
+    /// AP-007: FAIL FAST - searching an empty index is an error, not silent success.
+    /// Populate the index before searching, or check `count() > 0` first.
+    #[error("INDEX ERROR: Index for {embedder:?} is empty - populate before searching")]
+    IndexEmpty {
+        /// The empty embedder index
+        embedder: EmbedderIndex,
+    },
+
     /// Invalid term ID in SPLADE sparse vector.
     ///
     /// Term IDs must be in range [0, vocab_size).

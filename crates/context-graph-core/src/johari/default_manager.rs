@@ -14,7 +14,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use crate::config::constants::johari as johari_constants;
-use crate::traits::{TeleologicalMemoryStore, TeleologicalSearchOptions};
+use crate::traits::TeleologicalMemoryStore;
 use crate::types::fingerprint::{JohariFingerprint, SemanticFingerprint, NUM_EMBEDDERS};
 use crate::types::{JohariQuadrant, JohariTransition, TransitionTrigger};
 
@@ -345,21 +345,18 @@ impl<S: TeleologicalMemoryStore + 'static> JohariTransitionManager for DefaultJo
         pattern: QuadrantPattern,
         limit: usize,
     ) -> Result<Vec<(MemoryId, JohariFingerprint)>, JohariError> {
-        // Scan using semantic search with empty query
-        let empty_query = SemanticFingerprint::zeroed();
-        let options = TeleologicalSearchOptions::quick(limit * 10);
-
-        let results = self
+        // AP-007: Use proper list_all_johari scan instead of broken zeroed query
+        // Zeroed semantic queries have undefined cosine similarity and return wrong results.
+        let all_johari = self
             .store
-            .search_semantic(&empty_query, options)
+            .list_all_johari(limit * 10) // Fetch extra to allow for filtering
             .await
             .map_err(|e| JohariError::StorageError(e.to_string()))?;
 
-        let matches: Vec<_> = results
+        let matches: Vec<_> = all_johari
             .into_iter()
-            .filter(|r| matches_pattern(&r.fingerprint.johari, &pattern))
+            .filter(|(_, johari)| matches_pattern(johari, &pattern))
             .take(limit)
-            .map(|r| (r.fingerprint.id, r.fingerprint.johari))
             .collect();
 
         Ok(matches)
@@ -657,21 +654,18 @@ impl JohariTransitionManager for DynDefaultJohariManager {
         pattern: QuadrantPattern,
         limit: usize,
     ) -> Result<Vec<(MemoryId, JohariFingerprint)>, JohariError> {
-        // Scan using semantic search with empty query
-        let empty_query = SemanticFingerprint::zeroed();
-        let options = TeleologicalSearchOptions::quick(limit * 10);
-
-        let results = self
+        // AP-007: Use proper list_all_johari scan instead of broken zeroed query
+        // Zeroed semantic queries have undefined cosine similarity and return wrong results.
+        let all_johari = self
             .store
-            .search_semantic(&empty_query, options)
+            .list_all_johari(limit * 10) // Fetch extra to allow for filtering
             .await
             .map_err(|e| JohariError::StorageError(e.to_string()))?;
 
-        let matches: Vec<_> = results
+        let matches: Vec<_> = all_johari
             .into_iter()
-            .filter(|r| matches_pattern(&r.fingerprint.johari, &pattern))
+            .filter(|(_, johari)| matches_pattern(johari, &pattern))
             .take(limit)
-            .map(|r| (r.fingerprint.id, r.fingerprint.johari))
             .collect();
 
         Ok(matches)

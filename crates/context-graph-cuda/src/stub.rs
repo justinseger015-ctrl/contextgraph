@@ -1,4 +1,27 @@
 //! Stub CPU implementation of vector operations.
+//!
+//! # WARNING: TEST ONLY - NOT FOR PRODUCTION USE
+//!
+//! This module provides CPU-based stub implementations that are intended
+//! **exclusively for testing purposes**. Using these stubs in production
+//! violates Constitution AP-007: "CUDA is ALWAYS required - no stub implementations".
+//!
+//! ## AP-007 Compliance
+//!
+//! Production code paths MUST use real CUDA implementations. The stub module
+//! is gated with `#[cfg(test)]` in `lib.rs` to prevent accidental production usage.
+//!
+//! ## Allowed Usage
+//!
+//! - Unit tests that need to verify vector operation logic
+//! - Integration tests where GPU hardware is unavailable
+//! - CI/CD pipelines without GPU access (test builds only)
+//!
+//! ## Prohibited Usage
+//!
+//! - Any production code path
+//! - Any code that processes real user data
+//! - Any deployment artifact
 
 use async_trait::async_trait;
 
@@ -7,7 +30,20 @@ use crate::ops::VectorOps;
 
 /// CPU stub for GPU operations.
 ///
-/// Used in Ghost System phase when GPU is not required.
+/// # WARNING: TEST ONLY - NOT FOR PRODUCTION USE
+///
+/// This struct provides CPU-based implementations of vector operations
+/// for **testing purposes only**. Using this in production violates
+/// Constitution AP-007.
+///
+/// # Constitution AP-007 Compliance
+///
+/// Production code MUST use real CUDA implementations. This stub is
+/// gated with `#[cfg(test)]` to prevent production usage.
+#[deprecated(
+    since = "0.1.0",
+    note = "TEST ONLY: StubVectorOps violates AP-007 if used in production. Use real CUDA implementations."
+)]
 #[derive(Debug, Clone, Default)]
 pub struct StubVectorOps {
     device_name: String,

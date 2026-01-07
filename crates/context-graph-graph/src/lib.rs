@@ -36,6 +36,38 @@
 //! }
 //! ```
 
+// ============================================================================
+// GPU ENFORCEMENT - AP-007 CRITICAL
+// ============================================================================
+//
+// This compile_error! ensures GPU is available at compile time.
+// NO CPU FALLBACK. NO WORKAROUNDS. NO EXCEPTIONS.
+//
+// The Constitution mandates GPU acceleration for vector search performance.
+// Without FAISS GPU, the <2ms latency target (perf.latency.faiss_1M_k100)
+// cannot be achieved.
+//
+// Constitution Reference: stack.gpu, AP-007, TECH-GRAPH-004
+// ============================================================================
+
+#[cfg(not(feature = "faiss-gpu"))]
+compile_error!(
+    "[GRAPH-E001] FAISS_GPU_REQUIRED: The 'faiss-gpu' feature MUST be enabled.
+
+    Context Graph's knowledge graph requires GPU-accelerated vector search.
+
+    Requirements:
+        - GPU: RTX 5090 (Blackwell architecture) or compatible
+        - CUDA: 13.1+
+        - libfaiss_c: GPU-enabled build
+
+    Build with: cargo build --features faiss-gpu
+
+    Constitution Reference: stack.gpu, AP-007, TECH-GRAPH-004
+    Performance Target: <2ms for 1M vectors @ k=100 (perf.latency.faiss_1M_k100)
+    Exit Code: 102 (FAISS_GPU_UNAVAILABLE)"
+);
+
 pub mod config;
 pub mod contradiction;
 pub mod entailment;

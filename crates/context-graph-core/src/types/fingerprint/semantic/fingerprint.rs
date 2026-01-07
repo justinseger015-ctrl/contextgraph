@@ -31,6 +31,14 @@ use crate::types::fingerprint::SparseVector;
 /// 3. Maintain flexibility for future dimension changes
 ///
 /// Dimension validation is performed via `validate()` and construction methods.
+///
+/// # IMPORTANT: No Default Implementation
+///
+/// This struct intentionally does NOT implement `Default` to prevent accidental
+/// creation of all-zero fingerprints that pass validation but cause silent failures
+/// in search and alignment operations. Use [`Self::zeroed()`] explicitly when you
+/// need a placeholder fingerprint (e.g., in tests), but be aware that zeroed data
+/// should never be used in production workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticFingerprint {
     /// E1: Semantic (e5-large-v2) - 1024D dense embedding.
@@ -75,6 +83,18 @@ pub struct SemanticFingerprint {
 
 impl SemanticFingerprint {
     /// Create a zeroed fingerprint (all embeddings initialized to 0.0).
+    ///
+    /// # ⚠️ TEST ONLY - AP-007 ENFORCED
+    ///
+    /// This method is **only available in test builds** because:
+    /// - Zero vectors have undefined cosine similarity (0/0 = NaN)
+    /// - HNSW search returns unpredictable results with zero-magnitude vectors
+    /// - Production code MUST use real embeddings from the GPU pipeline
+    ///
+    /// If you need this in production, you're doing something wrong.
+    /// Use the embedding pipeline to compute real vectors instead.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use = "zeroed fingerprints should be used explicitly and with caution"]
     pub fn zeroed() -> Self {
         Self {
             e1_semantic: vec![0.0; E1_DIM],
@@ -191,11 +211,9 @@ impl SemanticFingerprint {
     }
 }
 
-impl Default for SemanticFingerprint {
-    fn default() -> Self {
-        Self::zeroed()
-    }
-}
+// NOTE: Default is intentionally NOT implemented for SemanticFingerprint.
+// All-zero fingerprints pass validation but cause silent failures in search/alignment.
+// Use SemanticFingerprint::zeroed() explicitly when placeholder data is needed.
 
 impl PartialEq for SemanticFingerprint {
     fn eq(&self, other: &Self) -> bool {

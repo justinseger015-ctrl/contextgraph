@@ -8,7 +8,11 @@ use crate::warm::integration::WarmEmbeddingPipeline;
 
 use super::test_config;
 
+/// Test that calling warm() on an already-initialized pipeline is a no-op.
+///
+/// CUDA feature required because warm() is only defined with cuda feature.
 #[test]
+#[cfg(feature = "cuda")]
 fn test_pipeline_warm_already_initialized() {
     let config = test_config();
     let mut pipeline = WarmEmbeddingPipeline::new(config).expect("Failed to create pipeline");

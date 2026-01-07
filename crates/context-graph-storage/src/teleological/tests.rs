@@ -15,9 +15,11 @@ use uuid::Uuid;
 // Helper Functions - Create REAL data (no mocks)
 // =========================================================================
 
-/// Create a REAL SemanticFingerprint with default embeddings.
+/// Create a SemanticFingerprint with zeroed embeddings for testing.
+/// NOTE: This uses zeroed data which is only suitable for serialization tests.
+/// For search/alignment tests, use real embeddings from the embedding pipeline.
 fn create_real_semantic() -> SemanticFingerprint {
-    SemanticFingerprint::default()
+    SemanticFingerprint::zeroed()
 }
 
 /// Create a REAL PurposeVector with specified alignment.

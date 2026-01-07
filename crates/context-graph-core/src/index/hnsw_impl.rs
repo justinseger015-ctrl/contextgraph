@@ -352,10 +352,15 @@ impl RealHnswIndex {
             });
         }
 
-        // Check if index is empty
+        // AP-007: FAIL FAST - searching an empty index is an error, not silent success
         if self.uuid_to_data_id.is_empty() {
-            debug!("HNSW search on empty index, returning empty results");
-            return Ok(Vec::new());
+            error!(
+                "FATAL: HNSW search on empty index - dimension={}, k={}. Populate index before searching.",
+                self.config.dimension, k
+            );
+            return Err(IndexError::IndexEmpty {
+                embedder: EmbedderIndex::E1Semantic, // Generic embedder - actual embedder tracked at MultiSpaceIndex level
+            });
         }
 
         // ef_search controls search quality/speed tradeoff

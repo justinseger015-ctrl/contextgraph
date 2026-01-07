@@ -492,6 +492,54 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     /// # Errors
     /// - `CoreError::StorageError` - Compaction failure
     async fn compact(&self) -> CoreResult<()>;
+
+    // ==================== Scanning Operations ====================
+
+    /// List fingerprints by dominant Johari quadrant.
+    ///
+    /// This performs a full scan of the store, filtering by the dominant
+    /// Johari quadrant aggregated across all 13 embedders.
+    ///
+    /// # AP-007: PROPER SCANNING
+    ///
+    /// This method exists to support quadrant-based queries WITHOUT using
+    /// zero-magnitude semantic queries (which have undefined cosine similarity).
+    ///
+    /// # Arguments
+    /// * `quadrant` - Johari quadrant index (0=Open, 1=Hidden, 2=Blind, 3=Unknown)
+    /// * `limit` - Maximum results to return
+    ///
+    /// # Returns
+    /// Vector of (MemoryId, JohariFingerprint) pairs matching the quadrant.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn list_by_quadrant(
+        &self,
+        quadrant: usize,
+        limit: usize,
+    ) -> CoreResult<Vec<(Uuid, crate::types::fingerprint::JohariFingerprint)>>;
+
+    /// List all fingerprints with their Johari state.
+    ///
+    /// # AP-007: PROPER SCANNING
+    ///
+    /// This method exists to support pattern-based quadrant queries that need
+    /// to inspect per-embedder quadrant state. It replaces the broken pattern
+    /// of using zeroed semantic queries for "get all" operations.
+    ///
+    /// # Arguments
+    /// * `limit` - Maximum results to return
+    ///
+    /// # Returns
+    /// Vector of (MemoryId, JohariFingerprint) pairs.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn list_all_johari(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<(Uuid, crate::types::fingerprint::JohariFingerprint)>>;
 }
 
 /// Extension trait for convenient TeleologicalMemoryStore operations.

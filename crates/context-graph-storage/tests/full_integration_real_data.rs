@@ -46,6 +46,17 @@ use uuid::Uuid;
 // Test Utilities - REAL Data Generation (NO MOCKS)
 // =============================================================================
 
+/// Create a RocksDbTeleologicalStore with initialized HNSW indexes.
+/// This is required after the HNSW integration (Fix #3).
+async fn create_initialized_store(path: &std::path::Path) -> RocksDbTeleologicalStore {
+    let store = RocksDbTeleologicalStore::open(path).expect("Failed to open store");
+    store
+        .initialize_hnsw()
+        .await
+        .expect("Failed to initialize HNSW");
+    store
+}
+
 /// Generate a REAL random unit vector of specified dimension.
 /// All vectors are normalized to have L2 norm = 1.0.
 fn generate_real_unit_vector(dim: usize) -> Vec<f32> {
@@ -169,8 +180,7 @@ async fn test_rocksdb_store_roundtrip_real_data() {
     println!("\n=== TEST: RocksDB + Store Roundtrip with REAL Data ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = RocksDbTeleologicalStore::open(temp_dir.path())
-        .expect("Failed to open store");
+    let store = create_initialized_store(temp_dir.path()).await;
 
     // Verify health check passes
     store.health_check().expect("Health check failed");
@@ -269,6 +279,10 @@ async fn test_full_storage_pipeline_real_data() {
     };
     let store = RocksDbTeleologicalStore::open_with_config(temp_dir.path(), config)
         .expect("Failed to open store");
+    store
+        .initialize_hnsw()
+        .await
+        .expect("Failed to initialize HNSW");
 
     println!("[BEFORE] Empty store");
 
@@ -364,6 +378,7 @@ async fn test_physical_persistence_across_restart() {
     {
         let store = RocksDbTeleologicalStore::open(&db_path)
             .expect("Failed to open store (phase 1)");
+        store.initialize_hnsw().await.expect("Failed to initialize HNSW");
 
         for fp in &test_fingerprints {
             store.store(fp.clone()).await.expect("Failed to store");
@@ -384,6 +399,7 @@ async fn test_physical_persistence_across_restart() {
     {
         let store = RocksDbTeleologicalStore::open(&db_path)
             .expect("Failed to reopen store (phase 2)");
+        store.initialize_hnsw().await.expect("Failed to initialize HNSW");
 
         let count = store.count().await.expect("Count failed");
         assert_eq!(count, 10, "Should still have 10 fingerprints after reopen");
@@ -450,8 +466,7 @@ async fn test_all_column_families_populated() {
     println!("\n=== TEST: All Column Families Populated ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = RocksDbTeleologicalStore::open(temp_dir.path())
-        .expect("Failed to open store");
+    let store = create_initialized_store(temp_dir.path()).await;
 
     // Store a fingerprint
     let fp = create_real_fingerprint();
@@ -560,8 +575,7 @@ async fn test_batch_store_retrieve_performance() {
     println!("\n=== TEST: Batch Store/Retrieve Performance ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = RocksDbTeleologicalStore::open(temp_dir.path())
-        .expect("Failed to open store");
+    let store = create_initialized_store(temp_dir.path()).await;
 
     const BATCH_SIZE: usize = 1000;
 
@@ -636,8 +650,7 @@ async fn test_search_returns_correct_results() {
     println!("\n=== TEST: Search Returns Correct Results ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = RocksDbTeleologicalStore::open(temp_dir.path())
-        .expect("Failed to open store");
+    let store = create_initialized_store(temp_dir.path()).await;
 
     // Store 50 random fingerprints
     println!("[SETUP] Storing 50 fingerprints...");
@@ -715,8 +728,7 @@ async fn test_update_and_delete_operations() {
     println!("\n=== TEST: Update and Delete Operations ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = RocksDbTeleologicalStore::open(temp_dir.path())
-        .expect("Failed to open store");
+    let store = create_initialized_store(temp_dir.path()).await;
 
     // Store initial fingerprint
     let fp = create_real_fingerprint();
@@ -785,10 +797,7 @@ async fn test_concurrent_access() {
     println!("\n=== TEST: Concurrent Access ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = std::sync::Arc::new(
-        RocksDbTeleologicalStore::open(temp_dir.path())
-            .expect("Failed to open store")
-    );
+    let store = std::sync::Arc::new(create_initialized_store(temp_dir.path()).await);
 
     const CONCURRENT_OPS: usize = 100;
     let mut handles = Vec::with_capacity(CONCURRENT_OPS);
@@ -894,8 +903,7 @@ async fn test_edge_cases() {
     println!("\n=== TEST: Edge Cases ===\n");
 
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let store = RocksDbTeleologicalStore::open(temp_dir.path())
-        .expect("Failed to open store");
+    let store = create_initialized_store(temp_dir.path()).await;
 
     // Test 1: Retrieve non-existent ID
     let fake_id = Uuid::new_v4();
@@ -920,21 +928,20 @@ async fn test_edge_cases() {
     assert!(batch_result.is_empty(), "Empty batch should return empty result");
     println!("[EDGE] Empty batch retrieve returns empty - OK");
 
-    // Test 5: Store and retrieve fingerprint with empty sparse vectors
-    let mut minimal_fp = create_real_fingerprint();
-    minimal_fp.semantic.e6_sparse = SparseVector::empty();
-    minimal_fp.semantic.e13_splade = SparseVector::empty();
+    // Test 5: Empty sparse vectors are REJECTED (Fix #7 - fail fast on zero-norm)
+    // Per constitution: NO backwards compatibility, reject garbage inputs
+    let mut empty_sparse_fp = create_real_fingerprint();
+    empty_sparse_fp.semantic.e6_sparse = SparseVector::empty();
+    empty_sparse_fp.semantic.e13_splade = SparseVector::empty();
 
-    let minimal_id = minimal_fp.id;
-    store.store(minimal_fp).await.expect("Store minimal should work");
-
-    let retrieved = store.retrieve(minimal_id).await
-        .expect("Retrieve should work")
-        .expect("Should find minimal fp");
-
-    assert!(retrieved.semantic.e6_sparse.is_empty(), "E6 sparse should be empty");
-    assert!(retrieved.semantic.e13_splade.is_empty(), "E13 sparse should be empty");
-    println!("[EDGE] Fingerprint with empty sparse vectors - OK");
+    let store_result = store.store(empty_sparse_fp).await;
+    assert!(store_result.is_err(), "Empty sparse vectors MUST be rejected");
+    let err_msg = format!("{:?}", store_result.unwrap_err());
+    assert!(
+        err_msg.contains("Zero-norm") || err_msg.contains("empty") || err_msg.contains("INDEX ERROR"),
+        "Error should indicate zero-norm/empty vector rejection: {}", err_msg
+    );
+    println!("[EDGE] Empty sparse vectors correctly REJECTED (fail-fast) - OK");
 
     // Test 6: Double store (should work, overwrites)
     let fp2 = create_real_fingerprint_with_id(Uuid::new_v4());

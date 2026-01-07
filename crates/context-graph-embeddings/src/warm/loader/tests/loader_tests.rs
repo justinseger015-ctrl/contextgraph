@@ -82,7 +82,11 @@ fn test_loading_order_uses_registry() {
 // Test 4: Preflight Checks GPU Requirements
 // ============================================================================
 
+/// Test that preflight checks verify GPU requirements.
+///
+/// CUDA feature required because run_preflight_checks() is only defined with cuda feature.
 #[test]
+#[cfg(feature = "cuda")]
 fn test_preflight_checks_gpu_requirements() {
     let config = test_config();
     let mut loader = WarmLoader::new(config).expect("Failed to create loader");
@@ -102,7 +106,12 @@ fn test_preflight_checks_gpu_requirements() {
 // Test 5: Fail Fast on Allocation Error
 // ============================================================================
 
+/// Test that allocation errors are handled with fail-fast behavior.
+///
+/// CUDA feature required because initialize_cuda_for_test() and allocate_model_vram()
+/// are only defined with cuda feature.
 #[test]
+#[cfg(feature = "cuda")]
 fn test_fail_fast_on_allocation_error() {
     let mut config = test_config();
     // Set a very small VRAM budget to trigger allocation failure

@@ -259,6 +259,8 @@ impl MultiUtlParams {
 
     /// Validate parameters are in expected ranges.
     ///
+    /// AP-007: FAIL FAST - rejects garbage/zero inputs that would produce meaningless 0.5 scores.
+    ///
     /// Returns error message if invalid, None if valid.
     pub fn validate(&self) -> Option<String> {
         // Check w_e range [0.5, 1.5]
@@ -296,7 +298,46 @@ impl MultiUtlParams {
             }
         }
 
+        // AP-007: GIGO Prevention - reject all-zero inputs that produce meaningless 0.5 scores
+        let semantic_sum: f32 = self.semantic_deltas.iter().map(|x| x.abs()).sum();
+        let coherence_sum: f32 = self.coherence_deltas.iter().map(|x| x.abs()).sum();
+
+        const MIN_SIGNAL_THRESHOLD: f32 = 0.001;
+
+        if semantic_sum < MIN_SIGNAL_THRESHOLD && coherence_sum < MIN_SIGNAL_THRESHOLD {
+            return Some(format!(
+                "GIGO rejected: Both semantic_deltas (sum={:.6}) and coherence_deltas (sum={:.6}) are effectively zero. \
+                 This would produce a meaningless neutral score (0.5). \
+                 Provide real semantic/coherence signals or explicitly acknowledge no learning occurred.",
+                semantic_sum, coherence_sum
+            ));
+        }
+
         None
+    }
+
+    /// Compute the Multi-UTL score with validation.
+    ///
+    /// AP-007: FAIL FAST - returns Err if inputs are garbage.
+    ///
+    /// # Returns
+    /// - `Ok(f32)` - Valid learning score in range (0.0, 1.0)
+    /// - `Err(String)` - Validation error with detailed message
+    pub fn compute_validated(&self) -> Result<f32, String> {
+        if let Some(error) = self.validate() {
+            return Err(error);
+        }
+        Ok(self.compute())
+    }
+
+    /// Check if this represents garbage/zero input that would produce meaningless results.
+    ///
+    /// Use this before calling compute() to avoid GIGO scenarios.
+    pub fn is_garbage_input(&self) -> bool {
+        const MIN_SIGNAL_THRESHOLD: f32 = 0.001;
+        let semantic_sum: f32 = self.semantic_deltas.iter().map(|x| x.abs()).sum();
+        let coherence_sum: f32 = self.coherence_deltas.iter().map(|x| x.abs()).sum();
+        semantic_sum < MIN_SIGNAL_THRESHOLD && coherence_sum < MIN_SIGNAL_THRESHOLD
     }
 }
 
@@ -335,18 +376,29 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_utl_default() {
+    fn test_multi_utl_default_is_garbage() {
         let params = MultiUtlParams::default();
-        let score = params.compute();
 
-        // With all zeros, semantic_sum * coherence_sum = 0, so sigmoid(0) = 0.5
+        // AP-007: Default params (all zeros) should be detected as garbage input
+        assert!(
+            params.is_garbage_input(),
+            "Default params with all zeros should be detected as garbage"
+        );
+
+        // compute() still works (for backwards compatibility) but gives meaningless 0.5
+        let score = params.compute();
         assert!(
             (score - 0.5).abs() < 1e-6,
-            "Default params should give 0.5, got {}",
+            "Default params produce meaningless 0.5, got {}",
             score
         );
 
-        println!("[PASS] Default MultiUtlParams gives score={}", score);
+        // compute_validated() should fail for garbage input
+        let result = params.compute_validated();
+        assert!(result.is_err(), "compute_validated should reject garbage input");
+        assert!(result.unwrap_err().contains("GIGO rejected"));
+
+        println!("[PASS] Default params correctly detected as garbage input");
     }
 
     #[test]
@@ -443,8 +495,19 @@ mod tests {
 
     #[test]
     fn test_validation() {
-        let valid = MultiUtlParams::default();
-        assert!(valid.validate().is_none());
+        // Valid params with real data
+        let valid = MultiUtlParams {
+            semantic_deltas: [0.1; NUM_EMBEDDERS],
+            coherence_deltas: [0.1; NUM_EMBEDDERS],
+            ..Default::default()
+        };
+        assert!(valid.validate().is_none(), "Valid params should pass validation");
+
+        // AP-007: Default (all-zero) params now fail GIGO validation
+        let garbage = MultiUtlParams::default();
+        let garbage_err = garbage.validate();
+        assert!(garbage_err.is_some(), "Garbage input should fail validation");
+        assert!(garbage_err.unwrap().contains("GIGO rejected"));
 
         let invalid_w_e = MultiUtlParams::default().with_w_e(2.0);
         assert!(invalid_w_e.validate().is_some());
@@ -456,7 +519,7 @@ mod tests {
         invalid_nan.semantic_deltas[0] = f32::NAN;
         assert!(invalid_nan.validate().is_some());
 
-        println!("[PASS] Validation catches invalid parameters");
+        println!("[PASS] Validation catches invalid and garbage parameters");
     }
 
     #[test]

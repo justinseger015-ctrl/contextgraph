@@ -1,8 +1,32 @@
 //! In-memory stub implementation of TeleologicalMemoryStore.
 //!
+//! # ⚠️ TEST ONLY - DO NOT USE IN PRODUCTION ⚠️
+//!
 //! This module provides `InMemoryTeleologicalStore`, a thread-safe in-memory
-//! implementation of the `TeleologicalMemoryStore` trait for testing and
-//! development.
+//! implementation of the `TeleologicalMemoryStore` trait **for testing only**.
+//!
+//! ## Critical Limitations
+//!
+//! - **O(n) search complexity**: All search operations perform full table scans.
+//!   This is acceptable for small test datasets but will be prohibitively slow
+//!   for any production workload.
+//! - **No persistence**: All data is lost when the store is dropped. There is no
+//!   way to save or restore state.
+//! - **No HNSW indexing**: Unlike production stores, this stub does not use
+//!   approximate nearest neighbor search.
+//!
+//! ## When to Use
+//!
+//! - Unit tests that need a `TeleologicalMemoryStore` implementation
+//! - Integration tests with small datasets (< 1000 fingerprints)
+//! - Development/prototyping where persistence is not required
+//!
+//! ## When NOT to Use
+//!
+//! - Production systems (use `RocksDbTeleologicalStore` instead)
+//! - Benchmarks (O(n) will skew results)
+//! - Any scenario requiring data persistence
+//! - Datasets larger than ~1000 fingerprints
 //!
 //! # Design
 //!
@@ -13,7 +37,7 @@
 //!
 //! # Performance
 //!
-//! - O(n) search operations (no indexing)
+//! - **O(n) search operations** - full table scan, no indexing
 //! - O(1) CRUD operations via HashMap
 //! - ~46KB per fingerprint in memory
 
@@ -38,8 +62,19 @@ use crate::types::fingerprint::{
 
 /// In-memory implementation of TeleologicalMemoryStore.
 ///
-/// Thread-safe via `DashMap`. No persistence - data lost on drop.
-/// Uses real algorithms for search (not mocks).
+/// # ⚠️ TEST ONLY - DO NOT USE IN PRODUCTION ⚠️
+///
+/// This implementation has the following critical limitations:
+///
+/// - **O(n) search complexity**: All searches perform full table scans
+/// - **No persistence**: Data is lost when the store is dropped
+/// - **No HNSW indexing**: Linear scan instead of approximate nearest neighbor
+///
+/// For production use, use `RocksDbTeleologicalStore` from `context-graph-storage`.
+///
+/// # Thread Safety
+///
+/// Thread-safe via `DashMap`. Uses real algorithms for search (not mocks).
 ///
 /// # Example
 ///
@@ -47,6 +82,7 @@ use crate::types::fingerprint::{
 /// use context_graph_core::stubs::InMemoryTeleologicalStore;
 /// use context_graph_core::traits::TeleologicalMemoryStore;
 ///
+/// // Only use in tests!
 /// let store = InMemoryTeleologicalStore::new();
 /// assert_eq!(store.backend_type(), context_graph_core::traits::TeleologicalStorageBackend::InMemory);
 /// ```
@@ -64,8 +100,13 @@ pub struct InMemoryTeleologicalStore {
 
 impl InMemoryTeleologicalStore {
     /// Create a new empty in-memory store.
+    ///
+    /// # Warning
+    ///
+    /// This store is for **testing only**. It uses O(n) search and has no persistence.
+    /// For production, use `RocksDbTeleologicalStore`.
     pub fn new() -> Self {
-        info!("Creating new InMemoryTeleologicalStore");
+        info!("Creating new InMemoryTeleologicalStore (TEST ONLY - O(n) search, no persistence)");
         Self {
             data: DashMap::new(),
             deleted: DashMap::new(),
@@ -74,9 +115,14 @@ impl InMemoryTeleologicalStore {
     }
 
     /// Create with pre-allocated capacity.
+    ///
+    /// # Warning
+    ///
+    /// This store is for **testing only**. It uses O(n) search and has no persistence.
+    /// For production, use `RocksDbTeleologicalStore`.
     pub fn with_capacity(capacity: usize) -> Self {
         info!(
-            "Creating InMemoryTeleologicalStore with capacity {}",
+            "Creating InMemoryTeleologicalStore with capacity {} (TEST ONLY - O(n) search, no persistence)",
             capacity
         );
         Self {
@@ -611,6 +657,76 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
 
         info!("Compaction complete: removed {} soft-deleted entries", self.deleted.len());
         Ok(())
+    }
+
+    async fn list_by_quadrant(
+        &self,
+        quadrant: usize,
+        limit: usize,
+    ) -> CoreResult<Vec<(Uuid, crate::types::fingerprint::JohariFingerprint)>> {
+        debug!(
+            "list_by_quadrant: quadrant={}, limit={}",
+            quadrant, limit
+        );
+
+        if quadrant > 3 {
+            error!("Invalid quadrant index: {} (must be 0-3)", quadrant);
+            return Err(CoreError::ValidationError {
+                field: "quadrant".to_string(),
+                message: format!("Quadrant index must be 0-3, got {}", quadrant),
+            });
+        }
+
+        let mut results = Vec::new();
+        let deleted_ids: HashSet<Uuid> = self.deleted.iter().map(|r| *r.key()).collect();
+
+        for entry in self.data.iter() {
+            if results.len() >= limit {
+                break;
+            }
+
+            let id = *entry.key();
+            if deleted_ids.contains(&id) {
+                continue;
+            }
+
+            let fp = entry.value();
+            let dominant = Self::get_dominant_quadrant(&fp.johari);
+
+            if dominant == quadrant {
+                results.push((id, fp.johari.clone()));
+            }
+        }
+
+        debug!("list_by_quadrant returned {} results", results.len());
+        Ok(results)
+    }
+
+    async fn list_all_johari(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<(Uuid, crate::types::fingerprint::JohariFingerprint)>> {
+        debug!("list_all_johari: limit={}", limit);
+
+        let mut results = Vec::new();
+        let deleted_ids: HashSet<Uuid> = self.deleted.iter().map(|r| *r.key()).collect();
+
+        for entry in self.data.iter() {
+            if results.len() >= limit {
+                break;
+            }
+
+            let id = *entry.key();
+            if deleted_ids.contains(&id) {
+                continue;
+            }
+
+            let fp = entry.value();
+            results.push((id, fp.johari.clone()));
+        }
+
+        debug!("list_all_johari returned {} results", results.len());
+        Ok(results)
     }
 }
 

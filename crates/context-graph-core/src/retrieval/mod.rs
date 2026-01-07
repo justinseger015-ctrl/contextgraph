@@ -80,12 +80,15 @@
 
 mod aggregation;
 mod executor;
-mod in_memory_executor;
 mod pipeline;
 mod query;
 mod result;
 mod teleological_query;
 mod teleological_result;
+
+// AP-007: In-memory executor uses stubs and is TEST ONLY
+#[cfg(test)]
+mod in_memory_executor;
 
 #[cfg(test)]
 mod tests;
@@ -93,8 +96,11 @@ mod tests;
 // Re-export all public types
 pub use aggregation::AggregationStrategy;
 pub use executor::{IndexType, MultiEmbeddingQueryExecutor, SpaceInfo};
-pub use in_memory_executor::InMemoryMultiEmbeddingExecutor;
 pub use pipeline::{DefaultTeleologicalPipeline, PipelineHealth, TeleologicalRetrievalPipeline};
+
+// AP-007: InMemoryMultiEmbeddingExecutor is TEST ONLY - uses stubs
+#[cfg(test)]
+pub use in_memory_executor::InMemoryMultiEmbeddingExecutor;
 pub use query::{EmbeddingSpaceMask, MultiEmbeddingQuery, PipelineStageConfig};
 pub use result::{
     AggregatedMatch, MultiEmbeddingResult, PipelineStageTiming, ScoredMatch, SpaceContribution,

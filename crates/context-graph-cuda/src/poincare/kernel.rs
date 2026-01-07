@@ -66,7 +66,13 @@ pub fn get_kernel_info() -> Option<PoincareKernelInfo> {
 /// Returns true if:
 /// 1. The `cuda` feature is enabled at compile time
 /// 2. The system has a CUDA-capable GPU
-/// 3. The CUDA runtime is available
+/// 3. The CUDA driver is available and initialized
+///
+/// # Implementation Note
+///
+/// Uses CUDA Driver API (cuInit, cuDeviceGetCount) instead of Runtime API
+/// (cudaGetDeviceCount) because Runtime API segfaults in CUDA 13.1 on WSL2
+/// with RTX 5090 (Blackwell) GPUs. This is a known NVIDIA driver bug.
 ///
 /// # Example
 ///
@@ -80,16 +86,30 @@ pub fn get_kernel_info() -> Option<PoincareKernelInfo> {
 /// }
 /// ```
 pub fn is_poincare_gpu_available() -> bool {
-    // Try to query CUDA device count
-    // This will fail if no CUDA runtime is available
+    // Use CUDA Driver API instead of Runtime API to avoid CUDA 13.1 WSL2 segfault bug
+    // Reference: cudaGetDeviceCount (Runtime) segfaults, cuDeviceGetCount (Driver) works
     extern "C" {
-        fn cudaGetDeviceCount(count: *mut i32) -> i32;
+        /// Initialize the CUDA driver (Driver API)
+        fn cuInit(flags: std::os::raw::c_uint) -> i32;
+        /// Get CUDA device count (Driver API)
+        fn cuDeviceGetCount(count: *mut i32) -> i32;
     }
 
     unsafe {
+        // Initialize CUDA driver first (required before any Driver API call)
+        let init_result = cuInit(0);
+        if init_result != 0 {
+            return false;
+        }
+
+        // Get device count using Driver API
         let mut device_count: i32 = 0;
-        let result = cudaGetDeviceCount(&mut device_count);
-        // cudaSuccess = 0
-        result == 0 && device_count > 0
+        let result = cuDeviceGetCount(&mut device_count);
+        // CUDA_SUCCESS = 0
+        if result != 0 {
+            return false;
+        }
+
+        device_count > 0
     }
 }

@@ -1,45 +1,44 @@
 //! Phase oscillation (φ) module.
 //!
 //! Implements phase synchronization and memory consolidation:
-//! - Phase oscillator for learning rhythms
+//! - **KuramotoNetwork**: True 13-oscillator Kuramoto coupled dynamics (Constitution v4.0.0)
+//! - PhaseOscillator: Simple single-phase oscillator (legacy, for backwards compatibility)
 //! - Consolidation phase detection (NREM/REM)
-//! - Phase alignment computation
 //!
-//! # Constitution Reference
+//! # Constitution Reference (Section gwt.kuramoto)
 //!
-//! - `φ` range: `[0, π]` representing phase angle
-//! - `cos(φ) = 1.0` when fully synchronized (φ = 0)
-//! - `cos(φ) = -1.0` when anti-phase (φ = π)
-//! - L4 operates at 100Hz reference frequency
+//! The Kuramoto model synchronizes 13 embedding spaces:
+//! ```text
+//! dθᵢ/dt = ωᵢ + (K/N) Σⱼ sin(θⱼ - θᵢ)
+//! ```
+//!
+//! Order parameter r measures synchronization:
+//! - r ≥ 0.8 → CONSCIOUS state
+//! - r < 0.5 → FRAGMENTED state
 //!
 //! # Example
 //!
 //! ```
-//! use context_graph_utl::phase::{PhaseOscillator, ConsolidationPhase, PhaseDetector};
-//! use context_graph_utl::config::PhaseConfig;
+//! use context_graph_utl::phase::{KuramotoNetwork, PhaseOscillator};
 //! use std::time::Duration;
 //!
-//! // Create phase oscillator
-//! let config = PhaseConfig::default();
-//! let mut oscillator = PhaseOscillator::new(&config);
+//! // Create Kuramoto network (13 coupled oscillators)
+//! let mut network = KuramotoNetwork::new();
 //!
-//! // Update phase based on elapsed time
-//! oscillator.update(Duration::from_millis(10));
+//! // Simulate time steps
+//! for _ in 0..100 {
+//!     network.step(Duration::from_millis(10));
+//! }
 //!
-//! // Get current phase and cosine
-//! let phase = oscillator.phase();
-//! let cos_phi = oscillator.cos_phase();
+//! // Check synchronization level
+//! let r = network.synchronization();
+//! let is_conscious = network.is_conscious();
 //!
-//! assert!(phase >= 0.0 && phase <= std::f32::consts::PI);
-//! assert!(cos_phi >= -1.0 && cos_phi <= 1.0);
-//!
-//! // Detect consolidation phase
-//! let detector = PhaseDetector::new();
-//! let phase_type = detector.detect_phase(0.3); // Low activity
+//! println!("Synchronization r = {:.3}, conscious = {}", r, is_conscious);
 //! ```
 
 mod consolidation;
 mod oscillator;
 
 pub use consolidation::{ConsolidationPhase, PhaseDetector};
-pub use oscillator::PhaseOscillator;
+pub use oscillator::{KuramotoNetwork, PhaseOscillator, EMBEDDER_NAMES, NUM_OSCILLATORS};

@@ -5,8 +5,13 @@
 //! - Neural attention mechanisms
 //! - Modern Hopfield network computations
 //!
-//! For Phase 0 (Ghost System), stub implementations run on CPU.
-//! Future phases will use cudarc bindings for RTX 5090 (Blackwell) optimization.
+//! # Constitution AP-007 Compliance
+//!
+//! **CUDA is ALWAYS required - no stub implementations in production.**
+//!
+//! The `StubVectorOps` type is available ONLY in test builds (`#[cfg(test)]`)
+//! and must NOT be used in production code paths. All production code must
+//! use real CUDA implementations.
 //!
 //! # Target Hardware
 //!
@@ -14,22 +19,27 @@
 //! - CUDA 13.1 with Compute Capability 12.0
 //! - Blackwell architecture optimizations
 //!
-//! # Example
+//! # Example (Test Only)
 //!
-//! ```
+//! ```ignore
+//! // StubVectorOps is only available in #[cfg(test)] builds
+//! #[cfg(test)]
 //! use context_graph_cuda::{StubVectorOps, VectorOps};
 //!
-//! // Create stub vector ops for CPU fallback
-//! let ops = StubVectorOps::new();
-//! // Stub uses CPU, so GPU is not available
-//! assert!(!ops.is_gpu_available());
-//! assert_eq!(ops.device_name(), "CPU (Stub)");
+//! #[cfg(test)]
+//! fn test_example() {
+//!     let ops = StubVectorOps::new();
+//!     assert!(!ops.is_gpu_available());
+//! }
 //! ```
 
 pub mod cone;
 pub mod error;
 pub mod ops;
 pub mod poincare;
+
+// AP-007: StubVectorOps is TEST ONLY - not available in production builds
+#[cfg(test)]
 pub mod stub;
 
 pub use error::{CudaError, CudaResult};
@@ -45,4 +55,6 @@ pub use cone::{
 };
 #[cfg(feature = "cuda")]
 pub use cone::{cone_check_batch_gpu, cone_check_single_gpu};
+// AP-007: StubVectorOps export is gated to test-only builds
+#[cfg(test)]
 pub use stub::StubVectorOps;
