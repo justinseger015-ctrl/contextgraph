@@ -20,6 +20,9 @@ rand.workspace = true
 dashmap = "5.5"
 bincode.workspace = true
 
+# Real HNSW implementation - NO FALLBACKS
+hnsw_rs = "0.3"
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 

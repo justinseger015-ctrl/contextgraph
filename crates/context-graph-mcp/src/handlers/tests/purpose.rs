@@ -3,7 +3,7 @@
 //! TASK-S003: Tests for purpose/query, purpose/north_star_alignment, goal/hierarchy_query,
 //! goal/aligned_memories, purpose/drift_check, and purpose/north_star_update handlers.
 //!
-//! NO MOCK DATA - uses InMemoryTeleologicalStore with StubMultiArrayProvider and real GoalHierarchy.
+//! Uses STUBS (InMemoryTeleologicalStore, StubMultiArrayProvider) with real GoalHierarchy.
 //!
 //! Tests verify:
 //! - purpose/query with 13D purpose vector similarity
@@ -1184,7 +1184,7 @@ async fn test_north_star_update_wrong_embedding_dims_fails() {
 /// 6. Find aligned memories via goal/aligned_memories
 /// 7. Check drift via purpose/drift_check
 ///
-/// NO MOCKS - uses real GoalHierarchy and InMemoryTeleologicalStore.
+/// Uses real GoalHierarchy with STUB storage (InMemoryTeleologicalStore).
 #[tokio::test]
 async fn test_full_state_verification_purpose_workflow() {
     let handlers = create_test_handlers();

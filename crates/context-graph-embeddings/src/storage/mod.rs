@@ -9,6 +9,7 @@
 //! - `IndexEntry`: Entry in per-embedder HNSW index (dequantized for search)
 //! - `EmbedderQueryResult`: Result from single embedder search
 //! - `MultiSpaceQueryResult`: RRF-fused result from multi-space retrieval
+//! - `MultiSpaceSearchEngine`: Stage 3 multi-space search with RRF fusion
 //!
 //! # Relationship to Other Types
 //!
@@ -18,6 +19,10 @@
 //! The conversion between these types happens in the Logic Layer (TASK-EMB-022).
 
 mod types;
+pub mod multi_space;
+
+#[cfg(test)]
+mod full_state_verification;
 
 pub use types::{
     // Constants
@@ -32,4 +37,10 @@ pub use types::{
     IndexEntry,
     EmbedderQueryResult,
     MultiSpaceQueryResult,
+};
+
+pub use multi_space::{
+    MultiSpaceSearchEngine,
+    QuantizedFingerprintRetriever,
+    MultiSpaceIndexProvider,
 };

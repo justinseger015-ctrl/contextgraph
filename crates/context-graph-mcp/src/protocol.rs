@@ -156,6 +156,14 @@ pub mod error_codes {
     pub const META_UTL_TRAJECTORY_ERROR: i32 = -32044;
     /// Health metrics failed
     pub const META_UTL_HEALTH_ERROR: i32 = -32045;
+
+    // Monitoring error codes (-32050 to -32059) - TASK-EMB-024
+    /// SystemMonitor not configured or returned error
+    pub const SYSTEM_MONITOR_ERROR: i32 = -32050;
+    /// LayerStatusProvider not configured or returned error
+    pub const LAYER_STATUS_ERROR: i32 = -32051;
+    /// Pipeline breakdown metrics not yet implemented
+    pub const PIPELINE_METRICS_UNAVAILABLE: i32 = -32052;
 }
 
 /// MCP method names.

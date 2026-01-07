@@ -23,7 +23,7 @@
 //!
 //! - **NO BACKWARDS COMPATIBILITY**: Old MemoryStore trait deleted
 //! - **FAIL FAST**: All errors return `CoreError` variants with context
-//! - **NO MOCK DATA**: Tests use real `InMemoryTeleologicalStore`
+//! - **UNIT TESTS**: Tests use stub `InMemoryTeleologicalStore` (not persistent RocksDB)
 //! - **13 EMBEDDERS**: Full E1-E13 semantic fingerprint support
 
 use std::path::{Path, PathBuf};

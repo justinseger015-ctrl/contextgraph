@@ -344,20 +344,16 @@ impl Handlers {
                     "query_metadata": metadata
                 });
 
-                // Pipeline breakdown (simulated - actual pipeline would provide real timing)
+                // TASK-EMB-024: Pipeline breakdown - FAIL FAST with explicit error
+                // NO fake/simulated timing data - require real pipeline metrics
                 if include_breakdown {
-                    response["pipeline_breakdown"] = json!({
-                        "stage1_splade_ms": 0.0,
-                        "stage1_candidates": 0,
-                        "stage2_matryoshka_ms": 0.0,
-                        "stage2_candidates": 0,
-                        "stage3_full_hnsw_ms": query_latency_ms,
-                        "stage3_candidates": results.len(),
-                        "stage4_teleological_ms": 0.0,
-                        "stage4_candidates": results.len(),
-                        "stage5_late_interaction_ms": 0.0,
-                        "stage5_candidates": results.len()
-                    });
+                    error!("search/multi: Pipeline breakdown requested but not implemented");
+                    return JsonRpcResponse::error(
+                        id,
+                        error_codes::PIPELINE_METRICS_UNAVAILABLE,
+                        "Pipeline breakdown metrics are not yet implemented. \
+                         Set include_pipeline_breakdown=false or wait for real pipeline metrics.",
+                    );
                 }
 
                 debug!(

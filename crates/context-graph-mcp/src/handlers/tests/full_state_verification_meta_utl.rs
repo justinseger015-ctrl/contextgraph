@@ -9,7 +9,7 @@
 //! 3. Edge Case Audit: Test 3+ edge cases with BEFORE/AFTER state logging
 //! 4. Evidence of Success: Print actual data residing in the system
 //!
-//! ## NO Mock Data
+//! ## Uses STUB implementations (InMemoryTeleologicalStore)
 //!
 //! All tests use real InMemoryTeleologicalStore with real fingerprints.
 //! NO fallbacks, NO default values, NO workarounds.
@@ -208,10 +208,15 @@ async fn test_fsv_learning_trajectory_specific_embedders() {
     println!("======================================================================\n");
 }
 
+/// Test that health_metrics correctly fails when real SystemMonitor is unavailable.
+///
+/// TASK-EMB-024: FAIL FAST - NO hardcoded fallback values.
+/// StubSystemMonitor intentionally returns NotImplemented errors.
+/// This test verifies the fail-fast behavior is working correctly.
 #[tokio::test]
 async fn test_fsv_health_metrics_with_targets() {
     println!("\n======================================================================");
-    println!("FSV: meta_utl/health_metrics - With Constitution Targets");
+    println!("FSV: meta_utl/health_metrics - Verify FAIL-FAST Behavior");
     println!("======================================================================\n");
 
     let (handlers, _store, _tracker) = create_verifiable_handlers_with_tracker();
@@ -227,40 +232,41 @@ async fn test_fsv_health_metrics_with_targets() {
 
     let response = handlers.dispatch(request).await;
 
-    // STEP 2: VERIFY RESPONSE
-    assert!(response.error.is_none(), "Handler should succeed");
-    let result = response.result.unwrap();
+    // STEP 2: VERIFY FAIL-FAST BEHAVIOR
+    // TASK-EMB-024: StubSystemMonitor intentionally fails with NotImplemented
+    // This is CORRECT behavior - no fake/simulated metrics allowed
+    println!("VERIFY FAIL-FAST BEHAVIOR:");
+    println!("  - StubSystemMonitor is designed to fail (TASK-EMB-024)");
+    println!("  - NO hardcoded fallback values allowed");
+    println!("  - Real SystemMonitor required for health metrics");
 
-    println!("VERIFY CONSTITUTION TARGETS:");
-    let metrics = &result["metrics"];
+    assert!(
+        response.error.is_some(),
+        "Handler MUST fail when using StubSystemMonitor (TASK-EMB-024 fail-fast policy)"
+    );
 
-    // Verify hardcoded targets from constitution.yaml (use approx for f32 precision)
-    let learning_target = metrics["learning_score_target"].as_f64().unwrap();
-    assert!((learning_target - 0.6).abs() < 0.001, "learning_score_target should be ~0.6, got {}", learning_target);
-    println!("  learning_score_target: {} (verified ~0.6)", learning_target);
+    let error = response.error.as_ref().unwrap();
+    println!("\n  Error code: {}", error.code);
+    println!("  Error message: {}", error.message);
 
-    assert_eq!(metrics["coherence_recovery_target_ms"].as_u64().unwrap(), 10000);
-    println!("  coherence_recovery_target_ms: 10000 (verified)");
+    // Verify it's the expected SYSTEM_MONITOR_ERROR
+    assert_eq!(
+        error.code,
+        crate::protocol::error_codes::SYSTEM_MONITOR_ERROR,
+        "Should return SYSTEM_MONITOR_ERROR when SystemMonitor fails"
+    );
 
-    let attack_target = metrics["attack_detection_target"].as_f64().unwrap();
-    assert!((attack_target - 0.95).abs() < 0.001, "attack_detection_target should be ~0.95, got {}", attack_target);
-    println!("  attack_detection_target: {} (verified ~0.95)", attack_target);
-
-    let fp_target = metrics["false_positive_target"].as_f64().unwrap();
-    assert!((fp_target - 0.02).abs() < 0.001, "false_positive_target should be ~0.02, got {}", fp_target);
-    println!("  false_positive_target: {} (verified ~0.02)", fp_target);
-
-    // Verify per_space_accuracy has 13 elements
-    let per_space = metrics["per_space_accuracy"].as_array().unwrap();
-    assert_eq!(per_space.len(), NUM_EMBEDDERS, "per_space_accuracy should have 13 elements");
-    println!("  per_space_accuracy length: {} (verified)", per_space.len());
-
-    // Verify overall_status
-    let overall_status = result["overall_status"].as_str().unwrap();
-    println!("  overall_status: {}", overall_status);
+    // Verify error message mentions the component
+    assert!(
+        error.message.contains("coherence_recovery") || error.message.contains("recovery"),
+        "Error should mention the failing component"
+    );
 
     println!("\n======================================================================");
-    println!("EVIDENCE: Constitution targets match spec values");
+    println!("EVIDENCE: FAIL-FAST behavior working correctly");
+    println!("  - StubSystemMonitor returns NotImplemented (by design)");
+    println!("  - Handler correctly propagates error");
+    println!("  - No fake metrics returned");
     println!("======================================================================\n");
 }
 

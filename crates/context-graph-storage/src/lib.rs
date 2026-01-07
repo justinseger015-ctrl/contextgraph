@@ -87,4 +87,7 @@ pub use teleological::{
     QUANTIZED_EMBEDDER_CFS, QUANTIZED_EMBEDDER_CF_COUNT,
     // Quantized fingerprint storage trait (TASK-EMB-022)
     QuantizedFingerprintStorage, QuantizedStorageError, QuantizedStorageResult,
+    // RocksDB teleological store (TASK: test-remediation)
+    RocksDbTeleologicalStore, TeleologicalStoreConfig, TeleologicalStoreError,
+    TeleologicalStoreResult,
 };

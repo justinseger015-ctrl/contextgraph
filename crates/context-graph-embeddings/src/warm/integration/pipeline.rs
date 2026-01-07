@@ -50,6 +50,11 @@ impl WarmEmbeddingPipeline {
     /// On ANY initialization error, this method logs diagnostics and calls
     /// `std::process::exit()` with the appropriate exit code.
     /// It only returns `Ok(Self)` on complete success.
+    ///
+    /// # CUDA Requirement
+    ///
+    /// This function requires the `cuda` feature. CUDA is mandatory per Constitution AP-007.
+    #[cfg(feature = "cuda")]
     pub fn create_and_warm(config: WarmConfig) -> WarmResult<Self> {
         tracing::info!("Starting WarmEmbeddingPipeline initialization");
         let start_time = Instant::now();
@@ -151,6 +156,11 @@ impl WarmEmbeddingPipeline {
     /// Loads all 12 models into VRAM and validates them. Unlike
     /// [`create_and_warm()`](Self::create_and_warm), this method returns
     /// an error instead of exiting on failure.
+    ///
+    /// # CUDA Requirement
+    ///
+    /// This function requires the `cuda` feature. CUDA is mandatory per Constitution AP-007.
+    #[cfg(feature = "cuda")]
     pub fn warm(&mut self) -> WarmResult<()> {
         if self.initialized.load(Ordering::SeqCst) {
             tracing::warn!("Pipeline already initialized, skipping warm()");

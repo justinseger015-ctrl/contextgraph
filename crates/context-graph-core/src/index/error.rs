@@ -118,6 +118,71 @@ pub enum IndexError {
         /// Underlying error message
         message: String,
     },
+
+    /// HNSW index construction failed.
+    ///
+    /// This is a FATAL error - NO FALLBACKS. The system will not silently degrade.
+    #[error("HNSW CONSTRUCTION FAILED: dimension={dimension}, M={m}, ef_construction={ef_construction}: {message}")]
+    HnswConstructionFailed {
+        /// Embedding dimension requested
+        dimension: usize,
+        /// M parameter (edges per node)
+        m: usize,
+        /// ef_construction parameter
+        ef_construction: usize,
+        /// Detailed error message
+        message: String,
+    },
+
+    /// HNSW insertion failed.
+    ///
+    /// This is a FATAL error - the vector could not be added to the index.
+    #[error("HNSW INSERTION FAILED: memory_id={memory_id}, dimension={dimension}: {message}")]
+    HnswInsertionFailed {
+        /// The memory ID that failed to insert
+        memory_id: Uuid,
+        /// Dimension of the vector
+        dimension: usize,
+        /// Detailed error message
+        message: String,
+    },
+
+    /// HNSW search failed.
+    ///
+    /// This is a FATAL error - search could not complete.
+    #[error("HNSW SEARCH FAILED: k={k}, query_dim={query_dim}: {message}")]
+    HnswSearchFailed {
+        /// Number of neighbors requested
+        k: usize,
+        /// Query vector dimension
+        query_dim: usize,
+        /// Detailed error message
+        message: String,
+    },
+
+    /// HNSW persistence failed.
+    ///
+    /// Failed to save or load the HNSW index.
+    #[error("HNSW PERSISTENCE FAILED: operation={operation}, path={path}: {message}")]
+    HnswPersistenceFailed {
+        /// Operation being performed (save/load)
+        operation: String,
+        /// Path to the index file
+        path: String,
+        /// Detailed error message
+        message: String,
+    },
+
+    /// HNSW library internal error.
+    ///
+    /// An unexpected error from the hnsw_rs library.
+    #[error("HNSW INTERNAL ERROR: {context}: {message}")]
+    HnswInternalError {
+        /// Context of the operation
+        context: String,
+        /// Error message from hnsw_rs
+        message: String,
+    },
 }
 
 impl IndexError {

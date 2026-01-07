@@ -30,6 +30,7 @@ pub mod error;
 pub mod index;
 pub mod johari;
 pub mod marblestone;
+pub mod monitoring;
 pub mod purpose;
 pub mod retrieval;
 pub mod similarity;
@@ -41,3 +42,7 @@ pub mod types;
 pub use config::Config;
 pub use error::{CoreError, CoreResult};
 pub use marblestone::{Domain, EdgeType, NeurotransmitterWeights};
+pub use monitoring::{
+    HealthMetrics, LayerInfo, LayerStatus, LayerStatusProvider, MonitorResult, StubLayerStatusProvider,
+    StubSystemMonitor, SystemMonitor, SystemMonitorError,
+};

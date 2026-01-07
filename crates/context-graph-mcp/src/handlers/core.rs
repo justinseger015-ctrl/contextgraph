@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use context_graph_core::alignment::GoalAlignmentCalculator;
 use context_graph_core::johari::{DynDefaultJohariManager, JohariTransitionManager, NUM_EMBEDDERS};
+use context_graph_core::monitoring::{LayerStatusProvider, StubLayerStatusProvider, StubSystemMonitor, SystemMonitor};
 use context_graph_core::purpose::GoalHierarchy;
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor};
 
@@ -194,6 +195,7 @@ use crate::protocol::{error_codes, methods, JsonRpcRequest, JsonRpcResponse};
 /// TASK-S003: Added GoalAlignmentCalculator and GoalHierarchy for purpose operations.
 /// TASK-S004: Added JohariTransitionManager for johari/* operations.
 /// TASK-S005: Added MetaUtlTracker for meta_utl/* operations.
+/// TASK-EMB-024: Added SystemMonitor and LayerStatusProvider for real health metrics.
 pub struct Handlers {
     /// Teleological memory store - stores TeleologicalFingerprint with 13 embeddings.
     /// NO legacy MemoryStore support.
@@ -221,6 +223,14 @@ pub struct Handlers {
     /// Meta-UTL tracker - tracks predictions and per-embedder accuracy.
     /// TASK-S005: Required for meta_utl/* handlers.
     pub(super) meta_utl_tracker: Arc<RwLock<MetaUtlTracker>>,
+
+    /// System monitor for REAL health metrics.
+    /// TASK-EMB-024: Required for meta_utl/health_metrics - NO hardcoded values.
+    pub(super) system_monitor: Arc<dyn SystemMonitor>,
+
+    /// Layer status provider for REAL layer statuses.
+    /// TASK-EMB-024: Required for get_memetic_status and get_graph_manifest - NO hardcoded values.
+    pub(super) layer_status_provider: Arc<dyn LayerStatusProvider>,
 }
 
 impl Handlers {
@@ -232,6 +242,11 @@ impl Handlers {
     /// * `multi_array_provider` - 13-embedding generator (TASK-F007)
     /// * `alignment_calculator` - Goal alignment calculator (TASK-S003)
     /// * `goal_hierarchy` - Goal hierarchy with North Star (TASK-S003)
+    ///
+    /// # TASK-EMB-024 Note
+    ///
+    /// This constructor uses StubSystemMonitor and StubLayerStatusProvider as defaults.
+    /// For production use with real metrics, use `with_full_monitoring()`.
     pub fn new(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
@@ -246,6 +261,10 @@ impl Handlers {
         // TASK-S005: Create Meta-UTL tracker
         let meta_utl_tracker = Arc::new(RwLock::new(MetaUtlTracker::new()));
 
+        // TASK-EMB-024: Default to stub monitors (will fail with explicit errors)
+        let system_monitor: Arc<dyn SystemMonitor> = Arc::new(StubSystemMonitor::new());
+        let layer_status_provider: Arc<dyn LayerStatusProvider> = Arc::new(StubLayerStatusProvider::new());
+
         Self {
             teleological_store,
             utl_processor,
@@ -254,6 +273,8 @@ impl Handlers {
             goal_hierarchy: Arc::new(RwLock::new(goal_hierarchy)),
             johari_manager,
             meta_utl_tracker,
+            system_monitor,
+            layer_status_provider,
         }
     }
 
@@ -268,6 +289,10 @@ impl Handlers {
     /// * `multi_array_provider` - 13-embedding generator (TASK-F007)
     /// * `alignment_calculator` - Goal alignment calculator (TASK-S003)
     /// * `goal_hierarchy` - Shared goal hierarchy reference (TASK-S003)
+    ///
+    /// # TASK-EMB-024 Note
+    ///
+    /// This constructor uses StubSystemMonitor and StubLayerStatusProvider as defaults.
     pub fn with_shared_hierarchy(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
@@ -282,6 +307,10 @@ impl Handlers {
         // TASK-S005: Create Meta-UTL tracker
         let meta_utl_tracker = Arc::new(RwLock::new(MetaUtlTracker::new()));
 
+        // TASK-EMB-024: Default to stub monitors (will fail with explicit errors)
+        let system_monitor: Arc<dyn SystemMonitor> = Arc::new(StubSystemMonitor::new());
+        let layer_status_provider: Arc<dyn LayerStatusProvider> = Arc::new(StubLayerStatusProvider::new());
+
         Self {
             teleological_store,
             utl_processor,
@@ -290,6 +319,8 @@ impl Handlers {
             goal_hierarchy,
             johari_manager,
             meta_utl_tracker,
+            system_monitor,
+            layer_status_provider,
         }
     }
 
@@ -305,6 +336,10 @@ impl Handlers {
     /// * `alignment_calculator` - Goal alignment calculator (TASK-S003)
     /// * `goal_hierarchy` - Shared goal hierarchy reference (TASK-S003)
     /// * `johari_manager` - Shared Johari manager reference (TASK-S004)
+    ///
+    /// # TASK-EMB-024 Note
+    ///
+    /// This constructor uses StubSystemMonitor and StubLayerStatusProvider as defaults.
     pub fn with_johari_manager(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
@@ -316,6 +351,10 @@ impl Handlers {
         // TASK-S005: Create Meta-UTL tracker
         let meta_utl_tracker = Arc::new(RwLock::new(MetaUtlTracker::new()));
 
+        // TASK-EMB-024: Default to stub monitors (will fail with explicit errors)
+        let system_monitor: Arc<dyn SystemMonitor> = Arc::new(StubSystemMonitor::new());
+        let layer_status_provider: Arc<dyn LayerStatusProvider> = Arc::new(StubLayerStatusProvider::new());
+
         Self {
             teleological_store,
             utl_processor,
@@ -324,6 +363,8 @@ impl Handlers {
             goal_hierarchy,
             johari_manager,
             meta_utl_tracker,
+            system_monitor,
+            layer_status_provider,
         }
     }
 
@@ -333,6 +374,10 @@ impl Handlers {
     /// implementation or share it across multiple handler instances (for testing).
     ///
     /// TASK-S005: Added for full state verification tests.
+    ///
+    /// # TASK-EMB-024 Note
+    ///
+    /// This constructor uses StubSystemMonitor and StubLayerStatusProvider as defaults.
     pub fn with_meta_utl_tracker(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
@@ -342,6 +387,10 @@ impl Handlers {
         johari_manager: Arc<dyn JohariTransitionManager>,
         meta_utl_tracker: Arc<RwLock<MetaUtlTracker>>,
     ) -> Self {
+        // TASK-EMB-024: Default to stub monitors (will fail with explicit errors)
+        let system_monitor: Arc<dyn SystemMonitor> = Arc::new(StubSystemMonitor::new());
+        let layer_status_provider: Arc<dyn LayerStatusProvider> = Arc::new(StubLayerStatusProvider::new());
+
         Self {
             teleological_store,
             utl_processor,
@@ -350,6 +399,47 @@ impl Handlers {
             goal_hierarchy,
             johari_manager,
             meta_utl_tracker,
+            system_monitor,
+            layer_status_provider,
+        }
+    }
+
+    /// Create new handlers with full monitoring support.
+    ///
+    /// TASK-EMB-024: This is the recommended constructor for production use
+    /// when you need REAL health metrics (no hardcoded values).
+    ///
+    /// # Arguments
+    /// * `teleological_store` - Store for TeleologicalFingerprint (TASK-F008)
+    /// * `utl_processor` - UTL metrics computation
+    /// * `multi_array_provider` - 13-embedding generator (TASK-F007)
+    /// * `alignment_calculator` - Goal alignment calculator (TASK-S003)
+    /// * `goal_hierarchy` - Shared goal hierarchy reference (TASK-S003)
+    /// * `johari_manager` - Shared Johari manager reference (TASK-S004)
+    /// * `meta_utl_tracker` - Shared Meta-UTL tracker (TASK-S005)
+    /// * `system_monitor` - Real system monitor for health metrics
+    /// * `layer_status_provider` - Real layer status provider
+    pub fn with_full_monitoring(
+        teleological_store: Arc<dyn TeleologicalMemoryStore>,
+        utl_processor: Arc<dyn UtlProcessor>,
+        multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
+        alignment_calculator: Arc<dyn GoalAlignmentCalculator>,
+        goal_hierarchy: Arc<RwLock<GoalHierarchy>>,
+        johari_manager: Arc<dyn JohariTransitionManager>,
+        meta_utl_tracker: Arc<RwLock<MetaUtlTracker>>,
+        system_monitor: Arc<dyn SystemMonitor>,
+        layer_status_provider: Arc<dyn LayerStatusProvider>,
+    ) -> Self {
+        Self {
+            teleological_store,
+            utl_processor,
+            multi_array_provider,
+            alignment_calculator,
+            goal_hierarchy,
+            johari_manager,
+            meta_utl_tracker,
+            system_monitor,
+            layer_status_provider,
         }
     }
 

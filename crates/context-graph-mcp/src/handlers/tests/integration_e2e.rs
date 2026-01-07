@@ -12,7 +12,7 @@
 //! 4. AFTER STATE: Document final state changes
 //! 5. EVIDENCE: Print physical evidence of success
 //!
-//! ## NO Mock Data, NO Fallbacks, NO Workarounds
+//! ## Uses STUB implementations for unit testing (InMemoryTeleologicalStore, StubMultiArrayProvider)
 //!
 //! All tests use real implementations:
 //! - InMemoryTeleologicalStore (real DashMap storage)

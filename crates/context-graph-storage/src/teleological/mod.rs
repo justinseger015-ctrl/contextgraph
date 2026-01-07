@@ -41,6 +41,7 @@
 pub mod column_families;
 pub mod indexes;
 pub mod quantized;
+pub mod rocksdb_store;
 pub mod schema;
 pub mod serialization;
 
@@ -91,4 +92,10 @@ pub use indexes::{
     // Dimension constants
     E1_DIM, E1_MATRYOSHKA_DIM, E2_DIM, E3_DIM, E4_DIM, E5_DIM, E6_SPARSE_VOCAB, E7_DIM, E8_DIM,
     E9_DIM, E10_DIM, E11_DIM, E12_TOKEN_DIM, E13_SPLADE_VOCAB, NUM_EMBEDDERS, PURPOSE_VECTOR_DIM,
+};
+
+// Re-export RocksDB teleological store (TASK: RocksDbTeleologicalStore)
+pub use rocksdb_store::{
+    RocksDbTeleologicalStore, TeleologicalStoreConfig, TeleologicalStoreError,
+    TeleologicalStoreResult,
 };

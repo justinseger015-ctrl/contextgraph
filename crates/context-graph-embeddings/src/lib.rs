@@ -48,6 +48,7 @@ compile_error!(
 );
 
 pub mod batch;
+pub mod cache;
 pub mod config;
 pub mod error;
 pub mod gpu;
@@ -59,7 +60,8 @@ pub mod types;
 pub mod warm;
 pub mod quantization;
 
-// NOTE: cache module removed - now handled by context-graph-teleology crate
+// Cache re-exports
+pub use cache::{CacheKey, CacheStats, EmbeddingCache};
 
 pub use config::{
     BatchConfig, CacheConfig, EmbeddingConfig, EvictionPolicy, GpuConfig,

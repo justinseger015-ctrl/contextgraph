@@ -5,7 +5,7 @@
 use std::time::Instant;
 
 use serde_json::json;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use context_graph_core::johari::NUM_EMBEDDERS;
@@ -362,10 +362,43 @@ impl Handlers {
             0.5 // Default when no data
         };
 
-        // Simulated metrics (would come from system monitoring in production)
-        let coherence_recovery_time_ms: u64 = 8500;
-        let attack_detection_rate: f32 = 0.97;
-        let false_positive_rate: f32 = 0.015;
+        // TASK-EMB-024: Get REAL metrics from SystemMonitor - NO HARDCODED VALUES
+        // FAIL FAST if SystemMonitor is not configured
+        let coherence_recovery_time_ms = match self.system_monitor.coherence_recovery_time_ms().await {
+            Ok(v) => v,
+            Err(e) => {
+                error!(error = %e, "meta_utl/health_metrics: coherence_recovery_time_ms FAILED");
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::SYSTEM_MONITOR_ERROR,
+                    format!("Failed to get coherence_recovery_time_ms: {}", e),
+                );
+            }
+        };
+
+        let attack_detection_rate = match self.system_monitor.attack_detection_rate().await {
+            Ok(v) => v,
+            Err(e) => {
+                error!(error = %e, "meta_utl/health_metrics: attack_detection_rate FAILED");
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::SYSTEM_MONITOR_ERROR,
+                    format!("Failed to get attack_detection_rate: {}", e),
+                );
+            }
+        };
+
+        let false_positive_rate = match self.system_monitor.false_positive_rate().await {
+            Ok(v) => v,
+            Err(e) => {
+                error!(error = %e, "meta_utl/health_metrics: false_positive_rate FAILED");
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::SYSTEM_MONITOR_ERROR,
+                    format!("Failed to get false_positive_rate: {}", e),
+                );
+            }
+        };
 
         // Check against targets
         let learning_score_status = if learning_score >= LEARNING_SCORE_TARGET {

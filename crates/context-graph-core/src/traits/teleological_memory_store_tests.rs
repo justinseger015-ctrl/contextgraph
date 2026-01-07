@@ -1,6 +1,6 @@
 //! Comprehensive tests for TeleologicalMemoryStore trait and InMemoryTeleologicalStore.
 //!
-//! These tests use REAL data and REAL implementations - NO MOCK DATA.
+//! These tests use STUB implementations (InMemoryTeleologicalStore) for isolated testing.
 //! All tests verify actual storage operations with real fingerprints.
 //!
 //! # Test Categories

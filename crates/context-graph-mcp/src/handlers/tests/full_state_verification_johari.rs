@@ -9,7 +9,7 @@
 //! 3. Edge Case Audit: Test 3+ edge cases with BEFORE/AFTER state logging
 //! 4. Evidence of Success: Print actual data residing in the system
 //!
-//! ## NO Mock Data
+//! ## Uses STUB implementations (InMemoryTeleologicalStore)
 //!
 //! All tests use real InMemoryTeleologicalStore with real fingerprints.
 //! NO fallbacks, NO default values, NO workarounds.

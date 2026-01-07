@@ -20,6 +20,7 @@ path = "src/main.rs"
 context-graph-core = { path = "../context-graph-core" }
 context-graph-cuda = { path = "../context-graph-cuda" }
 context-graph-embeddings = { path = "../context-graph-embeddings" }
+context-graph-storage = { path = "../context-graph-storage" }
 context-graph-utl = { path = "../context-graph-utl" }
 
 # Async runtime
@@ -63,6 +64,6 @@ tempfile = "3.10"
 # No fallback stubs - system fails fast if CUDA unavailable
 default = ["cuda"]
 candle = ["context-graph-embeddings/candle"]
-cuda = ["context-graph-cuda/cuda", "candle"]
+cuda = ["context-graph-cuda/cuda", "context-graph-embeddings/cuda", "context-graph-storage/cuda", "candle"]
 # Integration tests requiring real GPU/model files
 integration = []

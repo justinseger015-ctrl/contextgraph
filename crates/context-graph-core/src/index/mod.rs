@@ -62,7 +62,7 @@ pub mod status;
 
 // Re-exports for convenient access
 pub use error::{IndexError, IndexResult};
-pub use hnsw_impl::{HnswMultiSpaceIndex, SimpleHnswIndex};
+pub use hnsw_impl::{HnswMultiSpaceIndex, RealHnswIndex, SimpleHnswIndex};
 pub use manager::MultiSpaceIndexManager;
 pub use splade_impl::SpladeInvertedIndex;
 pub use status::{IndexHealth, IndexStatus, MultiIndexHealth};

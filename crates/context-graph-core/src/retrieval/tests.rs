@@ -7,11 +7,11 @@
 //! 3. Single-space search tests
 //! 4. Multi-space RRF aggregation tests
 //! 5. Pipeline execution tests
-//! 6. Real data integration tests (no mocks)
+//! 6. Unit tests with STUB implementations
 //! 7. Edge cases and error handling
 //!
-//! All tests use real `InMemoryTeleologicalStore` and `StubMultiArrayProvider`.
-//! NO MOCK DATA - per constitution.yaml.
+//! All tests use STUB implementations (InMemoryTeleologicalStore, StubMultiArrayProvider).
+//! These are NOT real implementations - see integration tests for RocksDB + real embeddings.
 
 use super::*;
 use crate::stubs::{InMemoryTeleologicalStore, StubMultiArrayProvider};
