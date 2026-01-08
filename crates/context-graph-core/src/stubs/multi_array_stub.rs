@@ -253,7 +253,7 @@ impl MultiArrayEmbeddingProvider for StubMultiArrayProvider {
         fingerprint.e3_temporal_periodic = Self::fill_dense_embedding(content, 512);
         fingerprint.e4_temporal_positional = Self::fill_dense_embedding(content, 512);
         fingerprint.e5_causal = Self::fill_dense_embedding(content, 768);
-        fingerprint.e7_code = Self::fill_dense_embedding(content, 256);
+        fingerprint.e7_code = Self::fill_dense_embedding(content, 1536);
         fingerprint.e8_graph = Self::fill_dense_embedding(content, 384);
         fingerprint.e9_hdc = Self::fill_dense_embedding(content, 10000);
         fingerprint.e10_multimodal = Self::fill_dense_embedding(content, 768);
@@ -536,7 +536,7 @@ mod tests {
         assert_eq!(fp.e3_temporal_periodic.len(), 512);
         assert_eq!(fp.e4_temporal_positional.len(), 512);
         assert_eq!(fp.e5_causal.len(), 768);
-        assert_eq!(fp.e7_code.len(), 256);
+        assert_eq!(fp.e7_code.len(), 1536);
         assert_eq!(fp.e8_graph.len(), 384);
         assert_eq!(fp.e9_hdc.len(), 10000);
         assert_eq!(fp.e10_multimodal.len(), 768);

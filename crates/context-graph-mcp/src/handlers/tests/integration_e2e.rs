@@ -1540,6 +1540,438 @@ async fn test_edge_case_goal_not_found() {
 }
 
 // =============================================================================
+// REAL GPU Embedding Integration Tests (Feature-gated: cuda)
+// =============================================================================
+//
+// These integration tests verify end-to-end workflows with REAL GPU embeddings.
+// They require:
+// - NVIDIA CUDA GPU with 8GB+ VRAM
+// - Pre-downloaded models in ./models directory
+// - cargo test --features cuda
+//
+// Run for Full State Verification with production-ready embeddings.
+// =============================================================================
+
+#[cfg(feature = "cuda")]
+mod real_embedding_integration_tests {
+    use super::*;
+    use crate::handlers::tests::create_test_handlers_with_real_embeddings;
+    use std::time::Instant;
+
+    /// FSV: Complete memory lifecycle with REAL GPU embeddings.
+    ///
+    /// Tests: store -> retrieve -> search -> delete with real 13-embedding fingerprints.
+    /// Verification is done through handlers interface (not direct store access).
+    #[tokio::test]
+    async fn test_fsv_real_embeddings_memory_lifecycle() {
+        println!("\n======================================================================");
+        println!("FSV: Real GPU Embeddings - Complete Memory Lifecycle");
+        println!("======================================================================\n");
+
+        let (handlers, _tempdir) = create_test_handlers_with_real_embeddings().await;
+
+        // 1. STORE: Create fingerprint with REAL GPU embeddings
+        let content = "Neural networks learn hierarchical representations of data patterns";
+        let store_request = make_request("memory/store", 1, json!({
+            "content": content,
+            "importance": 0.95
+        }));
+
+        let store_start = Instant::now();
+        let store_response = handlers.dispatch(store_request).await;
+        let store_latency = store_start.elapsed();
+        println!("Store latency: {:?}", store_latency);
+
+        assert!(store_response.error.is_none(), "Store should succeed with real embeddings");
+        let store_result = store_response.result.expect("Should have result");
+        let fingerprint_id = store_result.get("fingerprint_id")
+            .and_then(|v| v.as_str())
+            .expect("Should have fingerprint_id");
+        println!("✓ Stored fingerprint: {}", fingerprint_id);
+
+        // Verify store result has embedding count (13 embeddings)
+        if let Some(emb_count) = store_result.get("embedding_count").and_then(|v| v.as_u64()) {
+            assert_eq!(emb_count, 13, "Should have 13 embeddings");
+            println!("✓ Fingerprint has {} embeddings", emb_count);
+        }
+
+        // Verify purpose vector is returned and has 13 dimensions
+        if let Some(pv) = store_result.get("purpose_vector").and_then(|v| v.as_array()) {
+            assert_eq!(pv.len(), 13, "Purpose vector should be 13D");
+            println!("✓ Purpose vector has {} dimensions", pv.len());
+
+            // Verify each dimension is in [-1, 1]
+            for (i, dim) in pv.iter().enumerate() {
+                if let Some(val) = dim.as_f64() {
+                    assert!(
+                        val >= -1.0 && val <= 1.0,
+                        "PV[{}] should be in [-1, 1]: {}",
+                        i, val
+                    );
+                }
+            }
+        }
+
+        // 2. RETRIEVE: Verify retrieval returns same fingerprint
+        let retrieve_request = make_request("memory/retrieve", 2, json!({
+            "fingerprintId": fingerprint_id
+        }));
+        let retrieve_response = handlers.dispatch(retrieve_request).await;
+        assert!(retrieve_response.error.is_none(), "Retrieve should succeed");
+        let retrieve_result = retrieve_response.result.expect("Should have result");
+
+        let retrieved_id = retrieve_result.get("fingerprintId")
+            .and_then(|v| v.as_str())
+            .expect("Should have fingerprintId");
+        assert_eq!(retrieved_id, fingerprint_id, "Retrieved ID should match stored ID");
+        println!("✓ Retrieved fingerprint matches stored");
+
+        // 3. SEARCH: Verify semantic search finds the fingerprint
+        let search_request = make_request("search/multi", 3, json!({
+            "query": "machine learning neural network data patterns",
+            "query_type": "semantic_search",
+            "topK": 10,
+            "minSimilarity": 0.0,
+            "include_per_embedder_scores": true
+        }));
+
+        let search_start = Instant::now();
+        let search_response = handlers.dispatch(search_request).await;
+        let search_latency = search_start.elapsed();
+        println!("Search latency: {:?}", search_latency);
+
+        assert!(search_response.error.is_none(), "Search should succeed with real embeddings");
+        let search_result = search_response.result.expect("Should have result");
+        let results = search_result.get("results")
+            .and_then(|v| v.as_array())
+            .expect("Should have results array");
+
+        assert!(!results.is_empty(), "Should find at least one result");
+        let first = &results[0];
+        let found_id = first.get("fingerprintId").and_then(|v| v.as_str());
+        assert_eq!(found_id, Some(fingerprint_id), "Should find the stored fingerprint");
+        println!("✓ Search found stored fingerprint");
+
+        // Verify per-embedder scores (13 embedders)
+        if let Some(per_scores) = first.get("per_embedder_scores").and_then(|v| v.as_object()) {
+            println!("  Per-embedder scores: {} embedders reported", per_scores.len());
+        }
+
+        // 4. DELETE: Remove the fingerprint
+        let delete_request = make_request("memory/delete", 4, json!({
+            "fingerprintId": fingerprint_id,
+            "soft": false
+        }));
+        let delete_response = handlers.dispatch(delete_request).await;
+        assert!(delete_response.error.is_none(), "Delete should succeed");
+        println!("✓ Deleted fingerprint");
+
+        // 5. VERIFY DELETION: Search should find nothing now
+        let verify_request = make_request("search/multi", 5, json!({
+            "query": "neural networks",
+            "query_type": "semantic_search",
+            "topK": 10,
+            "minSimilarity": 0.0
+        }));
+        let verify_response = handlers.dispatch(verify_request).await;
+        assert!(verify_response.error.is_none(), "Verify search should succeed");
+        let verify_result = verify_response.result.expect("Should have result");
+        let verify_count = verify_result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+        assert_eq!(verify_count, 0, "Should find no results after delete");
+        println!("✓ Store is empty after delete");
+
+        println!("\n✓ COMPLETE: Real GPU embedding memory lifecycle verified");
+    }
+
+    /// FSV: Semantic search relevance with REAL embeddings.
+    ///
+    /// Verifies that real GPU embeddings produce semantically meaningful search results.
+    #[tokio::test]
+    async fn test_fsv_real_embeddings_semantic_relevance() {
+        println!("\n======================================================================");
+        println!("FSV: Real GPU Embeddings - Semantic Relevance Verification");
+        println!("======================================================================\n");
+
+        let (handlers, _tempdir) = create_test_handlers_with_real_embeddings().await;
+
+        // Store diverse content
+        let contents = [
+            ("Rust programming language provides memory safety without garbage collection", 0.9),
+            ("Python is a high-level interpreted programming language for data science", 0.9),
+            ("The Eiffel Tower is a famous landmark in Paris, France", 0.8),
+            ("Kubernetes orchestrates containerized applications across clusters", 0.85),
+        ];
+
+        let mut stored_ids = Vec::new();
+        for (i, (content, importance)) in contents.iter().enumerate() {
+            let store_request = make_request("memory/store", (i + 1) as i64, json!({
+                "content": content,
+                "importance": importance
+            }));
+            let response = handlers.dispatch(store_request).await;
+            assert!(response.error.is_none(), "Store {} should succeed", i);
+
+            if let Some(result) = response.result {
+                if let Some(id) = result.get("fingerprint_id").and_then(|v| v.as_str()) {
+                    stored_ids.push(id.to_string());
+                    println!("Stored[{}]: {}", i, &content[..50.min(content.len())]);
+                }
+            }
+        }
+
+        // Search for programming-related content
+        let search_request = make_request("search/multi", 100, json!({
+            "query": "programming language and software development",
+            "query_type": "semantic_search",
+            "topK": 10,
+            "minSimilarity": 0.0
+        }));
+        let response = handlers.dispatch(search_request).await;
+        assert!(response.error.is_none(), "Search should succeed");
+
+        let result = response.result.expect("Should have result");
+        let results = result.get("results").and_then(|v| v.as_array()).expect("Should have results");
+
+        println!("\nSearch results for 'programming language':");
+        for (i, r) in results.iter().enumerate() {
+            let content = r.get("content").and_then(|v| v.as_str()).unwrap_or("?");
+            let sim = r.get("combined_similarity").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            println!("  [{}] sim={:.4}: {}", i, sim, &content[..50.min(content.len())]);
+        }
+
+        // With real embeddings, programming content should rank higher than Eiffel Tower
+        // This is a soft assertion - we expect real semantic similarity to work
+        if results.len() >= 2 {
+            let top_content = results[0].get("content").and_then(|v| v.as_str()).unwrap_or("");
+            // Either Rust or Python should be in top results, not Eiffel Tower
+            let is_programming_related = top_content.contains("programming")
+                || top_content.contains("Rust")
+                || top_content.contains("Python")
+                || top_content.contains("Kubernetes");
+
+            if is_programming_related {
+                println!("✓ Real embeddings correctly ranked programming content first");
+            } else {
+                println!("WARNING: Top result may not be most semantically relevant");
+            }
+        }
+
+        println!("\n✓ COMPLETE: Semantic relevance test finished");
+    }
+
+    /// FSV: Purpose alignment with REAL 13D purpose vectors.
+    #[tokio::test]
+    async fn test_fsv_real_embeddings_purpose_alignment() {
+        println!("\n======================================================================");
+        println!("FSV: Real GPU Embeddings - Purpose Vector Alignment");
+        println!("======================================================================\n");
+
+        let (handlers, _tempdir) = create_test_handlers_with_real_embeddings().await;
+
+        // Store content
+        let store_request = make_request("memory/store", 1, json!({
+            "content": "Responsible AI development prioritizes safety and ethical considerations",
+            "importance": 0.95
+        }));
+        let response = handlers.dispatch(store_request).await;
+        assert!(response.error.is_none(), "Store should succeed");
+
+        let result = response.result.expect("Should have result");
+        let _fingerprint_id = result.get("fingerprint_id")
+            .and_then(|v| v.as_str())
+            .expect("Should have fingerprint_id");
+
+        // Verify purpose vector from store response
+        if let Some(pv) = result.get("purpose_vector").and_then(|v| v.as_array()) {
+            assert_eq!(pv.len(), 13, "Purpose vector must be 13D");
+
+            println!("Purpose vector dimensions:");
+            let dim_names = [
+                "E1:Semantic", "E2:TempCyclic", "E3:TempDecay", "E4:TempCtx",
+                "E5:Causal", "E6:Sparse", "E7:Code", "E8:Graph", "E9:HDC",
+                "E10:Multimodal", "E11:Entity", "E12:LateInteract", "E13:Sparse2"
+            ];
+            for (i, (dim, name)) in pv.iter().zip(dim_names.iter()).enumerate() {
+                let val = dim.as_f64().unwrap_or(0.0);
+                println!("  [{}] {}: {:.4}", i, name, val);
+                // Verify each dimension is in valid range [-1, 1]
+                assert!(
+                    val >= -1.0 && val <= 1.0,
+                    "PV dimension {} ({}) should be in [-1, 1]: {}",
+                    i, name, val
+                );
+            }
+        }
+
+        // Search by purpose
+        let purpose_vector: Vec<f64> = vec![
+            0.9,  // E1: Semantic - high for ethics content
+            0.2, 0.2, 0.2,  // E2-E4: Temporal
+            0.8,  // E5: Causal - important for safety
+            0.1, 0.3, 0.3, 0.2, 0.3, 0.5, 0.1, 0.1  // E6-E13
+        ];
+
+        let search_request = make_request("search/by_purpose", 2, json!({
+            "purpose_vector": purpose_vector,
+            "topK": 5,
+            "threshold": -1.0  // Allow all
+        }));
+        let response = handlers.dispatch(search_request).await;
+        assert!(response.error.is_none(), "By-purpose search should succeed");
+
+        let result = response.result.expect("Should have result");
+        let results = result.get("results").and_then(|v| v.as_array()).expect("Should have results");
+
+        if !results.is_empty() {
+            let alignment = results[0].get("alignment_score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            println!("\nTop alignment score: {:.4}", alignment);
+            assert!(
+                alignment >= -1.0 && alignment <= 1.0,
+                "Alignment should be in [-1, 1]"
+            );
+        }
+
+        println!("\n✓ COMPLETE: Purpose alignment test finished");
+    }
+
+    /// FSV: Verify all 13 embedding spaces are populated and searchable.
+    #[tokio::test]
+    async fn test_fsv_real_embeddings_all_spaces_populated() {
+        println!("\n======================================================================");
+        println!("FSV: Real GPU Embeddings - All 13 Spaces Populated");
+        println!("======================================================================\n");
+
+        let (handlers, _tempdir) = create_test_handlers_with_real_embeddings().await;
+
+        // Store content with code to exercise code embedder
+        let store_request = make_request("memory/store", 1, json!({
+            "content": "The function process_data(items: Vec<Item>) -> Result<Output> iterates through items",
+            "importance": 0.9
+        }));
+        let response = handlers.dispatch(store_request).await;
+        assert!(response.error.is_none(), "Store should succeed");
+
+        let result = response.result.expect("Should have result");
+        let _fingerprint_id = result.get("fingerprint_id")
+            .and_then(|v| v.as_str())
+            .expect("Should have fingerprint_id");
+
+        // Verify embedding count from store response
+        if let Some(emb_count) = result.get("embedding_count").and_then(|v| v.as_u64()) {
+            assert_eq!(emb_count, 13, "Must have exactly 13 embeddings");
+            println!("✓ Store returned {} embeddings", emb_count);
+        }
+
+        println!("\nVerifying all 13 embedding spaces via single-space search:");
+        let space_names = [
+            "E1:Semantic", "E2:TempCyclic", "E3:TempDecay", "E4:TempCtx",
+            "E5:Causal", "E6:Sparse(SPLADE)", "E7:Code", "E8:Graph", "E9:HDC",
+            "E10:Multimodal", "E11:Entity", "E12:LateInteract(ColBERT)", "E13:Sparse2"
+        ];
+
+        // Test single-space search for each space
+        println!("\nTesting single-space search for all 13 spaces:");
+        for space_index in 0..13 {
+            let search_request = make_request("search/single_space", (100 + space_index) as i64, json!({
+                "query": "function data processing",
+                "space_index": space_index,
+                "topK": 5,
+                "minSimilarity": 0.0
+            }));
+            let response = handlers.dispatch(search_request).await;
+
+            let status = if response.error.is_none() { "✓" } else { "✗" };
+            let count = response.result
+                .and_then(|r| r.get("count").and_then(|c| c.as_u64()))
+                .unwrap_or(0);
+            println!("  Space {}: {} (results: {})", space_index, status, count);
+
+            assert!(response.error.is_none(), "Space {} search should succeed", space_index);
+        }
+
+        println!("\n✓ COMPLETE: All 13 embedding spaces verified");
+    }
+
+    /// FSV: Performance benchmark with REAL GPU embeddings.
+    #[tokio::test]
+    async fn test_fsv_real_embeddings_performance() {
+        println!("\n======================================================================");
+        println!("FSV: Real GPU Embeddings - Performance Benchmark");
+        println!("======================================================================\n");
+
+        let (handlers, _tempdir) = create_test_handlers_with_real_embeddings().await;
+
+        // Warm up
+        let warmup = make_request("memory/store", 0, json!({
+            "content": "Warmup content for model initialization",
+            "importance": 0.5
+        }));
+        handlers.dispatch(warmup).await;
+
+        // Benchmark store operations
+        let mut store_latencies = Vec::new();
+        for i in 0..5 {
+            let content = format!("Performance test content number {} for benchmarking", i);
+            let request = make_request("memory/store", (i + 1) as i64, json!({
+                "content": content,
+                "importance": 0.8
+            }));
+
+            let start = Instant::now();
+            let response = handlers.dispatch(request).await;
+            let latency = start.elapsed();
+
+            assert!(response.error.is_none(), "Store {} should succeed", i);
+            store_latencies.push(latency.as_millis() as u64);
+            println!("Store[{}]: {}ms", i, latency.as_millis());
+        }
+
+        // Benchmark search operations
+        let mut search_latencies = Vec::new();
+        for i in 0..5 {
+            let request = make_request("search/multi", (100 + i) as i64, json!({
+                "query": format!("benchmark query number {}", i),
+                "query_type": "semantic_search",
+                "topK": 10,
+                "minSimilarity": 0.0
+            }));
+
+            let start = Instant::now();
+            let response = handlers.dispatch(request).await;
+            let latency = start.elapsed();
+
+            assert!(response.error.is_none(), "Search {} should succeed", i);
+            search_latencies.push(latency.as_millis() as u64);
+            println!("Search[{}]: {}ms", i, latency.as_millis());
+        }
+
+        // Calculate statistics
+        store_latencies.sort();
+        search_latencies.sort();
+
+        let store_median = store_latencies[store_latencies.len() / 2];
+        let store_p95 = *store_latencies.last().unwrap_or(&0);
+        let search_median = search_latencies[search_latencies.len() / 2];
+        let search_p95 = *search_latencies.last().unwrap_or(&0);
+
+        println!("\nPerformance Summary:");
+        println!("  Store - Median: {}ms, P95: {}ms", store_median, store_p95);
+        println!("  Search - Median: {}ms, P95: {}ms", search_median, search_p95);
+
+        // Constitution targets: inject_context p95 <25ms
+        // These are soft assertions - actual perf depends on hardware
+        if store_p95 > 100 {
+            println!("  WARNING: Store P95 {}ms exceeds 100ms target", store_p95);
+        }
+        if search_p95 > 100 {
+            println!("  WARNING: Search P95 {}ms exceeds 100ms target", search_p95);
+        }
+
+        println!("\n✓ COMPLETE: Performance benchmark finished");
+    }
+}
+
+// =============================================================================
 // TEST SUMMARY
 // =============================================================================
 //

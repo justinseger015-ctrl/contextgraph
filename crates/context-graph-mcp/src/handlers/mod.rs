@@ -43,6 +43,9 @@ mod tests;
 // Re-export the main Handlers struct for backward compatibility
 pub use self::core::Handlers;
 
+// Re-export MetaUtlTracker for server initialization
+pub use self::core::MetaUtlTracker;
+
 // Re-export GWT traits for external use (TASK-GWT-001)
 pub use self::gwt_traits::{
     GwtSystemProvider, KuramotoProvider, MetaCognitiveProvider,

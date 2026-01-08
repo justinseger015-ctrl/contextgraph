@@ -1,53 +1,54 @@
-//! Configuration types for CodeT5+ model.
+//! Configuration types for Qwen2 model (Qodo-Embed-1-1.5B).
 
 use std::path::Path;
 
 use crate::error::{EmbeddingError, EmbeddingResult};
 use crate::types::ModelId;
 
-/// CodeT5p configuration parsed from config.json.
+/// Qwen2 configuration parsed from config.json.
 #[derive(Debug, Clone)]
-pub struct CodeT5pConfig {
+pub struct QwenConfig {
     /// Vocabulary size.
     pub vocab_size: usize,
-    /// Hidden layer size (d_model).
-    pub d_model: usize,
-    /// Embedding dimension (output).
-    pub embed_dim: usize,
-    /// Key-value dimension.
-    pub d_kv: usize,
-    /// FFN dimension.
-    pub d_ff: usize,
-    /// Number of encoder layers.
-    pub num_layers: usize,
+    /// Hidden layer size.
+    pub hidden_size: usize,
+    /// Intermediate FFN size.
+    pub intermediate_size: usize,
+    /// Number of hidden layers.
+    pub num_hidden_layers: usize,
     /// Number of attention heads.
-    pub num_heads: usize,
-    /// Number of relative attention buckets.
-    pub relative_attention_num_buckets: usize,
-    /// Maximum distance for relative attention.
-    pub relative_attention_max_distance: usize,
-    /// Layer norm epsilon.
-    pub layer_norm_epsilon: f64,
+    pub num_attention_heads: usize,
+    /// Number of key-value heads (for GQA).
+    pub num_key_value_heads: usize,
+    /// RMSNorm epsilon.
+    pub rms_norm_eps: f64,
+    /// RoPE theta for position encoding.
+    pub rope_theta: f64,
+    /// Maximum position embeddings.
+    #[allow(dead_code)]
+    pub max_position_embeddings: usize,
+    /// Head dimension (computed from hidden_size / num_attention_heads).
+    pub head_dim: usize,
 }
 
-impl Default for CodeT5pConfig {
+impl Default for QwenConfig {
     fn default() -> Self {
         Self {
-            vocab_size: 32103,
-            d_model: 768,
-            embed_dim: 256,
-            d_kv: 64,
-            d_ff: 3072,
-            num_layers: 12,
-            num_heads: 12,
-            relative_attention_num_buckets: 32,
-            relative_attention_max_distance: 128,
-            layer_norm_epsilon: 1e-6,
+            vocab_size: 151646,
+            hidden_size: 1536,
+            intermediate_size: 8960,
+            num_hidden_layers: 28,
+            num_attention_heads: 12,
+            num_key_value_heads: 2,
+            rms_norm_eps: 1e-6,
+            rope_theta: 1_000_000.0,
+            max_position_embeddings: 131072,
+            head_dim: 128, // 1536 / 12 = 128
         }
     }
 }
 
-impl CodeT5pConfig {
+impl QwenConfig {
     /// Load config from JSON file.
     pub fn from_path(model_path: &Path) -> EmbeddingResult<Self> {
         let config_path = model_path.join("config.json");
@@ -60,46 +61,51 @@ impl CodeT5pConfig {
         #[derive(serde::Deserialize)]
         struct RawConfig {
             vocab_size: usize,
-            d_model: usize,
-            embed_dim: usize,
-            d_kv: usize,
-            d_ff: usize,
-            num_layers: usize,
-            num_heads: usize,
-            #[serde(default = "default_rel_buckets")]
-            relative_attention_num_buckets: usize,
-            #[serde(default = "default_rel_max_dist")]
-            relative_attention_max_distance: usize,
-            #[serde(default = "default_layer_norm_eps")]
-            layer_norm_epsilon: f64,
+            hidden_size: usize,
+            intermediate_size: usize,
+            num_hidden_layers: usize,
+            num_attention_heads: usize,
+            #[serde(default = "default_num_kv_heads")]
+            num_key_value_heads: usize,
+            #[serde(default = "default_rms_norm_eps")]
+            rms_norm_eps: f64,
+            #[serde(default = "default_rope_theta")]
+            rope_theta: f64,
+            #[serde(default = "default_max_position")]
+            max_position_embeddings: usize,
         }
 
-        fn default_rel_buckets() -> usize {
-            32
+        fn default_num_kv_heads() -> usize {
+            2
         }
-        fn default_rel_max_dist() -> usize {
-            128
-        }
-        fn default_layer_norm_eps() -> f64 {
+        fn default_rms_norm_eps() -> f64 {
             1e-6
+        }
+        fn default_rope_theta() -> f64 {
+            1_000_000.0
+        }
+        fn default_max_position() -> usize {
+            131072
         }
 
         let raw: RawConfig =
             serde_json::from_str(&config_content).map_err(|e| EmbeddingError::ConfigError {
-                message: format!("CodeModel config parse failed: {}", e),
+                message: format!("Qwen2 config parse failed: {}", e),
             })?;
 
-        Ok(CodeT5pConfig {
+        let head_dim = raw.hidden_size / raw.num_attention_heads;
+
+        Ok(QwenConfig {
             vocab_size: raw.vocab_size,
-            d_model: raw.d_model,
-            embed_dim: raw.embed_dim,
-            d_kv: raw.d_kv,
-            d_ff: raw.d_ff,
-            num_layers: raw.num_layers,
-            num_heads: raw.num_heads,
-            relative_attention_num_buckets: raw.relative_attention_num_buckets,
-            relative_attention_max_distance: raw.relative_attention_max_distance,
-            layer_norm_epsilon: raw.layer_norm_epsilon,
+            hidden_size: raw.hidden_size,
+            intermediate_size: raw.intermediate_size,
+            num_hidden_layers: raw.num_hidden_layers,
+            num_attention_heads: raw.num_attention_heads,
+            num_key_value_heads: raw.num_key_value_heads,
+            rms_norm_eps: raw.rms_norm_eps,
+            rope_theta: raw.rope_theta,
+            max_position_embeddings: raw.max_position_embeddings,
+            head_dim,
         })
     }
 }

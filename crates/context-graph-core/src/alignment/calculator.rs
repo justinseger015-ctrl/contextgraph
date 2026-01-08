@@ -411,7 +411,7 @@ impl DefaultAlignmentCalculator {
         // E6: Sparse (SPLADE) - use keyword matching
         alignments[5] = self.compute_sparse_alignment(&fingerprint.e6_sparse, goal);
 
-        // E7: Code (256D)
+        // E7: Code (1536D - Qodo-Embed)
         let projected_e7 = Self::project_embedding(&goal.embedding, fingerprint.e7_code.len());
         alignments[6] = self.compute_dense_alignment(&fingerprint.e7_code, &projected_e7);
 
@@ -929,9 +929,9 @@ mod tests {
         // E6: Sparse - set some active indices for non-zero alignment
         // (Sparse alignment computed separately, neutral 0.5 is fine for test)
 
-        // E7: Code (256D)
+        // E7: Code (1536D - Qodo-Embed)
         for i in 0..semantic.e7_code.len() {
-            semantic.e7_code[i] = (i as f32 / 256.0).sin() * alignment;
+            semantic.e7_code[i] = (i as f32 / 1536.0).sin() * alignment;
         }
 
         // E8: Graph (384D)

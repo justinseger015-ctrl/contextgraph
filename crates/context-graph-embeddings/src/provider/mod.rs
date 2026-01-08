@@ -1,7 +1,8 @@
 //! Embedding provider trait definition.
 //!
-//! This module provides the core abstraction for embedding providers:
-//! - [`EmbeddingProvider`]: Trait for all embedding providers
+//! This module provides the core abstractions for embedding providers:
+//! - [`EmbeddingProvider`]: Trait for single-model embedding providers
+//! - [`ProductionMultiArrayProvider`]: Production 13-embedder orchestrator
 //!
 //! # Architecture
 //!
@@ -12,7 +13,18 @@
 //! ├── dimension() -> usize              // Output dimension
 //! ├── model_name() -> &str              // Model identifier
 //! └── max_tokens() -> usize             // Token limit
+//!
+//! ProductionMultiArrayProvider
+//! ├── embed_all(&str) -> MultiArrayEmbeddingOutput  // All 13 embeddings
+//! ├── embed_batch_all(&[String]) -> Vec<Output>     // Batch all 13
+//! ├── model_ids() -> [&str; 13]                     // Model identifiers
+//! ├── is_ready() -> bool                            // Readiness check
+//! └── health_status() -> [bool; 13]                 // Per-embedder health
 //! ```
+
+mod multi_array;
+
+pub use multi_array::ProductionMultiArrayProvider;
 
 use async_trait::async_trait;
 

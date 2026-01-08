@@ -445,7 +445,7 @@ impl MultiEmbeddingQueryExecutor for InMemoryMultiEmbeddingExecutor {
             SpaceInfo::dense_hnsw(3, 512, 0, true),    // E4 Temporal-Positional
             SpaceInfo::dense_hnsw(4, 768, 0, true),    // E5 Causal
             SpaceInfo::sparse_inverted(5, 0, true),    // E6 Sparse
-            SpaceInfo::dense_hnsw(6, 256, 0, true),    // E7 Code
+            SpaceInfo::dense_hnsw(6, 1536, 0, true),   // E7 Code (Qodo-Embed)
             SpaceInfo::dense_hnsw(7, 384, 0, true),    // E8 Graph
             SpaceInfo::dense_hnsw(8, 10000, 0, true),  // E9 HDC
             SpaceInfo::dense_hnsw(9, 768, 0, true),    // E10 Multimodal

@@ -130,7 +130,7 @@ impl Handlers {
         }
 
         info!(domain = domain, ece = calibration.ece, "Threshold status retrieved");
-        JsonRpcResponse::success(id, response)
+        self.tool_result_with_pulse(id, response)
     }
 
     /// Handle get_calibration_metrics tool call.
@@ -224,7 +224,7 @@ impl Handlers {
             status = ?metrics.quality_status,
             "Calibration metrics retrieved"
         );
-        JsonRpcResponse::success(id, response)
+        self.tool_result_with_pulse(id, response)
     }
 
     /// Handle trigger_recalibration tool call.
@@ -385,6 +385,6 @@ impl Handlers {
         });
 
         info!(level = level, domain = domain, "Recalibration completed");
-        JsonRpcResponse::success(id, response)
+        self.tool_result_with_pulse(id, response)
     }
 }

@@ -1246,7 +1246,7 @@ mod tests {
             e4_temporal_positional: random_vector(512),
             e5_causal: random_vector(768),
             e6_sparse: SparseVector::new(vec![100, 200], vec![0.5, 0.3]).unwrap(),
-            e7_code: random_vector(256),
+            e7_code: random_vector(1536),
             e8_graph: random_vector(384),
             e9_hdc: random_vector(10000),
             e10_multimodal: random_vector(768),

@@ -399,7 +399,7 @@ mod tests {
             (ModelId::TemporalPositional, 512), // E4: Custom sinusoidal PE
             (ModelId::Causal, 768),             // E5: Longformer
             (ModelId::Sparse, 30522),           // E6: SPLADE (sparse vocab)
-            (ModelId::Code, 256),               // E7: CodeT5p embed_dim
+            (ModelId::Code, 1536),              // E7: Qodo-Embed-1-1.5B native
             (ModelId::Graph, 384),              // E8: paraphrase-MiniLM
             (ModelId::Hdc, 10000),              // E9: Hyperdimensional (10K-bit)
             (ModelId::Multimodal, 768),         // E10: CLIP

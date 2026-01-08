@@ -117,3 +117,6 @@ flamegraph.svg
 perf.data
 perf.data.old
 *.rlib
+
+# Runtime data
+contextgraph_data/

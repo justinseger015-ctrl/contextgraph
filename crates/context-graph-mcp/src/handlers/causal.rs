@@ -96,6 +96,29 @@ impl Handlers {
             }
         };
 
+        // TASK-CAUSAL-001: Validate target parameter based on direction
+        // Per tool schema: target is REQUIRED for forward, backward, bidirectional
+        // target is OPTIONAL for bridge, abduction
+        match direction {
+            InferenceDirection::Forward
+            | InferenceDirection::Backward
+            | InferenceDirection::Bidirectional => {
+                if target.is_none() {
+                    return self.tool_error_with_pulse(
+                        id,
+                        &format!(
+                            "Missing required 'target' parameter for direction '{}'. \
+                             Target is only optional for bridge and abduction directions.",
+                            direction_str
+                        ),
+                    );
+                }
+            }
+            InferenceDirection::Bridge | InferenceDirection::Abduction => {
+                // Target is optional for these directions
+            }
+        }
+
         // Create inference engine and perform inference
         let infer = OmniInfer::new();
 

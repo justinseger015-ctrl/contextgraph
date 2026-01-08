@@ -1,87 +1,117 @@
-//! Encoder layer and normalization for CodeT5+.
+//! Qwen2 decoder layer implementation.
 //!
 //! Contains:
-//! - RMSNorm (T5-style layer normalization)
-//! - Encoder layer forward pass
-//! - Feed-forward network (DenseReluDense)
+//! - RMSNorm (Qwen2-style layer normalization)
+//! - SwiGLU feed-forward network
+//! - Decoder layer forward pass
 
-use candle_core::Tensor;
+use candle_core::{DType, Tensor};
 
 use crate::error::{EmbeddingError, EmbeddingResult};
 
-use super::attention::self_attention_forward;
-use super::config::CodeT5pConfig;
-use super::weights::{T5EncoderLayerWeights, T5FfnWeights};
+use super::attention::gqa_forward;
+use super::config::QwenConfig;
+use super::position::RopeCache;
+use super::weights::{QwenLayerWeights, QwenMlpWeights};
 
-/// Apply RMSNorm (T5 style LayerNorm without bias).
+/// Apply RMSNorm (Root Mean Square Layer Normalization).
+///
+/// RMSNorm normalizes the input by dividing by the RMS of the elements,
+/// then multiplies by the learned scale (weight).
+///
+/// Unlike LayerNorm, RMSNorm does not center the input (no bias subtraction)
+/// and uses RMS instead of variance.
+///
+/// Computes in FP32 to prevent precision loss for large values, then converts back to FP16.
 pub fn rms_norm(x: &Tensor, weight: &Tensor, eps: f64) -> EmbeddingResult<Tensor> {
-    let variance = x
+    let original_dtype = x.dtype();
+
+    // Convert to F32 for numerical stability with large values
+    let x_f32 = x.to_dtype(DType::F32).map_err(|e| EmbeddingError::GpuError {
+        message: format!("Qwen2 RMSNorm x to F32 failed: {}", e),
+    })?;
+    let weight_f32 = weight.to_dtype(DType::F32).map_err(|e| EmbeddingError::GpuError {
+        message: format!("Qwen2 RMSNorm weight to F32 failed: {}", e),
+    })?;
+
+    // Compute RMS: sqrt(mean(x^2))
+    let variance = x_f32
         .sqr()
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel RMSNorm sqr failed: {}", e),
+            message: format!("Qwen2 RMSNorm sqr failed: {}", e),
         })?
         .mean_keepdim(candle_core::D::Minus1)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel RMSNorm mean failed: {}", e),
+            message: format!("Qwen2 RMSNorm mean failed: {}", e),
         })?;
 
+    // Add epsilon for numerical stability
     let eps_tensor = Tensor::ones_like(&variance)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel RMSNorm create eps ones failed: {}", e),
+            message: format!("Qwen2 RMSNorm create eps ones failed: {}", e),
         })?
         .affine(eps, 0.0)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel RMSNorm eps scale failed: {}", e),
+            message: format!("Qwen2 RMSNorm eps scale failed: {}", e),
         })?;
 
-    let normalized = x
+    // Normalize: x / sqrt(variance + eps)
+    let normalized = x_f32
         .broadcast_div(
             &variance
                 .broadcast_add(&eps_tensor)
                 .map_err(|e| EmbeddingError::GpuError {
-                    message: format!("CodeModel RMSNorm eps add failed: {}", e),
+                    message: format!("Qwen2 RMSNorm eps add failed: {}", e),
                 })?
                 .sqrt()
                 .map_err(|e| EmbeddingError::GpuError {
-                    message: format!("CodeModel RMSNorm sqrt failed: {}", e),
+                    message: format!("Qwen2 RMSNorm sqrt failed: {}", e),
                 })?,
         )
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel RMSNorm div failed: {}", e),
+            message: format!("Qwen2 RMSNorm div failed: {}", e),
         })?;
 
-    normalized
-        .broadcast_mul(weight)
+    // Scale by learned weight
+    let result = normalized
+        .broadcast_mul(&weight_f32)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel RMSNorm mul failed: {}", e),
-        })
+            message: format!("Qwen2 RMSNorm mul failed: {}", e),
+        })?;
+
+    // Convert back to original dtype
+    result.to_dtype(original_dtype).map_err(|e| EmbeddingError::GpuError {
+        message: format!("Qwen2 RMSNorm to original dtype failed: {}", e),
+    })
 }
 
-/// Run single encoder layer forward pass.
-pub fn encoder_layer_forward(
+/// Run single decoder layer forward pass.
+///
+/// Qwen2 layer structure:
+/// 1. RMSNorm (input_layernorm)
+/// 2. Grouped-Query Attention
+/// 3. Residual connection
+/// 4. RMSNorm (post_attention_layernorm)
+/// 5. SwiGLU FFN
+/// 6. Residual connection
+pub fn decoder_layer_forward(
     hidden_states: &Tensor,
-    layer: &T5EncoderLayerWeights,
+    layer: &QwenLayerWeights,
     attention_mask: &Tensor,
-    position_bias: &Tensor,
-    config: &CodeT5pConfig,
+    rope_cache: &RopeCache,
+    config: &QwenConfig,
     layer_idx: usize,
 ) -> EmbeddingResult<Tensor> {
-    // Pre-norm: apply layer norm before attention
+    // Pre-norm: apply RMSNorm before attention
     let normed = rms_norm(
         hidden_states,
-        &layer.attention_layer_norm_weight,
-        config.layer_norm_epsilon,
+        &layer.input_layernorm_weight,
+        config.rms_norm_eps,
     )?;
 
-    // Self-attention
-    let attention_output = self_attention_forward(
-        &normed,
-        &layer.attention,
-        attention_mask,
-        position_bias,
-        config,
-        layer_idx,
-    )?;
+    // Self-attention with GQA and RoPE
+    let attention_output =
+        gqa_forward(&normed, &layer.attention, attention_mask, rope_cache, config, layer_idx)?;
 
     // Residual connection
     let hidden_states =
@@ -89,40 +119,48 @@ pub fn encoder_layer_forward(
             .add(&attention_output)
             .map_err(|e| EmbeddingError::GpuError {
                 message: format!(
-                    "CodeModel layer {} attention residual failed: {}",
+                    "Qwen2 layer {} attention residual failed: {}",
                     layer_idx, e
                 ),
             })?;
 
-    // Pre-norm: apply layer norm before FFN
+    // Pre-norm: apply RMSNorm before FFN
     let normed = rms_norm(
         &hidden_states,
-        &layer.ffn.layer_norm_weight,
-        config.layer_norm_epsilon,
+        &layer.post_attention_layernorm_weight,
+        config.rms_norm_eps,
     )?;
 
-    // FFN
-    let ffn_output = ffn_forward(&normed, &layer.ffn, layer_idx)?;
+    // SwiGLU FFN
+    let ffn_output = swiglu_ffn_forward(&normed, &layer.mlp, config, layer_idx)?;
 
     // Residual connection
     hidden_states
         .add(&ffn_output)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel layer {} FFN residual failed: {}", layer_idx, e),
+            message: format!("Qwen2 layer {} FFN residual failed: {}", layer_idx, e),
         })
 }
 
-/// Run FFN forward pass (DenseReluDense).
-pub fn ffn_forward(
+/// Run SwiGLU FFN forward pass.
+///
+/// SwiGLU (Swish-Gated Linear Unit) combines:
+/// - Gate: silu(x @ gate_proj)
+/// - Up: x @ up_proj
+/// - Output: (gate * up) @ down_proj
+///
+/// SiLU is also known as Swish: silu(x) = x * sigmoid(x)
+pub fn swiglu_ffn_forward(
     hidden_states: &Tensor,
-    ffn: &T5FfnWeights,
+    mlp: &QwenMlpWeights,
+    _config: &QwenConfig,
     layer_idx: usize,
 ) -> EmbeddingResult<Tensor> {
     let (batch_size, seq_len, hidden_size) =
         hidden_states
             .dims3()
             .map_err(|e| EmbeddingError::GpuError {
-                message: format!("CodeModel layer {} FFN get dims failed: {}", layer_idx, e),
+                message: format!("Qwen2 layer {} FFN get dims failed: {}", layer_idx, e),
             })?;
 
     // Flatten to [batch*seq, hidden] for Candle matmul compatibility
@@ -130,43 +168,69 @@ pub fn ffn_forward(
         .reshape((batch_size * seq_len, hidden_size))
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CodeModel layer {} FFN flatten hidden failed: {}",
+                "Qwen2 layer {} FFN flatten hidden failed: {}",
                 layer_idx, e
             ),
         })?;
 
-    // wi: [d_model] -> [d_ff]
-    let intermediate = hidden_flat
-        .matmul(&ffn.wi_weight.t().map_err(|e| EmbeddingError::GpuError {
+    // Gate projection: [batch*seq, hidden] @ [intermediate, hidden]^T -> [batch*seq, intermediate]
+    let gate = hidden_flat
+        .matmul(&mlp.gate_proj_weight.t().map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CodeModel layer {} FFN wi transpose failed: {}",
+                "Qwen2 layer {} FFN gate_proj transpose failed: {}",
                 layer_idx, e
             ),
         })?)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel layer {} FFN wi matmul failed: {}", layer_idx, e),
+            message: format!(
+                "Qwen2 layer {} FFN gate_proj matmul failed: {}",
+                layer_idx, e
+            ),
         })?;
 
-    // ReLU activation
-    let intermediate = intermediate.relu().map_err(|e| EmbeddingError::GpuError {
-        message: format!("CodeModel layer {} ReLU failed: {}", layer_idx, e),
+    // Up projection: [batch*seq, hidden] @ [intermediate, hidden]^T -> [batch*seq, intermediate]
+    let up = hidden_flat
+        .matmul(&mlp.up_proj_weight.t().map_err(|e| EmbeddingError::GpuError {
+            message: format!(
+                "Qwen2 layer {} FFN up_proj transpose failed: {}",
+                layer_idx, e
+            ),
+        })?)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!(
+                "Qwen2 layer {} FFN up_proj matmul failed: {}",
+                layer_idx, e
+            ),
+        })?;
+
+    // SiLU activation on gate: silu(x) = x * sigmoid(x)
+    let gate_activated = candle_nn::ops::silu(&gate).map_err(|e| EmbeddingError::GpuError {
+        message: format!("Qwen2 layer {} SiLU failed: {}", layer_idx, e),
     })?;
 
-    // wo: [d_ff] -> [d_model]
+    // Element-wise multiply: gate * up
+    let intermediate = gate_activated.mul(&up).map_err(|e| EmbeddingError::GpuError {
+        message: format!("Qwen2 layer {} FFN gate*up failed: {}", layer_idx, e),
+    })?;
+
+    // Down projection: [batch*seq, intermediate] @ [hidden, intermediate]^T -> [batch*seq, hidden]
     intermediate
-        .matmul(&ffn.wo_weight.t().map_err(|e| EmbeddingError::GpuError {
+        .matmul(&mlp.down_proj_weight.t().map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CodeModel layer {} FFN wo transpose failed: {}",
+                "Qwen2 layer {} FFN down_proj transpose failed: {}",
                 layer_idx, e
             ),
         })?)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel layer {} FFN wo matmul failed: {}", layer_idx, e),
+            message: format!(
+                "Qwen2 layer {} FFN down_proj matmul failed: {}",
+                layer_idx, e
+            ),
         })?
         .reshape((batch_size, seq_len, hidden_size))
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CodeModel layer {} FFN reshape output failed: {}",
+                "Qwen2 layer {} FFN reshape output failed: {}",
                 layer_idx, e
             ),
         })

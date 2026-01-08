@@ -7,7 +7,7 @@
 //!
 //! - Native output: 384D (final dimension, no projection needed)
 //!
-//! Unlike CodeModel which projects 256D -> 768D, GraphModel uses 384D directly
+//! GraphModel uses 384D directly (unlike CodeModel which uses 1536D via Qodo-Embed)
 //! as this is the native MiniLM embedding dimension.
 //!
 //! # Thread Safety

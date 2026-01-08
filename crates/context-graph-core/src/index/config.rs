@@ -32,8 +32,8 @@ pub const E5_DIM: usize = 768;
 /// E6 Sparse: 30522 vocab (BERT vocabulary)
 pub const E6_SPARSE_VOCAB: usize = 30_522;
 
-/// E7 Code: 256D (CodeT5p)
-pub const E7_DIM: usize = 256;
+/// E7 Code: 1536D (Qodo-Embed-1-1.5B)
+pub const E7_DIM: usize = 1536;
 
 /// E8 Graph: 384D (MiniLM)
 pub const E8_DIM: usize = 384;
@@ -110,7 +110,7 @@ pub enum EmbedderIndex {
     E5Causal,
     /// E6: sparse (NOT HNSW)
     E6Sparse,
-    /// E7: 256D code
+    /// E7: 1536D code (Qodo-Embed)
     E7Code,
     /// E8: 384D graph
     E8Graph,

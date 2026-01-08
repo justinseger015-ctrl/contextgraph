@@ -17,7 +17,8 @@ use super::constants::{
 /// This constant represents the sum of all dimensions for memory allocation.
 ///
 /// Calculated as:
-/// 1024 + 512 + 512 + 512 + 768 + 1536 + 768 + 384 + 1024 + 768 + 384 + 128 + 1536 = 9856
+/// 1024 + 512 + 512 + 512 + 768 + 1536 + 1536 + 384 + 1024 + 768 + 384 + 128 + 1536 = 10624
+/// (E7 Code changed from 768 to 1536 for Qodo-Embed migration)
 pub const TOTAL_DIMENSION: usize = SEMANTIC
     + TEMPORAL_RECENT
     + TEMPORAL_PERIODIC
@@ -42,8 +43,8 @@ pub const MODEL_COUNT: usize = 13;
 /// Compile-time assertion that TOTAL_DIMENSION equals expected value.
 /// This will cause a compilation error if dimensions change incorrectly.
 const _TOTAL_DIMENSION_CHECK: () = assert!(
-    TOTAL_DIMENSION == 9856,
-    "TOTAL_DIMENSION must equal 9856"
+    TOTAL_DIMENSION == 10624,
+    "TOTAL_DIMENSION must equal 10624"
 );
 
 /// Compile-time assertion that MODEL_COUNT equals 13.

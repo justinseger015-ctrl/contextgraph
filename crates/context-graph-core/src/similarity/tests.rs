@@ -61,7 +61,7 @@ fn create_test_fingerprint(seed: u64) -> TeleologicalFingerprint {
     let values: Vec<f32> = (0..10).map(|_| lcg_next(&mut state).abs()).collect();
     semantic.e6_sparse = SparseVector { indices, values };
 
-    // Populate E7 (256D)
+    // Populate E7 (1536D - Qodo-Embed)
     for v in semantic.e7_code.iter_mut() {
         *v = lcg_next(&mut state);
     }

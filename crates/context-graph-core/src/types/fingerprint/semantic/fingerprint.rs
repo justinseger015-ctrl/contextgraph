@@ -59,7 +59,7 @@ pub struct SemanticFingerprint {
     /// E6: Sparse Lexical (SPLADE) - sparse vector with ~1500 active of 30522 vocab.
     pub e6_sparse: SparseVector,
 
-    /// E7: Code (CodeT5p) - 256D dense embedding.
+    /// E7: Code (Qodo-Embed-1-1.5B) - 1536D dense embedding.
     pub e7_code: Vec<f32>,
 
     /// E8: Graph (MiniLM for structure) - 384D dense embedding.

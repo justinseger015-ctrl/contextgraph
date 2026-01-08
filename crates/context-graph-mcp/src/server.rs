@@ -16,9 +16,10 @@ use tracing::{debug, error, info, warn};
 
 use context_graph_core::alignment::{DefaultAlignmentCalculator, GoalAlignmentCalculator};
 use context_graph_core::config::Config;
-use context_graph_core::error::CoreError;
 use context_graph_core::purpose::GoalHierarchy;
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor};
+
+use context_graph_embeddings::{GpuConfig, ProductionMultiArrayProvider};
 
 // REAL implementations - NO STUBS
 use context_graph_storage::teleological::RocksDbTeleologicalStore;
@@ -27,83 +28,8 @@ use crate::adapters::UtlProcessorAdapter;
 use crate::handlers::Handlers;
 use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 
-// ============================================================================
-// LazyFailMultiArrayProvider - FAIL FAST placeholder
-// ============================================================================
-
-/// Placeholder MultiArrayEmbeddingProvider that fails on first use with a clear error.
-///
-/// This is NOT a stub that returns fake data. It exists only to provide a clear,
-/// actionable error message when embedding operations are attempted before the
-/// real GPU implementation is ready.
-///
-/// # FAIL FAST Policy
-///
-/// - `embed_all()` -> Returns error with instructions
-/// - `embed_single()` -> Returns error with instructions
-/// - No silent failures, no fake embeddings
-struct LazyFailMultiArrayProvider {
-    error_message: String,
-}
-
-impl LazyFailMultiArrayProvider {
-    fn new(message: &str) -> Self {
-        Self {
-            error_message: message.to_string(),
-        }
-    }
-}
-
-use context_graph_core::traits::MultiArrayEmbeddingOutput;
-use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
-
-#[async_trait::async_trait]
-impl MultiArrayEmbeddingProvider for LazyFailMultiArrayProvider {
-    async fn embed_all(
-        &self,
-        _text: &str,
-    ) -> Result<MultiArrayEmbeddingOutput, CoreError> {
-        error!("FAIL FAST: {}", self.error_message);
-        Err(CoreError::Embedding(self.error_message.clone()))
-    }
-
-    async fn embed_batch_all(
-        &self,
-        _contents: &[String],
-    ) -> Result<Vec<MultiArrayEmbeddingOutput>, CoreError> {
-        error!("FAIL FAST: {}", self.error_message);
-        Err(CoreError::Embedding(self.error_message.clone()))
-    }
-
-    fn model_ids(&self) -> [&str; NUM_EMBEDDERS] {
-        // Return placeholder IDs indicating not implemented
-        [
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-            "NOT_IMPLEMENTED",
-        ]
-    }
-
-    fn is_ready(&self) -> bool {
-        // Always return false - we are NOT ready (FAIL FAST)
-        false
-    }
-
-    fn health_status(&self) -> [bool; NUM_EMBEDDERS] {
-        // All embedders unhealthy - not implemented
-        [false; NUM_EMBEDDERS]
-    }
-}
+// NOTE: LazyFailMultiArrayProvider was removed - now using ProductionMultiArrayProvider
+// from context-graph-embeddings crate (TASK-F007 COMPLETED)
 
 // ============================================================================
 // MCP Server
@@ -166,43 +92,88 @@ impl McpServer {
         info!("Created UtlProcessorAdapter (REAL 6-component UTL computation: deltaS, deltaC, wE, phi, lambda, magnitude)");
 
         // ==========================================================================
-        // 3. MultiArrayEmbeddingProvider - FAIL FAST until real GPU implementation
+        // 3. REAL MultiArrayEmbeddingProvider - 13 GPU-accelerated embedders
         // ==========================================================================
-        // The real MultiArrayEmbeddingProvider requires:
-        // - GPU (CUDA) initialization
-        // - 13 embedding models loaded
-        // - ~8GB+ VRAM for all models
+        // TASK-F007 COMPLETED: ProductionMultiArrayProvider orchestrates all 13 embedders
+        // - E1-E5: Semantic, Temporal (3 variants), Causal
+        // - E6, E13: Sparse embedders (SPLADE)
+        // - E7-E11: Code, Graph, HDC, Multimodal, Entity
+        // - E12: Late-interaction (ColBERT)
         //
-        // Until TASK-F007 completes the GPU embedding infrastructure, we FAIL FAST
-        // with a clear error message instead of silently using stubs.
+        // GPU Requirements: NVIDIA CUDA GPU with 8GB+ VRAM
+        // Model Directory: ./models relative to binary (configurable via env)
+        let models_dir = Self::resolve_models_path(&config);
+        info!("Loading ProductionMultiArrayProvider with models from {:?}...", models_dir);
+
         let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(
-            LazyFailMultiArrayProvider::new(
-                "MultiArrayEmbeddingProvider not yet implemented. \
-                 GPU embedding infrastructure required (TASK-F007). \
-                 See crates/context-graph-embeddings for implementation status. \
-                 Required: CUDA GPU with 8GB+ VRAM, 13 embedding models."
-            )
+            ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+                .map_err(|e| {
+                    error!("FATAL: Failed to create ProductionMultiArrayProvider: {}", e);
+                    anyhow::anyhow!(
+                        "Failed to create ProductionMultiArrayProvider: {}. \
+                         Ensure models exist at {:?} and CUDA GPU is available.",
+                        e, models_dir
+                    )
+                })?
         );
-        warn!(
-            "MultiArrayEmbeddingProvider using LAZY-FAIL placeholder. \
-             First embedding operation will return clear error."
+        info!(
+            "Created ProductionMultiArrayProvider (13 embedders, GPU-accelerated, <30ms target)"
         );
 
-        // TASK-S003: Create alignment calculator and empty goal hierarchy
+        // TASK-S003: Create alignment calculator and goal hierarchy
         let alignment_calculator: Arc<dyn GoalAlignmentCalculator> =
             Arc::new(DefaultAlignmentCalculator::new());
-        let goal_hierarchy = GoalHierarchy::new();
+        let goal_hierarchy = Arc::new(parking_lot::RwLock::new(GoalHierarchy::new()));
         info!("Created DefaultAlignmentCalculator and empty GoalHierarchy");
 
-        let handlers = Handlers::new(
+        // ==========================================================================
+        // 4. Create Johari manager, Meta-UTL tracker, and monitoring providers
+        // ==========================================================================
+        use context_graph_core::johari::DynDefaultJohariManager;
+        use context_graph_core::monitoring::{StubLayerStatusProvider, StubSystemMonitor};
+        use crate::handlers::MetaUtlTracker;
+
+        let johari_manager: Arc<dyn context_graph_core::johari::JohariTransitionManager> =
+            Arc::new(DynDefaultJohariManager::new(Arc::clone(&teleological_store)));
+        info!("Created DynDefaultJohariManager for Johari quadrant management");
+
+        let meta_utl_tracker = Arc::new(parking_lot::RwLock::new(MetaUtlTracker::new()));
+        info!("Created MetaUtlTracker for per-embedder accuracy tracking");
+
+        // TODO: Replace with real SystemMonitor and LayerStatusProvider when available
+        // For now, using stubs that will FAIL FAST with clear errors on first use
+        let system_monitor: Arc<dyn context_graph_core::monitoring::SystemMonitor> =
+            Arc::new(StubSystemMonitor::new());
+        let layer_status_provider: Arc<dyn context_graph_core::monitoring::LayerStatusProvider> =
+            Arc::new(StubLayerStatusProvider::new());
+        warn!("Using StubSystemMonitor and StubLayerStatusProvider - will FAIL FAST on health metric queries");
+
+        // ==========================================================================
+        // 5. Create Handlers with REAL GWT providers (P2-01 through P2-06)
+        // ==========================================================================
+        // Using with_default_gwt() to create all GWT providers:
+        // - KuramotoProviderImpl: Real Kuramoto oscillator network
+        // - GwtSystemProviderImpl: Real consciousness equation C(t) = I(t) × R(t) × D(t)
+        // - WorkspaceProviderImpl: Real global workspace with winner-take-all
+        // - MetaCognitiveProviderImpl: Real meta-cognitive loop
+        // - SelfEgoProviderImpl: Real self-ego node for identity tracking
+        let handlers = Handlers::with_default_gwt(
             Arc::clone(&teleological_store),
             Arc::clone(&utl_processor),
             Arc::clone(&multi_array_provider),
             alignment_calculator,
             goal_hierarchy,
+            johari_manager,
+            meta_utl_tracker,
+            system_monitor,
+            layer_status_provider,
         );
+        info!("Created Handlers with REAL GWT providers (Kuramoto, GWT, Workspace, MetaCognitive, SelfEgo)");
+        info!("Created REAL NeuromodulationManager (Dopamine, Serotonin, Noradrenaline at baseline; ACh read-only via GWT)");
+        info!("Created REAL Dream components (DreamController, DreamScheduler, AmortizedLearner) with constitution defaults");
+        info!("Created REAL AdaptiveThresholdCalibration (4-level: EWMA, Temperature, Bandit, Bayesian)");
 
-        info!("MCP Server initialization complete - TeleologicalFingerprint mode active");
+        info!("MCP Server initialization complete - TeleologicalFingerprint mode active with GWT + Neuromod + Dream + ATC");
 
         Ok(Self {
             config,
@@ -321,6 +292,30 @@ impl McpServer {
             .join("contextgraph_data");
         info!("Using default storage path: {:?}", default_path);
         Self::ensure_directory_exists(&default_path);
+        default_path
+    }
+
+    /// Resolve the models directory path from configuration or environment.
+    ///
+    /// Priority order:
+    /// 1. `CONTEXT_GRAPH_MODELS_PATH` environment variable
+    /// 2. `config.models.path` from configuration (if exists)
+    /// 3. Default: `./models` in current directory
+    ///
+    /// Does NOT create the directory - models must be pre-downloaded.
+    fn resolve_models_path(_config: &Config) -> PathBuf {
+        // Check environment variable first
+        if let Ok(env_path) = std::env::var("CONTEXT_GRAPH_MODELS_PATH") {
+            let path = PathBuf::from(env_path);
+            info!("Using models path from CONTEXT_GRAPH_MODELS_PATH: {:?}", path);
+            return path;
+        }
+
+        // Default path: ./models relative to current directory
+        let default_path = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("models");
+        info!("Using default models path: {:?}", default_path);
         default_path
     }
 

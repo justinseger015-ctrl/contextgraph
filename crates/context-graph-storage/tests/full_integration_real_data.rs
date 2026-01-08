@@ -95,7 +95,7 @@ fn generate_real_sparse_vector(target_nnz: usize) -> SparseVector {
 }
 
 /// Generate a REAL SemanticFingerprint with proper dimensions.
-/// E1: 1024D, E2-E4: 512D, E5: 768D, E6: sparse, E7: 256D, E8: 384D,
+/// E1: 1024D, E2-E4: 512D, E5: 768D, E6: sparse, E7: 1536D, E8: 384D,
 /// E9: 10000D, E10: 768D, E11: 384D, E12: 128D tokens, E13: sparse
 fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
     SemanticFingerprint {
@@ -105,7 +105,7 @@ fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
         e4_temporal_positional: generate_real_unit_vector(512),
         e5_causal: generate_real_unit_vector(768),
         e6_sparse: generate_real_sparse_vector(100), // ~0.3% sparsity for E6
-        e7_code: generate_real_unit_vector(256),
+        e7_code: generate_real_unit_vector(1536),
         e8_graph: generate_real_unit_vector(384),
         e9_hdc: generate_real_unit_vector(10000),
         e10_multimodal: generate_real_unit_vector(768),

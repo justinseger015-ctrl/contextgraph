@@ -8,6 +8,24 @@ use crate::error::{EmbeddingError, EmbeddingResult};
 use super::ModelEmbedding;
 
 impl ModelEmbedding {
+    /// Consumes the embedding and returns the underlying vector.
+    ///
+    /// # Returns
+    /// The owned embedding vector.
+    ///
+    /// # Example
+    /// ```rust
+    /// use context_graph_embeddings::types::{ModelId, ModelEmbedding};
+    ///
+    /// let embedding = ModelEmbedding::new(ModelId::Semantic, vec![0.1, 0.2, 0.3], 1000);
+    /// let vector = embedding.into_vec();
+    /// assert_eq!(vector.len(), 3);
+    /// ```
+    #[inline]
+    pub fn into_vec(self) -> Vec<f32> {
+        self.vector
+    }
+
     /// Calculates the L2 (Euclidean) norm of the vector.
     ///
     /// # Returns

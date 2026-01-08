@@ -16,7 +16,7 @@ use super::tokenizer::TokenizerFamily;
 /// | TemporalPositional | Sinusoidal PE | 512 | Custom |
 /// | Causal | Longformer | 768 | Pretrained |
 /// | Sparse | SPLADE | ~30K sparse | Pretrained |
-/// | Code | CodeT5p | 256 embed | Pretrained |
+/// | Code | Qodo-Embed-1-1.5B | 1536 | Pretrained |
 /// | Graph | paraphrase-MiniLM | 384 | Pretrained |
 /// | Hdc | Hyperdimensional | 10K-bit | Custom |
 /// | Multimodal | CLIP | 768 | Pretrained |
@@ -48,8 +48,7 @@ pub enum ModelId {
     Causal = 4,
     /// E6: Sparse lexical using naver/splade-cocondenser (~30K sparse -> 1536D projected)
     Sparse = 5,
-    /// E7: Code embedding using Salesforce/codet5p-110m-embedding (256D embed, 768D internal)
-    /// Note: PRD says 1536D - that's the projected dimension after learned projection layer
+    /// E7: Code embedding using Qodo-Embed-1-1.5B (1536D native)
     Code = 6,
     /// E8: Graph/sentence using sentence-transformers/paraphrase-MiniLM-L6-v2 (384D)
     Graph = 7,
@@ -68,7 +67,7 @@ pub enum ModelId {
 impl ModelId {
     /// Returns the native output dimension of this model BEFORE any projection.
     ///
-    /// Note: Sparse (30K), Hdc (10K-bit), and Code (256) are projected to larger dimensions
+    /// Note: Sparse (30K) and Hdc (10K-bit) are projected to smaller dimensions
     /// in downstream processing. This returns the raw model output size.
     #[must_use]
     pub const fn dimension(&self) -> usize {
@@ -79,7 +78,7 @@ impl ModelId {
             Self::TemporalPositional => 512,
             Self::Causal => 768,
             Self::Sparse => 30522, // SPLADE vocab size
-            Self::Code => 256,     // CodeT5p embed_dim (internal d_model=768)
+            Self::Code => 1536,    // Qodo-Embed-1-1.5B native dimension
             Self::Graph => 384,
             Self::Hdc => 10000, // 10K-bit vector
             Self::Multimodal => 768,
@@ -94,7 +93,6 @@ impl ModelId {
     /// All models are normalized to these dimensions before concatenation:
     /// - Most models: native dimension (no projection needed)
     /// - Sparse: 1536 (projected from 30K sparse)
-    /// - Code: 768 (projected from 256 embed_dim)
     /// - Hdc: 1024 (projected from 10K-bit)
     /// - LateInteraction: pooled to single 128D vector
     /// - Splade: 30K sparse -> 1536D projected
@@ -102,10 +100,9 @@ impl ModelId {
     pub const fn projected_dimension(&self) -> usize {
         match self {
             Self::Sparse => 1536,  // 30K -> 1536 via learned projection
-            Self::Code => 768,     // 256 embed -> 768 via projection (CodeT5p internal dim)
             Self::Hdc => 1024,     // 10K-bit -> 1024 via projection
             Self::Splade => 1536,  // 30K -> 1536 via learned projection (same as E6)
-            _ => self.dimension(), // No projection needed
+            _ => self.dimension(), // No projection needed (Code is now native 1536D)
         }
     }
 
@@ -155,7 +152,7 @@ impl ModelId {
             Self::Semantic => TokenizerFamily::BertWordpiece, // e5 uses BERT tokenizer
             Self::Causal => TokenizerFamily::RobertaBpe,      // Longformer uses RoBERTa
             Self::Sparse => TokenizerFamily::BertWordpiece,   // SPLADE uses BERT
-            Self::Code => TokenizerFamily::SentencePieceBpe,  // CodeT5p uses SentencePiece
+            Self::Code => TokenizerFamily::BertWordpiece,  // Qodo-Embed uses BERT tokenizer
             Self::Graph => TokenizerFamily::BertWordpiece,    // MiniLM uses BERT
             Self::Multimodal => TokenizerFamily::ClipBpe,     // CLIP has its own BPE
             Self::Entity => TokenizerFamily::BertWordpiece,   // all-MiniLM uses BERT

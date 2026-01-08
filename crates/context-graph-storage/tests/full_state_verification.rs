@@ -76,7 +76,7 @@ fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
         e4_temporal_positional: generate_real_unit_vector(512),
         e5_causal: generate_real_unit_vector(768),
         e6_sparse: generate_real_sparse_vector(100),
-        e7_code: generate_real_unit_vector(256),
+        e7_code: generate_real_unit_vector(1536),
         e8_graph: generate_real_unit_vector(384),
         e9_hdc: generate_real_unit_vector(10000),
         e10_multimodal: generate_real_unit_vector(768),

@@ -9,7 +9,7 @@ pub enum TokenizerFamily {
     BertWordpiece,
     /// RoBERTa BPE tokenization (Longformer)
     RobertaBpe,
-    /// SentencePiece BPE tokenization (CodeT5p)
+    /// SentencePiece BPE tokenization (legacy, unused)
     SentencePieceBpe,
     /// CLIP-specific BPE tokenization
     ClipBpe,

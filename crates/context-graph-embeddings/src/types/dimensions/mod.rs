@@ -3,7 +3,7 @@
 //! These constants define the exact dimensions used throughout the embedding pipeline:
 //! - Native dimensions: Raw model output sizes
 //! - Projected dimensions: Target sizes for Multi-Array Storage
-//! - TOTAL_DIMENSION: Sum of all projected dimensions (9856D)
+//! - TOTAL_DIMENSION: Sum of all projected dimensions (10624D)
 //!
 //! # Multi-Array Storage
 //!
@@ -16,10 +16,10 @@
 //! use context_graph_embeddings::types::dimensions;
 //!
 //! // Total dimension for memory calculations
-//! assert_eq!(dimensions::TOTAL_DIMENSION, 9856);
+//! assert_eq!(dimensions::TOTAL_DIMENSION, 10624);
 //!
 //! // Compile-time validation
-//! const _: () = assert!(dimensions::TOTAL_DIMENSION == 9856);
+//! const _: () = assert!(dimensions::TOTAL_DIMENSION == 10624);
 //! ```
 
 mod aggregates;
@@ -78,7 +78,7 @@ mod tests {
             + LATE_INTERACTION
             + super::constants::SPLADE;
         assert_eq!(sum, TOTAL_DIMENSION);
-        assert_eq!(TOTAL_DIMENSION, 9856);
+        assert_eq!(TOTAL_DIMENSION, 10624);
     }
 
 
@@ -94,7 +94,7 @@ mod tests {
     fn test_projected_dimension_by_index() {
         assert_eq!(projected_dimension_by_index(0), 1024); // Semantic
         assert_eq!(projected_dimension_by_index(5), 1536); // Sparse (projected)
-        assert_eq!(projected_dimension_by_index(6), 768); // Code (projected)
+        assert_eq!(projected_dimension_by_index(6), 1536); // Code (Qodo-Embed 1536D)
         assert_eq!(projected_dimension_by_index(8), 1024); // HDC (projected)
         assert_eq!(projected_dimension_by_index(11), 128); // LateInteraction
         assert_eq!(projected_dimension_by_index(12), 1536); // Splade (projected)
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_native_dimension_by_index() {
         assert_eq!(native_dimension_by_index(5), 30522); // Sparse native
-        assert_eq!(native_dimension_by_index(6), 256); // Code native
+        assert_eq!(native_dimension_by_index(6), 1536); // Code native (Qodo-Embed 1536D)
         assert_eq!(native_dimension_by_index(8), 10000); // HDC native
         assert_eq!(native_dimension_by_index(12), 30522); // Splade native
     }
@@ -162,11 +162,11 @@ mod tests {
 
     #[test]
     #[allow(clippy::assertions_on_constants)]
-    fn test_code_projection_ratio() {
-        // CodeT5p projects from 256 embed to 768 (expansion)
-        assert!(CODE > CODE_NATIVE);
-        assert_eq!(CODE, 768);
-        assert_eq!(CODE_NATIVE, 256);
+    fn test_code_dimension() {
+        // Qodo-Embed outputs 1536D natively (no projection needed)
+        assert_eq!(CODE, CODE_NATIVE);
+        assert_eq!(CODE, 1536);
+        assert_eq!(CODE_NATIVE, 1536);
     }
 
     // Edge Case Tests with Before/After State Printing

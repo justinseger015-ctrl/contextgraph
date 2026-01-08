@@ -849,7 +849,7 @@ mod tests {
 
         // PQ8: always 8 bytes (8 subvectors)
         assert_eq!(router.expected_size(ModelId::Semantic, 1024), 8);
-        assert_eq!(router.expected_size(ModelId::Code, 256), 8);
+        assert_eq!(router.expected_size(ModelId::Code, 1536), 8);
     }
 
     #[test]

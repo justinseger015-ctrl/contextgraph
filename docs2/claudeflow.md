@@ -1,163 +1,250 @@
-# Claude Flow Universal Guide
+# Claude Flow V3 - Optimal Usage Reference
 
-## CRITICAL RULES
+## Critical Rules
+- **99.9% Sequential** - Parallel only for read-only ops
+- **AgentDB Required** - 88% vs 60% success rate
+- **Forward-Looking Prompts** - Tell agents what next agents need
+- **Never Root Files** - Use subdirectories (`/src`, `/tests`, `/docs`)
+- **Batch Operations** - All related ops in ONE message
+- **Memory Positional Args** - `store "key" '{"data":"val"}' --namespace "ns"` (NOT `--key`)
 
-**99.9% SEQUENTIAL EXECUTION** - Only parallel for read-only. Dependencies require sequential.
-**ALWAYS USE AGENTDB REASONING BANK** - `agent memory init` = 88% vs 60% success.
-**FORWARD-LOOKING PROMPTS** - Tell agents about future needs.
+## Architecture
+```
+Claude Code = EXECUTION (Task tool, files, bash, git)
+Claude Flow = COORDINATION (swarm topology, memory, neural, MCP tools)
+```
+MCP coordinates strategy → Task tool spawns real working agents
 
-## Memory Syntax (CRITICAL - Positional Args)
+## Quick Start
+```bash
+npx claude-flow@v3alpha init                    # Initialize
+npx claude-flow@v3alpha doctor --fix            # Health check
+npx claude-flow@v3alpha daemon start            # Background workers
+npx claude-flow@v3alpha mcp start               # MCP server
+npx claude-flow@v3alpha hooks pretrain          # Bootstrap intelligence
+```
 
+## Commands
+
+| Cmd | Key Subcommands | Purpose |
+|-----|-----------------|---------|
+| `init` | `wizard`, `--full`, `--minimal` | Project setup |
+| `agent` | `spawn -t TYPE`, `list`, `status`, `stop`, `metrics` | Agent lifecycle |
+| `swarm` | `init --v3-mode`, `start`, `status`, `scale`, `coordinate` | Multi-agent coord |
+| `memory` | `store`, `retrieve`, `search -q`, `stats`, `cleanup`, `compress` | HNSW vector storage |
+| `task` | `create`, `list`, `status`, `assign`, `cancel`, `retry` | Task management |
+| `session` | `save`, `restore`, `list`, `export`, `import` | State persistence |
+| `mcp` | `start`, `stop`, `tools`, `exec` | MCP server |
+| `hooks` | `route`, `pretrain`, `pre/post-edit`, `session-*`, `worker` | Intelligence |
+| `daemon` | `start`, `stop`, `status`, `trigger -w WORKER` | Background workers |
+| `doctor` | `--fix`, `--install`, `-c COMPONENT` | Diagnostics |
+
+## Agents (54+)
+
+| Category | Agents | Use |
+|----------|--------|-----|
+| Core | `coder`, `reviewer`, `tester`, `planner`, `researcher` | Daily dev |
+| Coord | `hierarchical-coordinator` (4-6), `mesh-coordinator` (7+), `adaptive-coordinator` | Swarm lead |
+| Security | `security-architect`, `security-auditor` | Audits |
+| Perf | `perf-analyzer`, `performance-engineer` | Optimization |
+| GitHub | `pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager` | Repo ops |
+| SPARC | `sparc-coord`, `specification`, `pseudocode`, `architecture`, `refinement` | Methodology |
+| Consensus | `byzantine-coordinator`, `raft-manager`, `gossip-coordinator`, `crdt-synchronizer` | Fault tolerance |
+
+### Selection Matrix
+
+| Task | Agent | Topology |
+|------|-------|----------|
+| Bug fix | `coder` + `tester` | mesh |
+| Feature | `architect` + `coder` + `tester` + `reviewer` | hierarchical |
+| Refactor | `architect` + `coder` + `reviewer` | mesh |
+| Security | `security-architect` + `security-auditor` | hierarchical |
+| Perf | `perf-analyzer` + `coder` | hierarchical |
+
+## Swarm Topologies
+
+| Topology | Agents | Best For |
+|----------|--------|----------|
+| `ring` | 1-3 | Sequential pipelines |
+| `hierarchical` | 4-6 | Structured, clear authority |
+| `mesh` | 4-7 | Collaborative, redundant |
+| `hierarchical-mesh` | 7+ | Complex multi-domain |
+| `adaptive` | Any | Dynamic workloads |
+
+**Consensus**: `byzantine` (f<n/3), `raft` (f<n/2), `gossip` (eventual), `crdt` (concurrent), `quorum` (tunable)
+
+## Memory
+
+### Syntax (CRITICAL)
 ```bash
 # CORRECT
-npx claude-flow memory store "key" '{"data":"value"}' --namespace "project/area"
-
-# WRONG (will fail)
-npx claude-flow memory store --namespace "..." --key "..." --value "..."
+npx claude-flow@v3alpha memory store "key" '{"data":"value"}' --namespace "project/area"
+# WRONG - will fail
+npx claude-flow@v3alpha memory store --key "key" --value "value"
 ```
 
-## Essential Commands
-
-# Memory
-npx claude-flow memory store "name" '{"key":"value"}' --namespace "project/area"
-npx claude-flow memory retrieve --key "project/area/name"
-
-# Coordination
-npx claude-flow coordination swarm-init --topology [centralized|hierarchical|mesh]
-npx claude-flow coordination task-orchestrate --strategy sequential
-
-# Hooks
-npx claude-flow hooks pre-task --description "task"
-npx claude-flow hooks post-edit --file "path" --memory-key "key"
-npx claude-flow hooks session-end --export-metrics
-
-# Analysis
-npx claude-flow analysis bottleneck-detect
-npx claude-flow agent booster edit  # 352x faster
+### Namespaces
+```
+project/api/[endpoint]    project/events/[type]     project/frontend/[comp]
+project/database/[table]  project/tests/[feature]   project/patterns/[type]
 ```
 
-## Subagent Prompt Template (4-Part Pattern)
-
+### HNSW Tuning
 ```bash
-Task("[type]", `
-  ## TASK: [Primary task]
-  ## CONTEXT: Agent #N/M | Previous: [agents] | Next: [agents + what they need]
-  ## RETRIEVAL: npx claude-flow memory retrieve --key "[keys]"
-  ## STORAGE: For [Next]: "project/[ns]/[key]" - [what/why]
-`)
+export CLAUDE_FLOW_HNSW_M=16          # Connectivity
+export CLAUDE_FLOW_HNSW_EF=200        # Accuracy
+export CLAUDE_FLOW_EMBEDDING_DIM=384  # Dimensions
 ```
 
-## Sequential Workflow Example
+## Hooks
 
-```bash
-# Message 1: Backend
-Task("backend-dev", `
-  CONTEXT: Agent #1/4 | Next: Integration, UI, Tests
-  TASK: Implement backend
-  STORAGE: Store schemas for next 3 agents at project/events/schema, project/frontend/requirements, project/api/changes
-`)
-
-# Message 2: Integration (WAIT)
-Task("coder", `
-  CONTEXT: Agent #2/4 | Previous: Backend ✓ | Next: UI, Tests
-  RETRIEVAL: npx claude-flow memory retrieve --key "project/events/schema"
-  STORAGE: For UI: "project/frontend/handler"
-`)
-
-# Message 3: UI (WAIT)
-Task("coder", `
-  CONTEXT: Agent #3/4 | Previous: Backend, Integration ✓ | Next: Tests
-  RETRIEVAL: project/frontend/requirements, project/frontend/handler
-  STORAGE: For Tests: "project/frontend/component"
-`)
-
-# Message 4: Tests (WAIT)
-Task("tester", `
-  CONTEXT: Agent #4/4 (FINAL) | Previous: All ✓
-  RETRIEVAL: All keys from agents 1-3
-`)
-```
-
-## Memory Namespaces
-
-```
-project/events/[type]     project/api/[endpoint]    project/database/[table]
-project/frontend/[comp]   project/performance/[x]   project/bugs/[issue]
-project/tests/[feature]   project/docs/[file]
-```
-
-## Key Agents
-
-| Agent | Use |
-|-------|-----|
-| `backend-dev` | APIs, events, routes |
-| `coder` | Components, UI, stores |
-| `code-analyzer` | Analysis, architecture |
-| `tester` | Integration tests |
-| `perf-analyzer` | Profiling, bottlenecks |
-| `system-architect` | Architecture |
-| `tdd-london-swarm` | TDD workflows |
-
-**Coordinators**: `hierarchical-coordinator` (4-6), `mesh-coordinator` (7+), `adaptive-coordinator` (dynamic)
-
-## Topology
-
-| Agents | Topology |
-|--------|----------|
-| 1-3 | centralized |
-| 4-6 | hierarchical |
-| 7+ | mesh/adaptive |
-
-## Rules
-
-**DO**: Sequential (99.9%) Forward-looking prompts, Store schemas, Batch TodoWrite (5-10+), Include WORKFLOW CONTEXT
-**DON'T**: Parallel backend+frontend, Skip memory, Frontend before backend, Skip context in prompts
-
-## Truth Protocol
-
-Subagents must be brutally honest. No lies, simulations, or fake functionality.
-- State only verified facts
-- Fail honestly if infeasible
-- Challenge incorrect assumptions
-- Always inspect subagent results for honesty
-
-## Task Execution
-
-**Self-Assessment**: Rate 1-100 vs intent. Iterate until 100.
-**Verification**: Spawn reviewer subagent to validate.
-**Design**: KISS, YAGNI. Files <500 lines, functions <50 lines.
-
-## Subagent Response Format (REQUIRED)
-
-```
-## TASK COMPLETION SUMMARY
-**What I Did**: [1-2 sentences]
-**Files Created/Modified**: `./docs/[file].md` - [description]
-**Memory Locations**: `project/[area]/[key]` - [what, why next agents need it]
-**Access Commands**:
-  npx claude-flow memory retrieve --key "project/[area]/[key]"
-**Next Agent Guidance**: [What to retrieve]
-```
-
-**All .md files go to `./docs/` (NEVER root)**
-**Store ALL findings in memory with namespace**
-**Store file metadata**: `npx claude-flow memory store "doc-name" '{"path":"./docs/x.md","description":"..."}' --namespace "project/docs"`
-
-## Serena (MCP Semantic Code Tool)
-
-**Golden Rules**: Never read whole files. Use symbols. Narrow searches with `relative_path`.
-
-| Tool | Purpose |
+| Hook | Purpose |
 |------|---------|
-| `get_symbols_overview` | See file structure (FIRST) |
-| `find_symbol` | Find by name path |
-| `replace_symbol_body` | Replace whole symbol |
-| `replace_regex` | Small edits |
-| `insert_after_symbol` | Add new code |
-| `find_referencing_symbols` | Find usages |
+| `route "task"` | Route to optimal agent (learned patterns) |
+| `pretrain` | Bootstrap intelligence from codebase |
+| `pre/post-edit FILE` | Learning around file edits |
+| `pre/post-task` | Task lifecycle tracking |
+| `session-start/end` | Session management |
+| `intelligence pattern-search -q` | HNSW pattern search (150x faster) |
+| `worker dispatch --trigger NAME` | Trigger background worker |
+| `coverage-gaps` | Test coverage analysis |
 
-**Name Paths**: `method`, `Class/method`, `/Class/method` (absolute)
-**Workflow**: `get_symbols_overview` → `find_symbol(depth=1)` → `find_symbol(include_body=True)` → Edit
+## Background Workers (12)
+
+| Worker | Trigger | Auto-Triggers On |
+|--------|---------|------------------|
+| `map` | 5min | New dirs, large changes |
+| `audit` | 10min | Security file changes |
+| `optimize` | 15min | Slow ops detected |
+| `testgaps` | 20min | Code without tests |
+| `consolidate` | 30min | Session end |
+| `ultralearn` | manual | New project |
+| `deepdive` | manual | Complex edits |
+| `refactor` | manual | Code smells |
+| `benchmark` | manual | Perf-critical changes |
+
+## Optimal Patterns
+
+### Auto-Swarm Trigger (complex tasks)
+- 3+ files modified
+- New feature/refactor
+- API changes with tests
+- Security/performance work
+
+### Sequential Workflow Template
+```javascript
+// Message 1: Agent 1/N
+Task("backend-dev", `
+## TASK: [description]
+## CONTEXT: Agent #1/4 | Next: [agents + what they need]
+## STORAGE: "project/[ns]/[key]" - [data for next agents]
+`)
+
+// Message 2: Agent 2/N (WAIT)
+Task("coder", `
+## TASK: [description]
+## CONTEXT: Agent #2/4 | Previous: Backend | Next: [agents]
+## RETRIEVAL: npx claude-flow@v3alpha memory retrieve --key "project/[ns]/[key]"
+## STORAGE: "project/[ns]/[key]" - [data for next]
+`)
+// Continue sequentially...
+```
+
+### Swarm Auto-Orchestration (ONE message)
+```javascript
+// All in SAME message:
+mcp__claude-flow__swarm_init({topology:"hierarchical-mesh", maxAgents:15, strategy:"adaptive"})
+
+Task("hierarchical-coordinator", "Initialize, coordinate via memory")
+Task("researcher", "Analyze requirements, store findings")
+Task("system-architect", "Design approach, document decisions")
+Task("coder", "Implement following architecture")
+Task("tester", "Write tests")
+Task("reviewer", "Review quality and security")
+
+TodoWrite({todos: [
+  {content:"Init swarm", status:"in_progress", activeForm:"Initializing"},
+  {content:"Research", status:"in_progress", activeForm:"Researching"},
+  {content:"Design", status:"pending", activeForm:"Designing"},
+  {content:"Implement", status:"pending", activeForm:"Implementing"},
+  {content:"Test", status:"pending", activeForm:"Testing"},
+  {content:"Review", status:"pending", activeForm:"Reviewing"}
+]})
+```
+
+### Parallel Pattern (read-only ONLY)
+```javascript
+// ONE message, all parallel
+Task("researcher", "Analyze auth patterns")
+Task("code-analyzer", "Find vulnerabilities")
+Task("perf-analyzer", "Profile endpoints")
+```
+
+### Subagent Response Format
+```markdown
+## TASK COMPLETION
+**Did**: [1-2 sentences]
+**Files**: `./path/file.ts` - [desc]
+**Memory**: `project/ns/key` - [what, why next needs it]
+**Retrieve**: `npx claude-flow@v3alpha memory retrieve --key "project/ns/key"`
+**Next**: [guidance for downstream agents]
+```
+
+## MCP Tools
+
+| Tool | Use |
+|------|-----|
+| `swarm_init` | `{topology, maxAgents, strategy}` |
+| `agent_spawn` | `{type, name, capabilities}` |
+| `task_orchestrate` | `{task, strategy, priority}` |
+| `memory_usage` | `{action:"store/retrieve/search", namespace, key, value}` |
+| `memory_search` | `{pattern, namespace, limit}` |
+| `swarm_status` | Health check |
+| `agent_metrics` | Performance |
+| `neural_train` | Train patterns |
+| `performance_report` | `{format, timeframe}` |
+
+## Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| CLI startup | <500ms |
+| MCP response | <100ms |
+| Agent spawn | <200ms |
+| HNSW search | <1ms |
+| SONA adapt | <0.05ms |
+
+## Environment
+```bash
+CLAUDE_FLOW_MAX_AGENTS=15
+CLAUDE_FLOW_TOPOLOGY=hierarchical
+CLAUDE_FLOW_MEMORY_BACKEND=hybrid
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## Troubleshooting
+```bash
+# Health check
+npx claude-flow@v3alpha doctor --fix --verbose
+
+# MCP port in use
+lsof -i :3000 && kill -9 <PID>
+
+# Empty pattern search
+npx claude-flow@v3alpha hooks pretrain
+
+# Memory issues
+export CLAUDE_FLOW_MAX_AGENTS=5
+npx claude-flow@v3alpha memory cleanup
+```
+
+## Checklist
+
+**Before work**: `doctor --fix` → `daemon start` → `mcp start`
+
+**Complex tasks**: Init swarm → Route via hooks → Sequential workflow → Memory handoffs → Batch todos
+
+**After work**: `hooks session-end --export-metrics` → Verify results → Cleanup
 
 ---
-**Remember**: Sequential by default. Forward-looking prompts. Memory handoffs. Claude Flow coordinates, Claude Code executes.
+**Core**: Claude Flow coordinates, Claude Code executes. Sequential default. Forward prompts. Memory handoffs. Truth protocol (no faking).

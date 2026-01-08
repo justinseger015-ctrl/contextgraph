@@ -3,8 +3,7 @@
 
 [models]
 semantic = { path = "/home/cabdru/contextgraph/models/semantic", repo = "intfloat/e5-large-v2" }
-code = { path = "/home/cabdru/contextgraph/models/code", repo = "microsoft/codebert-base" }
-code-alt = { path = "/home/cabdru/contextgraph/models/code", repo = "Salesforce/codet5p-110m-embedding" }
+code = { path = "/home/cabdru/contextgraph/models/code-1536", repo = "Qodo/Qodo-Embed-1-1.5B" }
 multimodal = { path = "/home/cabdru/contextgraph/models/multimodal", repo = "openai/clip-vit-large-patch14" }
 sparse = { path = "/home/cabdru/contextgraph/models/sparse", repo = "naver/splade-cocondenser-ensembledistil" }
 late-interaction = { path = "/home/cabdru/contextgraph/models/late-interaction", repo = "colbert-ir/colbertv2.0" }

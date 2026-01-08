@@ -16,7 +16,7 @@ impl ModelId {
             Self::Semantic => Some("intfloat/e5-large-v2"),
             Self::Causal => Some("allenai/longformer-base-4096"),
             Self::Sparse => Some("naver/splade-cocondenser-ensembledistil"),
-            Self::Code => Some("Salesforce/codet5p-110m-embedding"),
+            Self::Code => Some("Qodo/Qodo-Embed-1-1.5B"),
             Self::Graph => Some("sentence-transformers/paraphrase-MiniLM-L6-v2"),
             Self::Multimodal => Some("openai/clip-vit-large-patch14"),
             Self::Entity => Some("sentence-transformers/all-MiniLM-L6-v2"),

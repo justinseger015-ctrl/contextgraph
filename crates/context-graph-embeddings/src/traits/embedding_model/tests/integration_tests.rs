@@ -108,7 +108,7 @@ async fn test_multiple_model_instances_independent() {
     assert_eq!(sem_emb.model_id, ModelId::Semantic);
     assert_eq!(code_emb.model_id, ModelId::Code);
     assert_eq!(sem_emb.dimension(), 1024);
-    assert_eq!(code_emb.dimension(), 256);
+    assert_eq!(code_emb.dimension(), 1536);
 }
 
 // =========================================================================

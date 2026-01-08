@@ -38,7 +38,7 @@ pub const EMBEDDER_NAMES: [&str; NUM_OSCILLATORS] = [
     "E4_TempPositional", // sinusoidal PE
     "E5_Causal",        // Longformer SCM
     "E6_SparseLex",     // SPLADE
-    "E7_Code",          // CodeT5p
+    "E7_Code",          // Qodo-Embed-1-1.5B
     "E8_Graph",         // MiniLM structure
     "E9_HDC",           // 10K-bit hyperdimensional
     "E10_Multimodal",   // CLIP

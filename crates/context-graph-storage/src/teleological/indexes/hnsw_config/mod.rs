@@ -24,7 +24,7 @@
 //! | E3TemporalPeriodic | 512 | 16 | 200 | 100 | Cosine |
 //! | E4TemporalPositional | 512 | 16 | 200 | 100 | Cosine |
 //! | E5Causal | 768 | 16 | 200 | 100 | AsymmetricCosine |
-//! | E7Code | 256 | 16 | 200 | 100 | Cosine |
+//! | E7Code | 1536 | 16 | 200 | 100 | Cosine |
 //! | E8Graph | 384 | 16 | 200 | 100 | Cosine |
 //! | E9HDC | 10000 | 16 | 200 | 100 | Cosine |
 //! | E10Multimodal | 768 | 16 | 200 | 100 | Cosine |

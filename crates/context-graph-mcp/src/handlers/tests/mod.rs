@@ -9,7 +9,7 @@
 //!
 //! # Test Helper Variants
 //!
-//! This module provides two categories of test helpers:
+//! This module provides three categories of test helpers:
 //!
 //! ## Fast In-Memory Helpers (Unit Tests)
 //! - `create_test_handlers()` - Uses InMemoryTeleologicalStore with stubs
@@ -18,6 +18,11 @@
 //! ## Real Storage Helpers (Integration Tests)
 //! - `create_test_handlers_with_rocksdb()` - Uses RocksDbTeleologicalStore with tempdir
 //! - `create_test_handlers_with_rocksdb_no_north_star()` - Same but with empty goal hierarchy
+//! - `create_test_handlers_with_rocksdb_store_access()` - Same but returns store for FSV assertions
+//!
+//! ## Real GPU Embedding Helpers (FSV Tests) - Feature-gated: `cuda`
+//! - `create_test_handlers_with_real_embeddings()` - Uses ProductionMultiArrayProvider (GPU)
+//! - `create_test_handlers_with_real_embeddings_store_access()` - Same but returns store for FSV
 //!
 //! # TempDir Lifecycle
 //!
@@ -34,6 +39,7 @@
 //! } // _tempdir dropped here, cleaning up the database
 //! ```
 
+mod causal;
 mod cognitive_pulse;
 mod error_codes;
 mod full_state_verification;
@@ -64,6 +70,14 @@ use context_graph_core::purpose::{GoalHierarchy, GoalId, GoalLevel, GoalNode};
 use context_graph_core::stubs::{InMemoryTeleologicalStore, StubMultiArrayProvider, StubUtlProcessor};
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor};
 use context_graph_storage::teleological::RocksDbTeleologicalStore;
+
+// TASK-P3-01: Import real embedding provider for FSV tests (feature-gated)
+#[cfg(feature = "cuda")]
+use context_graph_embeddings::{GpuConfig, ProductionMultiArrayProvider};
+
+// TASK-P3-01: Import PathBuf for models directory resolution
+#[cfg(feature = "cuda")]
+use std::path::PathBuf;
 
 use crate::adapters::UtlProcessorAdapter;
 use crate::handlers::Handlers;
@@ -382,6 +396,179 @@ pub(crate) async fn create_test_handlers_with_rocksdb_store_access() -> (
     );
 
     (handlers, teleological_store, tempdir)
+}
+
+// ============================================================================
+// TASK-P3-01: Real GPU Embedding Test Helpers (FSV Integration Testing)
+// ============================================================================
+
+/// Create test handlers with REAL ProductionMultiArrayProvider for Full State Verification.
+///
+/// This helper is feature-gated behind `cuda` feature and requires:
+/// - NVIDIA CUDA GPU with 8GB+ VRAM
+/// - Models pre-downloaded to `./models` directory
+/// - CUDA toolkit installed and configured
+///
+/// # When to Use
+///
+/// Use this helper ONLY for Full State Verification (FSV) tests that need to verify:
+/// - Actual embedding generation produces correct dimensions
+/// - Real semantic similarity computations
+/// - GPU acceleration performance characteristics
+/// - End-to-end embedding pipeline correctness
+///
+/// For fast unit tests that don't need real embeddings, use:
+/// - `create_test_handlers()` - Fast in-memory with stubs
+/// - `create_test_handlers_with_rocksdb()` - Real storage, stub embeddings
+///
+/// # Returns
+///
+/// `(Handlers, TempDir)` - The Handlers instance and the TempDir that owns the database.
+///
+/// # Panics
+///
+/// Panics if:
+/// - CUDA GPU is not available
+/// - Models directory doesn't exist or is missing models
+/// - RocksDB fails to open
+/// - HNSW initialization fails
+///
+/// # Example
+///
+/// ```ignore
+/// #[tokio::test]
+/// #[cfg(feature = "cuda")]
+/// async fn test_fsv_with_real_embeddings() {
+///     let (handlers, _tempdir) = create_test_handlers_with_real_embeddings().await;
+///
+///     // This test uses REAL GPU embeddings
+///     let response = handlers.dispatch(store_request).await;
+///
+///     // Verify embeddings have correct dimensions
+///     assert!(response.result.is_some());
+/// }
+/// ```
+#[cfg(feature = "cuda")]
+pub(crate) async fn create_test_handlers_with_real_embeddings() -> (Handlers, TempDir) {
+    let tempdir = TempDir::new().expect("Failed to create temp directory for RocksDB FSV test");
+    let db_path = tempdir.path().join("test_rocksdb_fsv_real_embeddings");
+
+    // Open RocksDB store
+    let rocksdb_store = RocksDbTeleologicalStore::open(&db_path)
+        .expect("Failed to open RocksDbTeleologicalStore in FSV test with real embeddings");
+
+    // CRITICAL: Initialize HNSW indexes BEFORE wrapping in Arc<dyn>
+    rocksdb_store
+        .initialize_hnsw()
+        .await
+        .expect("Failed to initialize HNSW indexes in FSV test");
+
+    let teleological_store: Arc<dyn TeleologicalMemoryStore> = Arc::new(rocksdb_store);
+
+    // Use real UTL processor adapter for live computation
+    let utl_processor: Arc<dyn UtlProcessor> = Arc::new(UtlProcessorAdapter::with_defaults());
+
+    // TASK-P3-01: Use REAL ProductionMultiArrayProvider (GPU-accelerated, 13 embedders)
+    // This requires CUDA GPU and models in ./models directory
+    let models_dir = resolve_test_models_path();
+    let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(
+        ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+            .expect(&format!(
+                "Failed to create ProductionMultiArrayProvider. \
+                 Ensure models exist at {:?} and CUDA GPU is available.",
+                models_dir
+            ))
+    );
+
+    let alignment_calculator: Arc<dyn GoalAlignmentCalculator> =
+        Arc::new(DefaultAlignmentCalculator::new());
+    let goal_hierarchy = create_test_hierarchy();
+
+    let handlers = Handlers::new(
+        teleological_store,
+        utl_processor,
+        multi_array_provider,
+        alignment_calculator,
+        goal_hierarchy,
+    );
+
+    (handlers, tempdir)
+}
+
+/// Create test handlers with REAL embeddings and exposed store reference for FSV assertions.
+///
+/// Same as `create_test_handlers_with_real_embeddings()` but also returns a direct
+/// reference to the teleological store for Full State Verification assertions.
+///
+/// # Returns
+///
+/// `(Handlers, Arc<dyn TeleologicalMemoryStore>, TempDir)`
+/// - Handlers instance for dispatching MCP requests
+/// - Direct reference to the store for FSV assertions (verify data was persisted)
+/// - TempDir that MUST be kept alive for the duration of the test
+#[cfg(feature = "cuda")]
+pub(crate) async fn create_test_handlers_with_real_embeddings_store_access() -> (
+    Handlers,
+    Arc<dyn TeleologicalMemoryStore>,
+    TempDir,
+) {
+    let tempdir = TempDir::new().expect("Failed to create temp directory for FSV test");
+    let db_path = tempdir.path().join("test_rocksdb_fsv_real_embeddings_store");
+
+    // Open RocksDB store
+    let rocksdb_store = RocksDbTeleologicalStore::open(&db_path)
+        .expect("Failed to open RocksDbTeleologicalStore in FSV test");
+
+    // CRITICAL: Initialize HNSW indexes BEFORE wrapping in Arc<dyn>
+    rocksdb_store
+        .initialize_hnsw()
+        .await
+        .expect("Failed to initialize HNSW indexes in FSV test");
+
+    let teleological_store: Arc<dyn TeleologicalMemoryStore> = Arc::new(rocksdb_store);
+
+    // Use real UTL processor adapter
+    let utl_processor: Arc<dyn UtlProcessor> = Arc::new(UtlProcessorAdapter::with_defaults());
+
+    // REAL ProductionMultiArrayProvider for FSV
+    let models_dir = resolve_test_models_path();
+    let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(
+        ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+            .expect(&format!(
+                "Failed to create ProductionMultiArrayProvider for FSV. \
+                 Ensure models at {:?} and CUDA GPU available.",
+                models_dir
+            ))
+    );
+
+    let alignment_calculator: Arc<dyn GoalAlignmentCalculator> =
+        Arc::new(DefaultAlignmentCalculator::new());
+    let goal_hierarchy = create_test_hierarchy();
+
+    let handlers = Handlers::new(
+        Arc::clone(&teleological_store),
+        utl_processor,
+        multi_array_provider,
+        alignment_calculator,
+        goal_hierarchy,
+    );
+
+    (handlers, teleological_store, tempdir)
+}
+
+/// Resolve models directory for tests.
+///
+/// Priority:
+/// 1. `CONTEXT_GRAPH_MODELS_PATH` environment variable
+/// 2. Default: `./models` relative to current directory
+#[cfg(feature = "cuda")]
+fn resolve_test_models_path() -> PathBuf {
+    if let Ok(env_path) = std::env::var("CONTEXT_GRAPH_MODELS_PATH") {
+        return PathBuf::from(env_path);
+    }
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("models")
 }
 
 /// Create a JSON-RPC request for testing.

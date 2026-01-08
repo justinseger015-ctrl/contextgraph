@@ -113,7 +113,7 @@ impl DefaultModelFactory {
             ModelId::Semantic => "intfloat_e5-large-v2",
             ModelId::Causal => "allenai_longformer-base-4096",
             ModelId::Sparse => "naver_splade-cocondenser-ensembledistil",
-            ModelId::Code => "microsoft_codebert-base",
+            ModelId::Code => "qodo_qodo-embed-1-1.5b",
             ModelId::Graph => "sentence-transformers_all-MiniLM-L6-v2",
             ModelId::Multimodal => "openai_clip-vit-large-patch14",
             ModelId::Entity => "sentence-transformers_all-MiniLM-L6-v2",

@@ -102,9 +102,9 @@ fn test_projected_dimensions() {
     assert_eq!(ModelId::Sparse.dimension(), 30522);
     assert_eq!(ModelId::Sparse.projected_dimension(), 1536);
 
-    // Code projects from 256 embed_dim to 768 (CodeT5p internal dimension)
-    assert_eq!(ModelId::Code.dimension(), 256);
-    assert_eq!(ModelId::Code.projected_dimension(), 768);
+    // Code is now native 1536D (Qodo-Embed-1-1.5B) - no projection needed
+    assert_eq!(ModelId::Code.dimension(), 1536);
+    assert_eq!(ModelId::Code.projected_dimension(), 1536);
 
     // HDC projects from 10K-bit to 1024
     assert_eq!(ModelId::Hdc.dimension(), 10000);
@@ -139,10 +139,10 @@ fn test_tokenizer_families() {
         TokenizerFamily::RobertaBpe
     );
 
-    // SentencePiece family: Code (CodeT5p)
+    // BERT WordPiece family: Code (Qodo-Embed uses BERT tokenizer)
     assert_eq!(
         ModelId::Code.tokenizer_family(),
-        TokenizerFamily::SentencePieceBpe
+        TokenizerFamily::BertWordpiece
     );
 
     // CLIP family

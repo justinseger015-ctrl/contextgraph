@@ -13,7 +13,7 @@
 //! | E4 TemporalPositional | 512 | 512 | Float8E4M3 |
 //! | E5 Causal | 768 | 768 | PQ8 |
 //! | E6 Sparse | 30522 | 1536 | SparseNative |
-//! | E7 Code | 256 | 768 | PQ8 |
+//! | E7 Code | 1536 | 1536 | PQ8 |
 //! | E8 Graph | 384 | 384 | Float8E4M3 |
 //! | E9 Hdc | 10000 | 1024 | Binary |
 //! | E10 Multimodal | 768 | 768 | PQ8 |
@@ -56,7 +56,7 @@ const EXPECTED_NATIVE_DIMS: [(ModelId, usize); 13] = [
     (ModelId::TemporalPositional, 512),  // E4
     (ModelId::Causal, 768),              // E5
     (ModelId::Sparse, 30522),            // E6
-    (ModelId::Code, 256),                // E7
+    (ModelId::Code, 1536),               // E7
     (ModelId::Graph, 384),               // E8
     (ModelId::Hdc, 10000),               // E9
     (ModelId::Multimodal, 768),          // E10
@@ -74,7 +74,7 @@ const EXPECTED_PROJECTED_DIMS: [(ModelId, usize); 13] = [
     (ModelId::TemporalPositional, 512),  // E4 - no projection
     (ModelId::Causal, 768),              // E5 - no projection
     (ModelId::Sparse, 1536),             // E6 - 30K -> 1536
-    (ModelId::Code, 768),                // E7 - 256 -> 768
+    (ModelId::Code, 1536),               // E7 - native 1536D
     (ModelId::Graph, 384),               // E8 - no projection
     (ModelId::Hdc, 1024),                // E9 - 10K -> 1024
     (ModelId::Multimodal, 768),          // E10 - no projection
@@ -185,10 +185,10 @@ mod native_dimension_tests {
     fn test_e7_code_native_dimension() {
         assert_eq!(
             ModelId::Code.dimension(),
-            256,
-            "E7 Code: expected native dimension 256 (CodeT5p embed_dim)"
+            1536,
+            "E7 Code: expected native dimension 1536 (Qodo-Embed-1-1.5B)"
         );
-        assert_eq!(CODE_NATIVE, 256, "CODE_NATIVE constant mismatch");
+        assert_eq!(CODE_NATIVE, 1536, "CODE_NATIVE constant mismatch");
     }
 
     /// Test E8 Graph native dimension matches Constitution.
@@ -368,17 +368,17 @@ mod projected_dimension_tests {
         );
     }
 
-    /// Test E7 Code projected dimension (256 -> 768 expansion).
+    /// Test E7 Code projected dimension (1536D native, no projection needed).
     #[test]
     fn test_e7_code_projected_dimension() {
         assert_eq!(
             ModelId::Code.projected_dimension(),
-            768,
-            "E7 Code: expected projected dimension 768 (from 256)"
+            1536,
+            "E7 Code: expected projected dimension 1536 (Qodo-Embed native)"
         );
-        assert_eq!(CODE, 768, "CODE constant mismatch");
-        // Verify expansion factor (3x)
-        assert_eq!(CODE, CODE_NATIVE * 3, "E7 Code should expand 3x from 256 to 768");
+        assert_eq!(CODE, 1536, "CODE constant mismatch");
+        // Verify no expansion needed (1:1 ratio)
+        assert_eq!(CODE, CODE_NATIVE, "E7 Code should have no projection (native 1536D)");
     }
 
     /// Test E8 Graph projected dimension (no projection needed).
@@ -937,11 +937,11 @@ mod edge_case_tests {
             let projected = model_id.projected_dimension();
 
             match model_id {
-                // E7 Code: expansion (256 -> 768)
+                // E7 Code: no projection needed (native 1536D from Qodo-Embed)
                 ModelId::Code => {
-                    assert!(
-                        projected > native,
-                        "E7 Code should expand: {} > {} expected",
+                    assert_eq!(
+                        projected, native,
+                        "E7 Code should have no projection: {} == {} expected",
                         projected,
                         native
                     );

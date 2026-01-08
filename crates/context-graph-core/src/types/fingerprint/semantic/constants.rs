@@ -10,7 +10,7 @@
 //! | E4 | Sinusoidal PE | 512 |
 //! | E5 | Longformer SCM | 768 |
 //! | E6 | SPLADE (Sparse) | ~1500 active / 30522 vocab |
-//! | E7 | CodeT5p | 256 |
+//! | E7 | Qodo-Embed | 1536 |
 //! | E8 | MiniLM (Graph) | 384 |
 //! | E9 | HDC | 10000 |
 //! | E10 | CLIP | 768 |
@@ -36,8 +36,8 @@ pub const E5_DIM: usize = 768;
 /// E6: Sparse lexical (SPLADE) vocabulary size.
 pub const E6_SPARSE_VOCAB: usize = 30_522;
 
-/// E7: Code (CodeT5p) embedding dimension.
-pub const E7_DIM: usize = 256;
+/// E7: Code (Qodo-Embed) embedding dimension.
+pub const E7_DIM: usize = 1536;
 
 /// E8: Graph (MiniLM for structure) embedding dimension.
 pub const E8_DIM: usize = 384;
@@ -67,6 +67,6 @@ pub const NUM_EMBEDDERS: usize = 13;
 /// Total dense dimensions (excluding E6 sparse, E12 variable-length, and E13 sparse).
 ///
 /// Calculated as: E1 + E2 + E3 + E4 + E5 + E7 + E8 + E9 + E10 + E11
-/// = 1024 + 512 + 512 + 512 + 768 + 256 + 384 + 10000 + 768 + 384 = 15120
+/// = 1024 + 512 + 512 + 512 + 768 + 1536 + 384 + 10000 + 768 + 384 = 16400
 pub const TOTAL_DENSE_DIMS: usize =
     E1_DIM + E2_DIM + E3_DIM + E4_DIM + E5_DIM + E7_DIM + E8_DIM + E9_DIM + E10_DIM + E11_DIM;

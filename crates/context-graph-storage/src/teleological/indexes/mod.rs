@@ -124,7 +124,7 @@ mod tests {
         assert_eq!(E4_DIM, 512);
         assert_eq!(E5_DIM, 768);
         assert_eq!(E6_SPARSE_VOCAB, 30_522);
-        assert_eq!(E7_DIM, 256);
+        assert_eq!(E7_DIM, 1536);
         assert_eq!(E8_DIM, 384);
         assert_eq!(E9_DIM, 10_000);
         assert_eq!(E10_DIM, 768);

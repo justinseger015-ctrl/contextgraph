@@ -103,7 +103,7 @@ pub struct MultiArrayEmbeddingOutput {
     /// - 3: E4 Temporal-Positional
     /// - 4: E5 Causal (Longformer)
     /// - 5: E6 Sparse (SPLADE)
-    /// - 6: E7 Code (CodeT5p)
+    /// - 6: E7 Code (Qodo-Embed-1-1.5B)
     /// - 7: E8 Graph (MiniLM)
     /// - 8: E9 HDC
     /// - 9: E10 Multimodal (CLIP)
@@ -334,7 +334,7 @@ pub trait MultiArrayEmbeddingProvider: Send + Sync {
             512,   // E4: Temporal-Positional
             768,   // E5: Causal (Longformer)
             0,     // E6: Sparse (SPLADE) - variable
-            256,   // E7: Code (CodeT5p)
+            1536,  // E7: Code (Qodo-Embed-1-1.5B)
             384,   // E8: Graph (MiniLM)
             10000, // E9: HDC
             768,   // E10: Multimodal (CLIP)
@@ -650,7 +650,7 @@ mod tests {
         assert_eq!(dims[3], 512, "E4 temporal-positional should be 512D");
         assert_eq!(dims[4], 768, "E5 causal should be 768D");
         assert_eq!(dims[5], 0, "E6 sparse should be 0 (variable)");
-        assert_eq!(dims[6], 256, "E7 code should be 256D");
+        assert_eq!(dims[6], 1536, "E7 code should be 1536D");
         assert_eq!(dims[7], 384, "E8 graph should be 384D");
         assert_eq!(dims[8], 10000, "E9 HDC should be 10000D");
         assert_eq!(dims[9], 768, "E10 multimodal should be 768D");
@@ -756,7 +756,7 @@ mod tests {
         assert_eq!(fp.e4_temporal_positional.len(), 512);
         assert_eq!(fp.e5_causal.len(), 768);
         assert!(fp.e6_sparse.is_empty()); // Sparse starts empty
-        assert_eq!(fp.e7_code.len(), 256);
+        assert_eq!(fp.e7_code.len(), 1536);
         assert_eq!(fp.e8_graph.len(), 384);
         assert_eq!(fp.e9_hdc.len(), 10000);
         assert_eq!(fp.e10_multimodal.len(), 768);
@@ -789,7 +789,7 @@ mod tests {
                 "sinusoidal-pe".to_string(),
                 "longformer".to_string(),
                 "splade".to_string(),
-                "codet5p".to_string(),
+                "qodo-embed".to_string(),
                 "minilm-graph".to_string(),
                 "hdc-10k".to_string(),
                 "clip".to_string(),

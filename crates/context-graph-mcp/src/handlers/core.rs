@@ -16,8 +16,11 @@ use tracing::debug;
 use uuid::Uuid;
 
 use context_graph_core::alignment::GoalAlignmentCalculator;
+use context_graph_core::atc::AdaptiveThresholdCalibration;
+use context_graph_core::dream::{AmortizedLearner, DreamController, DreamScheduler};
 use context_graph_core::johari::{DynDefaultJohariManager, JohariTransitionManager, NUM_EMBEDDERS};
 use context_graph_core::monitoring::{LayerStatusProvider, StubLayerStatusProvider, StubSystemMonitor, SystemMonitor};
+use context_graph_core::neuromod::NeuromodulationManager;
 use context_graph_core::purpose::GoalHierarchy;
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor};
 
@@ -682,6 +685,36 @@ impl Handlers {
         let self_ego: Arc<tokio::sync::RwLock<dyn SelfEgoProvider>> =
             Arc::new(tokio::sync::RwLock::new(SelfEgoProviderImpl::new()));
 
+        // TASK-NEUROMOD-MCP: Create REAL NeuromodulationManager with default baselines
+        // Constitution neuromod section: Dopamine [1,5], Serotonin [0,1], Noradrenaline [0.5,2]
+        // Acetylcholine is READ-ONLY, managed by GWT MetaCognitiveLoop
+        let neuromod_manager: Arc<RwLock<NeuromodulationManager>> =
+            Arc::new(RwLock::new(NeuromodulationManager::new()));
+
+        // TASK-DREAM-MCP: Create REAL Dream components with constitution-mandated defaults
+        // Constitution dream section:
+        // - Trigger: activity < 0.15, idle 10min
+        // - NREM: 3min, replay recent, tight coupling, recency_bias 0.8
+        // - REM: 2min, explore attractors, temp 2.0
+        // - Constraints: 100 queries, semantic_leap 0.7, abort_on_query, wake <100ms, gpu <30%
+        // - Amortized: 3+ hop ≥5×, weight product(path), confidence ≥0.7
+        let dream_controller: Arc<RwLock<DreamController>> =
+            Arc::new(RwLock::new(DreamController::new()));
+        let dream_scheduler: Arc<RwLock<DreamScheduler>> =
+            Arc::new(RwLock::new(DreamScheduler::new()));
+        let amortized_learner: Arc<RwLock<AmortizedLearner>> =
+            Arc::new(RwLock::new(AmortizedLearner::new()));
+
+        // TASK-ATC-001: Create REAL AdaptiveThresholdCalibration with constitution-mandated defaults
+        // Constitution adaptive_thresholds section:
+        // - Level 1 EWMA Drift Tracker (per-query)
+        // - Level 2 Temperature Scaling (hourly, per-embedder T values)
+        // - Level 3 Bandit Threshold Selector (session, UCB/Thompson Sampling)
+        // - Level 4 Bayesian Meta-Optimizer (weekly, GP surrogate + EI acquisition)
+        // Threshold priors: θ_opt=0.75, θ_acc=0.70, θ_warn=0.55, θ_dup=0.90, θ_edge=0.70, etc.
+        let atc: Arc<RwLock<AdaptiveThresholdCalibration>> =
+            Arc::new(RwLock::new(AdaptiveThresholdCalibration::new()));
+
         Self {
             teleological_store,
             utl_processor,
@@ -697,14 +730,14 @@ impl Handlers {
             workspace_provider: Some(workspace_provider),
             meta_cognitive: Some(meta_cognitive),
             self_ego: Some(self_ego),
-            // TASK-ATC-001: ATC provider default to None - use with_atc() for ATC support
-            atc: None,
-            // TASK-DREAM-MCP: Dream fields default to None
-            dream_controller: None,
-            dream_scheduler: None,
-            amortized_learner: None,
-            // TASK-NEUROMOD-MCP: Neuromod defaults to None
-            neuromod_manager: None,
+            // TASK-ATC-001: REAL AdaptiveThresholdCalibration wired
+            atc: Some(atc),
+            // TASK-DREAM-MCP: REAL Dream components wired
+            dream_controller: Some(dream_controller),
+            dream_scheduler: Some(dream_scheduler),
+            amortized_learner: Some(amortized_learner),
+            // TASK-NEUROMOD-MCP: REAL NeuromodulationManager wired
+            neuromod_manager: Some(neuromod_manager),
         }
     }
 

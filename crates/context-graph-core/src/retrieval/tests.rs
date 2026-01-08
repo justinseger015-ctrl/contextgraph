@@ -44,7 +44,7 @@ fn create_searchable_fingerprint(seed: u8) -> TeleologicalFingerprint {
     for i in 0..semantic.e2_temporal_recent.len().min(512) {
         semantic.e2_temporal_recent[i] = ((seed as usize * 2 + i) % 256) as f32 / 255.0;
     }
-    for i in 0..semantic.e7_code.len().min(256) {
+    for i in 0..semantic.e7_code.len().min(1536) {
         semantic.e7_code[i] = ((seed as usize * 3 + i) % 256) as f32 / 255.0;
     }
 

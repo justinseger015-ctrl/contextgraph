@@ -66,19 +66,19 @@ mod tests {
     #[test]
     fn test_native_dimension() {
         let model = create_test_model();
-        assert_eq!(model.dimension(), 256);
+        assert_eq!(model.dimension(), 1536);
     }
 
     #[test]
     fn test_projected_dimension() {
         let model = create_test_model();
-        assert_eq!(model.projected_dimension(), 768);
+        assert_eq!(model.projected_dimension(), 1536);
     }
 
     #[test]
     fn test_max_tokens() {
         let model = create_test_model();
-        assert_eq!(model.max_tokens(), 512);
+        assert_eq!(model.max_tokens(), 32768);
     }
 
     #[test]
@@ -230,11 +230,11 @@ mod tests {
 
     #[test]
     fn test_constants_are_correct() {
-        assert_eq!(CODE_NATIVE_DIMENSION, 256);
-        assert_eq!(CODE_PROJECTED_DIMENSION, 768);
-        assert_eq!(CODE_MAX_TOKENS, 512);
+        assert_eq!(CODE_NATIVE_DIMENSION, 1536);
+        assert_eq!(CODE_PROJECTED_DIMENSION, 1536);
+        assert_eq!(CODE_MAX_TOKENS, 32768);
         assert_eq!(CODE_LATENCY_BUDGET_MS, 10);
-        assert_eq!(CODE_MODEL_NAME, "Salesforce/codet5p-110m-embedding");
+        assert_eq!(CODE_MODEL_NAME, "Qodo/Qodo-Embed-1-1.5B");
     }
 
     #[test]

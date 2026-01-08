@@ -37,7 +37,7 @@
 //! | 3 | E4_Temporal_Positional | 512 | Dense HNSW |
 //! | 4 | E5_Causal | 768 | Dense HNSW |
 //! | 5 | E6_Sparse | variable | Sparse Inverted |
-//! | 6 | E7_Code | 256 | Dense HNSW |
+//! | 6 | E7_Code | 1536 | Dense HNSW |
 //! | 7 | E8_Graph | 384 | Dense HNSW |
 //! | 8 | E9_HDC | 10000 | Dense HNSW |
 //! | 9 | E10_Multimodal | 768 | Dense HNSW |

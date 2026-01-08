@@ -25,7 +25,7 @@
 //!
 //! // Check model dimensions statically
 //! assert_eq!(ModelId::Semantic.dimension(), 1024);
-//! assert_eq!(ModelId::Code.dimension(), 256);  // CodeT5p embed_dim
+//! assert_eq!(ModelId::Code.dimension(), 1536); // Qodo-Embed-1-1.5B native
 //! assert_eq!(ModelId::Entity.dimension(), 384);
 //!
 //! // Registry config defaults
@@ -70,7 +70,7 @@ pub use config::{
     ModelPathConfig, PaddingStrategy,
 };
 pub use error::{EmbeddingError, EmbeddingResult};
-pub use provider::EmbeddingProvider;
+pub use provider::{EmbeddingProvider, ProductionMultiArrayProvider};
 pub use traits::{
     get_memory_estimate, DevicePlacement, EmbeddingModel, ModelFactory, QuantizationMode,
     SingleModelConfig, MEMORY_ESTIMATES, TOTAL_MEMORY_ESTIMATE,

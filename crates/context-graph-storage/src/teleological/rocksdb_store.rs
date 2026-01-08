@@ -1376,7 +1376,7 @@ mod tests {
             e4_temporal_positional: generate_vec(512, seed + 3),      // 512D
             e5_causal: generate_vec(768, seed + 4),                   // 768D
             e6_sparse: generate_sparse(seed + 5),                     // Sparse
-            e7_code: generate_vec(256, seed + 6),                     // 256D
+            e7_code: generate_vec(1536, seed + 6),                    // 1536D
             e8_graph: generate_vec(384, seed + 7),                    // 384D
             e9_hdc: generate_vec(10000, seed + 8),                    // 10000D HDC
             e10_multimodal: generate_vec(768, seed + 9),              // 768D

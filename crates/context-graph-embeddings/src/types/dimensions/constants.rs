@@ -26,8 +26,8 @@ pub const CAUSAL_NATIVE: usize = 768;
 /// E6: Sparse lexical native dimension (SPLADE vocab size, ~5% active)
 pub const SPARSE_NATIVE: usize = 30522;
 
-/// E7: Code embedding native dimension (CodeT5p embed_dim)
-pub const CODE_NATIVE: usize = 256;
+/// E7: Code embedding native dimension (Qodo-Embed 1536D)
+pub const CODE_NATIVE: usize = 1536;
 
 /// E8: Graph embedding native dimension (paraphrase-MiniLM-L6-v2)
 pub const GRAPH_NATIVE: usize = 384;
@@ -69,8 +69,8 @@ pub const CAUSAL: usize = 768;
 /// E6: Sparse projected dimension (30K sparse -> 1536D via learned projection)
 pub const SPARSE: usize = 1536;
 
-/// E7: Code projected dimension (256 embed -> 768D via projection to match CodeT5p d_model)
-pub const CODE: usize = 768;
+/// E7: Code projected dimension (Qodo-Embed 1536D, no projection needed)
+pub const CODE: usize = 1536;
 
 /// E8: Graph projected dimension (no projection needed)
 pub const GRAPH: usize = 384;

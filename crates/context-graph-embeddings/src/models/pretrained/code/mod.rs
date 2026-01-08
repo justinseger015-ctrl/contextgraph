@@ -1,23 +1,29 @@
-//! Code embedding model using Salesforce/codet5p-110m-embedding.
+//! Code embedding model using Qodo/Qodo-Embed-1-1.5B.
 //!
-//! This model (E7) produces 256D native vectors optimized for code understanding.
-//! Uses SentencePiece BPE tokenization for processing source code.
+//! This model produces 1536D native vectors optimized for code understanding.
+//! Based on Qwen2 architecture with Grouped-Query Attention and RoPE.
 //!
-//! # Dimension Projection
+//! # Dimension
 //!
-//! - Native output: 256D (embed_dim)
-//! - Internal representation: 768D (d_model)
-//! - Projected output: 768D (for multi-array storage compatibility)
+//! - Native output: 1536D
+//! - Projected output: 1536D (no projection needed)
 //!
-//! The projection from 256D to 768D is learned during training.
+//! # Architecture (Qwen2)
+//!
+//! - 28 decoder layers
+//! - 1536 hidden dimension
+//! - 12 attention heads with GQA (2 KV heads per layer)
+//! - SwiGLU activation in FFN (8960 intermediate size)
+//! - RoPE position encoding (theta=1,000,000)
+//! - Last-token pooling for embedding output
 //!
 //! # Thread Safety
 //! - `AtomicBool` for `loaded` state (lock-free reads)
 //! - Inner model/tokenizer require explicit synchronization if mutable
 //!
 //! # Memory Layout
-//! - Total estimated: ~440MB for FP32 weights (110M parameters)
-//! - With FP16 quantization: ~220MB
+//! - Total estimated: ~6GB for FP32 weights (1.5B parameters)
+//! - With FP16: ~3GB VRAM usage
 
 mod attention;
 mod config;
@@ -35,7 +41,7 @@ mod tests_batch;
 #[cfg(test)]
 mod tests_edge_cases;
 
-// Re-export used public types
+// Re-export public types
 pub use constants::{
     CODE_LATENCY_BUDGET_MS, CODE_MAX_TOKENS, CODE_MODEL_NAME, CODE_NATIVE_DIMENSION,
     CODE_PROJECTED_DIMENSION,

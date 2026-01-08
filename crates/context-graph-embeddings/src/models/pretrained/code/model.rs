@@ -1,6 +1,7 @@
 //! CodeModel struct and core implementation.
 //!
-//! Contains the main model struct, construction, and embedding methods.
+//! Contains the main model struct, construction, and embedding methods
+//! for Qodo/Qodo-Embed-1-1.5B (Qwen2 architecture).
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,7 +15,7 @@ use crate::traits::{EmbeddingModel, SingleModelConfig};
 use crate::types::{InputType, ModelEmbedding, ModelId, ModelInput};
 
 use super::forward::gpu_forward;
-use super::weights::CodeT5pWeights;
+use super::weights::QwenWeights;
 
 /// Internal state that varies based on feature flags.
 #[allow(dead_code)]
@@ -22,34 +23,34 @@ pub(super) enum ModelState {
     /// Unloaded - no weights in memory.
     Unloaded,
 
-    /// Loaded with candle model and tokenizer (GPU-accelerated).
+    /// Loaded with Qwen2 model weights and tokenizer (GPU-accelerated).
     Loaded {
-        /// CodeT5p model weights on GPU.
-        weights: CodeT5pWeights,
+        /// Qwen2 model weights on GPU.
+        weights: QwenWeights,
         /// HuggingFace tokenizer for text encoding (boxed to reduce enum size).
         tokenizer: Box<Tokenizer>,
     },
 }
 
-/// Code embedding model using Salesforce/codet5p-110m-embedding.
+/// Code embedding model using Qodo/Qodo-Embed-1-1.5B.
 ///
-/// This model produces 256D native vectors (768D projected) optimized for
-/// code understanding and semantic similarity in source code.
+/// This model produces 1536D native vectors optimized for code understanding
+/// and semantic similarity in source code. Based on Qwen2 architecture.
 ///
 /// # Architecture
 ///
-/// CodeT5+ is an encoder-decoder model based on T5 with code-specific
-/// pretraining objectives:
-/// - **Span denoising**: Reconstruct masked spans in code
-/// - **Identifier prediction**: Predict masked variable/function names
-/// - **Cross-modal contrastive learning**: Align code and natural language
-///
-/// The embedding model uses the encoder with a learned projection head.
+/// Qodo-Embed-1-1.5B is based on Qwen2 with:
+/// - 28 decoder layers
+/// - 1536 hidden dimension
+/// - 12 attention heads with GQA (2 KV heads)
+/// - SwiGLU activation in FFN
+/// - RoPE position encoding
+/// - Last-token pooling
 ///
 /// # Supported Languages
 ///
-/// Trained on code from multiple programming languages:
-/// - Python, JavaScript, Java, Go, Ruby, PHP, C#, C, C++, TypeScript
+/// Trained on code from multiple programming languages for comprehensive
+/// code understanding and semantic search.
 ///
 /// # Construction
 ///
@@ -61,7 +62,7 @@ pub(super) enum ModelState {
 ///
 /// async fn example() -> EmbeddingResult<()> {
 ///     let model = CodeModel::new(
-///         Path::new("models/code"),
+///         Path::new("models/code-1536"),
 ///         SingleModelConfig::default(),
 ///     )?;
 ///     model.load().await?;  // Must load before embed
@@ -122,18 +123,18 @@ impl CodeModel {
     ///
     /// 1. Initialize CUDA device
     /// 2. Load config.json and tokenizer.json
-    /// 3. Load model.safetensors
-    /// 4. Transfer all weight tensors to GPU VRAM
+    /// 3. Load sharded safetensors (model-00001-of-00002.safetensors, model-00002-of-00002.safetensors)
+    /// 4. Transfer all weight tensors to GPU VRAM in FP16
     pub async fn load(&self) -> EmbeddingResult<()> {
         // Initialize GPU device
         let device = init_gpu().map_err(|e| EmbeddingError::GpuError {
-            message: format!("CodeModel GPU init failed: {}", e),
+            message: format!("Qwen2 GPU init failed: {}", e),
         })?;
 
-        // Load tokenizer from model directory
+        // Load tokenizer from model directory (tokenizer.json for full compatibility)
         let tokenizer_path = self.model_path.join("tokenizer.json");
-        let tokenizer =
-            Tokenizer::from_file(&tokenizer_path).map_err(|e| EmbeddingError::ModelLoadError {
+        let tokenizer = Tokenizer::from_file(&tokenizer_path).map_err(|e| {
+            EmbeddingError::ModelLoadError {
                 model_id: ModelId::Code,
                 source: Box::new(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
@@ -143,16 +144,18 @@ impl CodeModel {
                         e
                     ),
                 )),
-            })?;
+            }
+        })?;
 
-        // Load weights from safetensors
-        let weights = CodeT5pWeights::from_path(&self.model_path, device)?;
+        // Load weights from sharded safetensors
+        let weights = QwenWeights::from_path(&self.model_path, device)?;
 
         tracing::info!(
-            "CodeModel loaded: {} layers, d_model={}, embed_dim={}",
-            weights.config.num_layers,
-            weights.config.d_model,
-            weights.config.embed_dim
+            "Qodo-Embed loaded: {} layers, hidden_size={}, {} heads ({} KV heads)",
+            weights.config.num_hidden_layers,
+            weights.config.hidden_size,
+            weights.config.num_attention_heads,
+            weights.config.num_key_value_heads
         );
 
         // Update state
@@ -188,7 +191,7 @@ impl CodeModel {
 
         *state = ModelState::Unloaded;
         self.loaded.store(false, Ordering::SeqCst);
-        tracing::info!("CodeModel unloaded");
+        tracing::info!("Qodo-Embed unloaded");
         Ok(())
     }
 
@@ -264,7 +267,7 @@ impl EmbeddingModel for CodeModel {
             .model_state
             .read()
             .map_err(|e| EmbeddingError::InternalError {
-                message: format!("CodeModel failed to acquire read lock: {}", e),
+                message: format!("Qwen2 failed to acquire read lock: {}", e),
             })?;
 
         match &*state {

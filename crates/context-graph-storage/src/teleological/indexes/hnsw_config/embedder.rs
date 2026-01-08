@@ -32,7 +32,7 @@ pub enum EmbedderIndex {
     E5Causal,
     /// E6: ~30K sparse (inverted index, NOT HNSW)
     E6Sparse,
-    /// E7: 256D code (CodeT5p)
+    /// E7: 1536D code (Qodo-Embed-1-1.5B)
     E7Code,
     /// E8: 384D graph (MiniLM)
     E8Graph,

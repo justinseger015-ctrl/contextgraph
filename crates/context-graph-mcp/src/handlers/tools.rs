@@ -18,10 +18,11 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, warn};
 
+use context_graph_core::purpose::{DefaultPurposeComputer, PurposeComputeConfig, PurposeVectorComputer};
 use context_graph_core::traits::TeleologicalSearchOptions;
 use context_graph_core::types::UtlContext;
 use context_graph_core::types::fingerprint::{
-    JohariFingerprint, PurposeVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+    JohariFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS,
 };
 
 use crate::middleware::CognitivePulse;
@@ -293,10 +294,62 @@ impl Handlers {
         hasher.update(content.as_bytes());
         let content_hash: [u8; 32] = hasher.finalize().into();
 
-        // Create TeleologicalFingerprint with default purpose (will be computed later)
+        // AP-007: Compute purpose vector from semantic fingerprint and goal hierarchy
+        // Purpose vectors MUST be computed at storage time, not deferred (NO DEFAULT)
+        // From constitution.yaml: PV = [A(E1,V), A(E2,V), ..., A(E13,V)]
+        // where A(Ei, V) = cos(θ) between embedder i and North Star goal V
+        let purpose_vector = {
+            let hierarchy = self.goal_hierarchy.read().clone();
+
+            // If no North Star goal is defined, FAIL FAST (AP-007)
+            if hierarchy.north_star().is_none() {
+                error!(
+                    "inject_context: Goal hierarchy missing North Star goal. \
+                     Cannot compute purpose vector. \
+                     CONFIGURATION ERROR: Use purpose/north_star_update to configure goal hierarchy."
+                );
+                return self.tool_error_with_pulse(
+                    id,
+                    "Goal hierarchy not configured. Cannot compute purpose vector. \
+                     Use purpose/north_star_update endpoint to set North Star goal.",
+                );
+            }
+
+            // Compute purpose vector using DefaultPurposeComputer
+            // This computes alignment for each of 13 embedding spaces
+            let config = PurposeComputeConfig::with_hierarchy(hierarchy);
+
+            match DefaultPurposeComputer::new()
+                .compute_purpose(&embedding_output.fingerprint, &config)
+                .await
+            {
+                Ok(pv) => {
+                    debug!(
+                        aggregate_alignment = pv.aggregate_alignment(),
+                        dominant_embedder = pv.dominant_embedder,
+                        coherence = pv.coherence,
+                        "inject_context: Purpose vector computed for semantic fingerprint"
+                    );
+                    pv
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        "inject_context: Failed to compute purpose vector. \
+                         Cannot store memory without alignment metadata."
+                    );
+                    return self.tool_error_with_pulse(
+                        id,
+                        &format!("Purpose vector computation failed: {}", e),
+                    );
+                }
+            }
+        };
+
+        // Create TeleologicalFingerprint with REAL computed purpose vector
         let fingerprint = TeleologicalFingerprint::new(
             embedding_output.fingerprint,
-            PurposeVector::default(),
+            purpose_vector,
             JohariFingerprint::zeroed(),
             content_hash,
         );
@@ -361,10 +414,60 @@ impl Handlers {
         hasher.update(content.as_bytes());
         let content_hash: [u8; 32] = hasher.finalize().into();
 
-        // Create TeleologicalFingerprint
+        // AP-007: Compute purpose vector from semantic fingerprint and goal hierarchy
+        // Purpose vectors MUST be computed at storage time, not deferred (NO DEFAULT)
+        // From constitution.yaml: PV = [A(E1,V), A(E2,V), ..., A(E13,V)]
+        let purpose_vector = {
+            let hierarchy = self.goal_hierarchy.read().clone();
+
+            // If no North Star goal is defined, FAIL FAST (AP-007)
+            if hierarchy.north_star().is_none() {
+                error!(
+                    "store_memory: Goal hierarchy missing North Star goal. \
+                     Cannot compute purpose vector. \
+                     CONFIGURATION ERROR: Use purpose/north_star_update to configure goal hierarchy."
+                );
+                return self.tool_error_with_pulse(
+                    id,
+                    "Goal hierarchy not configured. Cannot compute purpose vector. \
+                     Use purpose/north_star_update endpoint to set North Star goal.",
+                );
+            }
+
+            // Compute purpose vector using DefaultPurposeComputer
+            let config = PurposeComputeConfig::with_hierarchy(hierarchy);
+
+            match DefaultPurposeComputer::new()
+                .compute_purpose(&embedding_output.fingerprint, &config)
+                .await
+            {
+                Ok(pv) => {
+                    debug!(
+                        aggregate_alignment = pv.aggregate_alignment(),
+                        dominant_embedder = pv.dominant_embedder,
+                        coherence = pv.coherence,
+                        "store_memory: Purpose vector computed for semantic fingerprint"
+                    );
+                    pv
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        "store_memory: Failed to compute purpose vector. \
+                         Cannot store memory without alignment metadata."
+                    );
+                    return self.tool_error_with_pulse(
+                        id,
+                        &format!("Purpose vector computation failed: {}", e),
+                    );
+                }
+            }
+        };
+
+        // Create TeleologicalFingerprint with REAL computed purpose vector
         let fingerprint = TeleologicalFingerprint::new(
             embedding_output.fingerprint,
-            PurposeVector::default(),
+            purpose_vector,
             JohariFingerprint::zeroed(),
             content_hash,
         );
