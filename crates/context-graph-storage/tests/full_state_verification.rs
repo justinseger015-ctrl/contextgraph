@@ -78,7 +78,7 @@ fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
         e6_sparse: generate_real_sparse_vector(100),
         e7_code: generate_real_unit_vector(1536),
         e8_graph: generate_real_unit_vector(384),
-        e9_hdc: generate_real_unit_vector(10000),
+        e9_hdc: generate_real_unit_vector(1024), // HDC projected dimension
         e10_multimodal: generate_real_unit_vector(768),
         e11_entity: generate_real_unit_vector(384),
         e12_late_interaction: vec![generate_real_unit_vector(128); 16],
@@ -228,7 +228,7 @@ async fn test_physical_write_read_verification() {
     println!("\n[3] DATA INTEGRITY VERIFICATION");
     println!("    ID match: {}", retrieved.id == id);
     println!("    E1 semantic dim: {} (expected 1024)", retrieved.semantic.e1_semantic.len());
-    println!("    E9 HDC dim: {} (expected 10000)", retrieved.semantic.e9_hdc.len());
+    println!("    E9 HDC dim: {} (expected 1024)", retrieved.semantic.e9_hdc.len());
     println!("    Purpose alignments dim: {} (expected 13)", retrieved.purpose_vector.alignments.len());
 
     // Verify exact vector match

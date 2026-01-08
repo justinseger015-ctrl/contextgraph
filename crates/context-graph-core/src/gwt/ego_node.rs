@@ -141,12 +141,29 @@ pub enum IdentityStatus {
 }
 
 impl IdentityContinuity {
+    /// Create new IdentityContinuity with correct initial status per constitution.yaml lines 387-392
+    /// Starting with identity_coherence=0.0 means status=Critical (IC < 0.5 triggers dream consolidation)
     pub fn new() -> Self {
+        let identity_coherence = 0.0;
         Self {
             recent_continuity: 1.0,
             kuramoto_order_parameter: 0.0,
-            identity_coherence: 0.0,
-            status: IdentityStatus::Healthy,
+            identity_coherence,
+            status: Self::compute_status_from_coherence(identity_coherence),
+        }
+    }
+
+    /// Compute status per constitution.yaml lines 387-392:
+    /// - Healthy: IC > 0.9
+    /// - Warning: 0.7 <= IC <= 0.9
+    /// - Degraded: 0.5 <= IC < 0.7
+    /// - Critical: IC < 0.5 (triggers dream consolidation)
+    fn compute_status_from_coherence(coherence: f32) -> IdentityStatus {
+        match coherence {
+            ic if ic > 0.9 => IdentityStatus::Healthy,
+            ic if ic >= 0.7 => IdentityStatus::Warning,
+            ic if ic >= 0.5 => IdentityStatus::Degraded,
+            _ => IdentityStatus::Critical,
         }
     }
 
@@ -162,13 +179,8 @@ impl IdentityContinuity {
         // Identity coherence = cosine × r
         self.identity_coherence = (pv_cosine * kuramoto_r).clamp(0.0, 1.0);
 
-        // Determine status
-        self.status = match self.identity_coherence {
-            ic if ic > 0.9 => IdentityStatus::Healthy,
-            ic if ic >= 0.7 => IdentityStatus::Warning,
-            ic if ic >= 0.5 => IdentityStatus::Degraded,
-            _ => IdentityStatus::Critical,
-        };
+        // Determine status using canonical computation
+        self.status = Self::compute_status_from_coherence(self.identity_coherence);
 
         Ok(self.status)
     }
@@ -301,6 +313,42 @@ mod tests {
         let snapshot = ego.get_latest_snapshot().unwrap();
         assert_eq!(snapshot.vector, [0.5; 13]);
         assert!(snapshot.context.contains("Test snapshot"));
+    }
+
+    /// FSV test: Initial IdentityContinuity status should be Critical per constitution.yaml lines 387-392
+    /// Because identity_coherence=0.0 at initialization, which is < 0.5 (Critical threshold)
+    #[test]
+    fn test_identity_continuity_initial_status_is_critical() {
+        let continuity = IdentityContinuity::new();
+
+        // Per constitution: IC < 0.5 should be Critical, not Healthy
+        assert_eq!(continuity.status, IdentityStatus::Critical,
+            "Initial identity coherence 0.0 must result in Critical status, not Healthy");
+        assert_eq!(continuity.identity_coherence, 0.0);
+    }
+
+    /// FSV test: Status transitions through all states correctly
+    #[test]
+    fn test_identity_status_from_coherence_all_states() {
+        // Verify compute_status_from_coherence works correctly
+        let mut continuity = IdentityContinuity::new();
+
+        // Update to each threshold and verify status
+        // Critical: IC < 0.5
+        continuity.update(0.3, 0.3).unwrap(); // IC = 0.09 < 0.5
+        assert_eq!(continuity.status, IdentityStatus::Critical);
+
+        // Degraded: 0.5 <= IC < 0.7
+        continuity.update(0.8, 0.7).unwrap(); // IC = 0.56
+        assert_eq!(continuity.status, IdentityStatus::Degraded);
+
+        // Warning: 0.7 <= IC <= 0.9
+        continuity.update(0.9, 0.85).unwrap(); // IC = 0.765
+        assert_eq!(continuity.status, IdentityStatus::Warning);
+
+        // Healthy: IC > 0.9
+        continuity.update(0.96, 0.96).unwrap(); // IC = 0.9216 > 0.9
+        assert_eq!(continuity.status, IdentityStatus::Healthy);
     }
 
     #[test]

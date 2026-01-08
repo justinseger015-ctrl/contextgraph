@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(E6_SPARSE_VOCAB, 30_522);
         assert_eq!(E7_DIM, 1536);
         assert_eq!(E8_DIM, 384);
-        assert_eq!(E9_DIM, 10_000);
+        assert_eq!(E9_DIM, 1024); // HDC projected dimension
         assert_eq!(E10_DIM, 768);
         assert_eq!(E11_DIM, 384);
         assert_eq!(E12_TOKEN_DIM, 128);

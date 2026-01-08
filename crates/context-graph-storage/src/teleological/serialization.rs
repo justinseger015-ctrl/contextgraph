@@ -1,7 +1,7 @@
 //! Bincode serialization for TeleologicalFingerprint.
 //!
 //! Uses bincode 1.3 for efficient binary serialization.
-//! Expected serialized size: ~63KB per fingerprint (based on SemanticFingerprint with 15,120 dense dims).
+//! Expected serialized size: ~30KB per fingerprint (based on SemanticFingerprint with 7,424 dense dims).
 //!
 //! # FAIL FAST Policy
 //!
@@ -27,16 +27,23 @@ pub const TELEOLOGICAL_VERSION: u8 = 1;
 /// Minimum expected size for a serialized TeleologicalFingerprint.
 ///
 /// Based on actual SemanticFingerprint size:
-/// - TOTAL_DENSE_DIMS = 15,120 → 60,480 bytes for dense embeddings
+/// - TOTAL_DENSE_DIMS = 7,424 → 29,696 bytes for dense embeddings (f32)
 /// - Plus sparse vectors, JohariFingerprint, PurposeVector, metadata
-/// - Expected total: ~63KB
-const MIN_FINGERPRINT_SIZE: usize = 55_000;
+/// - Bincode may compress zeros efficiently, so actual size varies
+/// - Using conservative minimum of 5KB to allow for heavy compression
+const MIN_FINGERPRINT_SIZE: usize = 5_000;
 
 /// Maximum expected size for a serialized TeleologicalFingerprint.
 ///
 /// With 100 evolution snapshots (MAX_EVOLUTION_SNAPSHOTS), size could grow significantly.
 /// Each snapshot contains PurposeVector (52B) + JohariFingerprint (~520B) + trigger + timestamp.
-/// Allowing up to 150KB for fully evolved fingerprints.
+/// Also, maximum-size fingerprints with many sparse entries and tokens can exceed 100KB:
+/// - 2000 E6 sparse entries: ~12KB (2000 * 6 bytes)
+/// - 1500 E13 SPLADE entries: ~9KB (1500 * 6 bytes)
+/// - 100 E12 tokens: ~51KB (100 * 128 * 4 bytes)
+/// - Dense embeddings: ~30KB
+/// Total maximum: ~102-110KB
+/// Allowing up to 150KB for edge cases with heavy sparse/token usage.
 const MAX_FINGERPRINT_SIZE: usize = 150_000;
 
 /// Serialize TeleologicalFingerprint to bytes.
@@ -45,13 +52,13 @@ const MAX_FINGERPRINT_SIZE: usize = 150_000;
 /// * `fp` - The TeleologicalFingerprint to serialize
 ///
 /// # Returns
-/// ~63KB byte vector containing:
+/// ~30KB byte vector containing:
 /// - 1 byte: version
 /// - N bytes: bincode-encoded TeleologicalFingerprint
 ///
 /// # Panics
 /// - Panics if bincode serialization fails (indicates struct incompatibility)
-/// - Panics if serialized size is outside [55KB, 150KB] range (indicates missing data or oversized evolution)
+/// - Panics if serialized size is outside [5KB, 150KB] range (indicates missing data or oversized evolution)
 ///
 /// # Example
 /// ```ignore

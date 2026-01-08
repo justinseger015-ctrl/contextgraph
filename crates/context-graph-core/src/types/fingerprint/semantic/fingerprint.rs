@@ -26,7 +26,7 @@ use crate::types::fingerprint::SparseVector;
 /// # Design Note
 ///
 /// Uses `Vec<f32>` instead of fixed-size arrays to:
-/// 1. Enable serde serialization for large embeddings (E9 has 10000 dims)
+/// 1. Enable serde serialization for embeddings (E9 has 1024 projected dims)
 /// 2. Avoid stack overflow with large arrays
 /// 3. Maintain flexibility for future dimension changes
 ///
@@ -65,7 +65,7 @@ pub struct SemanticFingerprint {
     /// E8: Graph (MiniLM for structure) - 384D dense embedding.
     pub e8_graph: Vec<f32>,
 
-    /// E9: HDC (10K-bit hyperdimensional) - 10000D dense embedding.
+    /// E9: HDC (projected from 10K-bit hyperdimensional) - 1024D dense embedding.
     pub e9_hdc: Vec<f32>,
 
     /// E10: Multimodal (CLIP) - 768D dense embedding.

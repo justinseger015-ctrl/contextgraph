@@ -255,7 +255,7 @@ impl MultiArrayEmbeddingProvider for StubMultiArrayProvider {
         fingerprint.e5_causal = Self::fill_dense_embedding(content, 768);
         fingerprint.e7_code = Self::fill_dense_embedding(content, 1536);
         fingerprint.e8_graph = Self::fill_dense_embedding(content, 384);
-        fingerprint.e9_hdc = Self::fill_dense_embedding(content, 10000);
+        fingerprint.e9_hdc = Self::fill_dense_embedding(content, 1024); // HDC projected
         fingerprint.e10_multimodal = Self::fill_dense_embedding(content, 768);
         fingerprint.e11_entity = Self::fill_dense_embedding(content, 384);
 
@@ -538,7 +538,7 @@ mod tests {
         assert_eq!(fp.e5_causal.len(), 768);
         assert_eq!(fp.e7_code.len(), 1536);
         assert_eq!(fp.e8_graph.len(), 384);
-        assert_eq!(fp.e9_hdc.len(), 10000);
+        assert_eq!(fp.e9_hdc.len(), 1024); // HDC projected
         assert_eq!(fp.e10_multimodal.len(), 768);
         assert_eq!(fp.e11_entity.len(), 384);
     }
@@ -605,7 +605,7 @@ mod tests {
         assert_eq!(dims[0], 1024); // E1
         assert_eq!(dims[1], 512); // E2
         assert_eq!(dims[5], 0); // E6 sparse
-        assert_eq!(dims[8], 10000); // E9 HDC
+        assert_eq!(dims[8], 1024); // E9 HDC (projected)
         assert_eq!(dims[12], 0); // E13 sparse
     }
 

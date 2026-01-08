@@ -1248,7 +1248,7 @@ mod tests {
             e6_sparse: SparseVector::new(vec![100, 200], vec![0.5, 0.3]).unwrap(),
             e7_code: random_vector(1536),
             e8_graph: random_vector(384),
-            e9_hdc: random_vector(10000),
+            e9_hdc: random_vector(1024), // HDC projected
             e10_multimodal: random_vector(768),
             e11_entity: random_vector(384),
             e12_late_interaction: vec![random_vector(128); 3], // 3 tokens

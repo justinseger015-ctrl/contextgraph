@@ -473,6 +473,7 @@ pub(crate) async fn create_test_handlers_with_real_embeddings() -> (Handlers, Te
     let models_dir = resolve_test_models_path();
     let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(
         ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+            .await
             .expect(&format!(
                 "Failed to create ProductionMultiArrayProvider. \
                  Ensure models exist at {:?} and CUDA GPU is available.",
@@ -534,6 +535,7 @@ pub(crate) async fn create_test_handlers_with_real_embeddings_store_access() -> 
     let models_dir = resolve_test_models_path();
     let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(
         ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+            .await
             .expect(&format!(
                 "Failed to create ProductionMultiArrayProvider for FSV. \
                  Ensure models at {:?} and CUDA GPU available.",
@@ -560,15 +562,27 @@ pub(crate) async fn create_test_handlers_with_real_embeddings_store_access() -> 
 ///
 /// Priority:
 /// 1. `CONTEXT_GRAPH_MODELS_PATH` environment variable
-/// 2. Default: `./models` relative to current directory
+/// 2. Default: `./models` relative to workspace root
 #[cfg(feature = "cuda")]
 fn resolve_test_models_path() -> PathBuf {
     if let Ok(env_path) = std::env::var("CONTEXT_GRAPH_MODELS_PATH") {
         return PathBuf::from(env_path);
     }
-    std::env::current_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join("models")
+    // Navigate from crate directory to workspace root
+    // CARGO_MANIFEST_DIR = crates/context-graph-mcp
+    // Workspace root = ../../ from there
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    // Go up to workspace root (crates/context-graph-mcp -> crates -> root)
+    let workspace_root = manifest_dir
+        .parent() // -> crates/
+        .and_then(|p| p.parent()) // -> workspace root
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    workspace_root.join("models")
 }
 
 /// Create a JSON-RPC request for testing.

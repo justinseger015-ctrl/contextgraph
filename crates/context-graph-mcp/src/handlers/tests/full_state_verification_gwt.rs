@@ -256,9 +256,10 @@ async fn test_get_kuramoto_sync_returns_real_oscillator_data() {
     let coupling = content["coupling"].as_f64().expect("coupling must be f64");
     assert!(coupling > 0.0, "Coupling strength K={} must be positive", coupling);
 
-    // FSV-8: State must be one of valid states
+    // FSV-8: State must be one of valid states (constitution.yaml lines 394-408)
+    // All 5 states per constitution: DORMANT, FRAGMENTED, EMERGING, CONSCIOUS, HYPERSYNC
     let state = content["state"].as_str().expect("state must be string");
-    let valid_states = ["CONSCIOUS", "EMERGING", "FRAGMENTED", "HYPERSYNC"];
+    let valid_states = ["DORMANT", "FRAGMENTED", "EMERGING", "CONSCIOUS", "HYPERSYNC"];
     assert!(
         valid_states.contains(&state),
         "State '{}' must be one of {:?}",
@@ -380,9 +381,10 @@ async fn test_get_consciousness_state_returns_real_gwt_data() {
         differentiation
     );
 
-    // FSV-4: State must be valid consciousness state
+    // FSV-4: State must be valid consciousness state (constitution.yaml lines 394-408)
+    // All 5 states: DORMANT, FRAGMENTED, EMERGING, CONSCIOUS, HYPERSYNC
     let state = content["state"].as_str().expect("state must be string");
-    let valid_states = ["CONSCIOUS", "EMERGING", "FRAGMENTED"];
+    let valid_states = ["DORMANT", "FRAGMENTED", "EMERGING", "CONSCIOUS", "HYPERSYNC"];
     assert!(
         valid_states.contains(&state),
         "State '{}' must be one of {:?}",
@@ -708,21 +710,15 @@ async fn test_gwt_cross_validation_kuramoto_and_consciousness() {
     );
 
     // CROSS-VALIDATION-2: State classifications should be consistent
+    // Both tools now use ConsciousnessState::from_level() so states should match exactly
+    // All 5 states per constitution.yaml lines 394-408: DORMANT, FRAGMENTED, EMERGING, CONSCIOUS, HYPERSYNC
     let kuramoto_state = kuramoto_content["state"].as_str().expect("kuramoto state");
     let consciousness_state = consciousness_content["state"].as_str().expect("consciousness state");
 
-    // Map kuramoto state to consciousness state (HYPERSYNC maps to CONSCIOUS in consciousness)
-    let expected_consciousness_state = match kuramoto_state {
-        "CONSCIOUS" | "HYPERSYNC" => "CONSCIOUS",
-        "EMERGING" => "EMERGING",
-        "FRAGMENTED" => "FRAGMENTED",
-        _ => "UNKNOWN",
-    };
-
     assert_eq!(
-        consciousness_state, expected_consciousness_state,
-        "Kuramoto state '{}' should map to consciousness state '{}', got '{}'",
-        kuramoto_state, expected_consciousness_state, consciousness_state
+        kuramoto_state, consciousness_state,
+        "Kuramoto state '{}' must exactly match consciousness state '{}'",
+        kuramoto_state, consciousness_state
     );
 
     // CROSS-VALIDATION-3: Integration factor should correlate with r

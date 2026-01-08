@@ -58,7 +58,7 @@
 //! let memory_needed = factory.estimate_memory(ModelId::Semantic);
 //! assert!(memory_needed > 0);
 //!
-//! // Create model (requires model files at ./models/intfloat_e5-large-v2/)
+//! // Create model (requires model files at ./models/semantic/)
 //! // let model = factory.create_model(ModelId::Semantic, &config)?;
 //! ```
 

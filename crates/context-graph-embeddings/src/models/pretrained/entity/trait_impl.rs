@@ -24,6 +24,10 @@ impl EmbeddingModel for EntityModel {
         self.loaded.load(Ordering::SeqCst)
     }
 
+    async fn load(&self) -> EmbeddingResult<()> {
+        EntityModel::load(self).await
+    }
+
     async fn embed(&self, input: &ModelInput) -> EmbeddingResult<ModelEmbedding> {
         // 1. Check initialized
         if !self.is_initialized() {

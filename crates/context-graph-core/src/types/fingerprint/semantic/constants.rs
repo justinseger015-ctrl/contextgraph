@@ -12,7 +12,7 @@
 //! | E6 | SPLADE (Sparse) | ~1500 active / 30522 vocab |
 //! | E7 | Qodo-Embed | 1536 |
 //! | E8 | MiniLM (Graph) | 384 |
-//! | E9 | HDC | 10000 |
+//! | E9 | HDC (projected) | 1024 |
 //! | E10 | CLIP | 768 |
 //! | E11 | MiniLM (Entity) | 384 |
 //! | E12 | ColBERT (Late-Interaction) | 128 per token |
@@ -42,8 +42,12 @@ pub const E7_DIM: usize = 1536;
 /// E8: Graph (MiniLM for structure) embedding dimension.
 pub const E8_DIM: usize = 384;
 
-/// E9: HDC (10K-bit hyperdimensional) embedding dimension.
-pub const E9_DIM: usize = 10_000;
+/// E9: HDC (projected) embedding dimension.
+///
+/// The HDC model uses 10,000-bit native hypervectors internally but projects
+/// to 1,024 dimensions for the fusion pipeline. This constant represents the
+/// projected dimension that is stored in SemanticFingerprint.
+pub const E9_DIM: usize = 1024;
 
 /// E10: Multimodal (CLIP) embedding dimension.
 pub const E10_DIM: usize = 768;
@@ -67,6 +71,6 @@ pub const NUM_EMBEDDERS: usize = 13;
 /// Total dense dimensions (excluding E6 sparse, E12 variable-length, and E13 sparse).
 ///
 /// Calculated as: E1 + E2 + E3 + E4 + E5 + E7 + E8 + E9 + E10 + E11
-/// = 1024 + 512 + 512 + 512 + 768 + 1536 + 384 + 10000 + 768 + 384 = 16400
+/// = 1024 + 512 + 512 + 512 + 768 + 1536 + 384 + 1024 + 768 + 384 = 7424
 pub const TOTAL_DENSE_DIMS: usize =
     E1_DIM + E2_DIM + E3_DIM + E4_DIM + E5_DIM + E7_DIM + E8_DIM + E9_DIM + E10_DIM + E11_DIM;

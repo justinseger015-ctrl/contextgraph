@@ -9,7 +9,8 @@ fn test_semantic_fingerprint_storage_size_zeroed() {
     let size = fp.storage_size();
 
     let expected = TOTAL_DENSE_DIMS * std::mem::size_of::<f32>();
-    assert_eq!(expected, 60480);
+    // TOTAL_DENSE_DIMS = 7424, * 4 bytes = 29696
+    assert_eq!(expected, 29696);
     assert_eq!(size, expected);
 }
 
@@ -22,7 +23,8 @@ fn test_semantic_fingerprint_storage_size_with_sparse() {
 
     let size = fp.storage_size();
 
-    let expected = 60480 + 24;
+    // 29696 (dense) + 24 (4 indices * 2 bytes + 4 values * 4 bytes = 8 + 16 = 24)
+    let expected = 29696 + 24;
     assert_eq!(size, expected);
 }
 
@@ -34,7 +36,8 @@ fn test_semantic_fingerprint_storage_size_with_tokens() {
 
     let size = fp.storage_size();
 
-    let expected = 60480 + 5120;
+    // 29696 (dense) + 10 tokens * 128 dims * 4 bytes = 29696 + 5120
+    let expected = 29696 + 5120;
     assert_eq!(size, expected);
 }
 
@@ -50,11 +53,12 @@ fn test_semantic_fingerprint_typical_storage_size() {
 
     let size = fp.storage_size();
 
-    let expected = 60480 + 9000 + 25600;
+    // 29696 (dense) + 9000 (1500 sparse entries) + 25600 (50 tokens * 128 * 4)
+    let expected = 29696 + 9000 + 25600;
     assert_eq!(size, expected);
 
-    assert!(size > 90_000);
-    assert!(size < 100_000);
+    assert!(size > 60_000);
+    assert!(size < 70_000);
 }
 
 #[test]
@@ -64,7 +68,7 @@ fn test_semantic_fingerprint_serialization_roundtrip() {
     fp.e1_semantic[0] = 1.0;
     fp.e1_semantic[100] = 2.5;
     fp.e5_causal[50] = 3.125; // Use a non-PI value
-    fp.e9_hdc[9999] = -1.0;
+    fp.e9_hdc[1023] = -1.0; // E9 now has 1024 dims (projected)
 
     fp.e6_sparse = SparseVector::new(vec![100, 200, 300], vec![0.5, 0.6, 0.7])
         .expect("valid sparse vector");
@@ -86,7 +90,7 @@ fn test_semantic_fingerprint_serialization_roundtrip() {
     assert_eq!(restored.e1_semantic[0], 1.0);
     assert_eq!(restored.e1_semantic[100], 2.5);
     assert_eq!(restored.e5_causal[50], 3.125);
-    assert_eq!(restored.e9_hdc[9999], -1.0);
+    assert_eq!(restored.e9_hdc[1023], -1.0);
     assert_eq!(restored.e6_sparse.nnz(), 3);
     assert_eq!(restored.e13_splade.nnz(), 3);
     assert_eq!(restored.token_count(), 3);

@@ -211,6 +211,10 @@ impl EmbeddingModel for GraphModel {
         self.loaded.load(Ordering::SeqCst)
     }
 
+    async fn load(&self) -> EmbeddingResult<()> {
+        GraphModel::load(self).await
+    }
+
     async fn embed(&self, input: &ModelInput) -> EmbeddingResult<ModelEmbedding> {
         if !self.is_initialized() {
             return Err(EmbeddingError::NotInitialized {

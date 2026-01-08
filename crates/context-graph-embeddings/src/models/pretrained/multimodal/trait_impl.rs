@@ -26,6 +26,10 @@ impl EmbeddingModel for MultimodalModel {
         self.loaded.load(Ordering::SeqCst)
     }
 
+    async fn load(&self) -> EmbeddingResult<()> {
+        MultimodalModel::load(self).await
+    }
+
     async fn embed(&self, input: &ModelInput) -> EmbeddingResult<ModelEmbedding> {
         if !self.is_initialized() {
             return Err(EmbeddingError::NotInitialized {

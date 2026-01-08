@@ -109,16 +109,17 @@ impl DefaultModelFactory {
     /// For pretrained models, returns the path to their model files.
     /// Custom models don't need model files, so this returns None.
     pub(crate) fn get_model_path(&self, model_id: ModelId) -> Option<PathBuf> {
+        // Model subdirectory names match actual ./models/ structure
         let subdir = match model_id {
-            ModelId::Semantic => "intfloat_e5-large-v2",
-            ModelId::Causal => "allenai_longformer-base-4096",
-            ModelId::Sparse => "naver_splade-cocondenser-ensembledistil",
-            ModelId::Code => "qodo_qodo-embed-1-1.5b",
-            ModelId::Graph => "sentence-transformers_all-MiniLM-L6-v2",
-            ModelId::Multimodal => "openai_clip-vit-large-patch14",
-            ModelId::Entity => "sentence-transformers_all-MiniLM-L6-v2",
-            ModelId::LateInteraction => "colbert-ir_colbertv2.0",
-            ModelId::Splade => "prithivida_Splade_PP_en_v1",
+            ModelId::Semantic => "semantic",
+            ModelId::Causal => "causal",
+            ModelId::Sparse => "sparse",
+            ModelId::Code => "code-1536",
+            ModelId::Graph => "graph",
+            ModelId::Multimodal => "multimodal",
+            ModelId::Entity => "entity",
+            ModelId::LateInteraction => "late-interaction",
+            ModelId::Splade => "splade-v3",
             // Custom models don't need model files
             ModelId::TemporalRecent
             | ModelId::TemporalPeriodic

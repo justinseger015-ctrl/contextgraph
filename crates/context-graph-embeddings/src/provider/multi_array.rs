@@ -328,8 +328,8 @@ unsafe impl Sync for TokenEmbedderAdapter {}
 ///
 /// # Model Loading
 ///
-/// Models are loaded lazily on first use. Call `initialize()` to pre-load
-/// all models before the first embedding request.
+/// Models are loaded eagerly during construction. The async `new()` method
+/// loads all 13 models and fails fast if any model cannot be loaded.
 ///
 /// # Performance
 ///
@@ -352,7 +352,7 @@ pub struct ProductionMultiArrayProvider {
     e7_code: Arc<dyn SingleEmbedder>,
     /// E8: Graph embedder (MiniLM, 384D)
     e8_graph: Arc<dyn SingleEmbedder>,
-    /// E9: HDC embedder (hyperdimensional, 10000D)
+    /// E9: HDC embedder (hyperdimensional, 1024D projected)
     e9_hdc: Arc<dyn SingleEmbedder>,
     /// E10: Multimodal embedder (CLIP, 768D)
     e10_multimodal: Arc<dyn SingleEmbedder>,
@@ -392,10 +392,9 @@ impl ProductionMultiArrayProvider {
     /// let provider = ProductionMultiArrayProvider::new(
     ///     PathBuf::from("./models"),
     ///     GpuConfig::default(),
-    /// )?;
-    /// provider.initialize().await?;
+    /// ).await?;
     /// ```
-    pub fn new(models_dir: PathBuf, gpu_config: GpuConfig) -> EmbeddingResult<Self> {
+    pub async fn new(models_dir: PathBuf, gpu_config: GpuConfig) -> EmbeddingResult<Self> {
         let factory = DefaultModelFactory::new(models_dir, gpu_config);
         let config = SingleModelConfig::cuda_fp16();
 
@@ -413,6 +412,26 @@ impl ProductionMultiArrayProvider {
         let e11_model = factory.create_model(ModelId::Entity, &config)?;
         let e12_model = factory.create_model(ModelId::LateInteraction, &config)?;
         let e13_model = factory.create_model(ModelId::Splade, &config)?;
+
+        // Load all models BEFORE wrapping in adapters (FAIL FAST)
+        // Per constitution.yaml: models must be ready before embed()
+        tracing::info!("Loading all 13 embedding models...");
+
+        e1_model.load().await?;
+        e2_model.load().await?;
+        e3_model.load().await?;
+        e4_model.load().await?;
+        e5_model.load().await?;
+        e6_model.load().await?;
+        e7_model.load().await?;
+        e8_model.load().await?;
+        e9_model.load().await?;
+        e10_model.load().await?;
+        e11_model.load().await?;
+        e12_model.load().await?;
+        e13_model.load().await?;
+
+        tracing::info!("All 13 embedding models loaded successfully");
 
         // Wrap models in appropriate adapters
         let e1_semantic: Arc<dyn SingleEmbedder> =

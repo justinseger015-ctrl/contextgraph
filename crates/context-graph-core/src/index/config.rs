@@ -38,8 +38,8 @@ pub const E7_DIM: usize = 1536;
 /// E8 Graph: 384D (MiniLM)
 pub const E8_DIM: usize = 384;
 
-/// E9 HDC: 10000D (holographic)
-pub const E9_DIM: usize = 10_000;
+/// E9 HDC: 1024D (projected from 10K-bit hypervector)
+pub const E9_DIM: usize = 1024;
 
 /// E10 Multimodal: 768D (CLIP)
 pub const E10_DIM: usize = 768;
@@ -114,7 +114,7 @@ pub enum EmbedderIndex {
     E7Code,
     /// E8: 384D graph
     E8Graph,
-    /// E9: 10000D HDC
+    /// E9: 1024D HDC (projected)
     E9HDC,
     /// E10: 768D multimodal
     E10Multimodal,

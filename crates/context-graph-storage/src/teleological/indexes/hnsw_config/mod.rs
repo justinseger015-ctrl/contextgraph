@@ -26,7 +26,7 @@
 //! | E5Causal | 768 | 16 | 200 | 100 | AsymmetricCosine |
 //! | E7Code | 1536 | 16 | 200 | 100 | Cosine |
 //! | E8Graph | 384 | 16 | 200 | 100 | Cosine |
-//! | E9HDC | 10000 | 16 | 200 | 100 | Cosine |
+//! | E9HDC | 1024 | 16 | 200 | 100 | Cosine |
 //! | E10Multimodal | 768 | 16 | 200 | 100 | Cosine |
 //! | E11Entity | 384 | 16 | 200 | 100 | Cosine |
 //! | PurposeVector | 13 | 16 | 200 | 100 | Cosine |

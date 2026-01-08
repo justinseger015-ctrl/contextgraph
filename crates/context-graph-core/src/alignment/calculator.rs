@@ -939,9 +939,9 @@ mod tests {
             semantic.e8_graph[i] = (i as f32 / 384.0).sin() * alignment;
         }
 
-        // E9: HDC (10000D)
+        // E9: HDC (1024D projected)
         for i in 0..semantic.e9_hdc.len() {
-            semantic.e9_hdc[i] = (i as f32 / 10000.0).sin() * alignment;
+            semantic.e9_hdc[i] = (i as f32 / 1024.0).sin() * alignment;
         }
 
         // E10: Multimodal (768D)

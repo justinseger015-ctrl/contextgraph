@@ -243,21 +243,21 @@ fn test_fingerprint_size_in_range() {
     let fp = create_real_fingerprint();
     let serialized = serialize_teleological_fingerprint(&fp);
 
-    // Actual size calculation:
-    // - TOTAL_DENSE_DIMS = 15,120 → 60,480 bytes for dense embeddings
+    // Actual size calculation (with E9_DIM = 1024 projected):
+    // - TOTAL_DENSE_DIMS = 7,424 → 29,696 bytes for dense embeddings
     // - Plus sparse vectors, JohariFingerprint (~520B), PurposeVector (52B), metadata
-    // - Total: ~63KB for a fresh fingerprint with 1 evolution snapshot
-    println!("BEFORE: Expected range [55KB, 150KB]");
+    // - Total: ~32-40KB for a fresh fingerprint with 1 evolution snapshot
+    println!("BEFORE: Expected range [25KB, 100KB]");
     println!("AFTER: Actual size {} bytes ({:.2}KB)", serialized.len(), serialized.len() as f64 / 1024.0);
 
     assert!(
-        serialized.len() >= 55_000,
-        "Size {} below minimum 55KB - embeddings may be missing",
+        serialized.len() >= 25_000,
+        "Size {} below minimum 25KB - embeddings may be missing",
         serialized.len()
     );
     assert!(
-        serialized.len() <= 150_000,
-        "Size {} above maximum 150KB - unexpectedly large",
+        serialized.len() <= 100_000,
+        "Size {} above maximum 100KB - unexpectedly large",
         serialized.len()
     );
     println!("RESULT: PASS - Size in expected range");

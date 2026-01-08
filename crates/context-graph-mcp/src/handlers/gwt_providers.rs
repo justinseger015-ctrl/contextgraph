@@ -614,7 +614,8 @@ mod tests {
         assert_eq!(provider.purpose_vector(), [0.0; 13]);
         assert_eq!(provider.coherence_with_actions(), 0.0);
         assert_eq!(provider.trajectory_length(), 0);
-        assert_eq!(provider.identity_status(), IdentityStatus::Healthy);
+        // Issue 2 fix: coherence=0.0 should result in Critical, not Healthy
+        assert_eq!(provider.identity_status(), IdentityStatus::Critical);
         assert_eq!(provider.identity_coherence(), 0.0);
     }
 

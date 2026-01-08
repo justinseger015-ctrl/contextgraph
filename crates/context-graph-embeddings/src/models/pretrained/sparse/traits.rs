@@ -27,6 +27,10 @@ impl EmbeddingModel for SparseModel {
         self.loaded.load(Ordering::SeqCst)
     }
 
+    async fn load(&self) -> EmbeddingResult<()> {
+        SparseModel::load(self).await
+    }
+
     async fn embed(&self, input: &ModelInput) -> EmbeddingResult<ModelEmbedding> {
         // Delegate to the inherent impl
         SparseModel::embed(self, input).await

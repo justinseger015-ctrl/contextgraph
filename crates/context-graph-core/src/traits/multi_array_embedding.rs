@@ -336,7 +336,7 @@ pub trait MultiArrayEmbeddingProvider: Send + Sync {
             0,     // E6: Sparse (SPLADE) - variable
             1536,  // E7: Code (Qodo-Embed-1-1.5B)
             384,   // E8: Graph (MiniLM)
-            10000, // E9: HDC
+            1024,  // E9: HDC (projected)
             768,   // E10: Multimodal (CLIP)
             384,   // E11: Entity (MiniLM)
             128,   // E12: Late-Interaction (ColBERT per-token)
@@ -652,7 +652,7 @@ mod tests {
         assert_eq!(dims[5], 0, "E6 sparse should be 0 (variable)");
         assert_eq!(dims[6], 1536, "E7 code should be 1536D");
         assert_eq!(dims[7], 384, "E8 graph should be 384D");
-        assert_eq!(dims[8], 10000, "E9 HDC should be 10000D");
+        assert_eq!(dims[8], 1024, "E9 HDC should be 1024D (projected)");
         assert_eq!(dims[9], 768, "E10 multimodal should be 768D");
         assert_eq!(dims[10], 384, "E11 entity should be 384D");
         assert_eq!(dims[11], 128, "E12 late-interaction should be 128D per token");
@@ -758,7 +758,7 @@ mod tests {
         assert!(fp.e6_sparse.is_empty()); // Sparse starts empty
         assert_eq!(fp.e7_code.len(), 1536);
         assert_eq!(fp.e8_graph.len(), 384);
-        assert_eq!(fp.e9_hdc.len(), 10000);
+        assert_eq!(fp.e9_hdc.len(), 1024); // HDC projected
         assert_eq!(fp.e10_multimodal.len(), 768);
         assert_eq!(fp.e11_entity.len(), 384);
         assert!(fp.e12_late_interaction.is_empty()); // Token-level starts empty

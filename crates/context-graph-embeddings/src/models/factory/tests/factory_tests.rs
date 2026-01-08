@@ -76,24 +76,21 @@ fn test_get_model_path_custom_returns_none() {
 fn test_get_model_path_semantic() {
     let factory = DefaultModelFactory::new(PathBuf::from("/data/models"), GpuConfig::default());
     let path = factory.get_model_path(ModelId::Semantic).unwrap();
-    assert_eq!(path, PathBuf::from("/data/models/intfloat_e5-large-v2"));
+    assert_eq!(path, PathBuf::from("/data/models/semantic"));
 }
 
 #[test]
 fn test_get_model_path_colbert() {
     let factory = DefaultModelFactory::new(PathBuf::from("/data/models"), GpuConfig::default());
     let path = factory.get_model_path(ModelId::LateInteraction).unwrap();
-    assert_eq!(path, PathBuf::from("/data/models/colbert-ir_colbertv2.0"));
+    assert_eq!(path, PathBuf::from("/data/models/late-interaction"));
 }
 
 #[test]
 fn test_get_model_path_clip() {
     let factory = DefaultModelFactory::new(PathBuf::from("/data/models"), GpuConfig::default());
     let path = factory.get_model_path(ModelId::Multimodal).unwrap();
-    assert_eq!(
-        path,
-        PathBuf::from("/data/models/openai_clip-vit-large-patch14")
-    );
+    assert_eq!(path, PathBuf::from("/data/models/multimodal"));
 }
 
 // =========================================================================

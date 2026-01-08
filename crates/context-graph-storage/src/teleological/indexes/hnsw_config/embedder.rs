@@ -36,7 +36,7 @@ pub enum EmbedderIndex {
     E7Code,
     /// E8: 384D graph (MiniLM)
     E8Graph,
-    /// E9: 10000D HDC (holographic)
+    /// E9: 1024D HDC (projected from 10K-bit)
     E9HDC,
     /// E10: 768D multimodal (CLIP)
     E10Multimodal,

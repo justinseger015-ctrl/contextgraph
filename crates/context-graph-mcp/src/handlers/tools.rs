@@ -18,6 +18,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, warn};
 
+use context_graph_core::gwt::state_machine::ConsciousnessState;
 use context_graph_core::purpose::{DefaultPurposeComputer, PurposeComputeConfig, PurposeVectorComputer};
 use context_graph_core::traits::TeleologicalSearchOptions;
 use context_graph_core::types::UtlContext;
@@ -270,8 +271,19 @@ impl Handlers {
             .and_then(|v| v.as_f64())
             .unwrap_or(0.5);
 
+        // Get goal_vector from North Star for UTL alignment computation (Issue 3 fix)
+        // Per constitution.yaml: alignment = cos(content_embedding, goal_vector)
+        // Without goal_vector, alignment always returns 1.0 (useless)
+        let goal_vector = {
+            let hierarchy = self.goal_hierarchy.read();
+            hierarchy.north_star().map(|ns| ns.embedding.clone())
+        };
+
         // Compute UTL metrics for the content
-        let context = UtlContext::default();
+        let context = UtlContext {
+            goal_vector,
+            ..Default::default()
+        };
         let metrics = match self.utl_processor.compute_metrics(&content, &context).await {
             Ok(m) => m,
             Err(e) => {
@@ -966,14 +978,11 @@ impl Handlers {
         let identity_status = self_ego.read().await.identity_status();
         let trajectory_length = self_ego.read().await.trajectory_length();
 
-        // Determine consciousness state string
-        let state = if r >= 0.8 {
-            "CONSCIOUS"
-        } else if r >= 0.5 {
-            "EMERGING"
-        } else {
-            "FRAGMENTED"
-        };
+        // Determine consciousness state string per constitution.yaml lines 394-408
+        // Uses the canonical ConsciousnessState::from_level() which implements all 5 states:
+        // DORMANT (r < 0.3), FRAGMENTED (0.3 <= r < 0.5), EMERGING (0.5 <= r < 0.8),
+        // CONSCIOUS (0.8 <= r <= 0.95), HYPERSYNC (r > 0.95)
+        let state = ConsciousnessState::from_level(r as f32).name();
 
         // Get GWT current state
         let gwt_state = gwt_system.current_state();
@@ -1069,16 +1078,11 @@ impl Handlers {
         // Get synchronization (same as r but as f64)
         let sync = network.synchronization();
 
-        // Classify state based on r
-        let state = if network.is_hypersync() {
-            "HYPERSYNC"
-        } else if network.is_conscious() {
-            "CONSCIOUS"
-        } else if network.is_fragmented() {
-            "FRAGMENTED"
-        } else {
-            "EMERGING"
-        };
+        // Classify state based on r using canonical state machine (constitution.yaml lines 394-408)
+        // This ensures consistency with get_consciousness_state and all 5 states are handled:
+        // DORMANT (r < 0.3), FRAGMENTED (0.3 <= r < 0.5), EMERGING (0.5 <= r < 0.8),
+        // CONSCIOUS (0.8 <= r <= 0.95), HYPERSYNC (r > 0.95)
+        let state = ConsciousnessState::from_level(sync as f32).name();
 
         // Get elapsed time
         let elapsed = network.elapsed_total();

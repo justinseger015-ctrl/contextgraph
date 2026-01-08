@@ -138,6 +138,40 @@ pub trait EmbeddingModel: Send + Sync {
     /// ```
     fn is_initialized(&self) -> bool;
 
+    /// Load model weights and initialize for inference.
+    ///
+    /// This method prepares the model for embedding generation by:
+    /// - Loading pretrained weights from disk (for pretrained models)
+    /// - Initializing GPU/CPU compute resources
+    /// - Setting up tokenizers and preprocessors
+    ///
+    /// For custom models (Temporal*, HDC) that don't require external weights,
+    /// the default implementation returns `Ok(())` immediately.
+    ///
+    /// # Returns
+    /// - `Ok(())` if model loaded successfully
+    /// - `Err(EmbeddingError)` on failure
+    ///
+    /// # Errors
+    /// - `EmbeddingError::ModelNotFound` if weights file doesn't exist
+    /// - `EmbeddingError::GpuError` if GPU initialization fails
+    /// - `EmbeddingError::ConfigError` if model config is invalid
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use context_graph_embeddings::types::ModelId;
+    /// // Create model and load before embedding
+    /// // let model = factory.create_model(ModelId::Semantic, &config)?;
+    /// // model.load().await?;  // MUST call before embed()
+    /// // let embedding = model.embed(&input).await?;
+    /// ```
+    async fn load(&self) -> EmbeddingResult<()> {
+        // Default: no-op for custom models that don't need loading
+        // Pretrained models override this with actual weight loading
+        Ok(())
+    }
+
     // =========================================================================
     // Default implementations
     // =========================================================================

@@ -96,7 +96,7 @@ fn generate_real_sparse_vector(target_nnz: usize) -> SparseVector {
 
 /// Generate a REAL SemanticFingerprint with proper dimensions.
 /// E1: 1024D, E2-E4: 512D, E5: 768D, E6: sparse, E7: 1536D, E8: 384D,
-/// E9: 10000D, E10: 768D, E11: 384D, E12: 128D tokens, E13: sparse
+/// E9: 1024D (projected), E10: 768D, E11: 384D, E12: 128D tokens, E13: sparse
 fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
     SemanticFingerprint {
         e1_semantic: generate_real_unit_vector(1024),
@@ -107,7 +107,7 @@ fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
         e6_sparse: generate_real_sparse_vector(100), // ~0.3% sparsity for E6
         e7_code: generate_real_unit_vector(1536),
         e8_graph: generate_real_unit_vector(384),
-        e9_hdc: generate_real_unit_vector(10000),
+        e9_hdc: generate_real_unit_vector(1024), // HDC projected dimension
         e10_multimodal: generate_real_unit_vector(768),
         e11_entity: generate_real_unit_vector(384),
         e12_late_interaction: vec![generate_real_unit_vector(128); 32], // 32 tokens
@@ -203,7 +203,7 @@ async fn test_rocksdb_store_roundtrip_real_data() {
         // Verify fingerprint has correct dimensions before storage
         assert_eq!(fp.semantic.e1_semantic.len(), 1024, "E1 should be 1024D");
         assert_eq!(fp.semantic.e5_causal.len(), 768, "E5 should be 768D");
-        assert_eq!(fp.semantic.e9_hdc.len(), 10000, "E9 should be 10000D");
+        assert_eq!(fp.semantic.e9_hdc.len(), 1024, "E9 should be 1024D (projected)");
         assert!(fp.semantic.e6_sparse.nnz() > 0, "E6 sparse should have entries");
         assert!(fp.semantic.e13_splade.nnz() > 0, "E13 sparse should have entries");
 
@@ -235,7 +235,7 @@ async fn test_rocksdb_store_roundtrip_real_data() {
         // Verify data integrity
         assert_eq!(retrieved.id, id, "ID mismatch");
         assert_eq!(retrieved.semantic.e1_semantic.len(), 1024, "E1 dimension mismatch");
-        assert_eq!(retrieved.semantic.e9_hdc.len(), 10000, "E9 dimension mismatch");
+        assert_eq!(retrieved.semantic.e9_hdc.len(), 1024, "E9 dimension mismatch (expected 1024)");
         assert!(retrieved.semantic.e13_splade.nnz() > 0, "E13 sparse should have entries");
 
         // Verify vectors are unit normalized (L2 norm ~ 1.0)
@@ -418,8 +418,8 @@ async fn test_physical_persistence_across_restart() {
                 "E1 dimension mismatch after reopen"
             );
             assert_eq!(
-                retrieved.semantic.e9_hdc.len(), 10000,
-                "E9 dimension mismatch after reopen"
+                retrieved.semantic.e9_hdc.len(), 1024,
+                "E9 dimension mismatch (expected 1024) after reopen"
             );
 
             println!("  [{}] {} verified", i, id);
@@ -485,8 +485,9 @@ async fn test_all_column_families_populated() {
         .expect("Get failed")
         .expect("Fingerprint not found in fingerprints CF");
 
+    // With E9_DIM = 1024 (projected), fingerprints are ~32-40KB
     println!("[VERIFIED] fingerprints CF: {} bytes", fp_data.len());
-    assert!(fp_data.len() >= 55_000, "Fingerprint should be >= 55KB, got {}", fp_data.len());
+    assert!(fp_data.len() >= 25_000, "Fingerprint should be >= 25KB, got {}", fp_data.len());
 
     // Deserialize and verify
     let retrieved_fp = deserialize_teleological_fingerprint(&fp_data);
@@ -871,14 +872,14 @@ fn test_serialization_size_verification() {
     println!("[SERIALIZED] Fingerprint {} to {} bytes ({:.2}KB)",
         id, bytes.len(), bytes.len() as f64 / 1024.0);
 
-    // Verify size is in expected range (55KB - 150KB)
+    // Verify size is in expected range (25KB - 100KB with E9_DIM = 1024 projected)
     assert!(
-        bytes.len() >= 55_000,
-        "Serialized size should be >= 55KB, got {} bytes", bytes.len()
+        bytes.len() >= 25_000,
+        "Serialized size should be >= 25KB, got {} bytes", bytes.len()
     );
     assert!(
-        bytes.len() <= 150_000,
-        "Serialized size should be <= 150KB, got {} bytes", bytes.len()
+        bytes.len() <= 100_000,
+        "Serialized size should be <= 100KB, got {} bytes", bytes.len()
     );
 
     // Deserialize
@@ -887,7 +888,7 @@ fn test_serialization_size_verification() {
     // Verify integrity
     assert_eq!(restored.id, id, "ID mismatch after roundtrip");
     assert_eq!(restored.semantic.e1_semantic.len(), 1024, "E1 dimension mismatch");
-    assert_eq!(restored.semantic.e9_hdc.len(), 10000, "E9 dimension mismatch");
+    assert_eq!(restored.semantic.e9_hdc.len(), 1024, "E9 dimension mismatch (expected 1024)");
     assert_eq!(restored.purpose_vector.alignments.len(), NUM_EMBEDDERS, "Purpose dimension mismatch");
 
     println!("[VERIFIED] Serialization roundtrip preserves all data");

@@ -107,6 +107,7 @@ impl McpServer {
 
         let multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(
             ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+                .await
                 .map_err(|e| {
                     error!("FATAL: Failed to create ProductionMultiArrayProvider: {}", e);
                     anyhow::anyhow!(

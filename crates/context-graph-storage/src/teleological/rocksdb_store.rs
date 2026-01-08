@@ -1378,7 +1378,7 @@ mod tests {
             e6_sparse: generate_sparse(seed + 5),                     // Sparse
             e7_code: generate_vec(1536, seed + 6),                    // 1536D
             e8_graph: generate_vec(384, seed + 7),                    // 384D
-            e9_hdc: generate_vec(10000, seed + 8),                    // 10000D HDC
+            e9_hdc: generate_vec(1024, seed + 8),                     // 1024D HDC (projected)
             e10_multimodal: generate_vec(768, seed + 9),              // 768D
             e11_entity: generate_vec(384, seed + 10),                 // 384D
             e12_late_interaction: generate_late_interaction(seed + 11), // Vec<Vec<f32>>
@@ -1476,9 +1476,10 @@ mod tests {
             let raw = store.get_fingerprint_raw(id).unwrap();
             assert!(raw.is_some(), "Raw bytes should exist in RocksDB");
             let raw_bytes = raw.unwrap();
+            // With E9_DIM = 1024 (projected), fingerprints are ~32-40KB
             assert!(
-                raw_bytes.len() >= 55000,
-                "Serialized fingerprint should be >= 55KB, got {} bytes",
+                raw_bytes.len() >= 25000,
+                "Serialized fingerprint should be >= 25KB, got {} bytes",
                 raw_bytes.len()
             );
         }
