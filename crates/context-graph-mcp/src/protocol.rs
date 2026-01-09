@@ -100,6 +100,10 @@ pub mod error_codes {
     pub const EMBEDDING_ERROR: i32 = -32005;
     pub const TOOL_NOT_FOUND: i32 = -32006;
     pub const LAYER_TIMEOUT: i32 = -32007;
+    /// Index operation failed (HNSW, inverted index, dimension mismatch) - TASK-CORE-014
+    pub const INDEX_ERROR: i32 = -32008;
+    /// GPU/CUDA operation failed (memory allocation, kernel execution) - TASK-CORE-014
+    pub const GPU_ERROR: i32 = -32009;
 
     // Teleological-specific error codes (-32010 to -32019) - TASK-S001
     /// TeleologicalFingerprint not found by UUID

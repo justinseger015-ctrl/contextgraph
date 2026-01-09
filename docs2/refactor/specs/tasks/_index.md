@@ -198,7 +198,7 @@ graph TD
 | 11 | TASK-CORE-011 | GPU Memory Management Infrastructure | - | 2 | :white_check_mark: done |
 | 12 | TASK-CORE-012 | Embedding Model Loading Infrastructure | CORE-011 | 2 | :white_check_mark: done |
 | 13 | TASK-CORE-013 | Embedding Quantization Infrastructure | CORE-012 | 2 | :white_check_mark: done |
-| 14 | TASK-CORE-014 | Unified Error Type Hierarchy | - | 1.5 | :white_circle: todo |
+| 14 | TASK-CORE-014 | Unified Error Type Hierarchy | - | 1.5 | :white_check_mark: done |
 
 ### Layer 2: Logic (Weeks 5-8)
 
@@ -278,7 +278,7 @@ graph TD
 | TASK-CORE-011 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (ModelSlotManager, MemoryPressure, 13 tests pass) |
 | TASK-CORE-012 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (UnifiedModelLoader, Embedder↔ModelId conversions, 58 tests pass) |
 | TASK-CORE-013 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (PQ8 k-means training, codebook persistence, 115 quantization tests pass, 284% recall improvement) |
-| TASK-CORE-014 | :white_circle: todo | - | - | - |
+| TASK-CORE-014 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (ContextGraphError hierarchy, 46 tests pass) |
 
 ### Logic (13 tasks)
 | Task | Status | Started | Completed | Verified |
@@ -334,7 +334,7 @@ graph TD
 | TASK-PERF-003 | :white_circle: todo | - | - | - |
 | TASK-PERF-004 | :white_circle: todo | - | - | - |
 
-**Progress: 13/52 tasks completed (25%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012, CORE-013 done**
+**Progress: 14/52 tasks completed (27%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012, CORE-013, CORE-014 done**
 
 ---
 

@@ -51,7 +51,13 @@ pub mod types;
 
 // Re-exports for convenience
 pub use config::Config;
+// Legacy error types (retained for backwards compatibility)
 pub use error::{CoreError, CoreResult};
+// TASK-CORE-014: Unified error hierarchy re-exports
+pub use error::{
+    ConfigError, ContextGraphError, EmbeddingError, GpuError, IndexError, McpError, Result,
+    StorageError,
+};
 pub use marblestone::{Domain, EdgeType, NeurotransmitterWeights};
 
 // Production monitoring types (traits and error types only)
