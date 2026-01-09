@@ -835,6 +835,7 @@ impl Handlers {
     /// Accepts either:
     /// - Array of indices: [0, 1, 4, 6]
     /// - Bitmask integer: 0x1FFF (all 13 spaces)
+    #[allow(clippy::result_large_err)]
     fn parse_active_spaces(
         &self,
         params: &serde_json::Value,

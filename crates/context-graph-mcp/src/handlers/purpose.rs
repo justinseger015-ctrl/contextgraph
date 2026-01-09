@@ -556,20 +556,21 @@ impl Handlers {
             }
         };
 
-        // Get the goal from hierarchy
-        let hierarchy = self.goal_hierarchy.read();
-        let goal: GoalNode = match hierarchy.get(&goal_id) {
-            Some(g) => g.clone(),
-            None => {
-                error!(goal_id = %goal_id, "goal/aligned_memories: Goal not found");
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::GOAL_NOT_FOUND,
-                    format!("Goal not found: {}", goal_id),
-                );
+        // Get the goal from hierarchy (scoped block ensures lock is released before await)
+        let goal: GoalNode = {
+            let hierarchy = self.goal_hierarchy.read();
+            match hierarchy.get(&goal_id) {
+                Some(g) => g.clone(),
+                None => {
+                    error!(goal_id = %goal_id, "goal/aligned_memories: Goal not found");
+                    return JsonRpcResponse::error(
+                        id,
+                        error_codes::GOAL_NOT_FOUND,
+                        format!("Goal not found: {}", goal_id),
+                    );
+                }
             }
         };
-        drop(hierarchy); // Release read lock
 
         // top_k has a sensible default (pagination parameter)
         const DEFAULT_TOP_K: usize = 10;
@@ -767,20 +768,19 @@ impl Handlers {
             .map(|v| v as f32)
             .unwrap_or(0.1);
 
-        // Check North Star is configured
-        let hierarchy = self.goal_hierarchy.read();
-        if !hierarchy.has_north_star() {
-            error!("purpose/drift_check: No North Star goal configured");
-            return JsonRpcResponse::error(
-                id,
-                error_codes::NORTH_STAR_NOT_CONFIGURED,
-                "No North Star goal configured. Use auto_bootstrap_north_star tool for autonomous goal discovery.",
-            );
-        }
-
-        let config =
-            AlignmentConfig::with_hierarchy(hierarchy.clone()).with_pattern_detection(true);
-        drop(hierarchy);
+        // Check North Star is configured (scoped block ensures lock is released before await)
+        let config = {
+            let hierarchy = self.goal_hierarchy.read();
+            if !hierarchy.has_north_star() {
+                error!("purpose/drift_check: No North Star goal configured");
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::NORTH_STAR_NOT_CONFIGURED,
+                    "No North Star goal configured. Use auto_bootstrap_north_star tool for autonomous goal discovery.",
+                );
+            }
+            AlignmentConfig::with_hierarchy(hierarchy.clone()).with_pattern_detection(true)
+        };
 
         let check_start = std::time::Instant::now();
 

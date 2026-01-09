@@ -333,28 +333,32 @@ impl Handlers {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // Get tracker for per-space accuracy
-        let tracker = self.meta_utl_tracker.read();
+        // Get tracker for per-space accuracy (scoped block ensures lock is released before await)
+        let (per_space_accuracy, learning_score) = {
+            let tracker = self.meta_utl_tracker.read();
 
-        // Calculate per-space accuracy
-        let mut per_space_accuracy = Vec::with_capacity(NUM_EMBEDDERS);
-        let mut total_accuracy = 0.0f32;
-        let mut accuracy_count = 0usize;
+            // Calculate per-space accuracy
+            let mut per_space_accuracy = Vec::with_capacity(NUM_EMBEDDERS);
+            let mut total_accuracy = 0.0f32;
+            let mut accuracy_count = 0usize;
 
-        for i in 0..NUM_EMBEDDERS {
-            let acc = tracker.get_embedder_accuracy(i).unwrap_or(0.0);
-            per_space_accuracy.push(acc);
-            if tracker.accuracy_counts[i] > 0 {
-                total_accuracy += acc;
-                accuracy_count += 1;
+            for i in 0..NUM_EMBEDDERS {
+                let acc = tracker.get_embedder_accuracy(i).unwrap_or(0.0);
+                per_space_accuracy.push(acc);
+                if tracker.accuracy_counts[i] > 0 {
+                    total_accuracy += acc;
+                    accuracy_count += 1;
+                }
             }
-        }
 
-        // Compute metrics
-        let learning_score = if accuracy_count > 0 {
-            total_accuracy / accuracy_count as f32
-        } else {
-            0.5 // Default when no data
+            // Compute metrics
+            let learning_score = if accuracy_count > 0 {
+                total_accuracy / accuracy_count as f32
+            } else {
+                0.5 // Default when no data
+            };
+
+            (per_space_accuracy, learning_score)
         };
 
         // TASK-EMB-024: Get REAL metrics from SystemMonitor - NO HARDCODED VALUES

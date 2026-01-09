@@ -196,7 +196,7 @@ graph TD
 | 9 | TASK-CORE-009 | Remove Projection Code | CORE-001 | 1 | :white_check_mark: done |
 | 10 | TASK-CORE-010 | Module Integration | CORE-005, CORE-008, CORE-009 | 1 | :white_check_mark: done |
 | 11 | TASK-CORE-011 | GPU Memory Management Infrastructure | - | 2 | :white_check_mark: done |
-| 12 | TASK-CORE-012 | Embedding Model Loading Infrastructure | CORE-011 | 2 | :white_circle: todo |
+| 12 | TASK-CORE-012 | Embedding Model Loading Infrastructure | CORE-011 | 2 | :white_check_mark: done |
 | 13 | TASK-CORE-013 | Embedding Quantization Infrastructure | CORE-012 | 2 | :white_circle: todo |
 | 14 | TASK-CORE-014 | Unified Error Type Hierarchy | - | 1.5 | :white_circle: todo |
 
@@ -276,7 +276,7 @@ graph TD
 | TASK-CORE-009 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (project_embedding removed, 2759 tests pass) |
 | TASK-CORE-010 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (GoalNode/GoalLevel re-exported, 2759 tests pass) |
 | TASK-CORE-011 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (ModelSlotManager, MemoryPressure, 13 tests pass) |
-| TASK-CORE-012 | :white_circle: todo | - | - | - |
+| TASK-CORE-012 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (UnifiedModelLoader, Embedder↔ModelId conversions, 58 tests pass) |
 | TASK-CORE-013 | :white_circle: todo | - | - | - |
 | TASK-CORE-014 | :white_circle: todo | - | - | - |
 
@@ -334,7 +334,7 @@ graph TD
 | TASK-PERF-003 | :white_circle: todo | - | - | - |
 | TASK-PERF-004 | :white_circle: todo | - | - | - |
 
-**Progress: 10/52 tasks completed (19%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011 done**
+**Progress: 12/52 tasks completed (23%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012 done**
 
 ---
 

@@ -82,10 +82,7 @@ fn test_fsv_edge_case_2_over_budget_rejection() {
 
     // ACTION: Try to exceed budget
     let result = manager.allocate_slot(Embedder::TemporalRecent, 200);
-    println!(
-        "ACTION: allocate_slot(TemporalRecent, 200) => {:?}",
-        result
-    );
+    println!("ACTION: allocate_slot(TemporalRecent, 200) => {:?}", result);
     assert!(result.is_err(), "Over-budget allocation should fail");
 
     // AFTER state (should be unchanged)
@@ -164,7 +161,11 @@ fn test_allocate_all_13_embedders_within_budget() {
 
     // Approximate sizes for quantized models (from task spec)
     let model_sizes: [(Embedder, usize, &str); 13] = [
-        (Embedder::Semantic, 200_000_000, "E1: 200MB (1024D e5-large)"),
+        (
+            Embedder::Semantic,
+            200_000_000,
+            "E1: 200MB (1024D e5-large)",
+        ),
         (Embedder::TemporalRecent, 100_000_000, "E2: 100MB (512D)"),
         (Embedder::TemporalPeriodic, 100_000_000, "E3: 100MB (512D)"),
         (
@@ -387,9 +388,7 @@ fn test_source_of_truth_internal_state() {
     let mut manager = ModelSlotManager::with_budget(5000);
 
     // Allocate multiple slots
-    manager
-        .allocate_slot(Embedder::Semantic, 1000)
-        .expect("E1");
+    manager.allocate_slot(Embedder::Semantic, 1000).expect("E1");
     manager
         .allocate_slot(Embedder::TemporalRecent, 500)
         .expect("E2");

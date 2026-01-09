@@ -6,6 +6,27 @@
 //! It loads safetensors files from local model directories and constructs
 //! complete BERT architecture components for embedding generation.
 //!
+//! # Module Structure (TASK-CORE-012)
+//!
+//! ## Core Components
+//!
+//! - [`GpuModelLoader`] - Low-level Candle loader for safetensors
+//! - [`UnifiedModelLoader`] - High-level loader with memory management
+//! - [`LoaderConfig`] - Configuration for unified loading
+//!
+//! ## Integration Flow
+//!
+//! ```text
+//! LoaderConfig
+//!      │
+//!      ▼
+//! UnifiedModelLoader ──────┬────────────────┐
+//!      │                   │                │
+//!      ▼                   ▼                ▼
+//! ModelSlotManager    GpuModelLoader   BertWeights
+//! (8GB budget, LRU)   (Candle/CUDA)    (Model data)
+//! ```
+//!
 //! # Supported Architectures
 //!
 //! | Model Type | Architecture | Example |
@@ -13,27 +34,26 @@
 //! | BERT | BertModel | e5-large-v2, all-MiniLM-L6-v2 |
 //! | MPNet | MPNetModel | all-mpnet-base-v2 |
 //!
-//! # Module Structure
-//!
-//! - [`config`] - BERT configuration parsing from config.json
-//! - [`error`] - Error types for model loading operations
-//! - [`weights`] - Weight structures for BERT components
-//! - [`loader`] - GPU model loader implementation
-//! - [`embedding_loader`] - Embedding and pooler weight loading
-//! - [`layer_loader`] - Encoder layer weight loading
-//! - [`tensor_utils`] - Tensor loading utilities
-//!
 //! # Usage
 //!
 //! ```rust,no_run
-//! use context_graph_embeddings::gpu::{GpuModelLoader, BertConfig};
+//! use context_graph_embeddings::gpu::{UnifiedModelLoader, LoaderConfig};
+//! use context_graph_embeddings::types::ModelId;
 //!
-//! // GpuModelLoader initializes GPU automatically
-//! let loader = GpuModelLoader::new().expect("GPU init should succeed");
+//! // Configure loader with models directory
+//! let config = LoaderConfig::with_models_dir("/home/user/models")
+//!     .with_budget(8 * 1024 * 1024 * 1024)  // 8GB
+//!     .with_auto_eviction(true);
 //!
-//! // Verify GPU device is available
-//! let device = loader.device();
-//! assert!(device.is_cuda());
+//! // Create unified loader (initializes GPU automatically)
+//! let loader = UnifiedModelLoader::new(config).expect("Loader init");
+//!
+//! // Load a model (manages memory automatically)
+//! loader.load_model(ModelId::Semantic).expect("Load failed");
+//!
+//! // Check memory usage
+//! let stats = loader.memory_stats().expect("Stats");
+//! println!("Allocated: {} MB", stats.allocated / (1024 * 1024));
 //! ```
 
 mod batch_loader;
@@ -43,12 +63,16 @@ mod error;
 mod layer_loader;
 mod loader;
 mod tensor_utils;
+mod unified;
 mod weights;
 
-// Re-export all public types for backwards compatibility
+// Re-export all public types
 pub use config::BertConfig;
 pub use error::ModelLoadError;
 pub use loader::GpuModelLoader;
+pub use unified::{
+    LoaderConfig, LoaderConfigError, MemoryStatsSnapshot, UnifiedLoaderError, UnifiedModelLoader,
+};
 pub use weights::{
     AttentionWeights, BertWeights, EmbeddingWeights, EncoderLayerWeights, FfnWeights, PoolerWeights,
 };

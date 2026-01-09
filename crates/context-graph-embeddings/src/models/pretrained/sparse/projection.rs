@@ -1246,6 +1246,7 @@ mod tests {
                 ProjectionMatrix::project;
         }
 
+        #[allow(clippy::type_complexity)]
         fn _assert_project_batch() {
             let _: fn(
                 &ProjectionMatrix,

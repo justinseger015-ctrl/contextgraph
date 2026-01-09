@@ -1,6 +1,10 @@
 //! Type conversions for ModelId.
+//!
+//! Includes bidirectional conversion between `ModelId` (embeddings crate)
+//! and `Embedder` (core crate) for cross-crate interoperability.
 
 use super::core::ModelId;
+use context_graph_core::teleological::embedder::Embedder;
 
 impl TryFrom<u8> for ModelId {
     type Error = &'static str;
@@ -57,5 +61,172 @@ impl TryFrom<&str> for ModelId {
             "Splade" | "SPLADE" => Ok(Self::Splade),
             _ => Err("Invalid ModelId string"),
         }
+    }
+}
+
+// =============================================================================
+// Embedder <-> ModelId conversions (TASK-CORE-012)
+// =============================================================================
+
+impl From<Embedder> for ModelId {
+    /// Convert from core crate's `Embedder` to embeddings crate's `ModelId`.
+    ///
+    /// Both enums have identical variant ordering (0-12), so conversion is direct.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_embeddings::types::ModelId;
+    /// use context_graph_core::teleological::embedder::Embedder;
+    ///
+    /// let embedder = Embedder::Semantic;
+    /// let model_id: ModelId = embedder.into();
+    /// assert_eq!(model_id, ModelId::Semantic);
+    /// ```
+    fn from(embedder: Embedder) -> Self {
+        match embedder {
+            Embedder::Semantic => ModelId::Semantic,
+            Embedder::TemporalRecent => ModelId::TemporalRecent,
+            Embedder::TemporalPeriodic => ModelId::TemporalPeriodic,
+            Embedder::TemporalPositional => ModelId::TemporalPositional,
+            Embedder::Causal => ModelId::Causal,
+            Embedder::Sparse => ModelId::Sparse,
+            Embedder::Code => ModelId::Code,
+            Embedder::Graph => ModelId::Graph,
+            Embedder::Hdc => ModelId::Hdc,
+            Embedder::Multimodal => ModelId::Multimodal,
+            Embedder::Entity => ModelId::Entity,
+            Embedder::LateInteraction => ModelId::LateInteraction,
+            Embedder::KeywordSplade => ModelId::Splade,
+        }
+    }
+}
+
+impl From<ModelId> for Embedder {
+    /// Convert from embeddings crate's `ModelId` to core crate's `Embedder`.
+    ///
+    /// Both enums have identical variant ordering (0-12), so conversion is direct.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use context_graph_embeddings::types::ModelId;
+    /// use context_graph_core::teleological::embedder::Embedder;
+    ///
+    /// let model_id = ModelId::Code;
+    /// let embedder: Embedder = model_id.into();
+    /// assert_eq!(embedder, Embedder::Code);
+    /// ```
+    fn from(model_id: ModelId) -> Self {
+        match model_id {
+            ModelId::Semantic => Embedder::Semantic,
+            ModelId::TemporalRecent => Embedder::TemporalRecent,
+            ModelId::TemporalPeriodic => Embedder::TemporalPeriodic,
+            ModelId::TemporalPositional => Embedder::TemporalPositional,
+            ModelId::Causal => Embedder::Causal,
+            ModelId::Sparse => Embedder::Sparse,
+            ModelId::Code => Embedder::Code,
+            ModelId::Graph => Embedder::Graph,
+            ModelId::Hdc => Embedder::Hdc,
+            ModelId::Multimodal => Embedder::Multimodal,
+            ModelId::Entity => Embedder::Entity,
+            ModelId::LateInteraction => Embedder::LateInteraction,
+            ModelId::Splade => Embedder::KeywordSplade,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_embedder_to_model_id_all_variants() {
+        // Test all 13 conversions Embedder -> ModelId
+        let mappings = [
+            (Embedder::Semantic, ModelId::Semantic),
+            (Embedder::TemporalRecent, ModelId::TemporalRecent),
+            (Embedder::TemporalPeriodic, ModelId::TemporalPeriodic),
+            (Embedder::TemporalPositional, ModelId::TemporalPositional),
+            (Embedder::Causal, ModelId::Causal),
+            (Embedder::Sparse, ModelId::Sparse),
+            (Embedder::Code, ModelId::Code),
+            (Embedder::Graph, ModelId::Graph),
+            (Embedder::Hdc, ModelId::Hdc),
+            (Embedder::Multimodal, ModelId::Multimodal),
+            (Embedder::Entity, ModelId::Entity),
+            (Embedder::LateInteraction, ModelId::LateInteraction),
+            (Embedder::KeywordSplade, ModelId::Splade),
+        ];
+
+        for (embedder, expected_model_id) in mappings {
+            let model_id: ModelId = embedder.into();
+            assert_eq!(
+                model_id, expected_model_id,
+                "Embedder::{:?} should map to ModelId::{:?}",
+                embedder, expected_model_id
+            );
+        }
+        println!("[PASS] All 13 Embedder -> ModelId conversions correct");
+    }
+
+    #[test]
+    fn test_model_id_to_embedder_all_variants() {
+        // Test all 13 conversions ModelId -> Embedder
+        let mappings = [
+            (ModelId::Semantic, Embedder::Semantic),
+            (ModelId::TemporalRecent, Embedder::TemporalRecent),
+            (ModelId::TemporalPeriodic, Embedder::TemporalPeriodic),
+            (ModelId::TemporalPositional, Embedder::TemporalPositional),
+            (ModelId::Causal, Embedder::Causal),
+            (ModelId::Sparse, Embedder::Sparse),
+            (ModelId::Code, Embedder::Code),
+            (ModelId::Graph, Embedder::Graph),
+            (ModelId::Hdc, Embedder::Hdc),
+            (ModelId::Multimodal, Embedder::Multimodal),
+            (ModelId::Entity, Embedder::Entity),
+            (ModelId::LateInteraction, Embedder::LateInteraction),
+            (ModelId::Splade, Embedder::KeywordSplade),
+        ];
+
+        for (model_id, expected_embedder) in mappings {
+            let embedder: Embedder = model_id.into();
+            assert_eq!(
+                embedder, expected_embedder,
+                "ModelId::{:?} should map to Embedder::{:?}",
+                model_id, expected_embedder
+            );
+        }
+        println!("[PASS] All 13 ModelId -> Embedder conversions correct");
+    }
+
+    #[test]
+    fn test_roundtrip_embedder_model_id() {
+        // Test roundtrip: Embedder -> ModelId -> Embedder
+        for embedder in Embedder::all() {
+            let model_id: ModelId = embedder.into();
+            let back: Embedder = model_id.into();
+            assert_eq!(
+                embedder, back,
+                "Roundtrip failed for Embedder::{:?}",
+                embedder
+            );
+        }
+        println!("[PASS] Embedder <-> ModelId roundtrip preserves all 13 variants");
+    }
+
+    #[test]
+    fn test_index_preservation() {
+        // Verify that index() is preserved across conversion
+        for embedder in Embedder::all() {
+            let model_id: ModelId = embedder.into();
+            assert_eq!(
+                embedder.index(),
+                model_id as usize,
+                "Index mismatch for {:?}",
+                embedder
+            );
+        }
+        println!("[PASS] Index values preserved across Embedder <-> ModelId conversion");
     }
 }
