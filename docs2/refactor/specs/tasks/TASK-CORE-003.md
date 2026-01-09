@@ -1,306 +1,275 @@
-# TASK-CORE-003: Define TeleologicalArray Type
+# TASK-CORE-003: SemanticFingerprint Type-Safe Access & Validation
 
 ```xml
-<task_spec id="TASK-CORE-003" version="1.0">
+<task_spec id="TASK-CORE-003" version="4.0">
 <metadata>
-  <title>Define TeleologicalArray Type with 13-Embedder Storage</title>
-  <status>todo</status>
+  <title>SemanticFingerprint Type-Safe Access & Validation</title>
+  <status>COMPLETED</status>
+  <completed_date>2026-01-09</completed_date>
   <layer>foundation</layer>
   <sequence>3</sequence>
   <implements>
     <requirement_ref>REQ-TELEOLOGICAL-02</requirement_ref>
     <requirement_ref>REQ-STORAGE-ATOMIC-01</requirement_ref>
+    <requirement_ref>ARCH-01: TeleologicalArray is atomic (all 13 embeddings)</requirement_ref>
+    <requirement_ref>ARCH-05: All 13 Embedders Must Be Present</requirement_ref>
   </implements>
   <depends_on>
-    <task_ref>TASK-CORE-002</task_ref>
+    <task_ref status="COMPLETED">TASK-CORE-002</task_ref>
   </depends_on>
-  <estimated_complexity>medium</estimated_complexity>
-  <estimated_days>2</estimated_days>
 </metadata>
 
-<context>
-The TeleologicalArray is the fundamental data structure for the refactored system.
-It stores 13 embeddings (one per embedder) as an atomic unit. This replaces the
-broken pattern of comparing single embeddings to multi-embedder fingerprints.
-Depends on TASK-CORE-002 for the Embedder enum.
-</context>
+<decision_made>
+## ARCHITECTURAL DECISION: COMPLETED
 
-<objective>
-Create the TeleologicalArray struct that holds 13 embedder outputs as a fixed array,
-with support for dense, sparse, and token-level embedding formats.
-</objective>
+**Decision**: SemanticFingerprint IS TeleologicalArray (Option 4 from original spec).
 
-<rationale>
-Storing all 13 embeddings together ensures:
-1. Atomic storage/retrieval - never partial arrays
-2. Apples-to-apples comparison - both arrays have same structure
-3. Per-embedder indexing - each dimension searchable independently
-4. Efficient serialization - single unit for persistence
+The existing `SemanticFingerprint` struct already correctly implements the 13-embedder
+storage architecture. A type alias `TeleologicalArray = SemanticFingerprint` provides
+spec alignment without code duplication.
 
-The array uses EmbedderOutput enum to handle different embedding types:
-- Dense: Fixed-size f32 vectors
-- Sparse: Index-value pairs for SPLADE
-- TokenLevel: Per-token embeddings for ColBERT
-</rationale>
+**Implemented Features**:
+1. ✅ `pub type TeleologicalArray = SemanticFingerprint;`
+2. ✅ `SemanticFingerprint::get(&self, embedder: Embedder) -> EmbeddingRef<'_>`
+3. ✅ `SemanticFingerprint::is_complete(&self) -> bool`
+4. ✅ `SemanticFingerprint::validate_strict(&self) -> Result<(), ValidationError>`
+5. ✅ `SemanticFingerprint::storage_bytes(&self) -> usize`
+6. ✅ `EmbeddingRef<'a>` enum (Dense, Sparse, TokenLevel variants)
+7. ✅ `ValidationError` enum with detailed error context
+8. ✅ 24 comprehensive tests passing
+</decision_made>
 
-<input_context_files>
-  <file purpose="embedder_enum">crates/context-graph-core/src/teleology/embedder.rs</file>
-  <file purpose="architecture_reference">docs2/refactor/01-ARCHITECTURE.md</file>
-  <file purpose="storage_spec">docs2/refactor/02-STORAGE.md</file>
-</input_context_files>
+<implementation_summary>
+## Files Modified
 
-<prerequisites>
-  <check>TASK-CORE-002 complete (Embedder enum exists)</check>
-  <check>context-graph-core compiles</check>
-</prerequisites>
+### Primary Implementation
+**File**: `crates/context-graph-core/src/types/fingerprint/semantic/fingerprint.rs`
+- Line 26: `pub type TeleologicalArray = SemanticFingerprint;`
+- Lines 40-47: `EmbeddingRef<'a>` enum definition
+- Lines 53-99: `ValidationError` enum with 4 variants
+- Lines 323-338: `get(&self, embedder: Embedder) -> EmbeddingRef<'_>`
+- Lines 350-361: `is_complete(&self) -> bool`
+- Lines 367-370: `storage_bytes(&self) -> usize`
+- Lines 387-497: `validate_strict(&self) -> Result<(), ValidationError>`
 
-<scope>
-  <in_scope>
-    <item>Create TeleologicalArray struct with 13-entry fixed array</item>
-    <item>Create EmbedderOutput enum (Dense, Sparse, TokenLevel)</item>
-    <item>Create SparseVector type for SPLADE embeddings</item>
-    <item>Create TokenEmbeddings type for ColBERT</item>
-    <item>Implement MessagePack serialization</item>
-    <item>Implement bincode serialization</item>
-    <item>Add metadata fields (id, created_at, source_content_hash)</item>
-    <item>Implement Default, Clone, Debug traits</item>
-  </in_scope>
-  <out_of_scope>
-    <item>Comparison types (TASK-CORE-004)</item>
-    <item>Similarity functions (TASK-LOGIC-001 through 003)</item>
-    <item>Storage implementation (TASK-CORE-006 through 008)</item>
-  </out_of_scope>
-</scope>
+### Re-exports
+**File**: `crates/context-graph-core/src/types/fingerprint/mod.rs`
+- Line 42-44: Added re-exports for `EmbeddingRef`, `TeleologicalArray`, `ValidationError`
 
-<definition_of_done>
-  <signatures>
-    <signature file="crates/context-graph-core/src/teleology/array.rs">
-      use crate::teleology::embedder::Embedder;
-      use uuid::Uuid;
-      use chrono::{DateTime, Utc};
+### Tests
+**File**: `crates/context-graph-core/src/types/fingerprint/semantic/tests/task_core_003_tests.rs`
+- 24 tests covering all edge cases
 
-      /// A sparse vector for SPLADE-style embeddings.
-      #[derive(Debug, Clone, PartialEq)]
-      pub struct SparseVector {
-          pub indices: Vec<u32>,
-          pub values: Vec<f32>,
-      }
+### Module Declaration
+**File**: `crates/context-graph-core/src/types/fingerprint/semantic/tests/mod.rs`
+- Added `mod task_core_003_tests;`
+</implementation_summary>
 
-      /// Token-level embeddings for ColBERT-style late interaction.
-      #[derive(Debug, Clone, PartialEq)]
-      pub struct TokenEmbeddings {
-          pub embeddings: Vec<Vec<f32>>,
-          pub token_count: usize,
-          pub dims_per_token: usize,
-      }
+<source_of_truth>
+## Source of Truth (For Verification)
 
-      /// Output from a single embedder in the teleological array.
-      #[derive(Debug, Clone, PartialEq)]
-      pub enum EmbedderOutput {
-          /// Dense floating-point vector
-          Dense(Vec<f32>),
-          /// Sparse vector (SPLADE)
-          Sparse(SparseVector),
-          /// Token-level embeddings (ColBERT)
-          TokenLevel(TokenEmbeddings),
-          /// Binary vector (HDC)
-          Binary(Vec<u8>),
-          /// Not yet computed
-          Pending,
-          /// Failed to compute
-          Failed(String),
-      }
+| Component | Location | What to Verify |
+|-----------|----------|----------------|
+| Embedder enum | `src/teleological/embedder.rs` | 13 variants, `index()`, `from_index()`, `expected_dims()`, `all()` |
+| Dimension constants | `src/types/fingerprint/semantic/constants.rs` | E1_DIM=1024, E2_DIM=512, etc. |
+| SparseVector | `src/types/fingerprint/sparse.rs` | `SparseVectorError` exported |
+| SemanticFingerprint | `src/types/fingerprint/semantic/fingerprint.rs` | All 5 methods implemented |
+| TeleologicalArray alias | `src/types/fingerprint/semantic/fingerprint.rs:26` | Type alias exists |
+| Re-exports | `src/types/fingerprint/mod.rs:42-44` | All types re-exported |
+| Tests | `src/types/fingerprint/semantic/tests/task_core_003_tests.rs` | 24 tests passing |
 
-      /// The fundamental storage unit: 13 embeddings as an atomic array.
-      #[derive(Debug, Clone)]
-      pub struct TeleologicalArray {
-          /// Unique identifier
-          pub id: Uuid,
-          /// The 13 embedder outputs
-          pub embeddings: [EmbedderOutput; 13],
-          /// Source content hash for deduplication
-          pub source_hash: u64,
-          /// Creation timestamp
-          pub created_at: DateTime<Utc>,
-          /// Optional metadata
-          pub metadata: Option<ArrayMetadata>,
-      }
+**Note**: All paths are relative to `crates/context-graph-core/`
+</source_of_truth>
 
-      #[derive(Debug, Clone, Default)]
-      pub struct ArrayMetadata {
-          pub namespace: Option<String>,
-          pub memory_type: Option<String>,
-          pub tags: Vec<String>,
-          pub custom: std::collections::HashMap<String, String>,
-      }
+<verification_commands>
+## Full State Verification Commands
 
-      impl TeleologicalArray {
-          pub fn new(id: Uuid) -> Self;
-          pub fn with_embeddings(id: Uuid, embeddings: [EmbedderOutput; 13]) -> Self;
-          pub fn get(&self, embedder: Embedder) -> &EmbedderOutput;
-          pub fn set(&mut self, embedder: Embedder, output: EmbedderOutput);
-          pub fn is_complete(&self) -> bool;
-          pub fn completed_count(&self) -> usize;
-          pub fn storage_bytes(&self) -> usize;
-      }
+Run these commands to verify the implementation is correct:
 
-      impl SparseVector {
-          pub fn new(indices: Vec<u32>, values: Vec<f32>) -> Self;
-          pub fn len(&self) -> usize;
-          pub fn is_empty(&self) -> bool;
-          pub fn active_dimensions(&self) -> usize;
-      }
+```bash
+# 1. Verify compilation (MUST pass with no errors)
+cargo check -p context-graph-core
+# Expected: Finished dev profile
 
-      impl TokenEmbeddings {
-          pub fn new(embeddings: Vec<Vec<f32>>, dims_per_token: usize) -> Self;
-          pub fn token_count(&self) -> usize;
-      }
-    </signature>
-  </signatures>
+# 2. Verify no duplicate Embedder definitions
+rg "pub enum Embedder\b" --type rust crates/context-graph-core/
+# Expected: ONLY teleological/embedder.rs
 
-  <constraints>
-    <constraint>Array size is exactly 13 (compile-time enforced)</constraint>
-    <constraint>All embeddings stored together atomically</constraint>
-    <constraint>No partial arrays in storage</constraint>
-    <constraint>MessagePack serialization must roundtrip correctly</constraint>
-    <constraint>Memory layout efficient (no excessive padding)</constraint>
-    <constraint>Implements Serialize, Deserialize via serde</constraint>
-  </constraints>
+# 3. Run TASK-CORE-003 specific tests
+cargo test -p context-graph-core task_core_003 -- --nocapture
+# Expected: 24 passed; 0 failed
 
-  <verification>
-    <command>cargo check -p context-graph-core</command>
-    <command>cargo test -p context-graph-core array</command>
-    <command>cargo test -p context-graph-core serialization</command>
-  </verification>
-</definition_of_done>
+# 4. Verify type alias exists
+rg "pub type TeleologicalArray = SemanticFingerprint" --type rust crates/context-graph-core/
+# Expected: One match at semantic/fingerprint.rs
 
-<pseudo_code>
-// crates/context-graph-core/src/teleology/array.rs
+# 5. Verify re-exports
+rg "TeleologicalArray" --type rust crates/context-graph-core/src/types/fingerprint/mod.rs
+# Expected: TeleologicalArray in re-export list
 
-use crate::teleology::embedder::Embedder;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
+# 6. Verify ValidationError re-export
+rg "ValidationError" --type rust crates/context-graph-core/src/types/fingerprint/mod.rs
+# Expected: ValidationError in re-export list
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SparseVector {
-    pub indices: Vec<u32>,
-    pub values: Vec<f32>,
+# 7. Verify EmbeddingRef re-export
+rg "EmbeddingRef" --type rust crates/context-graph-core/src/types/fingerprint/mod.rs
+# Expected: EmbeddingRef in re-export list
+```
+</verification_commands>
+
+<test_evidence>
+## Test Evidence (2026-01-09)
+
+```
+running 24 tests
+test types::fingerprint::semantic::tests::task_core_003_tests::test_all_embedders_via_get ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_embedder_dims_match_get_type ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_empty_sparse_valid ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_empty_token_level_valid ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_embedding_ref_categorization ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_get_returns_correct_dimensions ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_is_complete_invalid_dimensions ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_bincode_serialization_roundtrip ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_max_sparse_index_valid ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_is_complete_zeroed ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_storage_bytes ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_storage_bytes_with_sparse ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_storage_size_bytes_consistency ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_teleological_array_alias ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_bincode_serialization_with_data ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_sparse_duplicate ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_sparse_out_of_bounds ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_sparse_length_mismatch ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_sparse_unsorted ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_valid ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_wrong_e1_dimension ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validate_strict_wrong_token_dimension ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_validation_error_display ... ok
+test types::fingerprint::semantic::tests::task_core_003_tests::test_json_serialization_roundtrip ... ok
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 2712 filtered out
+```
+</test_evidence>
+
+<edge_cases_verified>
+## Edge Cases Verified
+
+| Scenario | Test Name | Result |
+|----------|-----------|--------|
+| Empty dense embedding | `test_validate_strict_wrong_e1_dimension` | ✅ Returns `DimensionMismatch` |
+| Wrong E1 dimension (512 instead of 1024) | `test_validate_strict_wrong_e1_dimension` | ✅ Returns `DimensionMismatch` |
+| Empty sparse vector (nnz=0) | `test_empty_sparse_valid` | ✅ VALID (sparse can be empty) |
+| Sparse index out of bounds (50000) | `test_validate_strict_sparse_out_of_bounds` | ✅ Returns `SparseVectorError` |
+| E12 with 0 tokens | `test_empty_token_level_valid` | ✅ VALID (empty content) |
+| E12 token with wrong dim (64 instead of 128) | `test_validate_strict_wrong_token_dimension` | ✅ Returns `TokenDimensionMismatch` |
+| Maximum sparse index (30521) | `test_max_sparse_index_valid` | ✅ VALID |
+| Unsorted sparse indices | `test_validate_strict_sparse_unsorted` | ✅ Returns `SparseVectorError` |
+| Duplicate sparse indices | `test_validate_strict_sparse_duplicate` | ✅ Returns `SparseVectorError` |
+| Mismatched indices/values lengths | `test_validate_strict_sparse_length_mismatch` | ✅ Returns `SparseVectorError` |
+| bincode serialization roundtrip | `test_bincode_serialization_roundtrip` | ✅ PASS |
+| JSON serialization roundtrip | `test_json_serialization_roundtrip` | ✅ PASS |
+</edge_cases_verified>
+
+<downstream_tasks>
+## Downstream Tasks Unblocked
+
+This task completion unblocks:
+
+1. **TASK-CORE-004: Define Comparison Types**
+   - Can use `SemanticFingerprint`/`TeleologicalArray` for comparison operands
+   - Can use `EmbeddingRef` for per-embedder comparison
+
+2. **TASK-LOGIC-001: Dense Similarity Functions**
+   - Can use `EmbeddingRef::Dense` for similarity computation
+   - Can use `Embedder::is_dense()` to filter
+
+3. **TASK-CORE-006: Storage Implementation**
+   - Can serialize/deserialize `SemanticFingerprint`
+   - Uses `storage_bytes()` for allocation sizing
+
+4. **TASK-LOGIC-012: Entry-Point Selection**
+   - Can use `SemanticFingerprint::get(embedder)` for single-space search
+</downstream_tasks>
+
+<api_reference>
+## API Reference
+
+### Types
+
+```rust
+/// Type alias: SemanticFingerprint IS TeleologicalArray
+pub type TeleologicalArray = SemanticFingerprint;
+
+/// Reference to embedding data (no-copy access)
+pub enum EmbeddingRef<'a> {
+    Dense(&'a [f32]),           // E1, E2-E5, E7-E11
+    Sparse(&'a SparseVector),   // E6, E13
+    TokenLevel(&'a [Vec<f32>]), // E12
 }
 
-impl SparseVector {
-    pub fn new(indices: Vec<u32>, values: Vec<f32>) -> Self {
-        debug_assert_eq!(indices.len(), values.len());
-        Self { indices, values }
-    }
-
-    pub fn len(&self) -> usize { self.indices.len() }
-    pub fn is_empty(&self) -> bool { self.indices.is_empty() }
-    pub fn active_dimensions(&self) -> usize { self.indices.len() }
+/// Validation error with full context
+pub enum ValidationError {
+    DimensionMismatch { embedder: Embedder, expected: usize, actual: usize },
+    EmptyDenseEmbedding { embedder: Embedder, expected: usize },
+    SparseVectorError { embedder: Embedder, source: SparseVectorError },
+    TokenDimensionMismatch { embedder: Embedder, token_index: usize, expected: usize, actual: usize },
 }
+```
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TokenEmbeddings {
-    pub embeddings: Vec<Vec<f32>>,
-    pub token_count: usize,
-    pub dims_per_token: usize,
+### Methods
+
+```rust
+impl SemanticFingerprint {
+    /// Type-safe access by Embedder enum
+    pub fn get(&self, embedder: Embedder) -> EmbeddingRef<'_>;
+
+    /// Check all dense embeddings have correct dimensions
+    pub fn is_complete(&self) -> bool;
+
+    /// Total heap allocation in bytes
+    pub fn storage_bytes(&self) -> usize;
+
+    /// Comprehensive validation with detailed errors
+    pub fn validate_strict(&self) -> Result<(), ValidationError>;
 }
+```
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum EmbedderOutput {
-    Dense(Vec<f32>),
-    Sparse(SparseVector),
-    TokenLevel(TokenEmbeddings),
-    Binary(Vec<u8>),
-    Pending,
-    Failed(String),
-}
+### Usage Example
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TeleologicalArray {
-    pub id: Uuid,
-    pub embeddings: [EmbedderOutput; 13],
-    pub source_hash: u64,
-    pub created_at: DateTime<Utc>,
-    pub metadata: Option<ArrayMetadata>,
-}
+```rust
+use context_graph_core::types::fingerprint::{SemanticFingerprint, EmbeddingRef, ValidationError};
+use context_graph_core::teleological::Embedder;
 
-impl TeleologicalArray {
-    pub fn new(id: Uuid) -> Self {
-        Self {
-            id,
-            embeddings: std::array::from_fn(|_| EmbedderOutput::Pending),
-            source_hash: 0,
-            created_at: Utc::now(),
-            metadata: None,
+fn process_fingerprint(fp: &SemanticFingerprint) -> Result<(), ValidationError> {
+    // Validate before use
+    fp.validate_strict()?;
+
+    // Type-safe access
+    match fp.get(Embedder::Semantic) {
+        EmbeddingRef::Dense(data) => {
+            println!("E1 has {} dimensions", data.len());
         }
+        _ => unreachable!("E1 is always dense"),
     }
 
-    pub fn get(&self, embedder: Embedder) -> &EmbedderOutput {
-        &self.embeddings[embedder.index()]
-    }
+    // Check memory usage
+    println!("Fingerprint uses {} bytes", fp.storage_bytes());
 
-    pub fn set(&mut self, embedder: Embedder, output: EmbedderOutput) {
-        self.embeddings[embedder.index()] = output;
-    }
-
-    pub fn is_complete(&self) -> bool {
-        self.embeddings.iter().all(|e| !matches!(e, EmbedderOutput::Pending))
-    }
-
-    pub fn completed_count(&self) -> usize {
-        self.embeddings.iter()
-            .filter(|e| !matches!(e, EmbedderOutput::Pending | EmbedderOutput::Failed(_)))
-            .count()
-    }
+    Ok(())
 }
+```
+</api_reference>
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+<critical_constraints>
+## Critical Constraints (From constitution.yaml)
 
-    #[test]
-    fn test_array_size() {
-        let arr = TeleologicalArray::new(Uuid::new_v4());
-        assert_eq!(arr.embeddings.len(), 13);
-    }
+| Constraint | Severity | Enforcement |
+|------------|----------|-------------|
+| ARCH-01: All 13 embeddings must be stored atomically | critical | `validate_strict()` checks all 13 |
+| ARCH-05: Missing embedders are fatal | critical | `validate_strict()` returns error |
+| AP-14: No `.unwrap()` in library code | medium | All validation returns `Result` |
+| NO Default impl | high | Intentionally omitted (see comment at line 546) |
+| NO backwards compatibility | critical | No deprecated shims |
+</critical_constraints>
 
-    #[test]
-    fn test_serialization_roundtrip() {
-        let arr = TeleologicalArray::new(Uuid::new_v4());
-        let bytes = rmp_serde::to_vec(&arr).unwrap();
-        let restored: TeleologicalArray = rmp_serde::from_slice(&bytes).unwrap();
-        assert_eq!(arr.id, restored.id);
-    }
-}
-</pseudo_code>
-
-<files_to_create>
-  <file path="crates/context-graph-core/src/teleology/array.rs">
-    TeleologicalArray struct and associated types
-  </file>
-</files_to_create>
-
-<files_to_modify>
-  <file path="crates/context-graph-core/src/teleology/mod.rs">
-    Add: pub mod array;
-  </file>
-  <file path="crates/context-graph-core/Cargo.toml">
-    Add dependencies: uuid, chrono, rmp-serde
-  </file>
-</files_to_modify>
-
-<validation_criteria>
-  <criterion>TeleologicalArray::embeddings has exactly 13 elements</criterion>
-  <criterion>Serialization roundtrip preserves all data</criterion>
-  <criterion>is_complete() returns false for new arrays</criterion>
-  <criterion>completed_count() correctly counts non-Pending embeddings</criterion>
-  <criterion>SparseVector indices and values have same length</criterion>
-</validation_criteria>
-
-<test_commands>
-  <command>cargo test -p context-graph-core array -- --nocapture</command>
-  <command>cargo test -p context-graph-core serialization -- --nocapture</command>
-</test_commands>
 </task_spec>
 ```
