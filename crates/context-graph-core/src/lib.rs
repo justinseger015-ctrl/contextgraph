@@ -67,7 +67,7 @@ pub use monitoring::{StubLayerStatusProvider, StubSystemMonitor};
 
 // Teleological module re-exports (cross-embedding synergy and fusion)
 pub use teleological::{
-    DomainAlignments, DomainType, GroupAlignments, GroupType, MultiResolutionHierarchy,
-    ProfileId, ProfileMetrics, SynergyMatrix, TaskType, TeleologicalProfile, TeleologicalVector,
-    TuckerCore,
+    DomainAlignments, DomainType, Embedder, EmbedderDims, EmbedderGroup, EmbedderMask,
+    GroupAlignments, GroupType, MultiResolutionHierarchy, ProfileId, ProfileMetrics, SynergyMatrix,
+    TaskType, TeleologicalProfile, TeleologicalVector, TuckerCore,
 };

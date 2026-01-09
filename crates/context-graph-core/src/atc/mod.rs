@@ -49,7 +49,11 @@ pub use calibration::{
 };
 pub use domain::{Domain, DomainManager, DomainThresholds};
 pub use level1_ewma::{DriftTracker, EwmaState};
-pub use level2_temperature::{Embedder, TemperatureCalibration, TemperatureScaler};
+pub use level2_temperature::{
+    embedder_temperature_range, TemperatureCalibration, TemperatureScaler,
+};
+// Re-export canonical Embedder from teleological module for ATC consumers
+pub use crate::teleological::Embedder;
 pub use level3_bandit::{ThresholdArm, ThresholdBandit};
 pub use level4_bayesian::{BayesianOptimizer, ThresholdConstraints, ThresholdObservation};
 
@@ -272,8 +276,8 @@ mod tests {
     fn test_temperature_scaling() {
         let mut atc = AdaptiveThresholdCalibration::new();
 
-        atc.record_prediction(Embedder::E1Semantic, 0.8, true);
-        let scaled = atc.get_scaled_confidence(Embedder::E1Semantic, 0.8);
+        atc.record_prediction(Embedder::Semantic, 0.8, true);
+        let scaled = atc.get_scaled_confidence(Embedder::Semantic, 0.8);
 
         assert!(scaled >= 0.0 && scaled <= 1.0);
     }

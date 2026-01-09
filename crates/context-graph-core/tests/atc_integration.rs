@@ -56,21 +56,21 @@ mod atc_integration_tests {
 
         // Simulate overconfident E5_Causal (should get T > 1.0)
         for _ in 0..30 {
-            scaler.record(Embedder::E5Causal, 0.9, false);
+            scaler.record(Embedder::Causal, 0.9, false);
         }
         for _ in 0..10 {
-            scaler.record(Embedder::E5Causal, 0.9, true);
+            scaler.record(Embedder::Causal, 0.9, true);
         }
 
         // Simulate underconfident E7_Code (should get T < 1.0)
         for _ in 0..20 {
-            scaler.record(Embedder::E7Code, 0.6, true);
+            scaler.record(Embedder::Code, 0.6, true);
         }
 
         let losses = scaler.calibrate_all();
 
-        let e5_loss = losses.get(&Embedder::E5Causal).unwrap();
-        let e7_loss = losses.get(&Embedder::E7Code).unwrap();
+        let e5_loss = losses.get(&Embedder::Causal).unwrap();
+        let e7_loss = losses.get(&Embedder::Code).unwrap();
 
         // Both should be calibrating (non-zero loss indicates calibration happened)
         println!(
@@ -79,8 +79,8 @@ mod atc_integration_tests {
         );
 
         // E5 likely to have higher temperature (overconfident)
-        let e5_temp = scaler.get_temperature(Embedder::E5Causal).unwrap();
-        let e7_temp = scaler.get_temperature(Embedder::E7Code).unwrap();
+        let e5_temp = scaler.get_temperature(Embedder::Causal).unwrap();
+        let e7_temp = scaler.get_temperature(Embedder::Code).unwrap();
 
         println!(
             "E5_Causal temperature: {}, E7_Code temperature: {}",
@@ -313,8 +313,8 @@ mod atc_integration_tests {
         println!("Drift status: {:?}", drift_status);
 
         // Level 2: Calibrate temperatures
-        atc.record_prediction(Embedder::E1Semantic, 0.8, true);
-        atc.record_prediction(Embedder::E5Causal, 0.85, false);
+        atc.record_prediction(Embedder::Semantic, 0.8, true);
+        atc.record_prediction(Embedder::Causal, 0.85, false);
 
         let losses = atc.calibrate_temperatures();
         println!("Temperature calibration losses: {:?}", losses);

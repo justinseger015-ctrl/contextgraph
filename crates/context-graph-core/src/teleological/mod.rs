@@ -59,6 +59,9 @@
 //! assert!(hierarchy.quick_score() > 0.7);
 //! ```
 
+// Canonical Embedder enumeration (SINGLE source of truth for embedder types)
+pub mod embedder;
+
 // Core type definitions
 pub mod types;
 
@@ -87,6 +90,7 @@ pub mod matrix_search;
 pub mod services;
 
 // Re-exports for convenience
+pub use embedder::{Embedder, EmbedderDims, EmbedderGroup, EmbedderMask};
 pub use groups::{GroupAlignments, GroupType};
 pub use meaning::{
     CrossEmbeddingAnalysis, ExtractedMeaning, FusionMethod, MeaningExtractionConfig,

@@ -101,22 +101,9 @@ impl Handlers {
             if emb_id >= 1 && emb_id <= 13 {
                 // Get poorly calibrated embedders to check if this one is among them
                 let poorly_calibrated = atc_guard.get_poorly_calibrated_embedders();
-                let embedder = match emb_id {
-                    1 => context_graph_core::atc::Embedder::E1Semantic,
-                    2 => context_graph_core::atc::Embedder::E2TemporalRecent,
-                    3 => context_graph_core::atc::Embedder::E3TemporalPeriodic,
-                    4 => context_graph_core::atc::Embedder::E4TemporalPositional,
-                    5 => context_graph_core::atc::Embedder::E5Causal,
-                    6 => context_graph_core::atc::Embedder::E6Sparse,
-                    7 => context_graph_core::atc::Embedder::E7Code,
-                    8 => context_graph_core::atc::Embedder::E8Graph,
-                    9 => context_graph_core::atc::Embedder::E9Hdc,
-                    10 => context_graph_core::atc::Embedder::E10Multimodal,
-                    11 => context_graph_core::atc::Embedder::E11Entity,
-                    12 => context_graph_core::atc::Embedder::E12LateInteraction,
-                    13 => context_graph_core::atc::Embedder::E13Splade,
-                    _ => context_graph_core::atc::Embedder::E1Semantic,
-                };
+                // Use canonical Embedder::from_index (0-based internally, but API uses 1-based for user-facing)
+                let embedder = context_graph_core::Embedder::from_index(emb_id - 1)
+                    .unwrap_or(context_graph_core::Embedder::Semantic);
 
                 let is_poorly_calibrated = poorly_calibrated.contains(&embedder);
 

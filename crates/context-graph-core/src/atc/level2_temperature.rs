@@ -14,49 +14,23 @@
 //! # Target
 //! L_calibration < 0.05
 
+use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
 
-/// Embedder identifier (E1-E13)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Embedder {
-    E1Semantic,
-    E2TemporalRecent,
-    E3TemporalPeriodic,
-    E4TemporalPositional,
-    E5Causal,
-    E6Sparse,
-    E7Code,
-    E8Graph,
-    E9Hdc,
-    E10Multimodal,
-    E11Entity,
-    E12LateInteraction,
-    E13Splade,
-}
+// Import canonical Embedder from teleological module
+use crate::teleological::Embedder;
 
-impl Embedder {
-    /// Get default (prior) temperature for this embedder
-    pub fn default_temperature(&self) -> f32 {
-        match self {
-            Embedder::E1Semantic => 1.0,
-            Embedder::E5Causal => 1.2,  // Overconfident
-            Embedder::E7Code => 0.9,    // Needs precision
-            Embedder::E9Hdc => 1.5,     // Noisy
-            Embedder::E13Splade => 1.1, // Sparse = variable
-            _ => 1.0,                    // Others at baseline
-        }
-    }
-
-    /// Get valid range for temperature
-    pub fn temperature_range(&self) -> (f32, f32) {
-        match self {
-            Embedder::E5Causal => (0.8, 2.5),
-            Embedder::E7Code => (0.5, 1.5),
-            Embedder::E9Hdc => (1.0, 3.0),
-            Embedder::E13Splade => (0.7, 2.0),
-            _ => (0.5, 2.0),
-        }
+/// Get valid temperature range for this embedder (ATC-specific).
+///
+/// This is separate from the Embedder enum because temperature ranges
+/// are specific to the ATC calibration system, not general embedder properties.
+pub fn embedder_temperature_range(embedder: Embedder) -> (f32, f32) {
+    match embedder {
+        Embedder::Causal => (0.8, 2.5),
+        Embedder::Code => (0.5, 1.5),
+        Embedder::Hdc => (1.0, 3.0),
+        Embedder::KeywordSplade => (0.7, 2.0),
+        _ => (0.5, 2.0),
     }
 }
 
@@ -123,7 +97,7 @@ impl TemperatureCalibration {
         }
 
         // Try a few temperature values and pick the best
-        let (min_t, max_t) = self.embedder.temperature_range();
+        let (min_t, max_t) = embedder_temperature_range(self.embedder);
         let mut best_temp = self.temperature;
         let mut best_loss = self.compute_brier_score();
 
@@ -202,24 +176,8 @@ pub struct TemperatureScaler {
 impl TemperatureScaler {
     /// Create new temperature scaler with all embedders
     pub fn new() -> Self {
-        let embedders = vec![
-            Embedder::E1Semantic,
-            Embedder::E2TemporalRecent,
-            Embedder::E3TemporalPeriodic,
-            Embedder::E4TemporalPositional,
-            Embedder::E5Causal,
-            Embedder::E6Sparse,
-            Embedder::E7Code,
-            Embedder::E8Graph,
-            Embedder::E9Hdc,
-            Embedder::E10Multimodal,
-            Embedder::E11Entity,
-            Embedder::E12LateInteraction,
-            Embedder::E13Splade,
-        ];
-
         let mut calibrations = HashMap::new();
-        for embedder in embedders {
+        for embedder in Embedder::all() {
             calibrations.insert(embedder, TemperatureCalibration::new(embedder));
         }
 
@@ -297,15 +255,15 @@ mod tests {
 
     #[test]
     fn test_temperature_defaults() {
-        assert_eq!(Embedder::E1Semantic.default_temperature(), 1.0);
-        assert_eq!(Embedder::E5Causal.default_temperature(), 1.2);
-        assert_eq!(Embedder::E7Code.default_temperature(), 0.9);
-        assert_eq!(Embedder::E9Hdc.default_temperature(), 1.5);
+        assert_eq!(Embedder::Semantic.default_temperature(), 1.0);
+        assert_eq!(Embedder::Causal.default_temperature(), 1.2);
+        assert_eq!(Embedder::Code.default_temperature(), 0.9);
+        assert_eq!(Embedder::Hdc.default_temperature(), 1.5);
     }
 
     #[test]
     fn test_calibration_sample() {
-        let mut cal = TemperatureCalibration::new(Embedder::E5Causal);
+        let mut cal = TemperatureCalibration::new(Embedder::Causal);
         assert_eq!(cal.temperature, 1.2);
 
         // Add perfectly calibrated samples
@@ -319,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_temperature_scaling() {
-        let mut cal = TemperatureCalibration::new(Embedder::E1Semantic);
+        let mut cal = TemperatureCalibration::new(Embedder::Semantic);
         cal.temperature = 1.0;
 
         // At temperature 1.0, confidence should stay the same (approximately)
@@ -332,12 +290,12 @@ mod tests {
         let mut scaler = TemperatureScaler::new();
 
         // Record some predictions
-        scaler.record(Embedder::E5Causal, 0.9, true);
-        scaler.record(Embedder::E5Causal, 0.85, true);
-        scaler.record(Embedder::E7Code, 0.7, true);
+        scaler.record(Embedder::Causal, 0.9, true);
+        scaler.record(Embedder::Causal, 0.85, true);
+        scaler.record(Embedder::Code, 0.7, true);
 
         // Scale a confidence value
-        let scaled = scaler.scale(Embedder::E5Causal, 0.8);
+        let scaled = scaler.scale(Embedder::Causal, 0.8);
         assert!(scaled >= 0.0 && scaled <= 1.0);
     }
 
@@ -346,5 +304,20 @@ mod tests {
         let scaler = TemperatureScaler::new();
         // Just created, should not need recalibration
         assert!(!scaler.should_recalibrate());
+    }
+
+    #[test]
+    fn test_embedder_temperature_range() {
+        let (min, max) = embedder_temperature_range(Embedder::Causal);
+        assert_eq!(min, 0.8);
+        assert_eq!(max, 2.5);
+
+        let (min, max) = embedder_temperature_range(Embedder::Code);
+        assert_eq!(min, 0.5);
+        assert_eq!(max, 1.5);
+
+        let (min, max) = embedder_temperature_range(Embedder::Semantic);
+        assert_eq!(min, 0.5);
+        assert_eq!(max, 2.0); // Default range
     }
 }
