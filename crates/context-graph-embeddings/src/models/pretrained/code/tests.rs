@@ -159,7 +159,6 @@ mod tests {
         let input = ModelInput::code("fn main() { println!(\"Hello\"); }", "rust").expect("Input");
         let embedding = model.embed(&input).await.expect("Embed should succeed");
         assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
-        assert_eq!(embedding.vector.len(), 768);
     }
 
     #[tokio::test]

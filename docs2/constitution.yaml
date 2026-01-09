@@ -163,7 +163,43 @@ teleological:
   purpose_vector: "PV = [A(E1,V), ..., A(E13,V)]  # 13D, searchable"
   thresholds: { optimal: "≥0.75", acceptable: "[0.70,0.75)", warning: "[0.55,0.70)", critical: "<0.55", failure_prediction: "ΔA<-0.15 predicts failure 30-60s" }
   transitivity: "If A(u,v)≥θ₁ and A(v,w)≥θ₂, then A(u,w)≥2θ₁θ₂-1"
-  goal_hierarchy: { V_global: "North Star", V_mid: "Retrieval/Storage/Reasoning", V_local: "Per-operation" }
+  goal_hierarchy: { V_global: "North Star (emergent from teleological arrays)", V_mid: "Retrieval/Storage/Reasoning", V_local: "Per-operation" }
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # CRITICAL: MANUAL NORTH STAR CREATION IS INVALID
+  # ═══════════════════════════════════════════════════════════════════════
+  # Manual North Star tools (set_north_star, get_north_star, update_north_star,
+  # delete_north_star, init_north_star_from_documents) have been REMOVED.
+  #
+  # WHY: Manual tools created single 1024D embeddings that CANNOT be meaningfully
+  # compared to 13-embedder teleological arrays. This is comparing apples to oranges.
+  #
+  # THE PROBLEM:
+  #   - A manual North Star is ONE vector (e.g., 1024D from text-embedding-3-large)
+  #   - Teleological fingerprints contain 13 DIFFERENT embeddings from 13 DIFFERENT models
+  #   - Each embedder (E1-E13) has different dimensions, semantics, and purposes
+  #   - Cosine similarity between E1's 1024D and a manual 1024D North Star is meaningless
+  #     when E7 (Code) is 1536D, E5 (Causal) is 768D, E9 (HDC) is binary, etc.
+  #
+  # THE SOLUTION (Autonomous System):
+  #   - North Star emerges AUTONOMOUSLY from analysis of stored teleological fingerprints
+  #   - The autonomous services (NORTH-008 to NORTH-020) work with full 13-embedder arrays
+  #   - Comparisons are ALWAYS apples-to-apples: same embedder to same embedder
+  #   - Purpose vectors (13D) aggregate per-embedder alignments coherently
+  #   - Drift detection, correction, and evolution operate on teleological space
+  #
+  # VALID COMPARISONS:
+  #   - TeleologicalFingerprint ↔ TeleologicalFingerprint (full 13-array)
+  #   - PurposeVector ↔ PurposeVector (13D alignment signatures)
+  #   - E_i embedding ↔ E_i embedding (same embedder only)
+  #   - Cross-correlations ↔ Cross-correlations (78D pair interactions)
+  #   - Group alignments ↔ Group alignments (6D hierarchical)
+  #
+  # INVALID COMPARISONS:
+  #   - Manual 1024D vector ↔ TeleologicalFingerprint (dimensionally incompatible)
+  #   - E1 (Semantic) ↔ E7 (Code) (different semantic spaces)
+  #   - Any single embedding ↔ Multi-embedding array (apples to oranges)
+
   embedder_purposes:
     E1: V_meaning, E2: V_freshness, E3: V_periodicity, E4: V_ordering, E5: V_causality
     E6: V_selectivity, E7: V_correctness, E8: V_connectivity, E9: V_robustness
@@ -296,15 +332,18 @@ mcp:
   marblestone_tools: [get_steering_feedback, omni_infer, verify_code_node]
   gwt_tools: [get_consciousness_state, get_workspace_status, get_kuramoto_sync, get_ego_state, trigger_workspace_broadcast, adjust_coupling, get_johari_classification, compute_delta_sc]
   adaptive_threshold_tools: [get_threshold_status, get_calibration_metrics, trigger_recalibration, set_threshold_prior, get_threshold_history, explain_threshold]
-  north_star_tools:
-    NORTH-008: [bootstrap_north_star, finalize_north_star, get_north_star_status]
-    NORTH-009: [get_learner_state, observe_outcome]
-    NORTH-010: [get_drift_status, get_drift_history]
-    NORTH-011: [trigger_drift_correction, preview_correction]
-    NORTH-012: [get_prune_candidates, execute_prune, get_prune_report]
-    NORTH-013: [get_consolidation_candidates, execute_consolidation]
+  # NOTE: Manual North Star tools REMOVED - see teleological section for explanation.
+  # The autonomous system works directly with 13-embedder teleological arrays.
+  autonomous_north_star_tools:
+    # NORTH-008: Bootstrap from teleological embeddings (NOT from manual vectors)
+    NORTH-008: [auto_bootstrap_north_star, get_autonomous_status]  # Discovers purpose from stored fingerprints
+    NORTH-009: [get_learner_state, observe_outcome]  # Threshold learning on teleological space
+    NORTH-010: [get_alignment_drift, get_drift_history]  # Drift in 13D purpose vector space
+    NORTH-011: [trigger_drift_correction, preview_correction]  # Corrects teleological alignment
+    NORTH-012: [get_pruning_candidates, execute_prune, get_prune_report]
+    NORTH-013: [trigger_consolidation, get_consolidation_candidates]
     NORTH-014: [analyze_gaps, get_gap_report]
-    NORTH-015: [discover_subgoals, propose_subgoal]
+    NORTH-015: [discover_sub_goals, propose_subgoal]  # Discovers goals from teleological clusters
     NORTH-016: [adjust_weights, preview_weight_change]
     NORTH-017: [get_obsolete_goals, mark_obsolete]
     NORTH-018: [get_schedule, trigger_scheduled_task]

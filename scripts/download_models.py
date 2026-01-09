@@ -19,13 +19,8 @@ MODELS = {
         "description": "E5-Large semantic embeddings (1024D)",
     },
     "code": {
-        "repo_id": "microsoft/codebert-base",
-        "description": "CodeBERT for code embeddings (768D)",
-    },
-    "code-alt": {
-        "repo_id": "Salesforce/codet5p-110m-embedding",
-        "description": "CodeT5+ embeddings (256D)",
-        "subdir": "code",
+        "repo_id": "Qodo/Qodo-Embed-1-1.5B",
+        "description": "Qodo-Embed Qwen2-based code embeddings (1536D)",
     },
     "multimodal": {
         "repo_id": "openai/clip-vit-large-patch14",

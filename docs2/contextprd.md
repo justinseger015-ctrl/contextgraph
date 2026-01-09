@@ -420,6 +420,41 @@ Transitions:
 
 **Similarity**: RRF(d) = Σᵢ 1/(k + rankᵢ(d)) — Reciprocal Rank Fusion across per-space results
 
+### 3.1 CRITICAL: Why Manual North Star Creation Is Invalid
+
+**Manual North Star tools have been REMOVED** because they created single 1024D embeddings that cannot be meaningfully compared to 13-embedder teleological arrays.
+
+**The Apples-to-Oranges Problem:**
+```
+Manual North Star:    ONE vector (1024D from text-embedding-3-large)
+Teleological Array:   13 DIFFERENT vectors from 13 DIFFERENT models
+                      - E1: 1024D semantic
+                      - E5: 768D causal (asymmetric!)
+                      - E7: 1536D code
+                      - E9: binary holographic
+                      - E13: ~30K sparse SPLADE
+```
+
+**Why cosine(manual_north_star, teleological_fingerprint) is meaningless:**
+1. **Dimensional incompatibility**: How do you compare 1024D to 768D? To binary? To sparse?
+2. **Semantic space mismatch**: E1 measures meaning, E5 measures causality, E7 measures code correctness
+3. **No coherent alignment**: A single vector cannot represent purpose across 13 different semantic spaces
+
+**The Correct Approach (Autonomous System):**
+| Instead of... | Do this... |
+|---------------|------------|
+| `set_north_star(description)` | Use `auto_bootstrap_north_star` to discover purpose from stored fingerprints |
+| Compare memory to manual vector | Compare `purpose_vector` to `purpose_vector` (13D ↔ 13D) |
+| Single alignment score | Use `theta_to_north_star` computed from 13D purpose vector aggregation |
+
+**Valid Comparisons (Apples-to-Apples):**
+- `TeleologicalFingerprint ↔ TeleologicalFingerprint` (full 13-array comparison)
+- `PurposeVector ↔ PurposeVector` (13D alignment signatures)
+- `E_i ↔ E_i` (same embedder only, e.g., E7 to E7)
+- `CrossCorrelations ↔ CrossCorrelations` (78D pair interactions)
+
+**The autonomous services (NORTH-008 to NORTH-020)** work entirely within teleological space, ensuring all comparisons are mathematically valid and semantically meaningful
+
 ---
 
 ## 4. DATA MODEL

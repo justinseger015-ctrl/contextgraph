@@ -3,7 +3,7 @@
 
 This script converts the following models that only have pytorch_model.bin:
 - sparse (naver/splade-cocondenser-ensembledistil)
-- code (Salesforce/codet5p-110m-embedding)
+- code (Qodo/Qodo-Embed-1-1.5B) - Qwen2-based code embeddings
 - causal (allenai/longformer-base-4096)
 
 Usage:

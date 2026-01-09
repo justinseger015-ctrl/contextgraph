@@ -546,185 +546,14 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
             }),
         ),
 
-        // ========== NORTH STAR TOOLS (TASK-NORTHSTAR-001) ==========
-
-        // set_north_star - Set the initial North Star goal
-        ToolDefinition::new(
-            "set_north_star",
-            "Set the North Star goal that defines the system's purpose. Required before storing memories. \
-             Generates a 1024D embedding from the description. Only one North Star allowed.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "description": {
-                        "type": "string",
-                        "description": "Human-readable description of the North Star goal (e.g., 'Build a bio-nervous knowledge graph with computational consciousness')"
-                    },
-                    "keywords": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Keywords for SPLADE matching (optional)"
-                    },
-                    "embedding": {
-                        "type": "array",
-                        "items": { "type": "number" },
-                        "description": "Optional 1024D embedding vector. If not provided, generated from description."
-                    }
-                },
-                "required": ["description"]
-            }),
-        ),
-
-        // get_north_star - Retrieve current North Star
-        ToolDefinition::new(
-            "get_north_star",
-            "Get the current North Star goal configuration, including description, embedding, and alignment stats. \
-             Returns exists=false if no North Star is configured.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "include_embedding": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Include the full 1024D embedding in response"
-                    },
-                    "include_stats": {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "Include alignment statistics"
-                    }
-                },
-                "required": []
-            }),
-        ),
-
-        // update_north_star - Update existing North Star
-        ToolDefinition::new(
-            "update_north_star",
-            "Update the existing North Star goal. Can update description, keywords, or embedding. \
-             Optionally recomputes alignment for all existing memories. Fails if no North Star exists.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "description": {
-                        "type": "string",
-                        "description": "New description (optional)"
-                    },
-                    "keywords": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "New keywords (optional)"
-                    },
-                    "embedding": {
-                        "type": "array",
-                        "items": { "type": "number" },
-                        "description": "New 1024D embedding (optional, regenerated from description if description changes)"
-                    },
-                    "recompute_alignments": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Recompute theta_to_north_star for all memories (expensive)"
-                    }
-                },
-                "required": []
-            }),
-        ),
-
-        // delete_north_star - Remove North Star (with safeguards)
-        ToolDefinition::new(
-            "delete_north_star",
-            "Delete the North Star goal. WARNING: This will break memory storage until a new North Star is set. \
-             Requires confirmation. Optionally deletes all child goals.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "confirm": {
-                        "type": "boolean",
-                        "description": "Must be true to confirm deletion"
-                    },
-                    "cascade": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Also delete all child goals (Strategic, Tactical, Immediate)"
-                    }
-                },
-                "required": ["confirm"]
-            }),
-        ),
-
-        // init_north_star_from_documents - Initialize from document chunks
-        ToolDefinition::new(
-            "init_north_star_from_documents",
-            "Initialize North Star by chunking documents, embedding all chunks, computing centroid, \
-             and setting that as the North Star embedding. Ideal for bootstrapping from project documentation.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "documents": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "content": { "type": "string" },
-                                "weight": { "type": "number", "default": 1.0 }
-                            },
-                            "required": ["content"]
-                        },
-                        "description": "Array of document contents to process"
-                    },
-                    "chunk_size": {
-                        "type": "integer",
-                        "default": 200,
-                        "minimum": 50,
-                        "maximum": 1000,
-                        "description": "Character size for chunks"
-                    },
-                    "chunk_overlap": {
-                        "type": "integer",
-                        "default": 50,
-                        "minimum": 0,
-                        "maximum": 200,
-                        "description": "Overlap between chunks"
-                    },
-                    "description": {
-                        "type": "string",
-                        "description": "Human-readable description for the North Star"
-                    },
-                    "store_chunks_as_memories": {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "Also store all chunks as memories after setting North Star"
-                    }
-                },
-                "required": ["documents", "description"]
-            }),
-        ),
-
-        // get_goal_hierarchy - Get full goal tree
-        ToolDefinition::new(
-            "get_goal_hierarchy",
-            "Get the complete goal hierarchy including North Star, Strategic, Tactical, and Immediate goals. \
-             Returns the full tree structure with alignment information.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "level": {
-                        "type": "string",
-                        "enum": ["all", "NorthStar", "Strategic", "Tactical", "Immediate"],
-                        "default": "all",
-                        "description": "Filter by goal level"
-                    },
-                    "include_embeddings": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Include embeddings in response (large)"
-                    }
-                },
-                "required": []
-            }),
-        ),
-
         // ========== TELEOLOGICAL TOOLS (13-EMBEDDER FUSION) ==========
+        //
+        // NOTE: Manual North Star tools (set_north_star, get_north_star, update_north_star,
+        // delete_north_star, init_north_star_from_documents, get_goal_hierarchy) have been
+        // REMOVED because they created single 1024D embeddings that cannot be meaningfully
+        // compared to 13-embedder teleological arrays. The autonomous system below works
+        // directly with teleological embeddings for apples-to-apples comparisons.
+        //
 
         // search_teleological - Cross-correlation search across all 13 embedders
         ToolDefinition::new(
@@ -1001,12 +830,13 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 
         // ========== AUTONOMOUS TOOLS (TASK-AUTONOMOUS-MCP) ==========
 
-        // auto_bootstrap_north_star - Initialize autonomous services from existing North Star
+        // auto_bootstrap_north_star - Initialize autonomous services from teleological embeddings
         ToolDefinition::new(
             "auto_bootstrap_north_star",
-            "Bootstrap the autonomous North Star system from an existing North Star goal. \
-             Initializes drift detection, pruning, consolidation, and sub-goal discovery services. \
-             Requires a North Star goal to be configured first via set_north_star.",
+            "Bootstrap the autonomous North Star system from existing teleological embeddings. \
+             Analyzes stored memories' 13-embedder teleological fingerprints to discover emergent \
+             purpose patterns and initialize drift detection, pruning, consolidation, and sub-goal \
+             discovery services. Works directly with teleological arrays for apples-to-apples comparisons.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1270,20 +1100,10 @@ pub mod tool_names {
     /// TASK-CAUSAL-001: Perform omni-directional causal inference
     pub const OMNI_INFER: &str = "omni_infer";
 
-    // ========== NORTH STAR TOOLS (TASK-NORTHSTAR-001) ==========
-
-    /// TASK-NORTHSTAR-001: Set the initial North Star goal
-    pub const SET_NORTH_STAR: &str = "set_north_star";
-    /// TASK-NORTHSTAR-001: Get current North Star configuration
-    pub const GET_NORTH_STAR: &str = "get_north_star";
-    /// TASK-NORTHSTAR-001: Update existing North Star
-    pub const UPDATE_NORTH_STAR: &str = "update_north_star";
-    /// TASK-NORTHSTAR-001: Delete North Star (requires confirmation)
-    pub const DELETE_NORTH_STAR: &str = "delete_north_star";
-    /// TASK-NORTHSTAR-001: Initialize North Star from document chunks with centroid
-    pub const INIT_NORTH_STAR_FROM_DOCUMENTS: &str = "init_north_star_from_documents";
-    /// TASK-NORTHSTAR-001: Get full goal hierarchy tree
-    pub const GET_GOAL_HIERARCHY: &str = "get_goal_hierarchy";
+    // NOTE: Manual North Star tools (SET_NORTH_STAR, GET_NORTH_STAR, UPDATE_NORTH_STAR,
+    // DELETE_NORTH_STAR, INIT_NORTH_STAR_FROM_DOCUMENTS, GET_GOAL_HIERARCHY) have been REMOVED.
+    // They created single 1024D embeddings incompatible with 13-embedder teleological arrays.
+    // Use the autonomous system tools which work with proper teleological embeddings.
 
     // ========== TELEOLOGICAL TOOLS (TELEO-007 through TELEO-011) ==========
 
@@ -1323,8 +1143,9 @@ mod tests {
     #[test]
     fn test_get_tool_definitions() {
         let tools = get_tool_definitions();
-        // 6 original + 6 GWT tools + 3 ATC tools + 4 Dream tools + 2 Neuromod tools + 1 Steering + 1 Causal + 6 North Star + 5 Teleological + 7 Autonomous = 41 total
-        assert_eq!(tools.len(), 41);
+        // 6 original + 6 GWT tools + 3 ATC tools + 4 Dream tools + 2 Neuromod tools + 1 Steering + 1 Causal + 5 Teleological + 7 Autonomous = 35 total
+        // NOTE: 6 manual North Star tools REMOVED (created single 1024D embeddings incompatible with 13-embedder teleological arrays)
+        assert_eq!(tools.len(), 35);
 
         let tool_names: Vec<_> = tools.iter().map(|t| t.name.as_str()).collect();
         // Original 6 tools
@@ -1357,13 +1178,8 @@ mod tests {
         assert!(tool_names.contains(&"get_steering_feedback"));
         // Causal tools (TASK-CAUSAL-001)
         assert!(tool_names.contains(&"omni_infer"));
-        // North Star tools (TASK-NORTHSTAR-001)
-        assert!(tool_names.contains(&"set_north_star"));
-        assert!(tool_names.contains(&"get_north_star"));
-        assert!(tool_names.contains(&"update_north_star"));
-        assert!(tool_names.contains(&"delete_north_star"));
-        assert!(tool_names.contains(&"init_north_star_from_documents"));
-        assert!(tool_names.contains(&"get_goal_hierarchy"));
+        // NOTE: Manual North Star tools REMOVED - they created single 1024D embeddings
+        // incompatible with 13-embedder teleological arrays. Use autonomous system instead.
         // Teleological tools (TELEO-007 through TELEO-011)
         assert!(tool_names.contains(&"search_teleological"));
         assert!(tool_names.contains(&"compute_teleological_vector"));

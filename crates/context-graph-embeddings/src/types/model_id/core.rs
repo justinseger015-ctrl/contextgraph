@@ -124,6 +124,7 @@ impl ModelId {
     /// Returns the maximum input token count for this model.
     ///
     /// # Returns
+    /// - Code (Qodo-Embed): 32768 tokens (Qwen2's extended context)
     /// - Causal (Longformer): 4096 tokens
     /// - CLIP (Multimodal): 77 tokens
     /// - Most others: 512 tokens
@@ -131,6 +132,7 @@ impl ModelId {
     #[must_use]
     pub const fn max_tokens(&self) -> usize {
         match self {
+            Self::Code => 32768,    // Qodo-Embed-1-1.5B (Qwen2) supports 32K context
             Self::Causal => 4096,   // Longformer's extended context
             Self::Multimodal => 77, // CLIP text encoder limit
             Self::TemporalRecent

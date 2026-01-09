@@ -23,7 +23,7 @@ use context_graph_core::purpose::{DefaultPurposeComputer, PurposeComputeConfig, 
 use context_graph_core::traits::TeleologicalSearchOptions;
 use context_graph_core::types::UtlContext;
 use context_graph_core::types::fingerprint::{
-    JohariFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS,
+    JohariFingerprint, PurposeVector, TeleologicalFingerprint, NUM_EMBEDDERS,
 };
 
 use crate::middleware::CognitivePulse;
@@ -127,15 +127,11 @@ impl Handlers {
             tool_names::OMNI_INFER => {
                 self.call_omni_infer(id, arguments).await
             }
-            // TASK-NORTHSTAR-001: North Star goal management tools
-            tool_names::SET_NORTH_STAR => self.call_set_north_star(id, arguments).await,
-            tool_names::GET_NORTH_STAR => self.call_get_north_star(id, arguments).await,
-            tool_names::UPDATE_NORTH_STAR => self.call_update_north_star(id, arguments).await,
-            tool_names::DELETE_NORTH_STAR => self.call_delete_north_star(id, arguments).await,
-            tool_names::INIT_NORTH_STAR_FROM_DOCUMENTS => {
-                self.call_init_north_star_from_documents(id, arguments).await
-            }
-            tool_names::GET_GOAL_HIERARCHY => self.call_get_goal_hierarchy(id, arguments).await,
+            // NOTE: Manual North Star tools REMOVED (set_north_star, get_north_star,
+            // update_north_star, delete_north_star, init_north_star_from_documents,
+            // get_goal_hierarchy) - they created single 1024D embeddings that cannot
+            // be meaningfully compared to 13-embedder teleological arrays.
+            // Use the autonomous system below which works with proper teleological embeddings.
             // TELEO-H1 to TELEO-H5: Teleological tools
             tool_names::SEARCH_TELEOLOGICAL => {
                 self.call_search_teleological(id, arguments).await
@@ -353,54 +349,59 @@ impl Handlers {
         hasher.update(content.as_bytes());
         let content_hash: [u8; 32] = hasher.finalize().into();
 
-        // AP-007: Compute purpose vector from semantic fingerprint and goal hierarchy
-        // Purpose vectors MUST be computed at storage time, not deferred (NO DEFAULT)
-        // From constitution.yaml: PV = [A(E1,V), A(E2,V), ..., A(E13,V)]
+        // AUTONOMOUS OPERATION: Compute purpose vector if North Star exists,
+        // otherwise use default (neutral) alignment.
+        //
+        // From contextprd.md: "The array [of 13 embeddings] IS the teleological vector"
+        // Purpose alignment is SECONDARY metadata - the 13-embedding fingerprint is primary.
+        // This allows autonomous operation without manual North Star configuration.
+        //
+        // When North Star exists: PV = [A(E1,V), A(E2,V), ..., A(E13,V)]
         // where A(Ei, V) = cos(θ) between embedder i and North Star goal V
+        //
+        // When no North Star: PV = [0.0; 13] (neutral alignment)
+        // Memories can be stored immediately; purpose can be recomputed later.
         let purpose_vector = {
             let hierarchy = self.goal_hierarchy.read().clone();
 
-            // If no North Star goal is defined, FAIL FAST (AP-007)
+            // If no North Star goal is defined, use default purpose vector
+            // This enables AUTONOMOUS operation - no manual configuration required
             if hierarchy.north_star().is_none() {
-                error!(
-                    "inject_context: Goal hierarchy missing North Star goal. \
-                     Cannot compute purpose vector. \
-                     CONFIGURATION ERROR: Use purpose/north_star_update to configure goal hierarchy."
+                debug!(
+                    "inject_context: No North Star configured. Using default purpose vector. \
+                     Memory will be stored with neutral alignment (can be recomputed later)."
                 );
-                return self.tool_error_with_pulse(
-                    id,
-                    "Goal hierarchy not configured. Cannot compute purpose vector. \
-                     Use purpose/north_star_update endpoint to set North Star goal.",
-                );
-            }
+                PurposeVector::default()
+            } else {
+                // Compute purpose vector using DefaultPurposeComputer
+                // This computes alignment for each of 13 embedding spaces
+                let config = PurposeComputeConfig::with_hierarchy(hierarchy);
 
-            // Compute purpose vector using DefaultPurposeComputer
-            // This computes alignment for each of 13 embedding spaces
-            let config = PurposeComputeConfig::with_hierarchy(hierarchy);
-
-            match DefaultPurposeComputer::new()
-                .compute_purpose(&embedding_output.fingerprint, &config)
-                .await
-            {
-                Ok(pv) => {
-                    debug!(
-                        aggregate_alignment = pv.aggregate_alignment(),
-                        dominant_embedder = pv.dominant_embedder,
-                        coherence = pv.coherence,
-                        "inject_context: Purpose vector computed for semantic fingerprint"
-                    );
-                    pv
-                }
-                Err(e) => {
-                    error!(
-                        error = %e,
-                        "inject_context: Failed to compute purpose vector. \
-                         Cannot store memory without alignment metadata."
-                    );
-                    return self.tool_error_with_pulse(
-                        id,
-                        &format!("Purpose vector computation failed: {}", e),
-                    );
+                match DefaultPurposeComputer::new()
+                    .compute_purpose(&embedding_output.fingerprint, &config)
+                    .await
+                {
+                    Ok(pv) => {
+                        debug!(
+                            aggregate_alignment = pv.aggregate_alignment(),
+                            dominant_embedder = pv.dominant_embedder,
+                            coherence = pv.coherence,
+                            "inject_context: Purpose vector computed for semantic fingerprint"
+                        );
+                        pv
+                    }
+                    Err(e) => {
+                        // If North Star exists but computation fails, THAT is an error
+                        error!(
+                            error = %e,
+                            "inject_context: Failed to compute purpose vector. \
+                             Cannot store memory without alignment metadata."
+                        );
+                        return self.tool_error_with_pulse(
+                            id,
+                            &format!("Purpose vector computation failed: {}", e),
+                        );
+                    }
                 }
             }
         };

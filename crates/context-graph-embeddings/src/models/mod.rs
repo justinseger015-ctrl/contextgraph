@@ -61,7 +61,7 @@ pub use memory_tracker::MemoryTracker;
 pub use pretrained::{
     // CausalModel (E5) - Longformer
     CausalModel,
-    // CodeModel (E7) - CodeBERT / CodeT5+
+    // CodeModel (E7) - Qodo-Embed-1-1.5B (Qwen2-based)
     CodeModel,
     // EntityModel (E11) - MiniLM entity
     EntityModel,

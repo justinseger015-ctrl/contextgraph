@@ -6,7 +6,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::error::EmbeddingError;
-    use crate::models::pretrained::code::CodeModel;
+    use crate::models::pretrained::code::{CodeModel, CODE_PROJECTED_DIMENSION};
     use crate::traits::{EmbeddingModel, SingleModelConfig};
     use crate::types::{ModelId, ModelInput};
     use once_cell::sync::OnceCell;
@@ -68,10 +68,10 @@ mod tests {
 
         println!("AFTER: result = {:?}", result.is_ok());
 
-        // Whitespace input should still produce valid 768D embedding
+        // Whitespace input should still produce valid embedding
         assert!(result.is_ok(), "Whitespace input should not error");
         let embedding = result.unwrap();
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
         println!("AFTER: vector.len() = {}", embedding.vector.len());
     }
 
@@ -91,10 +91,10 @@ mod tests {
 
         println!("AFTER: result = {:?}", result.is_ok());
 
-        // Must handle long input (real model would truncate at 512)
+        // Must handle long input (real model would truncate)
         assert!(result.is_ok());
         let embedding = result.unwrap();
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
         println!("AFTER: vector.len() = {}", embedding.vector.len());
     }
 
@@ -141,7 +141,7 @@ mod tests {
 
         assert!(result.is_ok(), "Special characters should be handled");
         let embedding = result.unwrap();
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
 
         // Verify no NaN or Inf
         let has_invalid = embedding
@@ -184,7 +184,7 @@ mod tests {
 
         // VERIFY
         assert_eq!(embedding.model_id, ModelId::Code);
-        assert_eq!(embedding.vector.len(), 768); // Projected dimension
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION); // Qwen2 1536D
         assert!((norm - 1.0).abs() < 0.001);
         assert!(!has_nan && !has_inf);
     }
@@ -270,7 +270,7 @@ mod tests {
         let text_emb = model.embed(&text_input).await.unwrap();
         println!(
             "   text input produces embedding = {}",
-            text_emb.vector.len() == 768
+            text_emb.vector.len() == CODE_PROJECTED_DIMENSION
         );
 
         println!("\n========================================");
@@ -290,7 +290,7 @@ mod tests {
             budget_ms,
             latencies
         );
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
         assert!((norm - 1.0).abs() < 0.001);
         assert!(is_deterministic, "Same input must be deterministic");
         assert!(vectors_differ, "Different inputs must differ");

@@ -69,21 +69,37 @@ impl McpServer {
         let db_path = Self::resolve_storage_path(&config);
         info!("Opening RocksDbTeleologicalStore at {:?}...", db_path);
 
-        let teleological_store: Arc<dyn TeleologicalMemoryStore> = Arc::new(
-            RocksDbTeleologicalStore::open(&db_path).map_err(|e| {
-                error!("FATAL: Failed to open RocksDB at {:?}: {}", db_path, e);
-                anyhow::anyhow!(
-                    "Failed to open RocksDbTeleologicalStore at {:?}: {}. \
-                     Check path exists, permissions, and RocksDB isn't locked by another process.",
-                    db_path,
-                    e
-                )
-            })?,
-        );
+        let rocksdb_store = RocksDbTeleologicalStore::open(&db_path).map_err(|e| {
+            error!("FATAL: Failed to open RocksDB at {:?}: {}", db_path, e);
+            anyhow::anyhow!(
+                "Failed to open RocksDbTeleologicalStore at {:?}: {}. \
+                 Check path exists, permissions, and RocksDB isn't locked by another process.",
+                db_path,
+                e
+            )
+        })?;
         info!(
             "Created RocksDbTeleologicalStore at {:?} (17 column families, persistent storage)",
             db_path
         );
+
+        // CRITICAL: Initialize HNSW indexes BEFORE wrapping in Arc<dyn>
+        // Without this, store operations fail with "Index for E1Semantic not initialized"
+        // This was a production bug - tests called initialize_hnsw() but server didn't!
+        rocksdb_store
+            .initialize_hnsw()
+            .await
+            .map_err(|e| {
+                error!("FATAL: Failed to initialize HNSW indexes: {}", e);
+                anyhow::anyhow!(
+                    "Failed to initialize HNSW indexes: {}. \
+                     This is required for search operations to work.",
+                    e
+                )
+            })?;
+        info!("Initialized HNSW indexes for all 13 embedders");
+
+        let teleological_store: Arc<dyn TeleologicalMemoryStore> = Arc::new(rocksdb_store);
 
         // ==========================================================================
         // 2. Create REAL UTL processor (6-component computation)

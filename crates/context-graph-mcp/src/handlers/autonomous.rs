@@ -263,7 +263,7 @@ impl Handlers {
                     return JsonRpcResponse::error(
                         id,
                         autonomous_error_codes::NO_NORTH_STAR_FOR_AUTONOMOUS,
-                        "No North Star goal configured. Use set_north_star first before bootstrapping autonomous system.",
+                        "No North Star goal detected. The autonomous system discovers purpose from stored teleological fingerprints. Store some memories first, then bootstrap will discover emergent purpose patterns.",
                     );
                 }
             }
@@ -967,8 +967,8 @@ impl Handlers {
         if !north_star_configured {
             recommendations.push(json!({
                 "priority": "critical",
-                "action": "set_north_star",
-                "description": "Configure a North Star goal to enable autonomous operations"
+                "action": "store_memory",
+                "description": "Store memories with teleological fingerprints first, then use auto_bootstrap_north_star to discover emergent purpose patterns from the stored fingerprints."
             }));
         } else {
             match severity {

@@ -619,17 +619,18 @@ async fn test_edge_case_purpose_query_12_elements() {
 }
 
 // =============================================================================
-// EDGE CASE 2: North Star Alignment Without North Star
+// EDGE CASE 2: Autonomous Operation Without North Star
 // =============================================================================
 
-/// EDGE CASE: Store operation without North Star should fail (AP-007 fail-fast).
+/// EDGE CASE: Store operation works autonomously without North Star.
 ///
-/// Per AP-007, the memory/store handler requires North Star to compute purpose alignment.
-/// Without North Star, the system MUST fail fast with a clear error message.
+/// AUTONOMOUS OPERATION: Per contextprd.md, the 13-embedding array IS the
+/// teleological vector. Memory storage uses default purpose vector [0.0; 13]
+/// when no North Star is configured, enabling autonomous operation.
 #[tokio::test]
-async fn test_edge_case_alignment_no_north_star() {
+async fn test_edge_case_autonomous_operation_no_north_star() {
     println!("\n======================================================================");
-    println!("EDGE CASE 2: Store & Alignment Without North Star (AP-007 Fail-Fast)");
+    println!("EDGE CASE 2: Autonomous Operation Without North Star");
     println!("======================================================================\n");
 
     let (handlers, _store, hierarchy) = create_verifiable_handlers_no_north_star();
@@ -639,30 +640,27 @@ async fn test_edge_case_alignment_no_north_star() {
     println!("   Has North Star: {}", hierarchy.read().has_north_star());
     assert!(!hierarchy.read().has_north_star(), "Must NOT have North Star");
 
-    // Try to store a fingerprint - should fail without North Star (AP-007)
-    println!("\n📝 ATTEMPTING: memory/store (should fail without North Star)");
+    // Store fingerprint - should SUCCEED without North Star (AUTONOMOUS OPERATION)
+    println!("\n📝 ATTEMPTING: memory/store (should succeed - autonomous operation)");
     let store_params = json!({
-        "content": "Test content for alignment",
+        "content": "Test content for autonomous alignment",
         "importance": 0.8
     });
     let store_request = make_request("memory/store", Some(JsonRpcId::Number(1)), Some(store_params));
     let store_response = handlers.dispatch(store_request).await;
 
-    // Verify store fails with NORTH_STAR_NOT_CONFIGURED error
+    // Verify store succeeds with default purpose vector
     assert!(
-        store_response.error.is_some(),
-        "Store MUST fail without North Star (AP-007 fail-fast)"
+        store_response.error.is_none(),
+        "Store MUST succeed without North Star (AUTONOMOUS OPERATION). Error: {:?}",
+        store_response.error
     );
-    let error = store_response.error.unwrap();
-    println!("   Error code: {} (expected: -32021)", error.code);
-    println!("   Error message: {}", error.message);
-    assert_eq!(
-        error.code, -32021,
-        "Must return NORTH_STAR_NOT_CONFIGURED (-32021)"
-    );
+    let result = store_response.result.expect("Should have result");
+    let fingerprint_id = result.get("fingerprintId").expect("Must have fingerprintId");
+    println!("   SUCCESS: fingerprintId={}", fingerprint_id);
 
-    // Also verify alignment endpoint fails the same way
-    println!("\n📝 ATTEMPTING: purpose/north_star_alignment (should also fail)");
+    // Alignment with non-existent fingerprint fails because it doesn't exist
+    println!("\n📝 ATTEMPTING: purpose/north_star_alignment (with non-existent fingerprint)");
     let align_params = json!({
         "fingerprint_id": "00000000-0000-0000-0000-000000000001"
     });
@@ -673,13 +671,18 @@ async fn test_edge_case_alignment_no_north_star() {
     );
     let response = handlers.dispatch(align_request).await;
 
-    // Verify alignment error
-    assert!(response.error.is_some(), "Alignment must fail without North Star");
+    // Should fail because fingerprint doesn't exist, NOT because North Star is missing
+    assert!(response.error.is_some(), "Alignment with non-existent fingerprint should fail");
     let align_error = response.error.unwrap();
     println!("   Error code: {}", align_error.code);
     println!("   Error message: {}", align_error.message);
+    // Should NOT be NORTH_STAR_NOT_CONFIGURED
+    assert_ne!(
+        align_error.code, -32021,
+        "Should NOT return NORTH_STAR_NOT_CONFIGURED - autonomous operation"
+    );
 
-    println!("\n✓ VERIFIED: System correctly rejects operations without North Star (AP-007)\n");
+    println!("\n✓ VERIFIED: System operates autonomously without North Star\n");
 }
 
 // =============================================================================

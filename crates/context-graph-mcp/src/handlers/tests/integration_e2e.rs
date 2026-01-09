@@ -1368,14 +1368,16 @@ async fn test_edge_case_space_index_13() {
     println!("✓ VERIFIED: space_index=13 rejected\n");
 }
 
-/// EDGE CASE 5: Store & Alignment without North Star should fail (AP-007).
+/// EDGE CASE 5: Store & Alignment work autonomously without North Star.
 ///
-/// Per AP-007, the system MUST fail fast when North Star is not configured.
-/// Both memory/store and purpose/north_star_alignment require North Star.
+/// AUTONOMOUS OPERATION: Per contextprd.md, the 13-embedding array IS the
+/// teleological vector. Memory storage uses default purpose vector [0.0; 13]
+/// when no North Star is configured. Alignment with non-existent fingerprint
+/// fails because fingerprint doesn't exist, not because North Star is missing.
 #[tokio::test]
-async fn test_edge_case_alignment_no_north_star() {
+async fn test_edge_case_alignment_autonomous_operation() {
     println!("\n======================================================================");
-    println!("EDGE CASE 5: Store & Alignment Without North Star (AP-007 Fail-Fast)");
+    println!("EDGE CASE 5: Autonomous Operation Without North Star");
     println!("======================================================================\n");
 
     let ctx = TestContext::new_without_north_star();
@@ -1384,35 +1386,42 @@ async fn test_edge_case_alignment_no_north_star() {
     assert!(!ctx.hierarchy.read().has_north_star(), "MUST NOT have North Star");
     println!("BEFORE: has_north_star = false");
 
-    // Try to store a fingerprint - should fail without North Star (AP-007)
-    println!("\nATTEMPTING: memory/store (should fail without North Star)");
+    // Store fingerprint - should SUCCEED without North Star (AUTONOMOUS OPERATION)
+    println!("\nATTEMPTING: memory/store (should succeed - autonomous operation)");
     let store_request = make_request("memory/store", 1, json!({
-        "content": "Test content",
+        "content": "Test content for autonomous operation",
         "importance": 0.5
     }));
     let store_response = ctx.handlers.dispatch(store_request).await;
 
-    // Verify store fails with NORTH_STAR_NOT_CONFIGURED
+    // Verify store succeeds with default purpose vector
     assert!(
-        store_response.error.is_some(),
-        "Store MUST fail without North Star (AP-007 fail-fast)"
+        store_response.error.is_none(),
+        "Store MUST succeed without North Star (AUTONOMOUS OPERATION). Error: {:?}",
+        store_response.error
     );
-    let store_error = store_response.error.unwrap();
-    println!("Store ERROR: code={}, message={}", store_error.code, store_error.message);
-    assert_eq!(store_error.code, error_codes::NORTH_STAR_NOT_CONFIGURED);
+    let result = store_response.result.expect("Should have result");
+    let fingerprint_id = result.get("fingerprintId").expect("Must have fingerprintId");
+    println!("Store SUCCESS: fingerprintId={}", fingerprint_id);
 
-    // Also try alignment with fake fingerprint - should also fail
-    println!("\nATTEMPTING: purpose/north_star_alignment (should also fail)");
+    // Alignment with non-existent fingerprint - fails because it doesn't exist
+    println!("\nATTEMPTING: purpose/north_star_alignment (with non-existent fingerprint)");
     let align_request = make_request("purpose/north_star_alignment", 2, json!({
         "fingerprint_id": "00000000-0000-0000-0000-000000000001"
     }));
     let response = ctx.handlers.dispatch(align_request).await;
 
-    assert!(response.error.is_some(), "Alignment without NS MUST fail");
+    // Should fail because fingerprint doesn't exist, NOT because North Star is missing
+    assert!(response.error.is_some(), "Alignment with non-existent fingerprint should fail");
     let error = response.error.unwrap();
     println!("Align ERROR: code={}, message={}", error.code, error.message);
+    // Should NOT be NORTH_STAR_NOT_CONFIGURED
+    assert_ne!(
+        error.code, error_codes::NORTH_STAR_NOT_CONFIGURED,
+        "Should NOT return NORTH_STAR_NOT_CONFIGURED - autonomous operation"
+    );
 
-    println!("✓ VERIFIED: System correctly rejects operations without North Star (AP-007)\n");
+    println!("✓ VERIFIED: System operates autonomously without North Star\n");
 }
 
 /// EDGE CASE 6: Fingerprint not found.

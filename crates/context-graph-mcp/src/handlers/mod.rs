@@ -31,7 +31,9 @@ mod johari;
 mod lifecycle;
 mod memory;
 mod neuromod;
-mod north_star;
+// NOTE: mod north_star REMOVED - Manual North Star tools created single 1024D embeddings
+// that cannot be meaningfully compared to 13-embedder teleological arrays.
+// Use purpose/ endpoints which work with the autonomous teleological system.
 mod purpose;
 mod search;
 mod steering;

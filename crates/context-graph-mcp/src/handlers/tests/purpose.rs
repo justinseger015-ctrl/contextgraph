@@ -367,34 +367,35 @@ async fn test_north_star_alignment_not_found_fails() {
     );
 }
 
-/// Test purpose/north_star_alignment fails without North Star configured.
+/// Test autonomous operation: store succeeds without North Star, alignment needs fingerprint.
 ///
-/// Per AP-007, both store and alignment require North Star to be configured.
-/// This test verifies both operations correctly fail fast.
+/// AUTONOMOUS OPERATION: Per contextprd.md, memory storage works without North Star
+/// by using a default purpose vector [0.0; 13]. The 13-embedding array IS the
+/// teleological vector - purpose alignment is secondary metadata.
+///
+/// Alignment operations still require the stored fingerprint to exist.
 #[tokio::test]
-async fn test_north_star_alignment_no_north_star_fails() {
+async fn test_north_star_alignment_autonomous_operation() {
     let handlers = create_test_handlers_no_north_star();
 
-    // Try to store content - should fail without North Star (AP-007)
+    // Store content - should SUCCEED without North Star (AUTONOMOUS OPERATION)
     let store_params = json!({
-        "content": "Test content",
+        "content": "Test content for autonomous operation",
         "importance": 0.8
     });
     let store_request = make_request("memory/store", Some(JsonRpcId::Number(1)), Some(store_params));
     let store_response = handlers.dispatch(store_request).await;
 
-    // Store should fail with NORTH_STAR_NOT_CONFIGURED
+    // Store should succeed with default purpose vector
     assert!(
-        store_response.error.is_some(),
-        "memory/store must fail without North Star configured (AP-007)"
+        store_response.error.is_none(),
+        "memory/store must succeed without North Star (AUTONOMOUS OPERATION). Error: {:?}",
+        store_response.error
     );
-    let store_error = store_response.error.unwrap();
-    assert_eq!(
-        store_error.code, -32021,
-        "Store should return NORTH_STAR_NOT_CONFIGURED error code"
-    );
+    let result = store_response.result.expect("Should have result");
+    assert!(result.get("fingerprintId").is_some(), "Must return fingerprintId");
 
-    // Also verify alignment fails with fake fingerprint
+    // Alignment with non-existent fingerprint should fail with NOT_FOUND (not missing config)
     let align_params = json!({
         "fingerprint_id": "00000000-0000-0000-0000-000000000001"
     });
@@ -405,9 +406,10 @@ async fn test_north_star_alignment_no_north_star_fails() {
     );
     let response = handlers.dispatch(align_request).await;
 
+    // Should fail because fingerprint doesn't exist, not because North Star is missing
     assert!(
         response.error.is_some(),
-        "purpose/north_star_alignment must fail without North Star configured"
+        "purpose/north_star_alignment must fail with non-existent fingerprint"
     );
 }
 
@@ -899,53 +901,43 @@ async fn test_drift_check_empty_ids_fails() {
     assert_eq!(error.code, -32602, "Should return INVALID_PARAMS error code");
 }
 
-/// Test purpose/drift_check fails without North Star configured.
+/// Test autonomous operation: store succeeds without North Star.
 ///
-/// Per AP-007, both store and drift_check require North Star to be configured.
-/// This test verifies both operations correctly fail fast.
+/// AUTONOMOUS OPERATION: Per contextprd.md, memory storage works without North Star
+/// by using a default purpose vector [0.0; 13]. The 13-embedding array IS the
+/// teleological vector - purpose alignment is secondary metadata.
+///
+/// Note: drift_check inherently requires a North Star (to compare alignment drift),
+/// so this test focuses on verifying that store works autonomously. Drift detection
+/// becomes meaningful only after a North Star is established.
 #[tokio::test]
-async fn test_drift_check_no_north_star_fails() {
+async fn test_store_autonomous_operation_for_drift() {
     let handlers = create_test_handlers_no_north_star();
 
-    // Try to store content - should fail without North Star (AP-007)
+    // Store content - should SUCCEED without North Star (AUTONOMOUS OPERATION)
     let store_params = json!({
-        "content": "Test content",
+        "content": "Test content for autonomous drift check",
         "importance": 0.8
     });
     let store_request = make_request("memory/store", Some(JsonRpcId::Number(1)), Some(store_params));
     let store_response = handlers.dispatch(store_request).await;
 
-    // Store should fail with NORTH_STAR_NOT_CONFIGURED
+    // Store should succeed with default purpose vector
     assert!(
-        store_response.error.is_some(),
-        "memory/store must fail without North Star configured (AP-007)"
+        store_response.error.is_none(),
+        "memory/store must succeed without North Star (AUTONOMOUS OPERATION). Error: {:?}",
+        store_response.error
     );
-    let store_error = store_response.error.unwrap();
-    assert_eq!(
-        store_error.code, -32021,
-        "Store should return NORTH_STAR_NOT_CONFIGURED error code"
+    let result = store_response.result.expect("Should have result");
+    let fingerprint_id = result.get("fingerprintId").expect("Must return fingerprintId");
+
+    // Verify the response contains expected fields demonstrating autonomous storage
+    assert!(
+        result.get("embeddingLatencyMs").is_some(),
+        "Must include embedding latency"
     );
 
-    // Also verify drift_check fails with fake fingerprint
-    let drift_params = json!({
-        "fingerprint_ids": ["00000000-0000-0000-0000-000000000001"]
-    });
-    let drift_request = make_request(
-        "purpose/drift_check",
-        Some(JsonRpcId::Number(2)),
-        Some(drift_params),
-    );
-    let response = handlers.dispatch(drift_request).await;
-
-    assert!(
-        response.error.is_some(),
-        "purpose/drift_check must fail without North Star configured"
-    );
-    let error = response.error.unwrap();
-    assert_eq!(
-        error.code, -32021,
-        "Should return NORTH_STAR_NOT_CONFIGURED error code"
-    );
+    println!("Successfully stored fingerprint {} autonomously (no North Star)", fingerprint_id);
 }
 
 /// Test purpose/drift_check handles not-found fingerprints gracefully.

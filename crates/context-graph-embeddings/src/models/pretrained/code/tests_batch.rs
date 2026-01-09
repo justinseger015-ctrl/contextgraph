@@ -6,7 +6,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::error::EmbeddingError;
-    use crate::models::pretrained::code::CodeModel;
+    use crate::models::pretrained::code::{CodeModel, CODE_PROJECTED_DIMENSION};
     use crate::traits::{EmbeddingModel, SingleModelConfig};
     use crate::types::{ModelId, ModelInput};
     use once_cell::sync::OnceCell;
@@ -58,7 +58,7 @@ mod tests {
         )
         .expect("Input");
         let embedding = model.embed(&input).await.expect("Embed");
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
     }
 
     #[tokio::test]
@@ -70,7 +70,7 @@ mod tests {
         )
         .expect("Input");
         let embedding = model.embed(&input).await.expect("Embed");
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
     }
 
     #[tokio::test]
@@ -82,7 +82,7 @@ mod tests {
         )
         .expect("Input");
         let embedding = model.embed(&input).await.expect("Embed");
-        assert_eq!(embedding.vector.len(), 768);
+        assert_eq!(embedding.vector.len(), CODE_PROJECTED_DIMENSION);
     }
 
     #[tokio::test]
@@ -161,7 +161,7 @@ mod tests {
         let embeddings = model.embed_batch(&inputs).await.expect("Batch embed");
         assert_eq!(embeddings.len(), 3);
         for emb in &embeddings {
-            assert_eq!(emb.vector.len(), 768);
+            assert_eq!(emb.vector.len(), CODE_PROJECTED_DIMENSION);
             assert_eq!(emb.model_id, ModelId::Code);
         }
     }
@@ -185,7 +185,7 @@ mod tests {
         let embeddings = model.embed_batch(&inputs).await.expect("Batch embed");
         assert_eq!(embeddings.len(), 3);
         for emb in &embeddings {
-            assert_eq!(emb.vector.len(), 768);
+            assert_eq!(emb.vector.len(), CODE_PROJECTED_DIMENSION);
         }
     }
 }
