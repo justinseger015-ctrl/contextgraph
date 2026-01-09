@@ -762,7 +762,8 @@ mod tests {
         let eval = detector.evaluate(&goal_id, &zero_metrics);
         // Should detect child alignment dropping (0.0 is below threshold)
         // but no inactivity since last_activity is now
-        assert!(eval.is_obsolete || !eval.is_obsolete); // Valid either way
+        // Verify the evaluation completed and has valid structure
+        assert!(!eval.reasons.is_empty() || !eval.is_obsolete, "Evaluation should either have reasons or be non-obsolete");
         println!("[PASS] test_detector_handles_edge_cases");
     }
 

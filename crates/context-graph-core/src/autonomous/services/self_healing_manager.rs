@@ -1186,8 +1186,8 @@ mod tests {
         // Check recovery was recorded
         let history = manager.get_recovery_history();
         // Recovery history may be empty if all healings were successful without issues
-        // This is acceptable behavior
-        assert!(history.len() >= 0);
+        // This is acceptable behavior - just verify we can retrieve it
+        let _ = history; // Verify history is retrievable (always valid since it returns Vec)
         println!("[PASS] test_full_healing_workflow");
     }
 
