@@ -29,16 +29,19 @@ and grouping utilities for the teleological array system.
 
 <rationale>
 The 13-embedder architecture captures different semantic dimensions of memory:
-- E1 (Semantic): General meaning via Matryoshka embeddings
-- E2-E3 (Temporal): Recency and periodic patterns
-- E4, E11 (Entity): Named entity relationships via TransE
-- E5 (Causal): Cause-effect reasoning
-- E6, E13 (SPLADE): Sparse lexical expansion
-- E7 (Code): Programming constructs via AST
-- E8 (Graph): Structural relationships
-- E9 (HDC): Holographic distributed computing
-- E10 (Multimodal): Cross-modal alignment
-- E12 (Late Interaction): Token-level ColBERT
+- E1 (Semantic): General meaning via Matryoshka embeddings (1024D)
+- E2 (TemporalRecent): Recency via exponential decay (512D)
+- E3 (TemporalPeriodic): Cyclical patterns via Fourier (512D)
+- E4 (EntityRelationship): Named entity positional encoding (512D)
+- E5 (Causal): Cause-effect reasoning, asymmetric (768D)
+- E6 (Splade): SPLADE sparse lexical expansion (~30K sparse)
+- E7 (Contextual): Discourse context understanding (1536D)
+- E8 (Emotional): Affective valence, sentiment (384D)
+- E9 (Syntactic): Structural patterns via XOR/Hamming (1024D binary)
+- E10 (Pragmatic): Intent and function understanding (768D)
+- E11 (CrossModal): Multi-modal bridges text/code/diagrams (384D)
+- E12 (LateInteraction): Token-level ColBERT MaxSim (128D/token)
+- E13 (KeywordSplade): Term matching, complementary to E6 (~30K sparse)
 
 A type-safe enum prevents index errors and enables compile-time verification.
 </rationale>
@@ -78,32 +81,32 @@ A type-safe enum prevents index errors and enables compile-time verification.
       #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
       #[repr(u8)]
       pub enum Embedder {
-          /// E1: Semantic understanding via Matryoshka (1024D, truncatable)
+          /// E1: Semantic understanding via Matryoshka (1024D, truncatable to 512/256/128)
           Semantic = 0,
-          /// E2: Recent temporal context (512D)
+          /// E2: Recent temporal context via exponential decay (512D)
           TemporalRecent = 1,
           /// E3: Periodic/cyclical patterns via Fourier (512D)
           TemporalPeriodic = 2,
-          /// E4: Named entity recognition (384D)
-          Entity = 3,
+          /// E4: Named entity positional encoding (512D)
+          EntityRelationship = 3,
           /// E5: Causal reasoning, asymmetric (768D)
           Causal = 4,
           /// E6: SPLADE sparse expansion (~30K sparse)
-          SpladeExpansion = 5,
-          /// E7: Code understanding via AST (1536D)
-          Code = 6,
-          /// E8: Graph/structural relationships (384D)
-          Graph = 7,
-          /// E9: Holographic distributed computing (10K-bit binary)
-          Hdc = 8,
-          /// E10: Multimodal alignment (768D)
-          Multimodal = 9,
-          /// E11: Knowledge base entity (TransE, 384D)
-          EntityTransE = 10,
-          /// E12: Late interaction/ColBERT (128D per token)
+          Splade = 5,
+          /// E7: Contextual/discourse understanding (1536D)
+          Contextual = 6,
+          /// E8: Emotional/sentiment (384D)
+          Emotional = 7,
+          /// E9: Syntactic patterns via XOR/Hamming (1024D binary)
+          Syntactic = 8,
+          /// E10: Pragmatic intent/function (768D)
+          Pragmatic = 9,
+          /// E11: Cross-modal bridges text/code/diagrams (384D)
+          CrossModal = 10,
+          /// E12: Late interaction/ColBERT MaxSim (128D per token)
           LateInteraction = 11,
-          /// E13: SPLADE keyword precision (~30K sparse)
-          SpladeKeyword = 12,
+          /// E13: Keyword SPLADE term matching (~30K sparse)
+          KeywordSplade = 12,
       }
 
       impl Embedder {
@@ -139,10 +142,11 @@ A type-safe enum prevents index errors and enables compile-time verification.
 
       #[derive(Debug, Clone, Copy, PartialEq, Eq)]
       pub enum EmbedderGroup {
-          Temporal,    // E2, E3
-          Relational,  // E4, E5, E11
-          Lexical,     // E6, E12, E13
-          Dense,       // E1, E7, E8, E10
+          Temporal,    // E2, E3, E4 (time-related)
+          Relational,  // E4, E5, E11 (entity/causal/cross-modal)
+          Lexical,     // E6, E12, E13 (sparse/token-level)
+          Dense,       // E1, E2, E3, E4, E5, E7, E8, E10, E11 (standard dense vectors)
+          Binary,      // E9 (Syntactic - binary/Hamming)
           All,
       }
 
@@ -175,19 +179,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Embedder {
-    Semantic = 0,
-    TemporalRecent = 1,
-    TemporalPeriodic = 2,
-    Entity = 3,
-    Causal = 4,
-    SpladeExpansion = 5,
-    Code = 6,
-    Graph = 7,
-    Hdc = 8,
-    Multimodal = 9,
-    EntityTransE = 10,
-    LateInteraction = 11,
-    SpladeKeyword = 12,
+    Semantic = 0,          // E1: 1024D dense
+    TemporalRecent = 1,    // E2: 512D dense
+    TemporalPeriodic = 2,  // E3: 512D dense
+    EntityRelationship = 3, // E4: 512D dense
+    Causal = 4,            // E5: 768D dense
+    Splade = 5,            // E6: ~30K sparse
+    Contextual = 6,        // E7: 1536D dense
+    Emotional = 7,         // E8: 384D dense
+    Syntactic = 8,         // E9: 1024D binary
+    Pragmatic = 9,         // E10: 768D dense
+    CrossModal = 10,       // E11: 384D dense
+    LateInteraction = 11,  // E12: 128D per token
+    KeywordSplade = 12,    // E13: ~30K sparse
 }
 
 impl Embedder {
@@ -207,19 +211,19 @@ impl Embedder {
 
     pub fn expected_dims(self) -> EmbedderDims {
         match self {
-            Self::Semantic => EmbedderDims::Dense(1024),
-            Self::TemporalRecent => EmbedderDims::Dense(512),
-            Self::TemporalPeriodic => EmbedderDims::Dense(512),
-            Self::Entity => EmbedderDims::Dense(384),
-            Self::Causal => EmbedderDims::Dense(768),
-            Self::SpladeExpansion => EmbedderDims::Sparse { max_active: 30000 },
-            Self::Code => EmbedderDims::Dense(1536),
-            Self::Graph => EmbedderDims::Dense(384),
-            Self::Hdc => EmbedderDims::Binary { bits: 10000 },
-            Self::Multimodal => EmbedderDims::Dense(768),
-            Self::EntityTransE => EmbedderDims::Dense(384),
-            Self::LateInteraction => EmbedderDims::TokenLevel { per_token: 128 },
-            Self::SpladeKeyword => EmbedderDims::Sparse { max_active: 30000 },
+            Self::Semantic => EmbedderDims::Dense(1024),       // E1
+            Self::TemporalRecent => EmbedderDims::Dense(512),  // E2
+            Self::TemporalPeriodic => EmbedderDims::Dense(512), // E3
+            Self::EntityRelationship => EmbedderDims::Dense(512), // E4
+            Self::Causal => EmbedderDims::Dense(768),          // E5
+            Self::Splade => EmbedderDims::Sparse { max_active: 30000 }, // E6
+            Self::Contextual => EmbedderDims::Dense(1536),     // E7
+            Self::Emotional => EmbedderDims::Dense(384),       // E8
+            Self::Syntactic => EmbedderDims::Binary { bits: 1024 }, // E9
+            Self::Pragmatic => EmbedderDims::Dense(768),       // E10
+            Self::CrossModal => EmbedderDims::Dense(384),      // E11
+            Self::LateInteraction => EmbedderDims::TokenLevel { per_token: 128 }, // E12
+            Self::KeywordSplade => EmbedderDims::Sparse { max_active: 30000 }, // E13
         }
     }
 
