@@ -50,6 +50,7 @@ mod error;
 mod explanation;
 mod multi_utl;
 mod result;
+mod sparse;
 
 #[cfg(test)]
 mod tests;
@@ -68,3 +69,9 @@ pub use error::SimilarityError;
 pub use explanation::SimilarityExplanation;
 pub use multi_utl::{sigmoid, MultiUtlParams};
 pub use result::CrossSpaceSimilarity;
+
+// Sparse similarity functions for E6/E13 (SPLADE) embeddings
+pub use sparse::{
+    bm25_score, jaccard_similarity, sparse_cosine_similarity, sparse_dot_product, sparse_l2_norm,
+    Bm25Config, SparseSimilarityError,
+};

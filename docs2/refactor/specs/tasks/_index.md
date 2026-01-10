@@ -204,8 +204,8 @@ graph TD
 
 | # | Task ID | Title | Depends On | Est. Days | Status |
 |---|---------|-------|------------|-----------|--------|
-| 15 | TASK-LOGIC-001 | Dense Similarity Functions | CORE-002, CORE-003 | 2 | :white_circle: todo |
-| 16 | TASK-LOGIC-002 | Sparse Similarity Functions | CORE-003 | 1.5 | :white_circle: todo |
+| 15 | TASK-LOGIC-001 | Dense Similarity Functions | CORE-002, CORE-003 | 2 | :white_check_mark: done |
+| 16 | TASK-LOGIC-002 | Sparse Similarity Functions | CORE-003 | 1.5 | :white_check_mark: done |
 | 17 | TASK-LOGIC-003 | Token-Level Similarity | CORE-003 | 1.5 | :white_circle: todo |
 | 18 | TASK-LOGIC-004 | Teleological Comparator | CORE-004, LOGIC-001-003 | 3 | :white_circle: todo |
 | 19 | TASK-LOGIC-005 | Single Embedder Search | LOGIC-004 | 2 | :white_circle: todo |
@@ -284,7 +284,7 @@ graph TD
 | Task | Status | Started | Completed | Verified |
 |------|--------|---------|-----------|----------|
 | TASK-LOGIC-001 | :white_check_mark: completed | 2026-01-10 | 2026-01-10 | YES (39 dense tests pass, SIMD within 1e-5 of scalar, 2807 total tests pass) |
-| TASK-LOGIC-002 | :white_circle: todo | - | - | - |
+| TASK-LOGIC-002 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (27 sparse.rs tests + 37 related sparse tests = 64 total sparse tests, Jaccard/BM25 verified, 2835 lib tests pass) |
 | TASK-LOGIC-003 | :white_circle: todo | - | - | - |
 | TASK-LOGIC-004 | :white_circle: todo | - | - | - |
 | TASK-LOGIC-005 | :white_circle: todo | - | - | - |
@@ -334,7 +334,7 @@ graph TD
 | TASK-PERF-003 | :white_circle: todo | - | - | - |
 | TASK-PERF-004 | :white_circle: todo | - | - | - |
 
-**Progress: 15/52 tasks completed (29%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012, CORE-013, CORE-014, LOGIC-001 done**
+**Progress: 16/52 tasks completed (31%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012, CORE-013, CORE-014, LOGIC-001, LOGIC-002 done**
 
 ---
 

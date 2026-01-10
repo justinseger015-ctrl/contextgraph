@@ -1,200 +1,3 @@
-# TASK-LOGIC-002: Sparse Similarity Functions
-
-## STATUS: COMPLETED (2026-01-09)
-
-### Completion Summary
-- **File Created**: `crates/context-graph-core/src/similarity/sparse.rs`
-- **Tests**: 27 sparse.rs tests + 37 related sparse tests = 64 total sparse tests pass
-- **Total Tests**: 2835 lib tests (64 sparse tests pass)
-- **Verified**: Synthetic data verification passed (dot=12.0, Jaccard=0.4, BM25 IDF correct)
-
-## CRITICAL CONTEXT FOR IMPLEMENTATION
-
-This task implements sparse vector similarity functions for E6 (SPLADE) and E13 (KeywordSPLADE) embeddings. The `SparseVector` type **already exists** and has methods like `dot()`, `cosine_similarity()`, and `l2_norm()`. This task creates **standalone functions** in a new `sparse.rs` file under `similarity/` module to match the pattern established by TASK-LOGIC-001.
-
-### What Already Exists (DO NOT DUPLICATE)
-
-**SparseVector type**: `crates/context-graph-core/src/types/fingerprint/sparse.rs`
-```rust
-pub struct SparseVector {
-    pub indices: Vec<u16>,  // Sorted ascending, valid range [0, 30521]
-    pub values: Vec<f32>,   // Same length as indices
-}
-
-impl SparseVector {
-    pub fn new(indices: Vec<u16>, values: Vec<f32>) -> Result<Self, SparseVectorError>;
-    pub fn empty() -> Self;
-    pub fn nnz(&self) -> usize;
-    pub fn dot(&self, other: &Self) -> f32;  // Merge-join algorithm
-    pub fn l2_norm(&self) -> f32;
-    pub fn cosine_similarity(&self, other: &Self) -> f32;
-    pub fn get(&self, vocab_index: u16) -> Option<f32>;
-    pub fn is_empty(&self) -> bool;
-    pub fn memory_size(&self) -> usize;
-}
-```
-
-**SPLADE Inverted Index with BM25**: `crates/context-graph-core/src/index/splade_impl.rs`
-```rust
-pub struct SpladeInvertedIndex {
-    // Already has BM25 search implementation for document retrieval
-    pub fn search(&self, query: &[(usize, f32)], k: usize) -> Vec<(Uuid, f32)>;
-}
-```
-
-**Dense Similarity Module**: `crates/context-graph-core/src/similarity/dense.rs`
-```rust
-// Pattern to follow for this task:
-pub fn cosine_similarity(a: &[f32], b: &[f32]) -> Result<f32, DenseSimilarityError>;
-pub fn dot_product(a: &[f32], b: &[f32]) -> Result<f32, DenseSimilarityError>;
-pub fn euclidean_distance(a: &[f32], b: &[f32]) -> Result<f32, DenseSimilarityError>;
-pub fn l2_norm(v: &[f32]) -> f32;
-pub fn normalize(v: &mut [f32]);
-```
-
-**Similarity Module**: `crates/context-graph-core/src/similarity/mod.rs`
-```rust
-mod config;
-mod default_engine;
-mod dense;  // Added by TASK-LOGIC-001
-mod engine;
-mod error;
-mod explanation;
-mod multi_utl;
-mod result;
-
-// Exports dense functions - need to add sparse exports
-pub use dense::{cosine_similarity, dot_product, euclidean_distance, l2_norm, normalize, DenseSimilarityError};
-```
-
-### Constants (Source of Truth)
-
-From `crates/context-graph-core/src/types/fingerprint/sparse.rs`:
-```rust
-pub const SPARSE_VOCAB_SIZE: usize = 30_522;  // BERT vocabulary size
-pub const MAX_SPARSE_ACTIVE: usize = 1_526;   // ~5% sparsity
-```
-
-From `crates/context-graph-core/src/index/config.rs`:
-```rust
-pub const E6_SPLADE_VOCAB: usize = 30_522;
-pub const E13_SPLADE_VOCAB: usize = 30_522;
-```
-
----
-
-## WHAT THIS TASK CREATES
-
-**New File**: `crates/context-graph-core/src/similarity/sparse.rs`
-
-This provides **standalone functions** that wrap/mirror `SparseVector` methods plus add:
-1. Jaccard similarity (dimension overlap)
-2. BM25 scoring for pairwise comparison (NOT for index retrieval)
-
-Why standalone functions? The `DefaultCrossSpaceEngine` uses a consistent interface pattern where similarity functions take primitive slices, not specific types.
-
----
-
-## IMPLEMENTATION REQUIREMENTS
-
-### 1. File Location
-
-Create: `crates/context-graph-core/src/similarity/sparse.rs`
-
-Update: `crates/context-graph-core/src/similarity/mod.rs` to add:
-```rust
-mod sparse;
-pub use sparse::{
-    sparse_dot_product, sparse_cosine_similarity, sparse_l2_norm,
-    jaccard_similarity, bm25_score, Bm25Config,
-    SparseSimilarityError,
-};
-```
-
-### 2. Error Type
-
-```rust
-use thiserror::Error;
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum SparseSimilarityError {
-    #[error("Empty sparse vector provided")]
-    EmptyVector,
-
-    #[error("Invalid index {index} exceeds vocabulary size {vocab_size}")]
-    IndexOutOfBounds { index: usize, vocab_size: usize },
-
-    #[error("Indices not sorted or contain duplicates")]
-    UnsortedIndices,
-
-    #[error("Indices and values length mismatch: indices={indices_len}, values={values_len}")]
-    LengthMismatch { indices_len: usize, values_len: usize },
-}
-```
-
-### 3. Core Functions
-
-```rust
-use crate::types::fingerprint::SparseVector;
-use std::collections::HashMap;
-
-/// Calculate dot product between two sparse vectors using merge-join.
-/// Complexity: O(n + m) where n, m are active indices.
-///
-/// Returns 0.0 if either vector is empty (not an error - valid sparse behavior).
-pub fn sparse_dot_product(a: &SparseVector, b: &SparseVector) -> f32;
-
-/// Calculate L2 norm of a sparse vector.
-pub fn sparse_l2_norm(v: &SparseVector) -> f32;
-
-/// Calculate cosine similarity between two sparse vectors.
-/// Returns 0.0 if either vector has zero norm (handles empty gracefully).
-pub fn sparse_cosine_similarity(a: &SparseVector, b: &SparseVector) -> f32;
-
-/// Calculate Jaccard similarity based on active dimension overlap.
-/// Jaccard = |A ∩ B| / |A ∪ B|
-/// Returns 1.0 if both empty (identical), 0.0 if one empty.
-pub fn jaccard_similarity(a: &SparseVector, b: &SparseVector) -> f32;
-
-/// BM25 configuration parameters.
-#[derive(Debug, Clone)]
-pub struct Bm25Config {
-    /// k1: Term frequency saturation (default: 1.2)
-    pub k1: f32,
-    /// b: Length normalization (default: 0.75)
-    pub b: f32,
-}
-
-impl Default for Bm25Config {
-    fn default() -> Self {
-        Self { k1: 1.2, b: 0.75 }
-    }
-}
-
-/// Calculate BM25 score for query against document.
-///
-/// NOTE: This is for pairwise scoring, NOT index retrieval.
-/// For index retrieval with IDF, use SpladeInvertedIndex::search().
-///
-/// Formula:
-/// score = Σ_t q_weight(t) × IDF(t) × (tf × (k1+1)) / (tf + k1×(1-b+b×len/avglen))
-pub fn bm25_score(
-    query: &SparseVector,
-    document: &SparseVector,
-    avg_doc_len: f32,
-    doc_count: usize,
-    term_doc_frequencies: &HashMap<u32, usize>,
-    config: &Bm25Config,
-) -> f32;
-```
-
----
-
-## IMPLEMENTATION CODE
-
-```rust
-// crates/context-graph-core/src/similarity/sparse.rs
-
 //! Sparse vector similarity functions for E6/E13 (SPLADE) embeddings.
 //!
 //! These functions operate on `SparseVector` types with ~30K vocabulary
@@ -213,7 +16,8 @@ pub fn bm25_score(
 //! | E13      | 30,522     | ~5% (1500 nnz)   |
 
 use crate::types::fingerprint::SparseVector;
-use std::collections::{HashMap, HashSet};
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use thiserror::Error;
 
 /// Errors from sparse vector similarity computation.
@@ -333,13 +137,13 @@ pub fn jaccard_similarity(a: &SparseVector, b: &SparseVector) -> f32 {
 
     while i < a.indices.len() && j < b.indices.len() {
         match a.indices[i].cmp(&b.indices[j]) {
-            std::cmp::Ordering::Equal => {
+            Ordering::Equal => {
                 intersection += 1;
                 i += 1;
                 j += 1;
             }
-            std::cmp::Ordering::Less => i += 1,
-            std::cmp::Ordering::Greater => j += 1,
+            Ordering::Less => i += 1,
+            Ordering::Greater => j += 1,
         }
     }
 
@@ -814,256 +618,82 @@ mod tests {
 
         println!("[PASS] Typical sparsity (1500 nnz) handled: norm={}", norm);
     }
+
+    // ========================================================================
+    // SYNTHETIC DATA VERIFICATION TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_synthetic_known_dot_product() {
+        // Input: a = {1: 2.0, 3: 3.0}, b = {3: 4.0, 5: 5.0}
+        // Expected: Only index 3 overlaps: 3.0 * 4.0 = 12.0
+        let a = SparseVector::new(vec![1, 3], vec![2.0, 3.0]).unwrap();
+        let b = SparseVector::new(vec![3, 5], vec![4.0, 5.0]).unwrap();
+        let dot = sparse_dot_product(&a, &b);
+
+        println!("STATE BEFORE: a.indices={:?}, a.values={:?}", a.indices, a.values);
+        println!("STATE BEFORE: b.indices={:?}, b.values={:?}", b.indices, b.values);
+        println!("STATE AFTER: dot={} (expected 12.0)", dot);
+
+        assert!(
+            (dot - 12.0).abs() < 1e-6,
+            "Expected 12.0, got {}",
+            dot
+        );
+        println!("[PASS] Synthetic dot product verified: 12.0");
+    }
+
+    #[test]
+    fn test_synthetic_known_jaccard() {
+        // Input: a = {1, 2, 3}, b = {2, 3, 4, 5}
+        // Intersection: {2, 3} = 2 elements
+        // Union: {1, 2, 3, 4, 5} = 5 elements
+        // Expected Jaccard: 2/5 = 0.4
+        let a = SparseVector::new(vec![1, 2, 3], vec![1.0, 1.0, 1.0]).unwrap();
+        let b = SparseVector::new(vec![2, 3, 4, 5], vec![1.0, 1.0, 1.0, 1.0]).unwrap();
+        let jaccard = jaccard_similarity(&a, &b);
+
+        println!("STATE BEFORE: a.indices={:?}", a.indices);
+        println!("STATE BEFORE: b.indices={:?}", b.indices);
+        println!("STATE AFTER: jaccard={} (expected 0.4)", jaccard);
+
+        assert!(
+            (jaccard - 0.4).abs() < 1e-6,
+            "Expected 0.4, got {}",
+            jaccard
+        );
+        println!("[PASS] Synthetic Jaccard verified: 0.4");
+    }
+
+    #[test]
+    fn test_synthetic_bm25_idf_verification() {
+        // Verify IDF component: rare terms score higher
+        // Common term in 90/100 docs vs rare term in 5/100 docs
+        // IDF(common) = ln((100-90+0.5)/(90+0.5)+1) = ln(10.5/90.5+1) ≈ ln(1.116) ≈ 0.11
+        // IDF(rare) = ln((100-5+0.5)/(5+0.5)+1) = ln(95.5/5.5+1) ≈ ln(18.36) ≈ 2.91
+
+        let query = SparseVector::new(vec![100, 200], vec![1.0, 1.0]).unwrap();
+        let doc_common = SparseVector::new(vec![100], vec![1.0]).unwrap();
+        let doc_rare = SparseVector::new(vec![200], vec![1.0]).unwrap();
+
+        let mut term_df = HashMap::new();
+        term_df.insert(100, 90);  // Common term in 90 docs
+        term_df.insert(200, 5);   // Rare term in 5 docs
+
+        let config = Bm25Config::default();
+        let score_common = bm25_score(&query, &doc_common, 1.0, 100, &term_df, &config);
+        let score_rare = bm25_score(&query, &doc_rare, 1.0, 100, &term_df, &config);
+
+        println!("IDF verification:");
+        println!("  Common term (90/100 docs): score = {}", score_common);
+        println!("  Rare term (5/100 docs): score = {}", score_rare);
+        println!("  Ratio rare/common = {}", score_rare / score_common);
+
+        // Rare term should score significantly higher
+        assert!(
+            score_rare > score_common * 5.0,
+            "Rare term (5 docs) should score much higher than common term (90 docs)"
+        );
+        println!("[PASS] BM25 IDF verified: rare terms score higher");
+    }
 }
-```
-
----
-
-## MODULE INTEGRATION
-
-Update `crates/context-graph-core/src/similarity/mod.rs`:
-
-```rust
-mod config;
-mod default_engine;
-mod dense;
-mod engine;
-mod error;
-mod explanation;
-mod multi_utl;
-mod result;
-mod sparse;  // ADD THIS
-
-#[cfg(test)]
-mod tests;
-
-// Re-export public types
-pub use config::{CrossSpaceConfig, MissingSpaceHandling, WeightingStrategy};
-pub use default_engine::DefaultCrossSpaceEngine;
-pub use dense::{
-    cosine_similarity, dot_product, euclidean_distance, l2_norm, normalize,
-    DenseSimilarityError,
-};
-#[cfg(target_arch = "x86_64")]
-pub use dense::cosine_similarity_simd;
-pub use engine::CrossSpaceSimilarityEngine;
-pub use error::SimilarityError;
-pub use explanation::SimilarityExplanation;
-pub use multi_utl::{sigmoid, MultiUtlParams};
-pub use result::CrossSpaceSimilarity;
-
-// ADD SPARSE EXPORTS
-pub use sparse::{
-    sparse_dot_product, sparse_cosine_similarity, sparse_l2_norm,
-    jaccard_similarity, bm25_score, Bm25Config,
-    SparseSimilarityError,
-};
-```
-
----
-
-## FULL STATE VERIFICATION REQUIREMENTS
-
-After completing the implementation, you MUST perform full state verification:
-
-### 1. Source of Truth Verification
-
-The source of truth is the **function outputs** - verify they match mathematical expectations:
-
-```rust
-// Run these in a test or manually verify
-// VERIFICATION 1: Dot product of orthogonal vectors = 0
-let a = SparseVector::new(vec![0, 1], vec![1.0, 2.0]).unwrap();
-let b = SparseVector::new(vec![2, 3], vec![3.0, 4.0]).unwrap();
-let dot = sparse_dot_product(&a, &b);
-println!("STATE BEFORE: a={:?}, b={:?}", a.indices, b.indices);
-println!("STATE AFTER: dot={} (expected 0.0)", dot);
-assert_eq!(dot, 0.0);
-
-// VERIFICATION 2: Jaccard of identical = 1.0
-let v = SparseVector::new(vec![1, 2, 3], vec![0.5, 0.5, 0.5]).unwrap();
-let jaccard = jaccard_similarity(&v, &v);
-println!("STATE BEFORE: v.indices={:?}", v.indices);
-println!("STATE AFTER: jaccard={} (expected 1.0)", jaccard);
-assert!((jaccard - 1.0).abs() < 1e-6);
-
-// VERIFICATION 3: BM25 rare term > common term
-// (See test_bm25_rare_term_higher_score)
-```
-
-### 2. Execute & Inspect
-
-Run the test suite and verify all tests pass:
-
-```bash
-cargo test -p context-graph-core sparse -- --nocapture 2>&1 | tee /tmp/sparse_test_output.txt
-```
-
-**Expected output**: All tests pass, with `[PASS]` messages showing actual values.
-
-### 3. Boundary & Edge Case Audit
-
-For each edge case, print state before and after:
-
-| Edge Case | Input State | Expected Output | Verification |
-|-----------|-------------|-----------------|--------------|
-| Empty vectors | `a.indices=[], b.indices=[]` | `dot=0.0, cosine=0.0, jaccard=1.0` | Print actual values |
-| No overlap | `a=[0,1], b=[2,3]` | `dot=0.0, cosine=0.0, jaccard=0.0` | Print actual values |
-| Maximum index | `indices=[0, 30521]` | All functions work | Print actual values |
-| Single element | `indices=[100], values=[5.0]` | `norm=5.0, dot=25.0` | Print actual values |
-
-### 4. Evidence of Success Log
-
-After implementation, create this log:
-
-```
-=== SPARSE SIMILARITY VERIFICATION LOG ===
-Test Environment: cargo test -p context-graph-core sparse -- --nocapture
-Timestamp: [ISO 8601 timestamp]
-
-TEST RESULTS:
-├── test_sparse_dot_identical: PASS (dot=14.0)
-├── test_sparse_dot_no_overlap: PASS (dot=0.0)
-├── test_sparse_dot_partial_overlap: PASS (dot=28.0)
-├── test_sparse_dot_empty: PASS
-├── test_sparse_l2_norm: PASS (norm=5.0)
-├── test_sparse_cosine_identical: PASS (sim=1.0)
-├── test_sparse_cosine_orthogonal: PASS (sim=0.0)
-├── test_jaccard_identical: PASS (sim=1.0)
-├── test_jaccard_no_overlap: PASS (sim=0.0)
-├── test_jaccard_partial_overlap: PASS (sim=0.5)
-├── test_bm25_basic: PASS (score>0)
-├── test_bm25_rare_term_higher_score: PASS (rare>common)
-└── [all other tests]
-
-EDGE CASE AUDIT:
-├── Empty inputs: All functions return expected values ✓
-├── No overlap: Correctly returns 0 ✓
-├── Maximum index (30521): Handled correctly ✓
-└── Typical sparsity (1500 nnz): Works efficiently ✓
-
-SOURCE OF TRUTH CHECK:
-├── sparse_dot_product matches SparseVector::dot() ✓
-├── sparse_cosine_similarity matches SparseVector::cosine_similarity() ✓
-├── Jaccard formula verified: |A∩B|/|A∪B| ✓
-└── BM25 IDF favors rare terms ✓
-
-INTEGRATION VERIFICATION:
-└── All existing similarity tests pass: ✓
-```
-
----
-
-## MANUAL TESTING WITH SYNTHETIC DATA
-
-Run these synthetic tests to verify correctness:
-
-### Test 1: Known Dot Product
-```rust
-// Input: a = {1: 2.0, 3: 3.0}, b = {3: 4.0, 5: 5.0}
-// Expected: Only index 3 overlaps: 3.0 * 4.0 = 12.0
-let a = SparseVector::new(vec![1, 3], vec![2.0, 3.0]).unwrap();
-let b = SparseVector::new(vec![3, 5], vec![4.0, 5.0]).unwrap();
-let dot = sparse_dot_product(&a, &b);
-assert!((dot - 12.0).abs() < 1e-6);
-```
-
-### Test 2: Known Jaccard
-```rust
-// Input: a = {1, 2, 3}, b = {2, 3, 4, 5}
-// Intersection: {2, 3} = 2 elements
-// Union: {1, 2, 3, 4, 5} = 5 elements
-// Expected Jaccard: 2/5 = 0.4
-let a = SparseVector::new(vec![1, 2, 3], vec![1.0, 1.0, 1.0]).unwrap();
-let b = SparseVector::new(vec![2, 3, 4, 5], vec![1.0, 1.0, 1.0, 1.0]).unwrap();
-let jaccard = jaccard_similarity(&a, &b);
-assert!((jaccard - 0.4).abs() < 1e-6);
-```
-
-### Test 3: Known BM25
-```rust
-// Verify IDF component: rare terms score higher
-// Common term in 90/100 docs vs rare term in 5/100 docs
-// IDF(common) = ln((100-90+0.5)/(90+0.5)+1) = ln(0.116+1) ≈ 0.11
-// IDF(rare) = ln((100-5+0.5)/(5+0.5)+1) = ln(18.36+1) ≈ 2.96
-```
-
----
-
-## FILES TO CREATE
-
-| File | Purpose |
-|------|---------|
-| `crates/context-graph-core/src/similarity/sparse.rs` | Sparse similarity functions |
-
-## FILES TO MODIFY
-
-| File | Change |
-|------|--------|
-| `crates/context-graph-core/src/similarity/mod.rs` | Add `mod sparse; pub use sparse::*;` |
-
----
-
-## DEPENDENCIES
-
-### Required (COMPLETED)
-- **TASK-CORE-003**: SparseVector type exists at `crates/context-graph-core/src/types/fingerprint/sparse.rs`
-
-### Uses Existing
-- `SparseVector` type and its methods (`dot`, `l2_norm`, `cosine_similarity`)
-- `SpladeInvertedIndex` for reference (index-level BM25 is separate)
-
----
-
-## TEST COMMANDS
-
-```bash
-# Run sparse similarity tests
-cargo test -p context-graph-core sparse -- --nocapture
-
-# Run all similarity tests (ensure no regression)
-cargo test -p context-graph-core similarity -- --nocapture
-
-# Full crate test
-cargo test -p context-graph-core
-
-# Verify total test count increased
-cargo test -p context-graph-core 2>&1 | grep "running"
-```
-
----
-
-## ANTI-PATTERNS TO AVOID
-
-1. **NO Duplicate Implementation**: Use `SparseVector` methods internally where possible
-2. **NO Mock Data**: Use real mathematical properties for tests
-3. **NO Silent Failures**: Empty vectors are valid (return 0.0), not errors
-4. **NO Backwards Compatibility Hacks**: If something breaks, fix the root cause
-5. **NO Index Guessing**: Trust `SparseVector` validation (indices are sorted, in-bounds)
-
----
-
-## NOTES FOR IMPLEMENTING AGENT
-
-1. The `SparseVector::dot()` method already uses merge-join. `sparse_dot_product()` simply delegates to it.
-
-2. Jaccard similarity is the **only** function that doesn't exist on `SparseVector`. Implement from scratch using merge-join.
-
-3. BM25 in this task is for **pairwise scoring** (query vs single document). The `SpladeInvertedIndex::search()` does index-level BM25 with precomputed IDF.
-
-4. Empty sparse vectors are valid. They represent "no terms" and should return sensible defaults (0.0 for dot/cosine, 1.0 for jaccard of two empties).
-
-5. The `term_doc_frequencies` HashMap in `bm25_score` uses `u32` keys because the index converts `u16` to `u32` for the HashMap.
-
----
-
-## TRACEABILITY TO CONSTITUTION
-
-| Requirement | Implementation |
-|-------------|----------------|
-| E6 SPLADE (sparse) | `sparse_cosine_similarity`, `sparse_dot_product` |
-| E13 KeywordSPLADE (sparse) | Same functions (identical dimension handling) |
-| BM25 scoring | `bm25_score` function |
-| Jaccard similarity | `jaccard_similarity` for vocabulary overlap |
-| No dimension projection (AP-03) | Functions take `SparseVector` directly |
-| No cross-embedder comparison (AP-02) | Functions compare sparse-to-sparse only |
