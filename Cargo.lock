@@ -713,6 +713,7 @@ dependencies = [
  "context-graph-embeddings",
  "futures",
  "rand 0.8.5",
+ "rayon",
  "rmp-serde",
  "rocksdb",
  "serde",
