@@ -211,8 +211,8 @@ graph TD
 | 19 | TASK-LOGIC-005 | Single Embedder Search | LOGIC-004 | 2 | :white_check_mark: done |
 | 20 | TASK-LOGIC-006 | Weighted Full Search | LOGIC-004 | 2 | :white_check_mark: done |
 | 21 | TASK-LOGIC-007 | Matrix Strategy Search | LOGIC-004 | 2 | :white_check_mark: done |
-| 22 | TASK-LOGIC-008 | 5-Stage Pipeline | LOGIC-005-007, LOGIC-011-012 | 3 | :white_circle: todo |
-| 23 | TASK-LOGIC-009 | Goal Discovery Pipeline | LOGIC-004 | 3 | :white_circle: todo |
+| 22 | TASK-LOGIC-008 | 5-Stage Pipeline | LOGIC-005-007, LOGIC-011-012 | 3 | :white_check_mark: done |
+| 23 | TASK-LOGIC-009 | Goal Discovery Pipeline | LOGIC-004 | 3 | :white_check_mark: done |
 | 24 | TASK-LOGIC-010 | Drift Detection | LOGIC-004 | 2 | :white_circle: todo |
 | 25 | TASK-LOGIC-011 | RRF Fusion Implementation | LOGIC-005-007 | 1.5 | :white_circle: todo |
 | 26 | TASK-LOGIC-012 | Entry-Point Selection Heuristics | CORE-002 | 2 | :white_circle: todo |
@@ -290,8 +290,8 @@ graph TD
 | TASK-LOGIC-005 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (47 tests + 1 integration, full state verification) |
 | TASK-LOGIC-006 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (23 tests pass, multi.rs ~1600 lines, git: 632fbc2) |
 | TASK-LOGIC-007 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (30 tests pass, matrix.rs ~520 lines, git: current) |
-| TASK-LOGIC-008 | :white_circle: todo | - | - | - |
-| TASK-LOGIC-009 | :white_circle: todo | - | - | - |
+| TASK-LOGIC-008 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (21 tests pass, pipeline.rs in context-graph-storage, git: 56ae42e) |
+| TASK-LOGIC-009 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (10 tests pass, discovery.rs ~1177 lines, K-means clustering verified) |
 | TASK-LOGIC-010 | :white_circle: todo | - | - | - |
 | TASK-LOGIC-011 | :white_circle: todo | - | - | - |
 | TASK-LOGIC-012 | :white_circle: todo | - | - | - |
@@ -334,7 +334,7 @@ graph TD
 | TASK-PERF-003 | :white_circle: todo | - | - | - |
 | TASK-PERF-004 | :white_circle: todo | - | - | - |
 
-**Progress: 21/52 tasks completed (40%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012, CORE-013, CORE-014, LOGIC-001, LOGIC-002, LOGIC-003, LOGIC-004, LOGIC-005, LOGIC-006, LOGIC-007 done**
+**Progress: 23/52 tasks completed (44%): CORE-001, CORE-002, CORE-003, CORE-004, CORE-005, CORE-007, CORE-008, CORE-009, CORE-010, CORE-011, CORE-012, CORE-013, CORE-014, LOGIC-001, LOGIC-002, LOGIC-003, LOGIC-004, LOGIC-005, LOGIC-006, LOGIC-007, LOGIC-008, LOGIC-009 done**
 
 ---
 

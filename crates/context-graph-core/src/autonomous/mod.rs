@@ -21,6 +21,7 @@
 
 pub mod bootstrap;
 pub mod curation;
+pub mod discovery;
 pub mod drift;
 pub mod evolution;
 pub mod services;
@@ -29,6 +30,10 @@ pub mod workflow;
 
 pub use bootstrap::*;
 pub use curation::*;
+pub use discovery::{
+    Cluster, ClusteringAlgorithm, DiscoveredGoal, DiscoveryConfig, DiscoveryResult,
+    GoalCandidate, GoalDiscoveryPipeline, GoalRelationship, NumClusters,
+};
 pub use drift::*;
 pub use evolution::*;
 pub use thresholds::*;
@@ -36,6 +41,8 @@ pub use workflow::*;
 
 // Explicit service re-exports to avoid ambiguous glob re-exports
 // (services module defines extended versions of some foundation types)
+// Note: SubGoalDiscovery types renamed with Service prefix to avoid conflicts
+// with the newer discovery module types (TASK-LOGIC-009)
 pub use services::{
     AdjustmentReport,
     BayesianObservation,
@@ -50,8 +57,8 @@ pub use services::{
     DailyScheduler,
     DetectorDataPoint,
     DetectorState,
-    DiscoveryConfig,
-    DiscoveryResult,
+    DiscoveryConfig as ServiceDiscoveryConfig,
+    DiscoveryResult as ServiceDiscoveryResult,
     // NORTH-011: DriftCorrector
     DriftCorrector,
     DriftCorrectorConfig,
@@ -68,7 +75,7 @@ pub use services::{
     GapDetectionService,
     GapReport,
     GapType,
-    GoalCandidate,
+    GoalCandidate as ServiceGoalCandidate,
     GoalWithMetrics,
     HealingAction,
     HealingResult,
