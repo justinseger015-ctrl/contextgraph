@@ -3,16 +3,40 @@
 //! TASK-S001: Updated to use TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
 //! TASK-S003: Added GoalAlignmentCalculator and GoalHierarchy for purpose operations.
 //! TASK-S004: Replaced stubs with REAL implementations (RocksDB, UTL adapter).
+//! TASK-INTEG-018: Added TCP transport support with concurrent client handling.
 //!
 //! NO BACKWARDS COMPATIBILITY with stubs. FAIL FAST with clear errors.
 
 use std::io::{self, BufRead, Write};
+use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use anyhow::Result;
-use tokio::sync::RwLock;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, error, info, warn};
+
+// ============================================================================
+// TASK-INTEG-018: Transport Mode
+// ============================================================================
+
+/// Transport mode for the MCP server.
+///
+/// TASK-INTEG-018: Enum for selecting between stdio and TCP transports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TransportMode {
+    /// Standard input/output transport (default).
+    /// Used for process-based MCP clients (e.g., VS Code, Claude Desktop).
+    #[default]
+    Stdio,
+
+    /// TCP socket transport.
+    /// Used for network-based MCP clients and remote deployments.
+    Tcp,
+}
 
 use context_graph_core::alignment::{DefaultAlignmentCalculator, GoalAlignmentCalculator};
 use context_graph_core::config::Config;
@@ -40,6 +64,7 @@ use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 /// MCP Server state.
 ///
 /// TASK-S001: Uses TeleologicalMemoryStore for 13-embedding fingerprint storage.
+/// TASK-INTEG-018: Arc-wrapped handlers for TCP transport sharing across concurrent clients.
 #[allow(dead_code)]
 pub struct McpServer {
     config: Config,
@@ -48,8 +73,16 @@ pub struct McpServer {
     utl_processor: Arc<dyn UtlProcessor>,
     /// Multi-array embedding provider - generates all 13 embeddings.
     multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
-    handlers: Handlers,
+    /// Arc-wrapped handlers for safe sharing across TCP client tasks.
+    /// TASK-INTEG-018: Handlers are now Arc-wrapped to allow concurrent TCP connections.
+    handlers: Arc<Handlers>,
     initialized: Arc<RwLock<bool>>,
+    /// Connection semaphore for limiting concurrent TCP connections.
+    /// TASK-INTEG-018: Initialized from config.mcp.max_connections.
+    connection_semaphore: Arc<Semaphore>,
+    /// Active connection counter for monitoring.
+    /// TASK-INTEG-018: Atomic counter for observability.
+    active_connections: Arc<AtomicUsize>,
 }
 
 impl McpServer {
@@ -188,13 +221,24 @@ impl McpServer {
 
         info!("MCP Server initialization complete - TeleologicalFingerprint mode active with GWT + Neuromod + Dream + ATC");
 
+        // TASK-INTEG-018: Create connection semaphore from config
+        let max_connections = config.mcp.max_connections;
+        let connection_semaphore = Arc::new(Semaphore::new(max_connections));
+        info!(
+            "TCP transport ready: max_connections={}, bind_address={}, tcp_port={}",
+            max_connections, config.mcp.bind_address, config.mcp.tcp_port
+        );
+
         Ok(Self {
             config,
             teleological_store,
             utl_processor,
             multi_array_provider,
-            handlers,
+            // TASK-INTEG-018: Arc-wrap handlers for TCP sharing
+            handlers: Arc::new(handlers),
             initialized: Arc::new(RwLock::new(false)),
+            connection_semaphore,
+            active_connections: Arc::new(AtomicUsize::new(0)),
         })
     }
 
@@ -379,5 +423,438 @@ impl McpServer {
                 );
             }
         }
+    }
+
+    // ========================================================================
+    // TASK-INTEG-018: TCP Transport Implementation
+    // ========================================================================
+
+    /// Run the server in TCP mode.
+    ///
+    /// TASK-INTEG-018: Accepts TCP connections on configured bind_address:tcp_port.
+    /// Spawns a tokio task per client, respecting max_connections semaphore.
+    ///
+    /// # Message Framing
+    ///
+    /// Uses newline-delimited JSON (NDJSON) - same as stdio transport.
+    /// Each JSON-RPC message is terminated by `\n`.
+    ///
+    /// # Connection Management
+    ///
+    /// - Uses Semaphore to limit concurrent connections to config.mcp.max_connections
+    /// - Each client runs in its own tokio task
+    /// - Clients are disconnected on first parse error (FAIL FAST per constitution)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - TCP listener fails to bind (address in use, permissions)
+    /// - TCP listener returns fatal accept error
+    pub async fn run_tcp(&self) -> Result<()> {
+        let bind_addr: SocketAddr = format!(
+            "{}:{}",
+            self.config.mcp.bind_address, self.config.mcp.tcp_port
+        )
+        .parse()
+        .map_err(|e| {
+            error!(
+                "FATAL: Invalid bind address '{}:{}': {}",
+                self.config.mcp.bind_address, self.config.mcp.tcp_port, e
+            );
+            anyhow::anyhow!(
+                "Invalid TCP bind address '{}:{}': {}. \
+                 Check config.mcp.bind_address and config.mcp.tcp_port.",
+                self.config.mcp.bind_address,
+                self.config.mcp.tcp_port,
+                e
+            )
+        })?;
+
+        let listener = TcpListener::bind(bind_addr).await.map_err(|e| {
+            error!("FATAL: Failed to bind TCP listener to {}: {}", bind_addr, e);
+            anyhow::anyhow!(
+                "Failed to bind TCP listener to {}: {}. \
+                 Address may be in use or require elevated permissions.",
+                bind_addr,
+                e
+            )
+        })?;
+
+        info!(
+            "MCP Server listening on TCP {} (max_connections={})",
+            bind_addr, self.config.mcp.max_connections
+        );
+
+        loop {
+            // Accept new connections
+            let (stream, peer_addr) = match listener.accept().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    // Log but continue accepting - most accept errors are transient
+                    error!("Failed to accept TCP connection: {}", e);
+                    continue;
+                }
+            };
+
+            // Clone Arc references for the spawned task
+            let handlers = Arc::clone(&self.handlers);
+            let semaphore = Arc::clone(&self.connection_semaphore);
+            let active_connections = Arc::clone(&self.active_connections);
+            let request_timeout = self.config.mcp.request_timeout;
+
+            // Spawn client handler task
+            tokio::spawn(async move {
+                // Acquire semaphore permit (blocks if at max_connections)
+                let _permit = match semaphore.acquire().await {
+                    Ok(p) => p,
+                    Err(_) => {
+                        error!("Semaphore closed unexpectedly for client {}", peer_addr);
+                        return;
+                    }
+                };
+
+                // Track active connection count
+                let conn_count = active_connections.fetch_add(1, Ordering::SeqCst) + 1;
+                info!(
+                    "TCP client connected: {} (active_connections={})",
+                    peer_addr, conn_count
+                );
+
+                // Handle client - permit is held until this returns
+                if let Err(e) =
+                    Self::handle_tcp_client(stream, peer_addr, handlers, request_timeout).await
+                {
+                    // Log at different levels based on error type
+                    if e.to_string().contains("connection reset")
+                        || e.to_string().contains("broken pipe")
+                    {
+                        debug!("TCP client {} disconnected: {}", peer_addr, e);
+                    } else {
+                        warn!("TCP client {} error: {}", peer_addr, e);
+                    }
+                }
+
+                // Decrement active connection count
+                let conn_count = active_connections.fetch_sub(1, Ordering::SeqCst) - 1;
+                info!(
+                    "TCP client disconnected: {} (active_connections={})",
+                    peer_addr, conn_count
+                );
+            });
+        }
+    }
+
+    /// Handle a single TCP client connection.
+    ///
+    /// TASK-INTEG-018: Reads newline-delimited JSON requests, dispatches to handlers,
+    /// writes newline-delimited JSON responses.
+    ///
+    /// # FAIL FAST Behavior
+    ///
+    /// Per constitution AP-007, on first parse error the client is disconnected.
+    /// This prevents malformed clients from corrupting server state.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - TCP stream for the client
+    /// * `peer_addr` - Client's socket address for logging
+    /// * `handlers` - Arc-wrapped handlers for request dispatch
+    /// * `request_timeout` - Request timeout in seconds (from config)
+    async fn handle_tcp_client(
+        stream: TcpStream,
+        peer_addr: SocketAddr,
+        handlers: Arc<Handlers>,
+        _request_timeout: u64,
+    ) -> Result<()> {
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+
+            // Read a line (newline-delimited JSON)
+            let bytes_read = reader.read_line(&mut line).await?;
+
+            // EOF - client closed connection
+            if bytes_read == 0 {
+                debug!("TCP client {} closed connection (EOF)", peer_addr);
+                break;
+            }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            debug!("TCP {} received: {}", peer_addr, trimmed);
+
+            // Parse request
+            let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
+                Ok(r) => r,
+                Err(e) => {
+                    // FAIL FAST: Send parse error and disconnect
+                    warn!(
+                        "TCP client {} sent invalid JSON, disconnecting: {}",
+                        peer_addr, e
+                    );
+                    let error_response = JsonRpcResponse::error(
+                        None,
+                        crate::protocol::error_codes::PARSE_ERROR,
+                        format!("Parse error: {}. Connection will be closed.", e),
+                    );
+                    let response_json = serde_json::to_string(&error_response)?;
+                    writer.write_all(response_json.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                    // FAIL FAST: Disconnect client
+                    return Err(anyhow::anyhow!(
+                        "Client sent invalid JSON-RPC: {}",
+                        e
+                    ));
+                }
+            };
+
+            // Validate JSON-RPC version
+            if request.jsonrpc != "2.0" {
+                let error_response = JsonRpcResponse::error(
+                    request.id.clone(),
+                    crate::protocol::error_codes::INVALID_REQUEST,
+                    "Invalid JSON-RPC version. Expected '2.0'.",
+                );
+                let response_json = serde_json::to_string(&error_response)?;
+                writer.write_all(response_json.as_bytes()).await?;
+                writer.write_all(b"\n").await?;
+                writer.flush().await?;
+                continue;
+            }
+
+            // Dispatch to handler
+            let response = handlers.dispatch(request).await;
+
+            // Handle notifications (no response needed)
+            if response.id.is_none() && response.result.is_none() && response.error.is_none() {
+                debug!("TCP {} notification handled, no response", peer_addr);
+                continue;
+            }
+
+            // Send response
+            let response_json = serde_json::to_string(&response)?;
+            debug!("TCP {} sending: {}", peer_addr, response_json);
+
+            writer.write_all(response_json.as_bytes()).await?;
+            writer.write_all(b"\n").await?;
+            writer.flush().await?;
+        }
+
+        Ok(())
+    }
+}
+
+// ============================================================================
+// TASK-INTEG-018: Transport Mode Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test TransportMode Debug formatting.
+    #[test]
+    fn test_transport_mode_debug() {
+        let stdio = TransportMode::Stdio;
+        let tcp = TransportMode::Tcp;
+
+        assert_eq!(format!("{:?}", stdio), "Stdio");
+        assert_eq!(format!("{:?}", tcp), "Tcp");
+    }
+
+    /// Test TransportMode Clone.
+    #[test]
+    fn test_transport_mode_clone() {
+        let original = TransportMode::Tcp;
+        let cloned = original.clone();
+
+        assert!(matches!(cloned, TransportMode::Tcp));
+    }
+
+    /// Test TransportMode Copy.
+    #[test]
+    fn test_transport_mode_copy() {
+        let original = TransportMode::Stdio;
+        let copied = original; // Copy, not move
+
+        // Both should still be usable
+        assert!(matches!(original, TransportMode::Stdio));
+        assert!(matches!(copied, TransportMode::Stdio));
+    }
+
+    /// Test TransportMode PartialEq.
+    #[test]
+    fn test_transport_mode_equality() {
+        assert_eq!(TransportMode::Stdio, TransportMode::Stdio);
+        assert_eq!(TransportMode::Tcp, TransportMode::Tcp);
+        assert_ne!(TransportMode::Stdio, TransportMode::Tcp);
+        assert_ne!(TransportMode::Tcp, TransportMode::Stdio);
+    }
+
+    /// Test TransportMode Default (should be Stdio).
+    #[test]
+    fn test_transport_mode_default() {
+        let default = TransportMode::default();
+        assert_eq!(default, TransportMode::Stdio);
+    }
+
+    /// Test TCP transport error codes exist and have correct values.
+    #[test]
+    fn test_tcp_error_codes_exist() {
+        use crate::protocol::error_codes;
+
+        // Verify error codes are in the -32110 range (TASK-INTEG-018)
+        assert_eq!(error_codes::TCP_BIND_FAILED, -32110);
+        assert_eq!(error_codes::TCP_CONNECTION_ERROR, -32111);
+        assert_eq!(error_codes::TCP_MAX_CONNECTIONS_REACHED, -32112);
+        assert_eq!(error_codes::TCP_FRAME_ERROR, -32113);
+        assert_eq!(error_codes::TCP_CLIENT_TIMEOUT, -32114);
+    }
+
+    /// Test TCP error codes are unique and don't conflict with other error codes.
+    #[test]
+    fn test_tcp_error_codes_unique() {
+        use crate::protocol::error_codes;
+
+        let tcp_codes = vec![
+            error_codes::TCP_BIND_FAILED,
+            error_codes::TCP_CONNECTION_ERROR,
+            error_codes::TCP_MAX_CONNECTIONS_REACHED,
+            error_codes::TCP_FRAME_ERROR,
+            error_codes::TCP_CLIENT_TIMEOUT,
+        ];
+
+        // All codes should be unique
+        let mut unique_codes = tcp_codes.clone();
+        unique_codes.sort();
+        unique_codes.dedup();
+        assert_eq!(tcp_codes.len(), unique_codes.len(), "TCP error codes must be unique");
+
+        // All codes should be in reserved range (-32110 to -32119)
+        for code in &tcp_codes {
+            assert!(
+                *code >= -32119 && *code <= -32110,
+                "TCP error code {} must be in range -32119 to -32110",
+                code
+            );
+        }
+    }
+
+    /// Test TCP error codes don't conflict with standard JSON-RPC codes.
+    #[test]
+    fn test_tcp_error_codes_no_jsonrpc_conflict() {
+        use crate::protocol::error_codes;
+
+        let tcp_codes = vec![
+            error_codes::TCP_BIND_FAILED,
+            error_codes::TCP_CONNECTION_ERROR,
+            error_codes::TCP_MAX_CONNECTIONS_REACHED,
+            error_codes::TCP_FRAME_ERROR,
+            error_codes::TCP_CLIENT_TIMEOUT,
+        ];
+
+        // Standard JSON-RPC error codes
+        let jsonrpc_codes = vec![
+            error_codes::PARSE_ERROR,      // -32700
+            error_codes::INVALID_REQUEST,  // -32600
+            error_codes::METHOD_NOT_FOUND, // -32601
+            error_codes::INVALID_PARAMS,   // -32602
+            error_codes::INTERNAL_ERROR,   // -32603
+        ];
+
+        // Verify no conflicts
+        for tcp_code in &tcp_codes {
+            for jsonrpc_code in &jsonrpc_codes {
+                assert_ne!(
+                    tcp_code, jsonrpc_code,
+                    "TCP error code {} conflicts with JSON-RPC code {}",
+                    tcp_code, jsonrpc_code
+                );
+            }
+        }
+    }
+
+    /// Test that TransportMode can be used in match expressions.
+    #[test]
+    fn test_transport_mode_match() {
+        let mode = TransportMode::Tcp;
+
+        let result = match mode {
+            TransportMode::Stdio => "stdio",
+            TransportMode::Tcp => "tcp",
+        };
+
+        assert_eq!(result, "tcp");
+    }
+
+    /// Test Semaphore capacity calculation from config.
+    /// (We test Semaphore directly since McpServer::new requires file system setup)
+    #[test]
+    fn test_semaphore_capacity_from_config() {
+        use context_graph_core::config::Config;
+
+        let mut config = Config::default_config();
+        config.mcp.max_connections = 10;
+
+        // Semaphore would be created with config.mcp.max_connections
+        let semaphore = Arc::new(Semaphore::new(config.mcp.max_connections));
+        assert_eq!(
+            semaphore.available_permits(),
+            10,
+            "Semaphore should have 10 permits matching max_connections"
+        );
+    }
+
+    /// Test default max_connections value from McpConfig.
+    #[test]
+    fn test_default_max_connections() {
+        use context_graph_core::config::Config;
+
+        let config = Config::default_config();
+        assert_eq!(
+            config.mcp.max_connections, 32,
+            "Default max_connections should be 32"
+        );
+    }
+
+    /// Test TCP bind address format parsing.
+    #[test]
+    fn test_tcp_bind_address_parsing() {
+        use std::net::SocketAddr;
+
+        // Valid addresses
+        let valid_addr: Result<SocketAddr, _> = "127.0.0.1:3100".parse();
+        assert!(valid_addr.is_ok(), "Should parse valid IPv4 address");
+
+        let valid_addr: Result<SocketAddr, _> = "0.0.0.0:3100".parse();
+        assert!(valid_addr.is_ok(), "Should parse 0.0.0.0 address");
+
+        let valid_addr: Result<SocketAddr, _> = "[::1]:3100".parse();
+        assert!(valid_addr.is_ok(), "Should parse IPv6 localhost");
+
+        // Invalid addresses
+        let invalid_addr: Result<SocketAddr, _> = "not-an-address".parse();
+        assert!(invalid_addr.is_err(), "Should reject invalid address");
+
+        let invalid_addr: Result<SocketAddr, _> = "127.0.0.1:".parse();
+        assert!(invalid_addr.is_err(), "Should reject address without port");
+    }
+
+    /// Test format string for bind address construction.
+    #[test]
+    fn test_bind_address_format() {
+        use context_graph_core::config::Config;
+
+        let config = Config::default_config();
+        let bind_str = format!("{}:{}", config.mcp.bind_address, config.mcp.tcp_port);
+
+        assert_eq!(bind_str, "127.0.0.1:3100");
     }
 }

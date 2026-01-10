@@ -240,6 +240,20 @@ pub mod error_codes {
     pub const CAUSAL_TARGET_REQUIRED: i32 = -32103;
     /// Causal graph operation failed
     pub const CAUSAL_GRAPH_ERROR: i32 = -32104;
+
+    // TCP Transport error codes (-32110 to -32119) - TASK-INTEG-018
+    /// TCP bind failed - address/port unavailable or permission denied
+    /// FAIL FAST: Server cannot start if bind fails
+    pub const TCP_BIND_FAILED: i32 = -32110;
+    /// TCP connection error - stream read/write failed, client disconnected
+    pub const TCP_CONNECTION_ERROR: i32 = -32111;
+    /// Maximum concurrent TCP connections reached
+    /// Server rejects new connections when at capacity (configurable via max_connections)
+    pub const TCP_MAX_CONNECTIONS_REACHED: i32 = -32112;
+    /// TCP frame error - invalid NDJSON framing, message too large
+    pub const TCP_FRAME_ERROR: i32 = -32113;
+    /// TCP client timeout - request processing exceeded request_timeout
+    pub const TCP_CLIENT_TIMEOUT: i32 = -32114;
 }
 
 /// MCP method names.

@@ -110,13 +110,14 @@ impl Config {
     ///
     /// This prevents accidentally running Production with fake embeddings or
     /// ephemeral storage that loses all data on restart.
+    ///
+    /// # TASK-INTEG-017 Update
+    ///
+    /// Added call to `self.mcp.validate()` to validate TCP transport configuration.
     pub fn validate(&self) -> CoreResult<()> {
-        // Basic field validation
-        if self.mcp.max_payload_size == 0 {
-            return Err(CoreError::ConfigError(
-                "mcp.max_payload_size must be greater than 0".into(),
-            ));
-        }
+        // TASK-INTEG-017: Validate MCP config including TCP transport fields
+        // FAIL FAST: Any invalid MCP config stops startup immediately
+        self.mcp.validate()?;
 
         if self.embedding.dimension == 0 {
             return Err(CoreError::ConfigError(

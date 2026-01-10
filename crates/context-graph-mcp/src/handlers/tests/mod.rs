@@ -45,6 +45,7 @@ mod consciousness_dispatch;
 mod exhaustive_mcp_tools;
 mod error_codes;
 mod full_state_verification;
+mod tcp_transport_integration;
 mod full_state_verification_gwt;
 mod full_state_verification_johari;
 mod full_state_verification_meta_utl;

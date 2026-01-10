@@ -22,20 +22,152 @@ impl Default for ServerConfig {
 }
 
 /// MCP (Model Context Protocol) configuration.
+///
+/// TASK-INTEG-017: Extended with TCP transport configuration fields.
+/// Supports both stdio (default) and TCP transports.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McpConfig {
+    /// Transport type: "stdio" or "tcp"
+    #[serde(default = "default_transport")]
     pub transport: String,
+
+    /// Maximum payload size in bytes (default: 10MB)
+    #[serde(default = "default_max_payload_size")]
     pub max_payload_size: usize,
+
+    /// Request timeout in seconds (default: 30)
+    #[serde(default = "default_request_timeout")]
     pub request_timeout: u64,
+
+    /// TCP bind address (default: "127.0.0.1")
+    /// Only used when transport = "tcp"
+    #[serde(default = "default_bind_address")]
+    pub bind_address: String,
+
+    /// TCP port number (default: 3100)
+    /// Only used when transport = "tcp"
+    #[serde(default = "default_tcp_port")]
+    pub tcp_port: u16,
+
+    /// Maximum concurrent TCP connections (default: 32)
+    /// Only used when transport = "tcp"
+    #[serde(default = "default_max_connections")]
+    pub max_connections: usize,
+}
+
+// ============================================================================
+// Serde Default Functions for McpConfig
+// ============================================================================
+
+fn default_transport() -> String {
+    "stdio".to_string()
+}
+
+fn default_max_payload_size() -> usize {
+    10_485_760 // 10MB
+}
+
+fn default_request_timeout() -> u64 {
+    30
+}
+
+fn default_bind_address() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_tcp_port() -> u16 {
+    3100
+}
+
+fn default_max_connections() -> usize {
+    32
 }
 
 impl Default for McpConfig {
     fn default() -> Self {
         Self {
-            transport: "stdio".to_string(),
-            max_payload_size: 10_485_760, // 10MB
-            request_timeout: 30,
+            transport: default_transport(),
+            max_payload_size: default_max_payload_size(),
+            request_timeout: default_request_timeout(),
+            bind_address: default_bind_address(),
+            tcp_port: default_tcp_port(),
+            max_connections: default_max_connections(),
         }
+    }
+}
+
+impl McpConfig {
+    /// Validate the MCP configuration.
+    ///
+    /// TASK-INTEG-017: Validates all MCP configuration fields.
+    /// FAIL FAST: Returns error immediately on invalid configuration.
+    ///
+    /// # Validation Rules
+    ///
+    /// - `transport`: Must be "stdio" or "tcp" (case-insensitive after lowercase)
+    /// - `max_payload_size`: Must be > 0
+    /// - `request_timeout`: Must be > 0
+    /// - `bind_address`: Must be non-empty when transport = "tcp"
+    /// - `tcp_port`: Must be in valid range (1-65535) when transport = "tcp"
+    /// - `max_connections`: Must be > 0 when transport = "tcp"
+    ///
+    /// # Errors
+    ///
+    /// Returns `CoreError::ConfigError` with descriptive message for validation failures.
+    pub fn validate(&self) -> crate::error::CoreResult<()> {
+        use crate::error::CoreError;
+
+        // Validate transport type
+        let transport_lower = self.transport.to_lowercase();
+        if transport_lower != "stdio" && transport_lower != "tcp" {
+            return Err(CoreError::ConfigError(format!(
+                "McpConfig validation failed: transport must be 'stdio' or 'tcp', got '{}'",
+                self.transport
+            )));
+        }
+
+        // Validate max_payload_size
+        if self.max_payload_size == 0 {
+            return Err(CoreError::ConfigError(
+                "McpConfig validation failed: max_payload_size must be > 0".to_string(),
+            ));
+        }
+
+        // Validate request_timeout
+        if self.request_timeout == 0 {
+            return Err(CoreError::ConfigError(
+                "McpConfig validation failed: request_timeout must be > 0".to_string(),
+            ));
+        }
+
+        // TCP-specific validation
+        if transport_lower == "tcp" {
+            // Validate bind_address
+            if self.bind_address.trim().is_empty() {
+                return Err(CoreError::ConfigError(
+                    "McpConfig validation failed: bind_address must be non-empty for TCP transport"
+                        .to_string(),
+                ));
+            }
+
+            // Validate tcp_port (u16 is already 0-65535, but 0 is reserved)
+            if self.tcp_port == 0 {
+                return Err(CoreError::ConfigError(
+                    "McpConfig validation failed: tcp_port must be in range 1-65535, got 0"
+                        .to_string(),
+                ));
+            }
+
+            // Validate max_connections
+            if self.max_connections == 0 {
+                return Err(CoreError::ConfigError(
+                    "McpConfig validation failed: max_connections must be > 0 for TCP transport"
+                        .to_string(),
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
