@@ -342,7 +342,7 @@ Already present in workspace - no new dependencies added:
 |------|--------|---------------------|
 | TASK-LOGIC-008 (5-Stage Pipeline) | Ready | LOGIC-005, LOGIC-006, LOGIC-007 ✓ |
 | TASK-LOGIC-011 (RRF Fusion) | Ready | Can build on matrix aggregation |
-| TASK-LOGIC-012 (Entry-Point Selection) | Ready | Uses matrix weights for routing |
+| TASK-LOGIC-013 (Search Result Caching) | Ready | Uses matrix weights for caching decisions |
 
 ## Integration Notes for TASK-LOGIC-008
 - MatrixStrategySearch provides cross-embedder correlation analysis

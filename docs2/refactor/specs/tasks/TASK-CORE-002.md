@@ -296,8 +296,8 @@ impl EmbedderGroup {
    - Can use `Embedder::is_dense()` to filter
    - Can use `Embedder::expected_dims()` for dimension validation
 
-4. **TASK-LOGIC-012: Entry-Point Selection**
-   - Can use `EmbedderGroup` for query type mapping
+4. **TASK-LOGIC-013: Search Result Caching**
+   - Can use `EmbedderGroup` for cache partitioning
 </downstream_tasks>
 
 <no_action_required>

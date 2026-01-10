@@ -12,7 +12,6 @@
   <implements>
     <requirement_ref>ARCH-01: TeleologicalArray is atomic storage unit</requirement_ref>
     <requirement_ref>ARCH-02: Compare only compatible embedding types (apples-to-apples)</requirement_ref>
-    <requirement_ref>ARCH-04: Entry-point discovery for retrieval</requirement_ref>
   </implements>
   <depends_on>
     <task_ref status="COMPLETED">TASK-CORE-007: Per-Embedder Index Structure</task_ref>
@@ -41,7 +40,7 @@ This task has been **fully implemented**. The `HnswMultiSpaceIndex` has been rep
 | `remove_from_indexes()` | Removes from all indexes |
 | `get_embedder_vector()` | Extracts vector for specific embedder from `SemanticFingerprint` |
 | `compute_embedder_scores()` | Computes cosine similarity for all 13 embedders |
-| `search_semantic()` | Uses entry-point pattern (E1Semantic first) |
+| `search_semantic()` | Searches across all embedder spaces in parallel |
 | `search_purpose()` | Uses PurposeVector index directly |
 | Removed | `initialize_hnsw()`, `is_hnsw_initialized()` |
 

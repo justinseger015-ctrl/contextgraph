@@ -4,8 +4,8 @@
 
 This document defines the complete task dependency graph for refactoring the ContextGraph system to use teleological arrays (13-embedder arrays) as the fundamental storage and comparison unit.
 
-**Total Tasks**: 49
-**Layers**: Foundation (14), Logic (13), Integration (16), Testing (5), Performance (4)
+**Total Tasks**: 48
+**Layers**: Foundation (14), Logic (12), Integration (16), Testing (5), Performance (4)
 **Estimated Timeline**: 14-18 weeks
 
 ---
@@ -43,7 +43,6 @@ graph TD
         LOGIC009[TASK-LOGIC-009: Goal Discovery Pipeline]
         LOGIC010[TASK-LOGIC-010: Drift Detection]
         LOGIC011[TASK-LOGIC-011: RRF Fusion]
-        LOGIC012[TASK-LOGIC-012: Entry-Point Selection]
         LOGIC013[TASK-LOGIC-013: Search Result Caching]
     end
 
@@ -104,8 +103,6 @@ graph TD
     LOGIC001 --> LOGIC004
     LOGIC002 --> LOGIC004
     LOGIC003 --> LOGIC004
-    CORE002 --> LOGIC012
-
     %% Logic Internal Dependencies
     LOGIC004 --> LOGIC005
     LOGIC004 --> LOGIC006
@@ -114,7 +111,6 @@ graph TD
     LOGIC006 --> LOGIC008
     LOGIC007 --> LOGIC008
     LOGIC011 --> LOGIC008
-    LOGIC012 --> LOGIC008
     LOGIC004 --> LOGIC009
     LOGIC004 --> LOGIC010
     LOGIC008 --> LOGIC013
@@ -211,12 +207,11 @@ graph TD
 | 19 | TASK-LOGIC-005 | Single Embedder Search | LOGIC-004 | 2 | :white_check_mark: done |
 | 20 | TASK-LOGIC-006 | Weighted Full Search | LOGIC-004 | 2 | :white_check_mark: done |
 | 21 | TASK-LOGIC-007 | Matrix Strategy Search | LOGIC-004 | 2 | :white_check_mark: done |
-| 22 | TASK-LOGIC-008 | 5-Stage Pipeline | LOGIC-005-007, LOGIC-011-012 | 3 | :white_check_mark: done |
+| 22 | TASK-LOGIC-008 | 5-Stage Pipeline | LOGIC-005-007, LOGIC-011 | 3 | :white_check_mark: done |
 | 23 | TASK-LOGIC-009 | Goal Discovery Pipeline | LOGIC-004 | 3 | :white_check_mark: done |
 | 24 | TASK-LOGIC-010 | Drift Detection | LOGIC-004 | 2 | :white_check_mark: done |
 | 25 | TASK-LOGIC-011 | RRF Fusion Implementation | LOGIC-005-007 | 1.5 | :white_check_mark: done |
-| 26 | TASK-LOGIC-012 | Entry-Point Selection Heuristics | CORE-002 | 2 | :white_circle: todo |
-| 27 | TASK-LOGIC-013 | Search Result Caching | LOGIC-008 | 1.5 | :white_circle: todo |
+| 26 | TASK-LOGIC-013 | Search Result Caching | LOGIC-008 | 1.5 | :white_circle: todo |
 
 ### Layer 3: Integration (Weeks 9-14)
 
@@ -294,7 +289,6 @@ graph TD
 | TASK-LOGIC-009 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (10 tests pass, discovery.rs ~1177 lines, K-means clustering verified) |
 | TASK-LOGIC-010 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (25 tests pass, drift.rs in autonomous module, git: 0b1a955) |
 | TASK-LOGIC-011 | :white_check_mark: completed | 2026-01-09 | 2026-01-09 | YES (12 aggregation tests pass, RRF in pipeline Stage 3, k=60 verified) |
-| TASK-LOGIC-012 | :white_circle: todo | - | - | - |
 | TASK-LOGIC-013 | :white_circle: todo | - | - | - |
 
 ### Integration (16 tasks)
@@ -366,7 +360,6 @@ CORE-002 → CORE-003 → CORE-004 → LOGIC-004 → LOGIC-008 → INTEG-002 →
 | Task | Title | Implements | Est. Days |
 |------|-------|------------|-----------|
 | LOGIC-011 | RRF Fusion Implementation | Multi-space aggregation | 1.5 |
-| LOGIC-012 | Entry-Point Selection Heuristics | ARCH-04 (Entry-point discovery) | 2 |
 | LOGIC-013 | Search Result Caching | REQ-LATENCY-01 | 1.5 |
 
 ### Integration Layer Additions (INTEG-011 to INTEG-016)
@@ -416,7 +409,6 @@ CORE-002 → CORE-003 → CORE-004 → LOGIC-004 → LOGIC-008 → INTEG-002 →
 - [ ] Comparator handles all comparison types
 - [ ] Search latency <60ms at 1M memories
 - [ ] Goal discovery clusters correctly
-- [ ] Entry-point selection working
 - [ ] RRF fusion verified
 
 ### After Integration (Week 14)
@@ -446,7 +438,6 @@ CORE-002 → CORE-003 → CORE-004 → LOGIC-004 → LOGIC-008 → INTEG-002 →
 
 ### Critical (Must Address)
 - **TASK-CORE-002**: Embedder definitions must match constitution exactly (7 of 13 were wrong)
-- **TASK-LOGIC-008**: Hardcoded entry-point violates ARCH-04 (fixed by LOGIC-012)
 - **TASK-INTEG-011**: All SEC-* requirements must be implemented
 
 ### High Risk
@@ -473,7 +464,6 @@ CORE-002 → CORE-003 → CORE-004 → LOGIC-004 → LOGIC-008 → INTEG-002 →
 | ARCH-01: Atomic storage | CORE-003, CORE-006 |
 | ARCH-02: Apples-to-apples | LOGIC-004 |
 | ARCH-03: Autonomous-first | INTEG-002, INTEG-003 |
-| ARCH-04: Entry-point discovery | LOGIC-012 |
 | ARCH-05: 13 embedders | CORE-002 |
 | ARCH-06: MCP boundary | INTEG-001, INTEG-013 |
 | ARCH-07: Hook-driven lifecycle | INTEG-004, INTEG-012, INTEG-016 |

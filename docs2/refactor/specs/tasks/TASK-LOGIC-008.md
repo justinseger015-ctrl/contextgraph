@@ -157,7 +157,6 @@ The 5-stage pipeline enables:
 
 - **ARCH-01**: TeleologicalArray is atomic - all 13 embeddings stored/retrieved together
 - **ARCH-02**: Apples-to-apples comparison - E1 compares with E1, NEVER cross-embedder
-- **ARCH-04**: Entry-point discovery for retrieval (exactly what this pipeline implements)
 - **FAIL FAST**: All errors are fatal. No recovery attempts. No fallbacks.
 - **Performance**: inject_context <25ms, full retrieval <30ms
 

@@ -2,11 +2,11 @@
 
 ## 1. Overview
 
-The search system enables finding relevant teleological arrays using various comparison strategies. The core innovation is **entry-point discovery**: search ALL 13 embedding spaces simultaneously, find the closest neighbors in each individual space, and if ONE point in ANY space is close to another, those teleological vectors become candidates for full comparison.
+The search system enables finding relevant teleological arrays using various comparison strategies. The core innovation is **parallel multi-space search**: search ALL 13 embedding spaces simultaneously, find the closest neighbors in each individual space, and if ONE point in ANY space is close to another, those teleological vectors become candidates for full comparison.
 
 ### 1.1 Core Principles
 
-1. **Entry-Point Discovery**: Any of the 13 embedding spaces can serve as an entry point
+1. **Parallel Multi-Space Search**: All 13 embedding spaces are searched simultaneously
 2. **Apples-to-Apples Comparison**: Same embedder types compared to each other (E1 to E1, E5 to E5, etc.)
 3. **Union-First Candidate Generation**: If close in ANY space, it's a candidate
 4. **Full Array Comparison**: After discovery, compare complete teleological fingerprints

@@ -200,5 +200,5 @@ feat(TASK-LOGIC-005): implement single embedder HNSW search
 Supports: Stage 2 (E1Matryoshka128) and Stage 3 (E1Semantic) of 5-stage pipeline
 NOT supported: E6/E12/E13 (require different algorithms)
 
-Refs: ARCH-04 (entry-point discovery)
+Refs: ARCH-02 (apples-to-apples comparison)
 ```

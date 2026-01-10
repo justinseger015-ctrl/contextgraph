@@ -186,8 +186,8 @@ This task completion unblocks:
    - Can serialize/deserialize `SemanticFingerprint`
    - Uses `storage_bytes()` for allocation sizing
 
-4. **TASK-LOGIC-012: Entry-Point Selection**
-   - Can use `SemanticFingerprint::get(embedder)` for single-space search
+4. **TASK-LOGIC-013: Search Result Caching**
+   - Can use `SemanticFingerprint::get(embedder)` for per-space result caching
 </downstream_tasks>
 
 <api_reference>

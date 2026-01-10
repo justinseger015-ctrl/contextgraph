@@ -41,8 +41,7 @@ The original task specification contained several errors that would have caused 
 
 ## Implements
 
-- **REQ-SEARCH-07**: Multi-space ranking fusion
-- **ARCH-04**: Entry-point discovery with reranking (Stage 3 of 5-stage pipeline)
+- **REQ-SEARCH-07**: Multi-space ranking fusion (Stage 3 of 5-stage pipeline)
 
 ## Dependencies
 
@@ -311,7 +310,7 @@ Before marking this task as truly complete, manually verify:
 
 ## Fail Fast Requirements
 
-Per constitution.yaml `ARCH-04` and project policy:
+Per constitution.yaml FAIL FAST policy:
 
 1. **NO FALLBACKS** - If RRF computation fails, propagate error immediately
 2. **NO MOCK DATA IN TESTS** - Use real Uuids and computed scores
@@ -322,7 +321,7 @@ Per constitution.yaml `ARCH-04` and project policy:
 
 ## Traceability
 
-- Source: Constitution ARCH-04 (Entry-point discovery pattern)
+- Source: Constitution ARCH-02 (Apples-to-apples comparison)
 - Reference: TASK-LOGIC-008 Stage 3 (Multi-space rerank)
 - Constitution line 715: `similarity.method: "RRF(d) = Σᵢ 1/(60 + rankᵢ(d))"`
 - Constitution line 723: Stage 3 spec

@@ -806,14 +806,14 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         options: TeleologicalSearchOptions,
     ) -> CoreResult<Vec<TeleologicalSearchResult>> {
         debug!(
-            "Searching semantic with top_k={}, min_similarity={} using entry-point pattern",
+            "Searching semantic with top_k={}, min_similarity={}",
             options.top_k, options.min_similarity
         );
 
-        // ARCH-04: Entry-point discovery - search E1 Semantic first
+        // Search E1 Semantic as primary (TODO: parallel multi-space search)
         let entry_embedder = EmbedderIndex::E1Semantic;
         let entry_index = self.index_registry.get(entry_embedder).ok_or_else(|| {
-            CoreError::IndexError(format!("Entry-point index {:?} not found", entry_embedder))
+            CoreError::IndexError(format!("Index {:?} not found", entry_embedder))
         })?;
 
         // Search E1 semantic space with 2x top_k to allow filtering
@@ -821,7 +821,7 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         let candidates = entry_index
             .search(&query.e1_semantic, k, None)
             .map_err(|e| {
-                error!("Entry-point search failed: {}", e);
+                error!("Semantic search failed: {}", e);
                 CoreError::IndexError(e.to_string())
             })?;
 
@@ -870,7 +870,7 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         // Truncate to top_k
         results.truncate(options.top_k);
 
-        debug!("Entry-point search returned {} results", results.len());
+        debug!("Semantic search returned {} results", results.len());
         Ok(results)
     }
 

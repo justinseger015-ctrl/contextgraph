@@ -82,13 +82,6 @@ architectural_rules:
     enforcement: "API design; no manual goal-setting methods exposed"
     rationale: "Manual configuration creates brittleness. System discovers what matters by observing actual user behavior."
 
-  ARCH-04:
-    title: "Entry-Point Discovery for Retrieval"
-    severity: high
-    description: "All searches MUST follow entry-point discovery: (1) Query enters ONE embedding space, (2) Fast ANN in single HNSW, (3) Retrieve full TeleologicalArrays, (4) Multi-space reranking with RRF."
-    enforcement: "Search API design; SearchAgent implementation"
-    rationale: "Searching all 13 indices is O(13n). Entry-point discovery achieves O(n) search with O(k*13) reranking."
-
   ARCH-05:
     title: "All 13 Embedders Must Be Present"
     severity: critical
@@ -530,7 +523,7 @@ claude_code_integration:
 
     semantic-search:
       model: sonnet
-      trigger: "Explicit search with entry-point selection"
+      trigger: "Explicit search across all embeddings"
       mcp_tool: search_graph
       features:
         - "All comparison modes supported"
@@ -560,9 +553,9 @@ claude_code_integration:
 
     search-agent:
       model: haiku
-      purpose: "Entry-point discovery and reranking"
+      purpose: "Multi-space parallel search and reranking"
       features:
-        - "Select optimal embedder for query"
+        - "Search all embedder spaces in parallel"
       performance_target: "<30ms"
 
     goal-agent:
@@ -585,7 +578,7 @@ claude_code_integration:
 embeddings:
   paradigm: "NO FUSION - Store all 13 embeddings; ~17KB quantized (63% reduction), 100% info preserved"
 
-  models: # dim|math|lat|quant|entry_point
+  models: # dim|math|lat|quant
     E1_Semantic:
       dim: 1024
       type: dense
@@ -593,7 +586,6 @@ embeddings:
       lat: "<5ms"
       quant: "PQ-8"
       matryoshka: [512,256,128]
-      entry_point: "Default for general queries"
       model_ref: "sentence-transformers/all-MiniLM-L12-v2 or similar"
 
     E2_Temporal_Recent:
@@ -602,7 +594,6 @@ embeddings:
       math: Exp_Decay
       lat: "<2ms"
       quant: Float8
-      entry_point: "For 'recent', 'latest', 'new' queries"
       encodes: "time-since-creation features"
 
     E3_Temporal_Periodic:
@@ -611,7 +602,6 @@ embeddings:
       math: Fourier
       lat: "<2ms"
       quant: Float8
-      entry_point: "For 'every Monday', 'morning routine' queries"
       encodes: "day-of-week, time-of-day cyclical patterns"
 
     E4_Temporal_Positional:
@@ -620,7 +610,6 @@ embeddings:
       math: Sin_PE
       lat: "<2ms"
       quant: Float8
-      entry_point: "For 'who', 'what', entity-focused queries"
       encodes: "named entity links, who/what relationships"
 
     E5_Causal:
@@ -630,7 +619,6 @@ embeddings:
       lat: "<8ms"
       quant: "PQ-8"
       asymmetric: true
-      entry_point: "For 'why', 'because', 'caused by' queries"
       encodes: "cause-effect chains, because/therefore relationships"
 
     E6_Sparse:
@@ -639,7 +627,6 @@ embeddings:
       math: TopK
       lat: "<3ms"
       quant: Sparse
-      entry_point: "For exact keyword queries"
       encodes: "sparse lexical, keyword precision"
 
     E7_Code:
@@ -648,7 +635,6 @@ embeddings:
       math: AST_Transformer
       lat: "<10ms"
       quant: "PQ-8"
-      entry_point: "For code queries, technical context"
       encodes: "discourse context, surrounding conversation"
 
     E8_Graph:
@@ -657,7 +643,6 @@ embeddings:
       math: MeanPooling
       lat: "<5ms"
       quant: Float8
-      entry_point: "For 'feels like', emotional queries"
       encodes: "affective valence, sentiment and emotion"
 
     E9_HDC:
@@ -666,7 +651,6 @@ embeddings:
       math: XOR_Hamming
       lat: "<1ms"
       quant: Binary
-      entry_point: "For pattern matching, structural queries"
       encodes: "structural patterns, grammar and structure"
 
     E10_Multimodal:
@@ -675,7 +659,6 @@ embeddings:
       math: CrossAttention
       lat: "<15ms"
       quant: "PQ-8"
-      entry_point: "For 'how to', intent queries"
       encodes: "intent and function, what the content does"
 
     E11_Entity:
@@ -684,7 +667,6 @@ embeddings:
       math: "h+r≈t"
       lat: "<2ms"
       quant: Float8
-      entry_point: "For cross-modal retrieval"
       encodes: "multi-modal links, bridges text/code/diagrams"
 
     E12_LateInteraction:
@@ -693,7 +675,6 @@ embeddings:
       math: ColBERT_MaxSim
       lat: "<8ms"
       quant: TokenPruning
-      entry_point: "For precise document matching"
       encodes: "ColBERT-style token-level, variable length"
 
     E13_SPLADE:
@@ -702,7 +683,6 @@ embeddings:
       math: SPLADE_v2
       lat: "<5ms"
       quant: Sparse
-      entry_point: "For keyword expansion queries"
       encodes: "term matching variant, complementary to E6"
 
   fingerprint:
@@ -914,7 +894,7 @@ version_history:
       - "Added Claude Code integration section (hooks, skills, subagents)"
       - "Enhanced anti-patterns with severity and rationale (AP-01 to AP-23)"
       - "Added TypeScript coding standards"
-      - "Enhanced embeddings with entry_point and encodes fields"
+      - "Enhanced embeddings with encodes fields"
       - "Aligned with constitution.md specification v2.0"
 
   "4.1.0":
@@ -950,7 +930,6 @@ quick_reference:
     AP-04: "No partial array storage"
 
   performance_targets:
-    entry_point_search: "<5ms p95"
     full_retrieval: "<30ms p95"
     thirteen_model_embedding: "<500ms p95"
     pre_tool_use_hook: "<100ms p95"

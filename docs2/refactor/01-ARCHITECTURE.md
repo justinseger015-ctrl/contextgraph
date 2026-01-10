@@ -8,7 +8,7 @@ The Teleological Array System represents a paradigm shift in AI memory architect
 1. **Atomic Arrays**: All 13 embeddings are generated, stored, and compared as a single unit
 2. **No Manual North Star**: Goals emerge autonomously from data patterns
 3. **Claude Code Hooks Integration**: Autonomous embedding pipeline via lifecycle hooks
-4. **Entry-Point Discovery**: Find closest matches in any of the 13 spaces
+4. **Parallel Multi-Space Search**: Find closest matches by searching all 13 spaces simultaneously
 
 ---
 

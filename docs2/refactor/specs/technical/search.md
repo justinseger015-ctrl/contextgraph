@@ -15,12 +15,12 @@
 
 <overview>
 The search system enables finding relevant teleological arrays using a 5-stage pipeline
-that leverages entry-point discovery across all 13 embedding spaces. The core innovation
-is that ANY embedding space can serve as an entry point - if an item is close in even ONE
+that searches all 13 embedding spaces in parallel. The core innovation
+is that candidates are discovered from ALL embedding spaces simultaneously - if an item is close in even ONE
 space, it becomes a candidate for full comparison.
 
 Key features:
-- Multi-space entry-point discovery (13 parallel HNSW indices)
+- Parallel search across all 13 HNSW indices
 - MUVERA-inspired fixed dimensional encoding for 8x speedup
 - Apples-to-apples per-embedder comparison
 - Configurable search matrices for weighted fusion
@@ -48,7 +48,7 @@ sequenceDiagram
     H->>H: Inject Context + Learned Thresholds
     H->>S: Enhanced Search Request
 
-    Note over S: Stage 1: Entry-Point Selection
+    Note over S: Stage 1: Parallel Space Search
     S->>I: Parallel search all 13 spaces
     I-->>S: Candidates per space
 
@@ -79,10 +79,10 @@ sequenceDiagram
 <section id="pipeline">
 <title>Five-Stage Search Pipeline</title>
 
-<stage id="stage-1" name="Entry-Point Selection">
+<stage id="stage-1" name="Parallel Space Search">
 <description>
-Select which of the 13 embedding spaces to use as entry points for candidate discovery.
-Any space can serve as an entry point based on query intent and configuration.
+Search all 13 embedding spaces in parallel for candidate discovery.
+Every space is searched simultaneously to ensure no relevant candidates are missed.
 </description>
 
 <embedding_spaces>
@@ -374,7 +374,7 @@ pub fn finalize_results(
     Maximum results to return
   </field>
   <field name="discovery" type="DiscoveryConfig" constraints="required">
-    Entry-point discovery configuration
+    Parallel search configuration across all spaces
   </field>
   <field name="filter" type="Option&lt;SearchFilter&gt;" constraints="optional">
     Optional filters (time range, purpose, etc.)
@@ -391,9 +391,9 @@ pub fn finalize_results(
 </model>
 
 <model name="DiscoveryConfig">
-  <description>Configuration for entry-point discovery</description>
+  <description>Configuration for parallel multi-space search</description>
   <field name="active_spaces" type="EmbedderMask" constraints="default: all 13">
-    Which embedding spaces to use for discovery
+    Which embedding spaces to search (all 13 by default)
   </field>
   <field name="candidates_per_space" type="usize" constraints="default: 100">
     Candidates per space (higher = better recall, slower)
@@ -494,35 +494,6 @@ pub fn finalize_results(
 <!-- ============================================================ -->
 
 <component_contracts>
-
-<component name="EntryPointSelector" path="src/search/entry_point.rs">
-  <trait_definition>
-```rust
-/// Trait for selecting entry points in the search pipeline
-#[async_trait]
-pub trait EntryPointSelector: Send + Sync {
-    /// Select which embedding spaces to use based on query and intent
-    async fn select_spaces(
-        &self,
-        query: &TeleologicalArray,
-        intent: &QueryIntent,
-        config: &DiscoveryConfig,
-    ) -> Result<EmbedderMask, SearchError>;
-
-    /// Get recommended candidates_per_space based on query complexity
-    fn recommend_candidates(&self, intent: &QueryIntent) -> usize;
-
-    /// Get learned thresholds from ReasoningBank
-    async fn get_learned_thresholds(
-        &self,
-        query_type: &str,
-    ) -> Option<[f32; 13]>;
-}
-```
-  </trait_definition>
-  <implementation>DefaultEntryPointSelector</implementation>
-  <implements>REQ-SEARCH-01, REQ-SEARCH-02</implements>
-</component>
 
 <component name="CandidateRetriever" path="src/search/retriever.rs">
   <trait_definition>
@@ -657,7 +628,7 @@ impl RRFFusion {
 /// Primary search engine for teleological arrays
 #[async_trait]
 pub trait TeleologicalSearchEngine: Send + Sync {
-    /// Execute a search query using entry-point discovery
+    /// Execute a search query using parallel multi-space search
     async fn search(
         &self,
         query: SearchQuery,
@@ -957,12 +928,12 @@ Found 8 relevant memories:
 ```
 </skill>
 
-<skill name="entry-point-search">
+<skill name="parallel-search">
 ```yaml
-# .claude/skills/entry-point-search/SKILL.md
+# .claude/skills/parallel-search/SKILL.md
 ---
-name: entry-point-search
-description: Multi-space entry-point discovery across all 13 embedding spaces
+name: parallel-search
+description: Parallel search across all 13 embedding spaces
 version: 1.0.0
 triggers:
   - explore
@@ -987,11 +958,11 @@ arguments:
 tools:
   - mcp__contextgraph__search_teleological
 config:
-  search_matrix: entry_point_optimized
+  search_matrix: parallel_optimized
   active_spaces: all
 ---
 
-# Entry-Point Search Skill
+# Parallel Search Skill
 
 Comprehensive multi-space search that discovers relevant memories through
 ANY of the 13 embedding spaces. A memory is considered relevant if it's
@@ -1147,7 +1118,7 @@ config:
     normal: UnionAll
     deep: UnionAll
   search_matrix:
-    shallow: entry_point_optimized
+    shallow: parallel_optimized
     normal: correlation_aware
     deep: recall_maximizing
 hooks:
@@ -1435,7 +1406,7 @@ async function analyzeQueryIntent(query: string): Promise<IntentAnalysis> {
 | code | code_focused | E7, E12 | Tiered |
 | entity | knowledge_graph | E11, E8 | UnionAll |
 | relational | correlation_aware | All | UnionAll |
-| exploratory | entry_point_optimized | All | UnionAll |
+| exploratory | parallel_optimized | All | UnionAll |
 | context | correlation_aware | All | UnionAll |
 </weight_selection>
 
@@ -1656,7 +1627,7 @@ pub fn precision_retrieval() -> SearchMatrix {
 <use_case>Cross-domain discovery</use_case>
 </matrix>
 
-<matrix name="entry_point_optimized">
+<matrix name="parallel_optimized">
 <description>Higher weight on good discovery spaces</description>
 <weights>
   E1 (Semantic): 0.20
@@ -1668,7 +1639,7 @@ pub fn precision_retrieval() -> SearchMatrix {
   Others: 0.16/7 each
 </weights>
 <aggregation>WeightedSum</aggregation>
-<use_case>Performance-critical entry-point search</use_case>
+<use_case>Performance-critical parallel search</use_case>
 </matrix>
 
 <matrix name="recall_maximizing">
