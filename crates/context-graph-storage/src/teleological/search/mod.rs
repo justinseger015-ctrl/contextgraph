@@ -81,6 +81,7 @@
 mod error;
 mod matrix;
 mod multi;
+mod pipeline;
 mod result;
 mod single;
 
@@ -122,4 +123,28 @@ pub use matrix::{
     MatrixSearchBuilder,
     // Result types
     MatrixSearchResults,
+};
+
+// Re-export pipeline types
+pub use pipeline::{
+    // Pipeline struct and builder
+    RetrievalPipeline,
+    PipelineBuilder,
+    // Configuration
+    PipelineConfig,
+    StageConfig,
+    // Stage enum
+    PipelineStage,
+    // Result types
+    PipelineResult,
+    StageResult,
+    PipelineCandidate,
+    // Error types
+    PipelineError,
+    // Storage traits
+    TokenStorage,
+    SpladeIndex,
+    // In-memory implementations for testing
+    InMemoryTokenStorage,
+    InMemorySpladeIndex,
 };

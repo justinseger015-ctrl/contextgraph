@@ -1,10 +1,10 @@
-# TASK-LOGIC-008: 5-Stage Pipeline
+# TASK-LOGIC-008: 5-Stage Retrieval Pipeline
 
 ```xml
-<task_spec id="TASK-LOGIC-008" version="1.0">
+<task_spec id="TASK-LOGIC-008" version="4.0">
 <metadata>
-  <title>Implement 5-Stage Retrieval Pipeline</title>
-  <status>todo</status>
+  <title>5-Stage Retrieval Pipeline with Progressive Filtering</title>
+  <status>in_progress</status>
   <layer>logic</layer>
   <sequence>18</sequence>
   <implements>
@@ -12,523 +12,318 @@
     <requirement_ref>REQ-LATENCY-01</requirement_ref>
   </implements>
   <depends_on>
-    <task_ref>TASK-LOGIC-005</task_ref>
-    <task_ref>TASK-LOGIC-006</task_ref>
-    <task_ref>TASK-LOGIC-007</task_ref>
+    <task_ref status="DONE">TASK-LOGIC-005</task_ref>
+    <task_ref status="DONE">TASK-LOGIC-006</task_ref>
+    <task_ref status="DONE">TASK-LOGIC-007</task_ref>
   </depends_on>
   <estimated_complexity>high</estimated_complexity>
-  <estimated_days>3</estimated_days>
 </metadata>
 
 <context>
-The 5-stage pipeline optimizes retrieval latency by progressively filtering
-candidates through stages of increasing precision but decreasing speed.
-Target: <60ms at 1M memories.
+## ⚠️ CRITICAL: CURRENT STATE (Verified 2026-01-09)
+
+### pipeline.rs EXISTS AND COMPILES
+
+The file `crates/context-graph-storage/src/teleological/search/pipeline.rs` **already exists** with:
+- **1934 lines** of code
+- **21 unit tests** (all passing)
+- **Full implementation** of the 5-stage pipeline structure
+- **Exports in mod.rs** already configured
+
+### WHAT IS IMPLEMENTED (DO NOT RE-IMPLEMENT)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| `PipelineError` enum | ✅ DONE | Stage, Timeout, MissingQuery, EmptyCandidates errors |
+| `PipelineStage` enum | ✅ DONE | SpladeFilter, MatryoshkaAnn, RrfRerank, AlignmentFilter, MaxSimRerank |
+| `StageConfig` struct | ✅ DONE | enabled, candidate_multiplier, min_score_threshold, max_latency_ms |
+| `PipelineConfig` struct | ✅ DONE | stages[5], k, purpose_vector, rrf_k |
+| `PipelineCandidate` struct | ✅ DONE | id, score, stage_scores |
+| `StageResult` struct | ✅ DONE | candidates, latency_us, candidates_in, candidates_out, stage |
+| `PipelineResult` struct | ✅ DONE | results, stage_results, total_latency_us, stages_executed, alignment_verified |
+| `RetrievalPipeline` struct | ✅ DONE | single_search, multi_search, config, splade_index, token_storage |
+| `PipelineBuilder` struct | ✅ DONE | Builder pattern for queries |
+| `TokenStorage` trait | ✅ DONE | Trait for ColBERT token storage |
+| `SpladeIndex` trait | ✅ DONE | Trait for SPLADE inverted index |
+| `InMemoryTokenStorage` | ✅ DONE | Test implementation |
+| `InMemorySpladeIndex` | ✅ DONE | Test implementation |
+| Stage 1: SPLADE filter | ✅ DONE | Uses SpladeIndex trait (NOT HNSW) |
+| Stage 2: Matryoshka ANN | ✅ DONE | Uses E1Matryoshka128 HNSW |
+| Stage 3: RRF rerank | ✅ DONE | Multi-space with RRF scoring |
+| Stage 4: Alignment filter | ✅ DONE | PurposeVector filtering |
+| Stage 5: MaxSim rerank | ✅ DONE | Uses TokenStorage trait (NOT HNSW) |
+| Unit tests | ✅ DONE | 21 tests passing |
+
+### Current Test Results (VERIFIED)
+
+```
+cargo test -p context-graph-storage teleological::search::pipeline
+running 21 tests
+test teleological::search::pipeline::tests::test_builder_basic ... ok
+test teleological::search::pipeline::tests::test_builder_chain ... ok
+test teleological::search::pipeline::tests::test_default_config ... ok
+test teleological::search::pipeline::tests::test_empty_index_returns_empty ... ok
+test teleological::search::pipeline::tests::test_execute_stages_selective ... ok
+test teleological::search::pipeline::tests::test_fail_fast_dimension_mismatch ... ok
+test teleological::search::pipeline::tests::test_fail_fast_empty_query ... ok
+test teleological::search::pipeline::tests::test_fail_fast_inf_in_query ... ok
+test teleological::search::pipeline::tests::test_fail_fast_nan_in_query ... ok
+test teleological::search::pipeline::tests::test_funnel_shape ... ok
+test teleological::search::pipeline::tests::test_full_pipeline_execution ... ok
+test teleological::search::pipeline::tests::test_latency_tracking ... ok
+test teleological::search::pipeline::tests::test_pipeline_creation ... ok
+test teleological::search::pipeline::tests::test_pipeline_stage_enum ... ok
+test teleological::search::pipeline::tests::test_rrf_score_calculation ... ok
+test teleological::search::pipeline::tests::test_single_candidate ... ok
+test teleological::search::pipeline::tests::test_stage_1_not_hnsw ... ok
+test teleological::search::pipeline::tests::test_stage_5_not_hnsw ... ok
+test teleological::search::pipeline::tests::test_stage_config_custom ... ok
+test teleological::search::pipeline::tests::test_stage_scores_tracked ... ok
+test teleological::search::pipeline::tests::test_verification_log ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored
+```
+
+### File Locations (VERIFIED)
+
+| File | Purpose | Status | Lines |
+|------|---------|--------|-------|
+| `crates/context-graph-storage/src/teleological/search/pipeline.rs` | **PIPELINE** | **EXISTS** | 1934 |
+| `crates/context-graph-storage/src/teleological/search/mod.rs` | Module exports | EXISTS | ~150 |
+| `crates/context-graph-storage/src/teleological/search/single.rs` | SingleEmbedderSearch | EXISTS | ~900 |
+| `crates/context-graph-storage/src/teleological/search/multi.rs` | MultiEmbedderSearch | EXISTS | ~1600 |
+| `crates/context-graph-storage/src/teleological/search/matrix.rs` | MatrixStrategySearch | EXISTS | ~1478 |
+| `crates/context-graph-storage/src/teleological/search/error.rs` | SearchError types | EXISTS | ~100 |
+| `crates/context-graph-storage/src/teleological/search/result.rs` | Result types | EXISTS | ~50 |
 </context>
 
 <objective>
-Implement the 5-stage retrieval pipeline: SPLADE sparse pre-filter, Matryoshka
-fast ANN, multi-space RRF rerank, teleological alignment filter, and late
-interaction MaxSim.
+## REMAINING WORK
+
+The core pipeline structure is implemented. The remaining work is **integration**:
+
+### 1. Real SPLADE Index Integration (Stage 1)
+
+The pipeline defines a `SpladeIndex` trait. Create a real implementation that uses inverted index infrastructure:
+
+```rust
+/// Trait for SPLADE inverted index operations. NOT HNSW.
+pub trait SpladeIndex: Send + Sync {
+    fn search(&self, sparse_query: &[f32], k: usize) -> Result<Vec<(Uuid, f32)>, SearchError>;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool { self.len() == 0 }
+}
+```
+
+### 2. Real Token Storage Integration (Stage 5)
+
+The pipeline defines a `TokenStorage` trait. Create a real implementation that retrieves ColBERT token embeddings:
+
+```rust
+/// Trait for storing/retrieving token-level embeddings for ColBERT MaxSim.
+pub trait TokenStorage: Send + Sync {
+    fn get_tokens(&self, id: &Uuid) -> Result<Option<Vec<Vec<f32>>>, SearchError>;
+    fn store_tokens(&self, id: &Uuid, tokens: Vec<Vec<f32>>) -> Result<(), SearchError>;
+}
+```
+
+### 3. Performance Validation at Scale
+
+Run at scale to verify:
+- Total pipeline latency <60ms at 1M memories
+- Per-stage latency targets met
+- Funnel shape maintained
+
+### 4. End-to-End Integration Tests with Real Data
+
+Write tests that:
+- Create real EmbedderIndexRegistry with actual HNSW indexes
+- Insert real TeleologicalArrays with all 13 embeddings
+- Execute pipeline with real queries
+- Verify results against ground truth
 </objective>
 
 <rationale>
-Multi-stage retrieval enables:
-1. Early elimination of non-candidates (Stage 1-2)
-2. Progressive precision increase (Stages 3-5)
-3. Sub-60ms latency even at scale
+The 5-stage pipeline enables:
+1. Early elimination of non-candidates (Stage 1-2): 1M -> 1K in <15ms
+2. Progressive precision increase (Stages 3-5): 1K -> k with increasing accuracy
+3. Sub-60ms total latency even at scale
 4. Stage skipping for specialized queries
-5. Configurable precision-speed tradeoff
+5. Configurable precision-speed tradeoff per stage
 </rationale>
 
-<input_context_files>
-  <file purpose="single_search">crates/context-graph-storage/src/teleological/search/single.rs</file>
-  <file purpose="weighted_search">crates/context-graph-storage/src/teleological/search/weighted.rs</file>
-  <file purpose="matrix_search">crates/context-graph-storage/src/teleological/search/matrix.rs</file>
-  <file purpose="pipeline_spec">docs2/refactor/03-SEARCH.md</file>
-</input_context_files>
+<architecture_constraints>
+## From constitution.yaml (MUST NOT VIOLATE)
 
-<prerequisites>
-  <check>TASK-LOGIC-005 complete (SingleEmbedderSearch)</check>
-  <check>TASK-LOGIC-006 complete (WeightedFullSearch)</check>
-  <check>TASK-LOGIC-007 complete (MatrixStrategySearch)</check>
-</prerequisites>
+- **ARCH-01**: TeleologicalArray is atomic - all 13 embeddings stored/retrieved together
+- **ARCH-02**: Apples-to-apples comparison - E1 compares with E1, NEVER cross-embedder
+- **ARCH-04**: Entry-point discovery for retrieval (exactly what this pipeline implements)
+- **FAIL FAST**: All errors are fatal. No recovery attempts. No fallbacks.
+- **Performance**: inject_context <25ms, full retrieval <30ms
 
-<scope>
-  <in_scope>
-    <item>Stage 1: SPLADE sparse pre-filter</item>
-    <item>Stage 2: Matryoshka 128D fast ANN</item>
-    <item>Stage 3: Multi-space RRF rerank</item>
-    <item>Stage 4: Teleological alignment filter</item>
-    <item>Stage 5: Late interaction MaxSim</item>
-    <item>Configurable stage pipeline</item>
-    <item>Latency tracking and optimization</item>
-  </in_scope>
-  <out_of_scope>
-    <item>Goal discovery (TASK-LOGIC-009)</item>
-    <item>Drift detection (TASK-LOGIC-010)</item>
-  </out_of_scope>
-</scope>
+## Performance Budgets
 
-<definition_of_done>
-  <signatures>
-    <signature file="crates/context-graph-storage/src/teleological/search/pipeline.rs">
-      use crate::teleological::store::SearchResult;
-      use context_graph_core::teleology::array::TeleologicalArray;
+| Stage | Target Latency | Input | Output |
+|-------|---------------|-------|--------|
+| S1: SPLADE | <5ms | 1M+ | 10K |
+| S2: Matryoshka | <10ms | 10K | 1K |
+| S3: RRF | <20ms | 1K | 100 |
+| S4: Alignment | <10ms | 100 | 50 |
+| S5: MaxSim | <15ms | 50 | k |
+| **Total** | **<60ms** | **1M+** | **k** |
 
-      /// Configuration for a pipeline stage.
-      #[derive(Debug, Clone)]
-      pub struct StageConfig {
-          pub enabled: bool,
-          pub candidate_multiplier: f32,
-          pub min_score_threshold: f32,
-          pub max_latency_ms: u64,
-      }
+## CRITICAL: Non-HNSW Embedders
 
-      /// Pipeline stage results with timing.
-      #[derive(Debug)]
-      pub struct StageResult {
-          pub candidates: Vec<SearchResult>,
-          pub latency_ms: u64,
-          pub candidates_in: usize,
-          pub candidates_out: usize,
-      }
+These 3 embedders CANNOT be queried via HNSW:
+- **E6Sparse** - Requires inverted index with BM25
+- **E12LateInteraction** - Requires ColBERT MaxSim token-level
+- **E13Splade** - Requires inverted index with learned expansion
 
-      /// 5-stage retrieval pipeline.
-      pub struct RetrievalPipeline {
-          stage_configs: [StageConfig; 5],
-          indices: PipelineIndices,
-      }
+The pipeline correctly uses trait abstractions for Stage 1 (`SpladeIndex`) and Stage 5 (`TokenStorage`).
+</architecture_constraints>
 
-      impl RetrievalPipeline {
-          pub fn new(indices: PipelineIndices) -> Self;
-          pub fn with_configs(indices: PipelineIndices, configs: [StageConfig; 5]) -> Self;
+<source_of_truth>
+## Full State Verification Protocol
 
-          /// Execute full pipeline.
-          pub async fn execute(
-              &self,
-              query: &TeleologicalArray,
-              limit: usize,
-          ) -> Result<PipelineResult, PipelineError>;
+### 1. Before ANY Test
 
-          /// Execute with stage selection.
-          pub async fn execute_stages(
-              &self,
-              query: &TeleologicalArray,
-              stages: &[PipelineStage],
-              limit: usize,
-          ) -> Result<PipelineResult, PipelineError>;
+```rust
+// Print registry state
+println!("=== SOURCE OF TRUTH: Registry State ===");
+for embedder in [E1Matryoshka128, E1Semantic, PurposeVector] {
+    let count = registry.get(embedder).map(|i| i.len()).unwrap_or(0);
+    println!("{:?}: {} vectors indexed", embedder, count);
+}
+```
 
-          /// Stage 1: SPLADE sparse pre-filter
-          async fn stage_splade_filter(
-              &self,
-              query: &TeleologicalArray,
-              config: &StageConfig,
-          ) -> Result<StageResult, PipelineError>;
+### 2. After Pipeline Execution
 
-          /// Stage 2: Matryoshka 128D fast ANN
-          async fn stage_matryoshka_ann(
-              &self,
-              query: &TeleologicalArray,
-              candidates: Vec<SearchResult>,
-              config: &StageConfig,
-          ) -> Result<StageResult, PipelineError>;
+```rust
+let result = pipeline.execute(&query_splade, &query_matryoshka, &query_semantic, &query_tokens)?;
 
-          /// Stage 3: Multi-space RRF rerank
-          async fn stage_rrf_rerank(
-              &self,
-              query: &TeleologicalArray,
-              candidates: Vec<SearchResult>,
-              config: &StageConfig,
-          ) -> Result<StageResult, PipelineError>;
+// VERIFY: Results non-empty
+assert!(!result.results.is_empty(), "Pipeline returned empty results");
 
-          /// Stage 4: Teleological alignment filter
-          async fn stage_alignment_filter(
-              &self,
-              query: &TeleologicalArray,
-              candidates: Vec<SearchResult>,
-              config: &StageConfig,
-          ) -> Result<StageResult, PipelineError>;
+// VERIFY: All stages executed
+assert_eq!(result.stages_executed.len(), 5);
 
-          /// Stage 5: Late interaction MaxSim
-          async fn stage_maxsim_rerank(
-              &self,
-              query: &TeleologicalArray,
-              candidates: Vec<SearchResult>,
-              config: &StageConfig,
-          ) -> Result<StageResult, PipelineError>;
-      }
-
-      #[derive(Debug, Clone, Copy)]
-      pub enum PipelineStage {
-          SpladeFilter,
-          MatryoshkaAnn,
-          RrfRerank,
-          AlignmentFilter,
-          MaxSimRerank,
-      }
-
-      #[derive(Debug)]
-      pub struct PipelineResult {
-          pub results: Vec<SearchResult>,
-          pub stage_results: Vec<StageResult>,
-          pub total_latency_ms: u64,
-          pub stages_executed: Vec<PipelineStage>,
-      }
-    </signature>
-  </signatures>
-
-  <constraints>
-    <constraint>Full pipeline completes in <60ms at 1M memories</constraint>
-    <constraint>Each stage filters to fewer candidates</constraint>
-    <constraint>Stages can be skipped for specialized queries</constraint>
-    <constraint>Latency tracked per stage</constraint>
-  </constraints>
-
-  <verification>
-    <command>cargo test -p context-graph-storage search::pipeline</command>
-    <command>cargo bench -p context-graph-storage pipeline_latency</command>
-  </verification>
-</definition_of_done>
-
-<pseudo_code>
-// crates/context-graph-storage/src/teleological/search/pipeline.rs
-
-use std::time::Instant;
-
-use crate::teleological::store::SearchResult;
-use crate::teleological::index::EmbedderIndex;
-use context_graph_core::teleology::array::TeleologicalArray;
-use context_graph_core::teleology::embedder::Embedder;
-use context_graph_core::teleology::similarity::token_level;
-
-#[derive(Debug, Clone)]
-pub struct StageConfig {
-    pub enabled: bool,
-    pub candidate_multiplier: f32,
-    pub min_score_threshold: f32,
-    pub max_latency_ms: u64,
+// VERIFY: Funnel shape
+for window in result.stage_results.windows(2) {
+    assert!(window[1].candidates_in <= window[0].candidates_out);
 }
 
-impl Default for StageConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            candidate_multiplier: 3.0,
-            min_score_threshold: 0.3,
-            max_latency_ms: 20,
-        }
-    }
+// VERIFY: Latency
+assert!(result.total_latency_us / 1000 < 60, "Exceeded 60ms target");
+
+// VERIFY: Scores valid (no NaN)
+for candidate in &result.results {
+    assert!(!candidate.score.is_nan());
+    assert!(candidate.score >= 0.0);
 }
 
-#[derive(Debug)]
-pub struct StageResult {
-    pub candidates: Vec<SearchResult>,
-    pub latency_ms: u64,
-    pub candidates_in: usize,
-    pub candidates_out: usize,
+// VERIFY: Results sorted descending
+for window in result.results.windows(2) {
+    assert!(window[0].score >= window[1].score);
 }
+```
 
-#[derive(Debug, Clone, Copy)]
-pub enum PipelineStage {
-    SpladeFilter,
-    MatryoshkaAnn,
-    RrfRerank,
-    AlignmentFilter,
-    MaxSimRerank,
-}
+### 3. Edge Case Verification
 
-pub struct PipelineIndices {
-    pub splade: Box<dyn EmbedderIndex + Send + Sync>,      // E6 or E13
-    pub semantic: Box<dyn EmbedderIndex + Send + Sync>,     // E1 (Matryoshka)
-    pub late_interaction: Box<dyn EmbedderIndex + Send + Sync>, // E12
-    pub all_indices: Vec<Box<dyn EmbedderIndex + Send + Sync>>,
-}
-
-pub struct RetrievalPipeline {
-    stage_configs: [StageConfig; 5],
-    indices: PipelineIndices,
-}
-
-impl RetrievalPipeline {
-    pub fn new(indices: PipelineIndices) -> Self {
-        Self {
-            stage_configs: [
-                StageConfig { candidate_multiplier: 10.0, ..Default::default() }, // Stage 1
-                StageConfig { candidate_multiplier: 5.0, ..Default::default() },  // Stage 2
-                StageConfig { candidate_multiplier: 3.0, ..Default::default() },  // Stage 3
-                StageConfig { candidate_multiplier: 2.0, ..Default::default() },  // Stage 4
-                StageConfig { candidate_multiplier: 1.0, ..Default::default() },  // Stage 5
-            ],
-            indices,
-        }
-    }
-
-    pub async fn execute(
-        &self,
-        query: &TeleologicalArray,
-        limit: usize,
-    ) -> Result<PipelineResult, PipelineError> {
-        let stages = vec![
-            PipelineStage::SpladeFilter,
-            PipelineStage::MatryoshkaAnn,
-            PipelineStage::RrfRerank,
-            PipelineStage::AlignmentFilter,
-            PipelineStage::MaxSimRerank,
-        ];
-        self.execute_stages(query, &stages, limit).await
-    }
-
-    pub async fn execute_stages(
-        &self,
-        query: &TeleologicalArray,
-        stages: &[PipelineStage],
-        limit: usize,
-    ) -> Result<PipelineResult, PipelineError> {
-        let start = Instant::now();
-        let mut stage_results = Vec::new();
-        let mut current_candidates: Vec<SearchResult> = Vec::new();
-        let mut executed_stages = Vec::new();
-
-        for (idx, stage) in stages.iter().enumerate() {
-            let config = &self.stage_configs[idx];
-            if !config.enabled {
-                continue;
-            }
-
-            let target_count = (limit as f32 * config.candidate_multiplier) as usize;
-
-            let result = match stage {
-                PipelineStage::SpladeFilter => {
-                    self.stage_splade_filter(query, target_count, config).await?
-                }
-                PipelineStage::MatryoshkaAnn => {
-                    self.stage_matryoshka_ann(query, current_candidates.clone(), target_count, config).await?
-                }
-                PipelineStage::RrfRerank => {
-                    self.stage_rrf_rerank(query, current_candidates.clone(), target_count, config).await?
-                }
-                PipelineStage::AlignmentFilter => {
-                    self.stage_alignment_filter(query, current_candidates.clone(), target_count, config).await?
-                }
-                PipelineStage::MaxSimRerank => {
-                    self.stage_maxsim_rerank(query, current_candidates.clone(), limit, config).await?
-                }
-            };
-
-            current_candidates = result.candidates.clone();
-            stage_results.push(result);
-            executed_stages.push(*stage);
-        }
-
-        Ok(PipelineResult {
-            results: current_candidates,
-            stage_results,
-            total_latency_ms: start.elapsed().as_millis() as u64,
-            stages_executed: executed_stages,
-        })
-    }
-
-    /// Stage 1: SPLADE sparse pre-filter
-    /// Uses E6 (SpladeExpansion) for broad recall with lexical matching.
-    async fn stage_splade_filter(
-        &self,
-        query: &TeleologicalArray,
-        target_count: usize,
-        config: &StageConfig,
-    ) -> Result<StageResult, PipelineError> {
-        let start = Instant::now();
-
-        let query_embedding = query.get(Embedder::SpladeExpansion);
-        let results = self.indices.splade
-            .search(query_embedding, target_count, Some(config.min_score_threshold))
-            .await
-            .map_err(|e| PipelineError::Stage { stage: "splade", error: e.to_string() })?;
-
-        Ok(StageResult {
-            candidates_in: 0, // First stage
-            candidates_out: results.len(),
-            candidates: results.into_iter()
-                .map(|r| SearchResult {
-                    array: TeleologicalArray::new(r.id),
-                    similarity: r.score,
-                    per_embedder_scores: [None; 13],
-                })
-                .collect(),
-            latency_ms: start.elapsed().as_millis() as u64,
-        })
-    }
-
-    /// Stage 2: Matryoshka 128D fast ANN
-    /// Uses truncated E1 (Semantic) embedding for fast approximate search.
-    async fn stage_matryoshka_ann(
-        &self,
-        query: &TeleologicalArray,
-        candidates: Vec<SearchResult>,
-        target_count: usize,
-        config: &StageConfig,
-    ) -> Result<StageResult, PipelineError> {
-        let start = Instant::now();
-        let candidates_in = candidates.len();
-
-        // Use Matryoshka truncation (128D) for speed
-        let query_embedding = query.get(Embedder::Semantic);
-
-        // If we have candidates, rerank them; otherwise search fresh
-        let results = if candidates.is_empty() {
-            self.indices.semantic
-                .search(query_embedding, target_count, None)
-                .await
-                .map_err(|e| PipelineError::Stage { stage: "matryoshka", error: e.to_string() })?
-        } else {
-            // Rerank candidates using semantic similarity
-            // In practice, we'd look up the actual arrays and compare
-            todo!("Rerank candidates using semantic similarity")
-        };
-
-        Ok(StageResult {
-            candidates_in,
-            candidates_out: results.len().min(target_count),
-            candidates: results.into_iter()
-                .take(target_count)
-                .map(|r| SearchResult {
-                    array: TeleologicalArray::new(r.id),
-                    similarity: r.score,
-                    per_embedder_scores: [None; 13],
-                })
-                .collect(),
-            latency_ms: start.elapsed().as_millis() as u64,
-        })
-    }
-
-    /// Stage 3: Multi-space RRF rerank
-    /// Combines scores from multiple embedding spaces using Reciprocal Rank Fusion.
-    async fn stage_rrf_rerank(
-        &self,
-        query: &TeleologicalArray,
-        candidates: Vec<SearchResult>,
-        target_count: usize,
-        config: &StageConfig,
-    ) -> Result<StageResult, PipelineError> {
-        let start = Instant::now();
-        let candidates_in = candidates.len();
-
-        // RRF with k=60
-        const RRF_K: f32 = 60.0;
-
-        // Get rankings from multiple spaces
-        // ... implementation details
-
-        Ok(StageResult {
-            candidates_in,
-            candidates_out: target_count.min(candidates.len()),
-            candidates: candidates.into_iter().take(target_count).collect(),
-            latency_ms: start.elapsed().as_millis() as u64,
-        })
-    }
-
-    /// Stage 4: Teleological alignment filter
-    /// Filters based on alignment with discovered goals.
-    async fn stage_alignment_filter(
-        &self,
-        query: &TeleologicalArray,
-        candidates: Vec<SearchResult>,
-        target_count: usize,
-        config: &StageConfig,
-    ) -> Result<StageResult, PipelineError> {
-        let start = Instant::now();
-        let candidates_in = candidates.len();
-
-        // Filter by teleological alignment
-        // ... implementation details
-
-        Ok(StageResult {
-            candidates_in,
-            candidates_out: target_count.min(candidates.len()),
-            candidates: candidates.into_iter().take(target_count).collect(),
-            latency_ms: start.elapsed().as_millis() as u64,
-        })
-    }
-
-    /// Stage 5: Late interaction MaxSim
-    /// Final precision reranking using ColBERT-style token matching.
-    async fn stage_maxsim_rerank(
-        &self,
-        query: &TeleologicalArray,
-        candidates: Vec<SearchResult>,
-        limit: usize,
-        config: &StageConfig,
-    ) -> Result<StageResult, PipelineError> {
-        let start = Instant::now();
-        let candidates_in = candidates.len();
-
-        // Final MaxSim reranking for precision
-        // ... implementation using token_level::max_sim
-
-        Ok(StageResult {
-            candidates_in,
-            candidates_out: limit.min(candidates.len()),
-            candidates: candidates.into_iter().take(limit).collect(),
-            latency_ms: start.elapsed().as_millis() as u64,
-        })
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum PipelineError {
-    #[error("Stage {stage} error: {error}")]
-    Stage { stage: &'static str, error: String },
-    #[error("Timeout at stage {stage}")]
-    Timeout { stage: &'static str },
-}
-
-#[derive(Debug)]
-pub struct PipelineResult {
-    pub results: Vec<SearchResult>,
-    pub stage_results: Vec<StageResult>,
-    pub total_latency_ms: u64,
-    pub stages_executed: Vec<PipelineStage>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_pipeline_reduces_candidates() {
-        // Each stage should reduce candidate count
-    }
-
-    #[tokio::test]
-    async fn test_pipeline_latency_target() {
-        // Full pipeline should complete in <60ms
-    }
-}
-</pseudo_code>
-
-<files_to_create>
-  <file path="crates/context-graph-storage/src/teleological/search/pipeline.rs">
-    5-stage retrieval pipeline implementation
-  </file>
-</files_to_create>
-
-<files_to_modify>
-  <file path="crates/context-graph-storage/src/teleological/search/mod.rs">
-    Add: pub mod pipeline;
-  </file>
-</files_to_modify>
-
-<validation_criteria>
-  <criterion>Pipeline completes in <60ms at 1M scale</criterion>
-  <criterion>Each stage reduces candidate count</criterion>
-  <criterion>Stage skipping works correctly</criterion>
-  <criterion>Latency tracked per stage</criterion>
-  <criterion>Final results are high quality</criterion>
-</validation_criteria>
+| Edge Case | Before State | Action | Expected After State |
+|-----------|--------------|--------|---------------------|
+| Empty index | len=0 | execute | Empty results, no error |
+| Single match | 1 vector | execute | 1 result with score |
+| Skip stage | Stage 2 disabled | execute_stages([1,3,4,5]) | 4 stages executed |
+| Timeout | Stage 1 > 5ms | execute | `PipelineError::Timeout` |
+| Bad query | NaN in splade | execute | `SearchError::InvalidVector` |
+</source_of_truth>
 
 <test_commands>
-  <command>cargo test -p context-graph-storage search::pipeline -- --nocapture</command>
-  <command>cargo bench -p context-graph-storage -- pipeline</command>
+```bash
+# Compile check (MUST PASS)
+cargo check -p context-graph-storage
+
+# Run pipeline tests (MUST SHOW 21 PASS)
+cargo test -p context-graph-storage teleological::search::pipeline -- --nocapture
+
+# Clippy validation (MUST HAVE NO ERRORS)
+cargo clippy -p context-graph-storage -- -D warnings
+
+# Run full test suite
+cargo test -p context-graph-storage -- --nocapture
+
+# Check exports are correct
+grep -A20 "pub use pipeline" crates/context-graph-storage/src/teleological/search/mod.rs
+```
 </test_commands>
+
+<fail_fast_compliance>
+## FAIL FAST Compliance
+
+All errors MUST propagate immediately:
+
+| Input | Expected Error |
+|-------|----------------|
+| Empty query vector | `SearchError::InvalidVector("empty query")` |
+| NaN in query | `SearchError::InvalidVector("NaN at index N")` |
+| Inf in query | `SearchError::InvalidVector("Inf at index N")` |
+| Wrong dimension | `SearchError::DimensionMismatch { expected, got }` |
+| Stage timeout | `PipelineError::Timeout { stage, elapsed_ms, max_ms }` |
+| Missing required query | `PipelineError::MissingQuery { stage }` |
+
+## NO Fallbacks. NO Recovery. NO Silent Failures.
+
+```rust
+// WRONG - Silent failure
+if query.is_empty() {
+    return Ok(vec![]); // BAD
+}
+
+// CORRECT - Fail fast
+if query.is_empty() {
+    return Err(SearchError::InvalidVector("FAIL FAST: empty query".into()));
+}
+```
+</fail_fast_compliance>
+
+<common_mistakes>
+## DO NOT Do These
+
+1. **DO NOT** re-implement pipeline.rs - it already exists with 1934 lines
+2. **DO NOT** modify pipeline.rs to use HNSW for E6Sparse, E12LateInteraction, or E13Splade
+3. **DO NOT** use async/await - the pipeline is synchronous with rayon for parallelism
+4. **DO NOT** swallow errors - propagate all `SearchError` and `PipelineError` variants
+5. **DO NOT** return empty results on error - FAIL FAST with proper error
+6. **DO NOT** use mock data in integration tests - use real HNSW indexes
+7. **DO NOT** skip validation - check all query vectors for NaN/Inf/empty
+8. **DO NOT** ignore latency constraints - each stage has max_latency_ms
+9. **DO NOT** break funnel shape - each stage MUST reduce candidates
+</common_mistakes>
+
+<next_steps>
+## Recommended Next Steps
+
+1. **Verify existing implementation** compiles and tests pass:
+   ```bash
+   cargo check -p context-graph-storage
+   cargo test -p context-graph-storage teleological::search::pipeline
+   ```
+
+2. **Identify real SPLADE index** - Check if one exists or needs creation:
+   ```bash
+   grep -r "SpladeIndex" crates/
+   grep -r "inverted" crates/
+   ```
+
+3. **Identify real token storage** - Check if ColBERT token storage exists:
+   ```bash
+   grep -r "TokenStorage" crates/
+   grep -r "ColBERT" crates/
+   ```
+
+4. **Write integration tests** with real data at scale
+
+5. **Run benchmarks** to validate <60ms target at 1M memories
+</next_steps>
 </task_spec>
 ```
