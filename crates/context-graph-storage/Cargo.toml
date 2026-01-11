@@ -22,6 +22,9 @@ async-trait = "0.1"
 tracing = "0.1"
 rayon = "1.10"
 sha2 = "0.10"
+# HNSW graph traversal - replaces brute force O(n) with O(log n)
+# TASK-STORAGE-P1-001
+usearch = "2"
 
 # Unix file locking for stale lock detection
 [target.'cfg(unix)'.dependencies]
