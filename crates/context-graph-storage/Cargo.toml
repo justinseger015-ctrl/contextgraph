@@ -37,10 +37,16 @@ cuda = ["context-graph-embeddings/cuda"]
 
 [dev-dependencies]
 tempfile = "3.10"
-rand = "0.8"
+rand = { version = "0.8", features = ["std_rng"] }
 futures = "0.3"
 # Enable test-utils for stubs access in tests (AP-007 compliant)
 context-graph-core = { path = "../context-graph-core", features = ["test-utils"] }
+# TASK-STORAGE-P2-001: Benchmarking for MaxSim performance validation
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "maxsim_bench"
+harness = false
 
 [[example]]
 name = "basic_storage"

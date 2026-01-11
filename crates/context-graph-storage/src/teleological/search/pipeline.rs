@@ -83,6 +83,7 @@ use rayon::prelude::*;
 use uuid::Uuid;
 
 use super::error::SearchError;
+use super::maxsim::compute_maxsim_direct;
 use super::multi::MultiEmbedderSearch;
 use super::single::SingleEmbedderSearch;
 use super::super::indexes::{EmbedderIndex, EmbedderIndexRegistry};
@@ -1274,56 +1275,15 @@ impl RetrievalPipeline {
     }
 
     /// Compute MaxSim score: (1/|Q|) × Σᵢ max_j cos(q_i, d_j)
+    ///
+    /// Delegates to SIMD-optimized implementation from maxsim module.
+    /// Uses AVX2 intrinsics when available for 4x-8x speedup on 128D vectors.
+    #[inline]
     fn compute_maxsim(&self, query: &[Vec<f32>], document: &[Vec<f32>]) -> f32 {
-        if query.is_empty() || document.is_empty() {
-            return 0.0;
-        }
-
-        let mut total_max_sim = 0.0f32;
-
-        for q_token in query {
-            let mut max_sim = f32::NEG_INFINITY;
-
-            for d_token in document {
-                let sim = cosine_similarity(q_token, d_token);
-                if sim > max_sim {
-                    max_sim = sim;
-                }
-            }
-
-            if max_sim.is_finite() {
-                total_max_sim += max_sim;
-            }
-        }
-
-        total_max_sim / query.len() as f32
+        compute_maxsim_direct(query, document)
     }
 }
 
-/// Compute cosine similarity between two vectors.
-#[inline]
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() {
-        return 0.0;
-    }
-
-    let mut dot = 0.0f32;
-    let mut norm_a = 0.0f32;
-    let mut norm_b = 0.0f32;
-
-    for (x, y) in a.iter().zip(b.iter()) {
-        dot += x * y;
-        norm_a += x * x;
-        norm_b += y * y;
-    }
-
-    let denom = (norm_a * norm_b).sqrt();
-    if denom < f32::EPSILON {
-        0.0
-    } else {
-        dot / denom
-    }
-}
 
 // ============================================================================
 // PIPELINE BUILDER
@@ -1441,6 +1401,7 @@ impl Default for PipelineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::maxsim::cosine_similarity_128d;
 
     // ========================================================================
     // STRUCTURAL TESTS
@@ -1683,7 +1644,7 @@ mod tests {
         // q[1] = [1, 0] -> max sim is 1.0 (to d[0])
         // Average = 1.0
 
-        let score = cosine_similarity(&query[0], &document[0]);
+        let score = cosine_similarity_128d(&query[0], &document[0]);
         assert!((score - 1.0).abs() < 0.001);
 
         println!("[VERIFIED] MaxSim computation correct");

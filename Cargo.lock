@@ -723,6 +723,7 @@ dependencies = [
  "chrono",
  "context-graph-core",
  "context-graph-embeddings",
+ "criterion",
  "futures",
  "libc",
  "rand 0.8.5",

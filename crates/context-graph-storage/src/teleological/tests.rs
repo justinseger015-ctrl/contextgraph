@@ -65,13 +65,14 @@ fn create_real_fingerprint() -> TeleologicalFingerprint {
 fn test_teleological_cf_names_count() {
     // TASK-TELEO-006: Updated from 4 to 7 CFs
     // TASK-GWT-P1-001: Updated from 8 to 9 CFs (added CF_EGO_NODE)
+    // TASK-STORAGE-P2-001: Updated from 9 to 10 CFs (added CF_E12_LATE_INTERACTION)
     assert_eq!(
         TELEOLOGICAL_CFS.len(),
         TELEOLOGICAL_CF_COUNT,
         "Must have exactly {} teleological column families",
         TELEOLOGICAL_CF_COUNT
     );
-    assert_eq!(TELEOLOGICAL_CF_COUNT, 9); // TASK-GWT-P1-001: +1 for CF_EGO_NODE
+    assert_eq!(TELEOLOGICAL_CF_COUNT, 10); // TASK-STORAGE-P2-001: +1 for CF_E12_LATE_INTERACTION
 }
 
 #[test]
@@ -794,16 +795,18 @@ fn test_descriptors_in_correct_order() {
 }
 
 #[test]
-fn test_get_all_teleological_cf_descriptors_returns_22() {
+fn test_get_all_teleological_cf_descriptors_returns_23() {
     use rocksdb::Cache;
     let cache = Cache::new_lru_cache(256 * 1024 * 1024);
     let descriptors = get_all_teleological_cf_descriptors(&cache);
 
-    // 9 teleological + 13 quantized embedder = 22 (TASK-GWT-P1-001: +1 for CF_EGO_NODE)
+    // 10 teleological + 13 quantized embedder = 23
+    // TASK-GWT-P1-001: +1 for CF_EGO_NODE
+    // TASK-STORAGE-P2-001: +1 for CF_E12_LATE_INTERACTION
     assert_eq!(
         descriptors.len(),
-        22,
-        "Must return 9 teleological + 13 quantized = 22 CFs"
+        23,
+        "Must return 10 teleological + 13 quantized = 23 CFs"
     );
 }
 

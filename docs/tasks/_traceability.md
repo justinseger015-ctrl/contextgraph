@@ -34,7 +34,7 @@ This matrix ensures every requirement, component, and behavior identified in the
 |-----|-------------|---------------|---------|----------|
 | Per-embedder deltaS Missing | E1-E13 lack specific entropy methods | SHERLOCK-05 | TASK-UTL-P1-001 | ☑ |
 | Workspace Dopamine Missing | WTA dynamics incomplete | SHERLOCK-03 | TASK-GWT-P1-002 | ☐ |
-| MaxSim Stage 5 Stub | Late interaction not working | SHERLOCK-08 | TASK-STORAGE-P2-001 | ☐ |
+| MaxSim Stage 5 (60%) | Needs: RocksDB storage, SIMD, benchmarks | SHERLOCK-08 | TASK-STORAGE-P2-001 | ☐ |
 | Chaos Tests Empty | Resilience unverified | SHERLOCK-10 | TASK-TEST-P2-001 | ☐ |
 | Validation Tests Empty | Quality gates missing | SHERLOCK-10 | TASK-TEST-P2-002 | ☐ |
 
@@ -145,7 +145,7 @@ The consciousness equation C(t) = I(t) × R(t) × D(t) requires:
 | TASK-GWT-P1-001 | ego_node.rs, rocksdb_store.rs | Ego Persistence |
 | TASK-GWT-P1-002 | workspace.rs, dream.rs, neuromod.rs | Event Wiring |
 | TASK-UTL-P1-001 | multi_utl.rs, magnitude.rs | DeltaS Methods |
-| TASK-STORAGE-P2-001 | pipeline.rs | MaxSim |
+| TASK-STORAGE-P2-001 | pipeline.rs, column_families.rs, mod.rs, rocksdb_store.rs | MaxSim + TokenStorage |
 | TASK-TEST-P2-001 | tests/chaos/*.rs | Chaos Tests |
 | TASK-TEST-P2-002 | .github/workflows/ci.yml | CI Pipeline |
 
@@ -232,7 +232,9 @@ Before marking a task as complete, verify:
 | TASK-GWT-P1-001 | `async fn load_ego_node(&self) -> CoreResult<Option<SelfEgoNode>>` | TeleologicalMemoryStore | ☑ |
 | TASK-GWT-P1-002 | `pub fn subscribe_to_workspace(&mut self, listener: Box<dyn WorkspaceEventListener>)` | Workspace | ☐ |
 | TASK-UTL-P1-001 | `fn compute_delta_s(&self, current: &[f32], history: &[Vec<f32>], k: usize) -> UtlResult<f32>` | EmbedderEntropy trait | ☑ |
-| TASK-STORAGE-P2-001 | `pub fn compute_maxsim(&self, query_tokens: &[Vec<f32>], doc_tokens: &[Vec<f32>]) -> f32` | MaxSimScorer | ☐ |
+| TASK-STORAGE-P2-001 | `MaxSimScorer::new()`, `score()`, `score_batch()` | MaxSimScorer | ☐ |
+| TASK-STORAGE-P2-001 | `RocksDbTokenStorage::new()`, `store()`, `get_tokens()` | RocksDbTokenStorage | ☐ |
+| TASK-STORAGE-P2-001 | `CF_E12_LATE_INTERACTION` constant | column_families | ☐ |
 | TASK-TEST-P2-001 | `async fn test_gpu_oom_recovery()` | ChaosTests | ☐ |
 | TASK-TEST-P2-002 | Quality gate job in ci.yml | GitHub Actions | ☐ |
 

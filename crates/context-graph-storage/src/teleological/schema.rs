@@ -375,3 +375,50 @@ pub fn parse_content_key(key: &[u8]) -> Uuid {
         );
     })
 }
+
+// =============================================================================
+// TASK-STORAGE-P2-001: E12 LATE INTERACTION TOKEN KEYS (UUID = 16 bytes)
+// =============================================================================
+
+/// Key for e12_late_interaction CF: memory_id UUID as 16 bytes.
+///
+/// Used to store ColBERT token embeddings for MaxSim scoring in Stage 5.
+///
+/// # Arguments
+/// * `id` - The memory's UUID
+///
+/// # Returns
+/// Exactly 16 bytes (UUID in big-endian format)
+#[inline]
+pub fn e12_late_interaction_key(id: &Uuid) -> [u8; 16] {
+    *id.as_bytes()
+}
+
+/// Parse e12_late_interaction key back to memory UUID.
+///
+/// # Arguments
+/// * `key` - Exactly 16 bytes
+///
+/// # Returns
+/// The parsed UUID
+///
+/// # Panics
+/// Panics if key is not exactly 16 bytes (FAIL FAST).
+#[inline]
+pub fn parse_e12_late_interaction_key(key: &[u8]) -> Uuid {
+    if key.len() != 16 {
+        panic!(
+            "STORAGE ERROR: e12_late_interaction key must be 16 bytes, got {} bytes. \
+             Key data: {:02x?}. This indicates corrupted storage or wrong CF access.",
+            key.len(),
+            key
+        );
+    }
+    Uuid::from_slice(key).unwrap_or_else(|e| {
+        panic!(
+            "STORAGE ERROR: Invalid UUID bytes in e12_late_interaction key. \
+             Error: {}. Key data: {:02x?}.",
+            e, key
+        );
+    })
+}

@@ -9,6 +9,7 @@
 //! - `purpose_vectors`: 13D purpose vectors for fast purpose-only queries (52 bytes)
 //! - `e13_splade_inverted`: Inverted index for Stage 1 (Recall) sparse search
 //! - `e1_matryoshka_128`: E1 truncated 128D vectors for Stage 2 (Semantic ANN)
+//! - `e12_late_interaction`: ColBERT token embeddings for Stage 5 (MaxSim rerank)
 //! - `emb_0` through `emb_12`: Per-embedder quantized storage
 //!
 //! # FAIL FAST Policy
@@ -33,6 +34,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
+use bincode;
 use rocksdb::{Cache, ColumnFamily, Options, WriteBatch, DB};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -53,12 +55,13 @@ use context_graph_core::types::fingerprint::{
 };
 
 use super::column_families::{
-    get_all_teleological_cf_descriptors, CF_CONTENT, CF_E13_SPLADE_INVERTED, CF_E1_MATRYOSHKA_128,
-    CF_EGO_NODE, CF_FINGERPRINTS, CF_PURPOSE_VECTORS, QUANTIZED_EMBEDDER_CFS, TELEOLOGICAL_CFS,
+    get_all_teleological_cf_descriptors, CF_CONTENT, CF_E12_LATE_INTERACTION, CF_E13_SPLADE_INVERTED,
+    CF_E1_MATRYOSHKA_128, CF_EGO_NODE, CF_FINGERPRINTS, CF_PURPOSE_VECTORS, QUANTIZED_EMBEDDER_CFS,
+    TELEOLOGICAL_CFS,
 };
 use super::schema::{
-    content_key, e13_splade_inverted_key, e1_matryoshka_128_key, ego_node_key, fingerprint_key,
-    parse_fingerprint_key, purpose_vector_key,
+    content_key, e12_late_interaction_key, e13_splade_inverted_key, e1_matryoshka_128_key,
+    ego_node_key, fingerprint_key, parse_fingerprint_key, purpose_vector_key,
 };
 use super::serialization::{
     deserialize_ego_node, deserialize_memory_id_list, deserialize_teleological_fingerprint,
@@ -531,6 +534,23 @@ impl RocksDbTeleologicalStore {
             .expect("CF_EGO_NODE must exist - database initialization failed")
     }
 
+    /// Get the e12_late_interaction column family handle.
+    ///
+    /// # FAIL FAST
+    ///
+    /// Panics if CF_E12_LATE_INTERACTION doesn't exist. This indicates database
+    /// initialization failed and is an invariant violation that cannot be recovered from.
+    /// CF_E12_LATE_INTERACTION must be present in any valid database opened by this store.
+    ///
+    /// TASK-STORAGE-P2-001: E12 ColBERT token storage CF handle.
+    #[inline]
+    #[allow(dead_code)]
+    fn cf_e12_late_interaction(&self) -> &ColumnFamily {
+        self.db
+            .cf_handle(CF_E12_LATE_INTERACTION)
+            .expect("CF_E12_LATE_INTERACTION must exist - database initialization failed")
+    }
+
     /// Store a fingerprint in all relevant column families.
     ///
     /// Writes to:
@@ -538,6 +558,7 @@ impl RocksDbTeleologicalStore {
     /// 2. `purpose_vectors` - 13D purpose vector for fast queries
     /// 3. `e1_matryoshka_128` - Truncated E1 embedding for Stage 2
     /// 4. `e13_splade_inverted` - Updates inverted index for Stage 1
+    /// 5. `e12_late_interaction` - ColBERT token embeddings for Stage 5 (TASK-STORAGE-P2-001)
     fn store_fingerprint_internal(
         &self,
         fp: &TeleologicalFingerprint,
@@ -573,6 +594,31 @@ impl RocksDbTeleologicalStore {
         // 4. Update E13 SPLADE inverted index
         // For each active term in the E13 sparse vector, add this fingerprint's ID to the posting list
         self.update_splade_inverted_index(&mut batch, &id, &fp.semantic.e13_splade)?;
+
+        // 5. Store E12 late interaction tokens (TASK-STORAGE-P2-001)
+        // ColBERT token embeddings for Stage 5 MaxSim reranking
+        if !fp.semantic.e12_late_interaction.is_empty() {
+            let cf_e12 = self.get_cf(CF_E12_LATE_INTERACTION)?;
+            let e12_key = e12_late_interaction_key(&id);
+            // Serialize tokens using bincode (same format as token_storage.rs)
+            let e12_bytes = bincode::serialize(&fp.semantic.e12_late_interaction).map_err(|e| {
+                error!(
+                    "Failed to serialize E12 tokens for fingerprint {}: {}",
+                    id, e
+                );
+                TeleologicalStoreError::Serialization {
+                    id: Some(id),
+                    message: format!("E12 token serialization failed: {}", e),
+                }
+            })?;
+            batch.put_cf(cf_e12, e12_key, &e12_bytes);
+            debug!(
+                "Stored {} E12 tokens ({} bytes) for fingerprint {}",
+                fp.semantic.e12_late_interaction.len(),
+                e12_bytes.len(),
+                id
+            );
+        }
 
         // Execute atomic batch write
         self.db.write(batch).map_err(|e| {
@@ -984,6 +1030,10 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
             // Remove content (TASK-CONTENT-009: cascade content deletion)
             let cf_content = self.cf_content();
             batch.delete_cf(cf_content, content_key(&id));
+
+            // Remove E12 late interaction tokens (TASK-STORAGE-P2-001)
+            let cf_e12 = self.get_cf(CF_E12_LATE_INTERACTION)?;
+            batch.delete_cf(cf_e12, e12_late_interaction_key(&id));
 
             // Remove from soft-deleted tracking
             if let Ok(mut deleted) = self.soft_deleted.write() {

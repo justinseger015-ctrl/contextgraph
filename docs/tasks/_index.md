@@ -128,9 +128,10 @@ graph TD
 #### TASK-STORAGE-P2-001: MaxSim Stage 5
 **File:** [TASK-STORAGE-P2-001-maxsim-stage5.md](./TASK-STORAGE-P2-001-maxsim-stage5.md)
 - **Layer:** Logic
-- **Effort:** 2 days
+- **Effort:** 1 day (60% complete - foundation exists)
 - **Impact:** ColBERT late interaction for precise retrieval
-- **Key Deliverable:** Token-level MaxSim scoring for E12_LateInteract
+- **Key Deliverable:** RocksDbTokenStorage + MaxSimScorer SIMD + CF_E12_LATE_INTERACTION
+- **Current State:** Basic scalar MaxSim works. Needs: persistent storage, SIMD optimization, benchmarks.
 
 #### TASK-TEST-P2-001: Chaos Tests
 **File:** [TASK-TEST-P2-001-chaos-tests.md](./TASK-TEST-P2-001-chaos-tests.md)

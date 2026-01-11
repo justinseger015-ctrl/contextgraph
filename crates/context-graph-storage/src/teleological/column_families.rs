@@ -100,7 +100,33 @@ pub const CF_CONTENT: &str = "content";
 /// No fallback options - let RocksDB error on open if misconfigured.
 pub const CF_EGO_NODE: &str = "ego_node";
 
-/// All teleological column family names (9 total: 4 original + 3 teleological + 1 content + 1 ego_node).
+// =============================================================================
+// TASK-STORAGE-P2-001: E12 LATE INTERACTION COLUMN FAMILY
+// =============================================================================
+
+/// Column family for E12 ColBERT late interaction token embeddings.
+///
+/// Stores the token-level embeddings for MaxSim scoring in Stage 5 of the
+/// 5-stage retrieval pipeline. Each memory has variable number of tokens,
+/// each token is a 128D vector.
+///
+/// # Storage Details
+/// - Key: UUID (16 bytes) for memory_id
+/// - Value: Vec<Vec<f32>> serialized via bincode (variable size)
+///   - Typical: 20-50 tokens × 128D × 4 bytes = 10-25KB per memory
+///   - Maximum: 512 tokens × 128D × 4 bytes = 256KB per memory
+/// - Compression: LZ4 (good compression for repeated float patterns)
+/// - Access pattern: Point lookup by UUID during Stage 5 rerank
+///
+/// # Performance Target
+/// - Retrieve 50 token sets in <5ms
+/// - MaxSim scoring of 50 candidates in <15ms
+///
+/// # FAIL FAST Policy
+/// No fallback options - let RocksDB error on open if misconfigured.
+pub const CF_E12_LATE_INTERACTION: &str = "e12_late_interaction";
+
+/// All teleological column family names (10 total: 4 original + 3 teleological + 1 content + 1 ego_node + 1 e12_late_interaction).
 pub const TELEOLOGICAL_CFS: &[&str] = &[
     CF_FINGERPRINTS,
     CF_PURPOSE_VECTORS,
@@ -114,10 +140,12 @@ pub const TELEOLOGICAL_CFS: &[&str] = &[
     CF_CONTENT,
     // TASK-GWT-P1-001: EGO_NODE storage CF
     CF_EGO_NODE,
+    // TASK-STORAGE-P2-001: E12 Late Interaction token storage CF
+    CF_E12_LATE_INTERACTION,
 ];
 
-/// Total count of teleological CFs (should be 9).
-pub const TELEOLOGICAL_CF_COUNT: usize = 9;
+/// Total count of teleological CFs (should be 10).
+pub const TELEOLOGICAL_CF_COUNT: usize = 10;
 
 // =============================================================================
 // QUANTIZED EMBEDDER COLUMN FAMILIES (13 CFs for per-embedder storage)
@@ -432,6 +460,45 @@ pub fn ego_node_cf_options(cache: &Cache) -> Options {
     opts
 }
 
+// =============================================================================
+// TASK-STORAGE-P2-001: CF OPTION BUILDER FOR E12 LATE INTERACTION
+// =============================================================================
+
+/// Options for E12 ColBERT late interaction token storage (~10-25KB typical).
+///
+/// # Configuration
+/// - 32KB block size (fits 1-2 token sets per block)
+/// - LZ4 compression (good for repeated float patterns, ~40% reduction)
+/// - Bloom filter for fast point lookups
+/// - 16-byte prefix extractor for UUID keys
+/// - Optimized for point lookups (Stage 5 retrieval pattern)
+///
+/// # Value Size
+/// - Minimum: 1 token × 128D × 4 bytes = 512 bytes
+/// - Typical: 30 tokens × 128D × 4 bytes = ~15KB
+/// - Maximum: 512 tokens × 128D × 4 bytes = 256KB
+///
+/// # FAIL FAST Policy
+/// No fallback options - let RocksDB error on open if misconfigured.
+pub fn e12_late_interaction_cf_options(cache: &Cache) -> Options {
+    let mut block_opts = BlockBasedOptions::default();
+    block_opts.set_block_cache(cache);
+    block_opts.set_block_size(32 * 1024); // 32KB blocks for ~15KB typical token sets
+    block_opts.set_bloom_filter(10.0, false);
+    block_opts.set_cache_index_and_filter_blocks(true);
+
+    let mut opts = Options::default();
+    opts.set_block_based_table_factory(&block_opts);
+    // LZ4 compression - good for float arrays with repeated patterns
+    opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+    // UUID prefix extractor for efficient key lookup
+    opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(16));
+    opts.optimize_for_point_lookup(64); // 64MB hint for point lookups
+    opts.create_if_missing(true);
+    // FAIL FAST: No fallback options - let RocksDB error on open if misconfigured
+    opts
+}
+
 /// Options for quantized embedder storage (~1-2KB per embedding).
 ///
 /// Configuration:
@@ -458,15 +525,15 @@ pub fn quantized_embedder_cf_options(cache: &Cache) -> Options {
     opts
 }
 
-/// Get all 9 teleological column family descriptors.
+/// Get all 10 teleological column family descriptors.
 ///
-/// Returns 9 descriptors: 4 original + 3 teleological + 1 content + 1 ego_node.
+/// Returns 10 descriptors: 4 original + 3 teleological + 1 content + 1 ego_node + 1 e12_late_interaction.
 ///
 /// # Arguments
 /// * `cache` - Shared block cache (recommended: 256MB via `Cache::new_lru_cache`)
 ///
 /// # Returns
-/// Vector of 9 `ColumnFamilyDescriptor`s for teleological storage.
+/// Vector of 10 `ColumnFamilyDescriptor`s for teleological storage.
 ///
 /// # Example
 /// ```ignore
@@ -475,7 +542,7 @@ pub fn quantized_embedder_cf_options(cache: &Cache) -> Options {
 ///
 /// let cache = Cache::new_lru_cache(256 * 1024 * 1024); // 256MB
 /// let descriptors = get_teleological_cf_descriptors(&cache);
-/// assert_eq!(descriptors.len(), 9);
+/// assert_eq!(descriptors.len(), 10);
 /// ```
 pub fn get_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
     vec![
@@ -500,6 +567,11 @@ pub fn get_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescrip
         ColumnFamilyDescriptor::new(CF_CONTENT, content_cf_options(cache)),
         // TASK-GWT-P1-001: EGO_NODE storage CF
         ColumnFamilyDescriptor::new(CF_EGO_NODE, ego_node_cf_options(cache)),
+        // TASK-STORAGE-P2-001: E12 Late Interaction token storage CF
+        ColumnFamilyDescriptor::new(
+            CF_E12_LATE_INTERACTION,
+            e12_late_interaction_cf_options(cache),
+        ),
     ]
 }
 
@@ -532,14 +604,14 @@ pub fn get_quantized_embedder_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyD
 
 /// Get ALL teleological + quantized embedder column family descriptors.
 ///
-/// Returns 22 descriptors total: 9 teleological + 13 quantized embedder.
+/// Returns 23 descriptors total: 10 teleological + 13 quantized embedder.
 /// Use this when opening a database that needs both fingerprint and per-embedder storage.
 ///
 /// # Arguments
 /// * `cache` - Shared block cache (recommended: 256MB via `Cache::new_lru_cache`)
 ///
 /// # Returns
-/// Vector of 22 `ColumnFamilyDescriptor`s.
+/// Vector of 23 `ColumnFamilyDescriptor`s.
 ///
 /// # Example
 /// ```ignore
@@ -548,7 +620,7 @@ pub fn get_quantized_embedder_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyD
 ///
 /// let cache = Cache::new_lru_cache(256 * 1024 * 1024); // 256MB
 /// let descriptors = get_all_teleological_cf_descriptors(&cache);
-/// assert_eq!(descriptors.len(), 22); // 9 teleological + 13 embedder
+/// assert_eq!(descriptors.len(), 23); // 10 teleological + 13 embedder
 /// ```
 pub fn get_all_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
     let mut descriptors = get_teleological_cf_descriptors(cache);

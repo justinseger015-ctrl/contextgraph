@@ -80,10 +80,12 @@
 
 mod error;
 mod matrix;
+mod maxsim;
 mod multi;
 mod pipeline;
 mod result;
 mod single;
+mod token_storage;
 
 // Re-export error types
 pub use error::{SearchError, SearchResult};
@@ -147,4 +149,27 @@ pub use pipeline::{
     // In-memory implementations for testing
     InMemoryTokenStorage,
     InMemorySpladeIndex,
+};
+
+// Re-export MaxSim scorer types (TASK-STORAGE-P2-001)
+pub use maxsim::{
+    // Scorer struct
+    MaxSimScorer,
+    // SIMD-optimized cosine similarity
+    cosine_similarity_128d,
+    // Standalone MaxSim computation
+    compute_maxsim_direct,
+    // Constants
+    E12_TOKEN_DIM,
+};
+
+// Re-export RocksDB token storage (TASK-STORAGE-P2-001)
+pub use token_storage::{
+    // Storage struct
+    RocksDbTokenStorage,
+    // Error types
+    TokenStorageError,
+    TokenStorageResult,
+    // Constants
+    MAX_TOKENS_PER_MEMORY,
 };
