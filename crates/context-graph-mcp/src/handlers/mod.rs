@@ -44,6 +44,9 @@ mod teleological;
 mod tools;
 mod utl;
 
+// TASK-GWT-P0-002: Background stepper for Kuramoto oscillator network
+pub mod kuramoto_stepper;
+
 #[cfg(test)]
 mod tests;
 
@@ -68,3 +71,8 @@ pub use self::gwt_providers::{
     GwtSystemProviderImpl, KuramotoProviderImpl, MetaCognitiveProviderImpl, SelfEgoProviderImpl,
     WorkspaceProviderImpl,
 };
+
+// Re-export Kuramoto stepper for wiring (TASK-GWT-P0-002)
+// Note: These are public API re-exports - unused within this crate but available to consumers
+#[allow(unused_imports)]
+pub use self::kuramoto_stepper::{KuramotoStepper, KuramotoStepperConfig, KuramotoStepperError};
