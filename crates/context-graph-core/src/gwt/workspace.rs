@@ -13,8 +13,13 @@
 //! 6. Inhibit: losing candidates receive dopamine reduction
 
 use crate::error::{CoreError, CoreResult};
+use crate::neuromod::NeuromodulationManager;
 use chrono::{DateTime, Duration, Utc};
 use uuid::Uuid;
+
+/// Dopamine inhibition factor for WTA losers
+/// Per constitution gwt.global_workspace step 6: "Inhibit: losing candidates receive dopamine reduction"
+pub const DA_INHIBITION_FACTOR: f32 = 0.1;
 
 /// A memory candidate competing for workspace entry
 #[derive(Debug, Clone)]
@@ -217,6 +222,60 @@ impl GlobalWorkspace {
             None
         }
     }
+
+    /// Apply dopamine reduction to losing WTA candidates
+    ///
+    /// Per constitution gwt.global_workspace step 6:
+    /// "Inhibit: losing candidates receive dopamine reduction"
+    ///
+    /// # Arguments
+    /// * `winner_id` - The ID of the winning memory
+    /// * `neuromod` - The neuromodulation manager to apply inhibition
+    ///
+    /// # Returns
+    /// The number of candidates that were inhibited
+    ///
+    /// # Algorithm
+    /// For each non-winner candidate:
+    /// - inhibition_magnitude = (1.0 - candidate.score) * DA_INHIBITION_FACTOR
+    /// - Calls neuromod.adjust(ModulatorType::Dopamine, -magnitude) to decrease dopamine
+    pub fn inhibit_losers(
+        &self,
+        winner_id: Uuid,
+        neuromod: &mut NeuromodulationManager,
+    ) -> CoreResult<usize> {
+        use crate::neuromod::state::ModulatorType;
+
+        let mut inhibited_count = 0;
+
+        for candidate in &self.candidates {
+            if candidate.id != winner_id {
+                // Calculate inhibition magnitude based on how far from winning
+                // Lower score = stronger inhibition
+                let inhibition_magnitude = (1.0 - candidate.score) * DA_INHIBITION_FACTOR;
+
+                // Apply dopamine reduction (negative delta)
+                neuromod.adjust(ModulatorType::Dopamine, -inhibition_magnitude)?;
+
+                tracing::debug!(
+                    "Inhibited loser memory {:?}: score={:.3}, inhibition={:.4}",
+                    candidate.id,
+                    candidate.score,
+                    inhibition_magnitude
+                );
+
+                inhibited_count += 1;
+            }
+        }
+
+        tracing::debug!(
+            "WTA inhibition complete: {} losers inhibited, winner={:?}",
+            inhibited_count,
+            winner_id
+        );
+
+        Ok(inhibited_count)
+    }
 }
 
 impl Default for GlobalWorkspace {
@@ -279,6 +338,28 @@ impl WorkspaceEventBroadcaster {
         Self {
             listeners: std::sync::Arc::new(tokio::sync::RwLock::new(Vec::new())),
         }
+    }
+
+    /// Register a listener for workspace events
+    ///
+    /// # Arguments
+    /// * `listener` - A boxed trait object implementing WorkspaceEventListener
+    ///
+    /// # Panics
+    /// Panics if unable to acquire write lock (indicates deadlock or poisoned lock)
+    pub async fn register_listener(&self, listener: Box<dyn WorkspaceEventListener>) {
+        let mut listeners = self.listeners.write().await;
+        tracing::debug!(
+            "Registering workspace event listener (total: {})",
+            listeners.len() + 1
+        );
+        listeners.push(listener);
+    }
+
+    /// Get the number of registered listeners
+    pub async fn listener_count(&self) -> usize {
+        let listeners = self.listeners.read().await;
+        listeners.len()
     }
 
     pub async fn broadcast(&self, event: WorkspaceEvent) {
@@ -393,5 +474,252 @@ mod tests {
     fn test_workspace_broadcast_duration() {
         let workspace = GlobalWorkspace::new();
         assert!(!workspace.is_broadcasting()); // Not yet broadcasting
+    }
+
+    // ============================================================
+    // Tests for register_listener
+    // ============================================================
+
+    /// Test listener for verification
+    struct TestListener {
+        event_count: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl TestListener {
+        fn new() -> Self {
+            Self {
+                event_count: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            }
+        }
+
+        fn count(&self) -> usize {
+            self.event_count.load(std::sync::atomic::Ordering::SeqCst)
+        }
+    }
+
+    impl WorkspaceEventListener for TestListener {
+        fn on_event(&self, _event: &WorkspaceEvent) {
+            self.event_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_register_listener() {
+        println!("=== FSV: WorkspaceEventBroadcaster::register_listener ===");
+
+        let broadcaster = WorkspaceEventBroadcaster::new();
+
+        // BEFORE
+        let before_count = broadcaster.listener_count().await;
+        println!("BEFORE: listener_count = {}", before_count);
+        assert_eq!(before_count, 0, "Should start with 0 listeners");
+
+        // EXECUTE
+        let listener = TestListener::new();
+        broadcaster.register_listener(Box::new(listener)).await;
+
+        // AFTER
+        let after_count = broadcaster.listener_count().await;
+        println!("AFTER: listener_count = {}", after_count);
+        assert_eq!(after_count, 1, "Should have 1 listener after registration");
+
+        // EVIDENCE
+        println!("EVIDENCE: Listener correctly registered");
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_to_registered_listeners() {
+        println!("=== FSV: Broadcast reaches registered listeners ===");
+
+        let broadcaster = WorkspaceEventBroadcaster::new();
+        let listener = TestListener::new();
+        let count_ref = std::sync::Arc::clone(&listener.event_count);
+
+        broadcaster.register_listener(Box::new(listener)).await;
+
+        // BEFORE
+        let before = count_ref.load(std::sync::atomic::Ordering::SeqCst);
+        println!("BEFORE: event_count = {}", before);
+
+        // EXECUTE
+        let event = WorkspaceEvent::MemoryEnters {
+            id: Uuid::new_v4(),
+            order_parameter: 0.85,
+            timestamp: Utc::now(),
+        };
+        broadcaster.broadcast(event).await;
+
+        // AFTER
+        let after = count_ref.load(std::sync::atomic::Ordering::SeqCst);
+        println!("AFTER: event_count = {}", after);
+
+        assert_eq!(after, 1, "Listener should receive exactly 1 event");
+        println!("EVIDENCE: Event correctly broadcast to listener");
+    }
+
+    #[tokio::test]
+    async fn test_broadcast_empty_listeners() {
+        println!("=== EDGE CASE: Broadcast with no listeners ===");
+
+        let broadcaster = WorkspaceEventBroadcaster::new();
+
+        // Should not panic
+        let event = WorkspaceEvent::MemoryEnters {
+            id: Uuid::new_v4(),
+            order_parameter: 0.85,
+            timestamp: Utc::now(),
+        };
+        broadcaster.broadcast(event).await;
+
+        println!("EVIDENCE: Broadcast with no listeners does not panic");
+    }
+
+    #[tokio::test]
+    async fn test_multiple_listeners() {
+        println!("=== TEST: Multiple listeners receive events ===");
+
+        let broadcaster = WorkspaceEventBroadcaster::new();
+
+        let listener1 = TestListener::new();
+        let count1 = std::sync::Arc::clone(&listener1.event_count);
+
+        let listener2 = TestListener::new();
+        let count2 = std::sync::Arc::clone(&listener2.event_count);
+
+        broadcaster.register_listener(Box::new(listener1)).await;
+        broadcaster.register_listener(Box::new(listener2)).await;
+
+        assert_eq!(broadcaster.listener_count().await, 2);
+
+        // Broadcast event
+        let event = WorkspaceEvent::MemoryEnters {
+            id: Uuid::new_v4(),
+            order_parameter: 0.85,
+            timestamp: Utc::now(),
+        };
+        broadcaster.broadcast(event).await;
+
+        // Both listeners should receive the event
+        assert_eq!(count1.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(count2.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        println!("EVIDENCE: Both listeners received the event");
+    }
+
+    // ============================================================
+    // Tests for inhibit_losers
+    // ============================================================
+
+    #[test]
+    fn test_inhibit_losers() {
+        println!("=== FSV: GlobalWorkspace::inhibit_losers ===");
+
+        let mut workspace = GlobalWorkspace::new();
+        let mut neuromod = NeuromodulationManager::new();
+
+        let winner_id = Uuid::new_v4();
+        let loser1_id = Uuid::new_v4();
+        let loser2_id = Uuid::new_v4();
+
+        // Set up candidates (winner + 2 losers)
+        workspace.candidates = vec![
+            WorkspaceCandidate::new(winner_id, 0.90, 0.85, 0.88).unwrap(), // score = 0.6732
+            WorkspaceCandidate::new(loser1_id, 0.85, 0.80, 0.82).unwrap(), // score = 0.5576
+            WorkspaceCandidate::new(loser2_id, 0.82, 0.75, 0.78).unwrap(), // score = 0.4797
+        ];
+
+        // BEFORE
+        let before_da = neuromod.get_hopfield_beta();
+        println!("BEFORE: dopamine = {:.3}", before_da);
+
+        // EXECUTE
+        let inhibited = workspace.inhibit_losers(winner_id, &mut neuromod).unwrap();
+
+        // AFTER
+        let after_da = neuromod.get_hopfield_beta();
+        println!("AFTER: dopamine = {:.3}", after_da);
+        println!("Inhibited count: {}", inhibited);
+
+        // VERIFY
+        assert_eq!(inhibited, 2, "Should inhibit exactly 2 losers");
+        assert!(after_da < before_da, "Dopamine should decrease after inhibition");
+
+        // EVIDENCE
+        println!("EVIDENCE: {} losers inhibited, dopamine dropped from {:.3} to {:.3}",
+            inhibited, before_da, after_da);
+    }
+
+    #[test]
+    fn test_inhibit_losers_single_winner() {
+        println!("=== EDGE CASE: inhibit_losers with only winner ===");
+
+        let mut workspace = GlobalWorkspace::new();
+        let mut neuromod = NeuromodulationManager::new();
+
+        let winner_id = Uuid::new_v4();
+        workspace.candidates = vec![
+            WorkspaceCandidate::new(winner_id, 0.90, 0.85, 0.88).unwrap(),
+        ];
+
+        let inhibited = workspace.inhibit_losers(winner_id, &mut neuromod).unwrap();
+
+        assert_eq!(inhibited, 0, "Should inhibit 0 with only winner");
+        println!("EVIDENCE: No inhibition when only winner present");
+    }
+
+    #[test]
+    fn test_inhibit_losers_empty_candidates() {
+        println!("=== EDGE CASE: inhibit_losers with no candidates ===");
+
+        let workspace = GlobalWorkspace::new();
+        let mut neuromod = NeuromodulationManager::new();
+
+        let winner_id = Uuid::new_v4();
+        let inhibited = workspace.inhibit_losers(winner_id, &mut neuromod).unwrap();
+
+        assert_eq!(inhibited, 0, "Should inhibit 0 with no candidates");
+        println!("EVIDENCE: No inhibition when no candidates");
+    }
+
+    #[test]
+    fn test_inhibit_losers_magnitude_calculation() {
+        println!("=== TEST: inhibit_losers magnitude calculation ===");
+
+        let mut workspace = GlobalWorkspace::new();
+        let mut neuromod = NeuromodulationManager::new();
+
+        let winner_id = Uuid::new_v4();
+        let loser_id = Uuid::new_v4();
+
+        // Create loser with score = 0.5 exactly
+        // score = r * importance * alignment = 0.82 * 0.76 * 0.8 = 0.49856
+        workspace.candidates = vec![
+            WorkspaceCandidate::new(winner_id, 0.90, 0.85, 0.88).unwrap(),
+            WorkspaceCandidate::new(loser_id, 0.82, 0.76, 0.8).unwrap(),
+        ];
+
+        let loser_score = workspace.candidates[1].score;
+        println!("Loser score: {:.4}", loser_score);
+
+        let before_da = neuromod.get_hopfield_beta();
+        workspace.inhibit_losers(winner_id, &mut neuromod).unwrap();
+        let after_da = neuromod.get_hopfield_beta();
+
+        // Expected inhibition magnitude = (1.0 - score) * DA_INHIBITION_FACTOR
+        // adjust() applies the delta directly to dopamine
+        let expected_delta = (1.0 - loser_score) * DA_INHIBITION_FACTOR;
+        let actual_delta = before_da - after_da;
+
+        println!("Expected delta: {:.4}, Actual delta: {:.4}", expected_delta, actual_delta);
+
+        // Allow small floating point tolerance
+        assert!(
+            (expected_delta - actual_delta).abs() < 0.0001,
+            "Inhibition magnitude mismatch: expected {:.4}, got {:.4}",
+            expected_delta,
+            actual_delta
+        );
+
+        println!("EVIDENCE: Inhibition magnitude correctly calculated");
     }
 }
