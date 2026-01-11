@@ -315,6 +315,37 @@ From initial grep, the following are expected to be discovered:
 
 ---
 
+## Acceptance Criteria Checklist
+
+### Discovery Completeness
+- [ ] All `crates/context-graph-*` directories scanned
+- [ ] Pattern `const.*THRESHOLD` found and documented
+- [ ] Pattern `const.*MIN_` found and documented
+- [ ] Pattern `const.*MAX_` found and documented
+- [ ] Pattern `: f32 = 0.` or `: f64 = 0.` found and documented
+- [ ] All results deduplicated by (file, line) tuple
+
+### Classification Accuracy
+- [ ] Every threshold assigned exactly one category
+- [ ] Critical thresholds (15+) have `atc_field` mapping
+- [ ] Critical thresholds have `domain_sensitivity` rating
+- [ ] Static thresholds have `rationale` explaining why
+- [ ] Evaluate thresholds have `notes` for domain experts
+
+### Inventory Quality
+- [ ] YAML file passes syntax validation
+- [ ] Total count matches individual counts
+- [ ] No duplicate entries
+- [ ] All file paths are relative to project root
+- [ ] Line numbers verified against current codebase
+
+### Documentation
+- [ ] Summary section complete with statistics
+- [ ] Migration plan with all 8 phases documented
+- [ ] Categories have descriptions
+
+---
+
 ## Notes
 
 - This task is read-only and produces documentation only
@@ -326,3 +357,4 @@ From initial grep, the following are expected to be discovered:
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

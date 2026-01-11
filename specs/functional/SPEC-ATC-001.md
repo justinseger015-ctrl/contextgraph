@@ -355,5 +355,136 @@ adaptive_thresholds:
 
 ---
 
+## Appendix B: Complete Threshold Range Reference
+
+### B.1 Core Alignment Thresholds (Existing)
+
+| Field | Default | Range | Update Frequency | Notes |
+|-------|---------|-------|------------------|-------|
+| `theta_opt` | 0.75 | [0.60, 0.90] | session | Optimal alignment |
+| `theta_acc` | 0.70 | [0.55, 0.85] | session | Acceptable alignment |
+| `theta_warn` | 0.55 | [0.40, 0.70] | session | Warning alignment |
+| `theta_dup` | 0.90 | [0.80, 0.98] | hourly | Duplicate detection |
+| `theta_edge` | 0.70 | [0.50, 0.85] | hourly | Edge creation |
+| `confidence_bias` | 1.0 | [0.5, 2.0] | daily | Domain confidence |
+
+### B.2 GWT Thresholds (NEW)
+
+| Field | Default | Range | Update Frequency | Domain Sensitivity |
+|-------|---------|-------|------------------|-------------------|
+| `theta_gate` | 0.70 | [0.65, 0.95] | per-query | High - broadcast decision |
+| `theta_hypersync` | 0.95 | [0.90, 0.99] | hourly | Medium - pathological state |
+| `theta_fragmentation` | 0.50 | [0.35, 0.65] | hourly | Medium - fragmentation warning |
+
+### B.3 Layer Thresholds (NEW)
+
+| Field | Default | Range | Update Frequency | Domain Sensitivity |
+|-------|---------|-------|------------------|-------------------|
+| `theta_memory_sim` | 0.50 | [0.35, 0.75] | per-query | High - memory retrieval |
+| `theta_reflex_hit` | 0.85 | [0.70, 0.95] | hourly | Low - cache precision |
+| `theta_consolidation` | 0.10 | [0.05, 0.30] | daily | Medium - consolidation trigger |
+
+### B.4 Dream Thresholds (NEW)
+
+| Field | Default | Range | Update Frequency | Domain Sensitivity |
+|-------|---------|-------|------------------|-------------------|
+| `theta_dream_activity` | 0.15 | [0.05, 0.30] | hourly | Low - idle detection |
+| `theta_semantic_leap` | 0.70 | [0.50, 0.90] | daily | Medium - exploration radius |
+| `theta_shortcut_conf` | 0.70 | [0.50, 0.85] | daily | Medium - shortcut creation |
+
+### B.5 Classification Thresholds (NEW)
+
+| Field | Default | Range | Update Frequency | Domain Sensitivity |
+|-------|---------|-------|------------------|-------------------|
+| `theta_johari` | 0.50 | [0.35, 0.65] | per-embedder | Medium - quadrant boundary |
+| `theta_blind_spot` | 0.50 | [0.35, 0.65] | per-embedder | Medium - blind spot detection |
+
+### B.6 Autonomous Thresholds (NEW)
+
+| Field | Default | Range | Update Frequency | Domain Sensitivity |
+|-------|---------|-------|------------------|-------------------|
+| `theta_obsolescence_low` | 0.30 | [0.20, 0.50] | daily | Medium - low relevance |
+| `theta_obsolescence_mid` | 0.60 | [0.45, 0.75] | daily | Medium - medium confidence |
+| `theta_obsolescence_high` | 0.80 | [0.65, 0.90] | daily | Medium - high confidence |
+| `theta_drift_slope` | 0.005 | [0.001, 0.01] | weekly | Low - drift detection |
+
+### B.7 Kuramoto Synchronization Thresholds (FUTURE)
+
+| Field | Default | Range | Update Frequency | Domain Sensitivity |
+|-------|---------|-------|------------------|-------------------|
+| `theta_kuramoto` | 0.80 | [0.65, 0.95] | daily | Medium - sync order |
+| `theta_coupling` | 0.10 | [0.05, 0.30] | weekly | Low - coupling strength |
+
+---
+
+## Appendix C: Domain Strictness Table
+
+| Domain | Strictness | Description | Example Threshold Adjustments |
+|--------|------------|-------------|------------------------------|
+| Medical | 1.0 | Most conservative | +15% gate, +10% memory_sim |
+| Code | 0.9 | Very strict | +10% gate, +8% memory_sim |
+| Legal | 0.8 | Strict | +8% gate, +6% memory_sim |
+| General | 0.5 | Baseline | Default values |
+| Research | 0.5 | Balanced | Default values, novelty bias |
+| Creative | 0.2 | Most permissive | -10% gate, -15% memory_sim |
+
+Strictness formula for threshold adjustment:
+```
+threshold_adjusted = threshold_base + (strictness * adjustment_range)
+```
+
+For inverse thresholds (dream activity, consolidation):
+```
+threshold_adjusted = threshold_base - (strictness * adjustment_range)
+```
+
+---
+
+## Appendix D: 4-Level ATC Architecture
+
+### Level 1: EWMA Drift Tracking
+- Exponentially Weighted Moving Average for observation smoothing
+- Formula: `ewma_t = alpha * observation + (1 - alpha) * ewma_{t-1}`
+- Default alpha: 0.2 (configurable per threshold)
+- Detects distribution drift in threshold usage patterns
+
+### Level 2: Temperature Scaling
+- Calibrates confidence scores using temperature parameter
+- Formula: `calibrated = softmax(logits / temperature)`
+- Temperature learned from validation data
+- Improves probability calibration across domains
+
+### Level 3: Thompson Sampling
+- Bandit-based exploration for threshold optimization
+- Maintains Beta distribution posteriors per threshold
+- Balances exploitation (current best) vs exploration (uncertain options)
+- Update formula: `Beta(a + successes, b + failures)`
+
+### Level 4: Bayesian Optimization
+- Gaussian Process for threshold landscape modeling
+- Acquisition function: Expected Improvement (EI)
+- Used for global threshold space exploration
+- Computationally expensive, run on schedule
+
+---
+
+## Appendix E: Neuromodulation Thresholds (Evaluate Category)
+
+These thresholds are bio-inspired and may require domain expert evaluation before migration:
+
+| File | Constant | Current Value | Migration Status |
+|------|----------|---------------|------------------|
+| `dopamine.rs:32` | `DA_DECAY_RATE` | 0.05 | Evaluate - bio constant |
+| `dopamine.rs:35` | `DA_WORKSPACE_INCREMENT` | 0.2 | Evaluate - bio constant |
+| `serotonin.rs:29` | `SEROTONIN_BASELINE` | 0.5 | Evaluate - bio constant |
+| `serotonin.rs:32` | `SEROTONIN_DECAY` | 0.02 | Evaluate - bio constant |
+| `acetylcholine.rs:30` | `ACH_BASELINE` | 0.5 | Evaluate - bio constant |
+| `noradrenaline.rs:31` | `NE_THRESHOLD` | 0.6 | Evaluate - arousal gate |
+
+Recommendation: Keep as static in v1.0, evaluate domain sensitivity in v1.1.
+
+---
+
 **Document History:**
 - 2026-01-11: Initial version (v1.0)
+- 2026-01-11: Added Appendices B-E with complete threshold reference (v1.1)

@@ -535,8 +535,68 @@ mod crisis_protocol_tests {
 
 ---
 
+## Dream System Integration
+
+The CrisisProtocol generates `IdentityCrisisEvent` which converts to `WorkspaceEvent::IdentityCritical`. The Dream system subscribes to this event and triggers consolidation.
+
+### Event Flow
+
+```
+CrisisProtocol.execute()
+    |
+    | generates IdentityCrisisEvent
+    v
+IdentityCrisisEvent.to_workspace_event()
+    |
+    | converts to WorkspaceEvent::IdentityCritical
+    v
+WorkspaceBroadcaster.broadcast()
+    |
+    | delivers to all listeners
+    v
+DreamController.on_event()
+    |
+    | triggers introspective dream
+    v
+Dream consolidation cycle
+```
+
+### DreamController Integration (Out of Scope)
+
+The DreamController should implement `WorkspaceEventListener` and:
+1. Listen for `WorkspaceEvent::IdentityCritical`
+2. Check `identity_coherence < 0.5` threshold
+3. Trigger introspective dream cycle
+4. After dream, re-evaluate IC
+
+This integration is handled by the Dream subsystem task, not this task.
+
+---
+
+## Implementation Checklist
+
+- [ ] Define `CrisisProtocolResult` struct with all fields
+- [ ] Define `CrisisAction` enum with all variants
+- [ ] Define `IdentityCrisisEvent` struct
+- [ ] Implement `IdentityCrisisEvent::from_detection()`
+- [ ] Implement `IdentityCrisisEvent::to_workspace_event()`
+- [ ] Define `CrisisProtocol` struct with `ego_node: Arc<RwLock<SelfEgoNode>>`
+- [ ] Implement `CrisisProtocol::new()`
+- [ ] Implement `CrisisProtocol::execute()` with all crisis logic
+- [ ] Add `record_purpose_snapshot()` call for IC < 0.7
+- [ ] Add event generation for IC < 0.5
+- [ ] Respect cooldown via `detection.can_emit_event`
+- [ ] Mark cooldown via `monitor.mark_event_emitted()`
+- [ ] Add comprehensive unit tests
+- [ ] Add integration test with mock ego node
+- [ ] Verify no panics from edge cases
+- [ ] Run clippy with `-D warnings`
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | Claude Opus 4.5 | Initial task specification |
+| 1.1.0 | 2026-01-11 | Claude Opus 4.5 | Added dream system integration documentation and implementation checklist |

@@ -1,0 +1,457 @@
+# Threshold Inventory - Template for TASK-ATC-P2-001
+#
+# This file documents all hardcoded thresholds in the ContextGraph codebase
+# and their migration status to the Adaptive Threshold Calibration (ATC) system.
+#
+# Categories:
+#   critical     - Must migrate: behavioral thresholds affecting consciousness/learning
+#   should_migrate - Should migrate: would benefit from domain adaptation
+#   evaluate     - Requires analysis before classification
+#   static       - Intentionally static: numerical stability or hardware constants
+#
+# Version: 1.0
+# Generated: 2026-01-11
+# Task: TASK-ATC-P2-001
+
+version: "1.0"
+generated_at: "2026-01-11T00:00:00Z"
+total_count: 35
+
+categories:
+  critical:
+    count: 15
+    description: "Behavioral thresholds that MUST use ATC for domain adaptation"
+    thresholds:
+      # === GWT Layer Thresholds ===
+      - name: "GW_THRESHOLD"
+        file: "crates/context-graph-core/src/layers/coherence.rs"
+        line: 60
+        current_value: 0.7
+        type: "f32"
+        purpose: "Global Workspace broadcast gate - determines when memories enter consciousness"
+        domain_sensitivity: "high"
+        atc_field: "theta_gate"
+        target_task: "TASK-ATC-P2-003"
+        rationale: "Different domains require different consciousness thresholds"
+
+      - name: "HYPERSYNC_THRESHOLD"
+        file: "crates/context-graph-core/src/layers/coherence.rs"
+        line: 69
+        current_value: 0.95
+        type: "f32"
+        purpose: "Hypersynchronization detection - pathological coherence state"
+        domain_sensitivity: "medium"
+        atc_field: "theta_hypersync"
+        target_task: "TASK-ATC-P2-003"
+        rationale: "Detects when system is over-synchronized (loss of diversity)"
+
+      - name: "FRAGMENTATION_THRESHOLD"
+        file: "crates/context-graph-core/src/layers/coherence.rs"
+        line: 72
+        current_value: 0.5
+        type: "f32"
+        purpose: "Workspace fragmentation warning - low coherence state"
+        domain_sensitivity: "medium"
+        atc_field: "theta_fragmentation"
+        target_task: "TASK-ATC-P2-003"
+        rationale: "Detects when workspace is too fragmented for consciousness"
+
+      # === Memory Layer Thresholds ===
+      - name: "MIN_MEMORY_SIMILARITY"
+        file: "crates/context-graph-core/src/layers/memory.rs"
+        line: 52
+        current_value: 0.5
+        type: "f32"
+        purpose: "Minimum similarity for memory retrieval"
+        domain_sensitivity: "high"
+        atc_field: "theta_memory_sim"
+        target_task: "TASK-ATC-P2-004"
+        rationale: "Medical/Code need higher precision, Creative needs exploration"
+
+      # === Reflex Layer Thresholds ===
+      - name: "MIN_HIT_SIMILARITY"
+        file: "crates/context-graph-core/src/layers/reflex.rs"
+        line: 52
+        current_value: 0.85
+        type: "f32"
+        purpose: "Minimum similarity for reflex cache hit"
+        domain_sensitivity: "low"
+        atc_field: "theta_reflex_hit"
+        target_task: "TASK-ATC-P2-004"
+        rationale: "Reflex responses require high confidence"
+
+      # === Learning Layer Thresholds ===
+      - name: "DEFAULT_CONSOLIDATION_THRESHOLD"
+        file: "crates/context-graph-core/src/layers/learning.rs"
+        line: 47
+        current_value: 0.1
+        type: "f32"
+        purpose: "Threshold for memory consolidation trigger"
+        domain_sensitivity: "medium"
+        atc_field: "theta_consolidation"
+        target_task: "TASK-ATC-P2-004"
+        rationale: "Controls when learning triggers consolidation"
+
+      # === Dream Layer Thresholds ===
+      - name: "ACTIVITY_THRESHOLD"
+        file: "crates/context-graph-core/src/dream/mod.rs"
+        line: 74
+        current_value: 0.15
+        type: "f32"
+        purpose: "Activity level below which dreaming triggers"
+        domain_sensitivity: "low"
+        atc_field: "theta_dream_activity"
+        target_task: "TASK-ATC-P2-005"
+        rationale: "Creative domains should dream more frequently"
+
+      - name: "MIN_SEMANTIC_LEAP"
+        file: "crates/context-graph-core/src/dream/mod.rs"
+        line: 83
+        current_value: 0.7
+        type: "f32"
+        purpose: "Minimum semantic distance for REM exploration"
+        domain_sensitivity: "medium"
+        atc_field: "theta_semantic_leap"
+        target_task: "TASK-ATC-P2-005"
+        rationale: "Controls how far dreams explore from known content"
+
+      - name: "SHORTCUT_CONFIDENCE_THRESHOLD"
+        file: "crates/context-graph-core/src/dream/mod.rs"
+        line: 108
+        current_value: 0.7
+        type: "f32"
+        purpose: "Confidence required for shortcut creation in dreams"
+        domain_sensitivity: "medium"
+        atc_field: "theta_shortcut_conf"
+        target_task: "TASK-ATC-P2-005"
+        rationale: "Medical/Code need higher confidence for shortcuts"
+
+      # === Alignment Thresholds ===
+      - name: "AlignmentThresholds::OPTIMAL"
+        file: "crates/context-graph-core/src/config/constants.rs"
+        line: 37
+        current_value: 0.75
+        type: "f32"
+        purpose: "Optimal alignment score threshold"
+        domain_sensitivity: "high"
+        atc_field: "theta_opt"
+        target_task: "TASK-ATC-P2-002"
+        rationale: "Already in DomainThresholds - verify usage"
+
+      - name: "AlignmentThresholds::ACCEPTABLE"
+        file: "crates/context-graph-core/src/config/constants.rs"
+        line: 43
+        current_value: 0.70
+        type: "f32"
+        purpose: "Acceptable alignment score threshold"
+        domain_sensitivity: "high"
+        atc_field: "theta_acc"
+        target_task: "TASK-ATC-P2-002"
+        rationale: "Already in DomainThresholds - verify usage"
+
+      - name: "AlignmentThresholds::WARNING"
+        file: "crates/context-graph-core/src/config/constants.rs"
+        line: 49
+        current_value: 0.55
+        type: "f32"
+        purpose: "Warning alignment score threshold"
+        domain_sensitivity: "high"
+        atc_field: "theta_warn"
+        target_task: "TASK-ATC-P2-002"
+        rationale: "Already in DomainThresholds - verify usage"
+
+      # === Classification Thresholds ===
+      - name: "BLIND_SPOT_THRESHOLD"
+        file: "crates/context-graph-core/src/config/constants.rs"
+        line: 114
+        current_value: 0.5
+        type: "f32"
+        purpose: "Threshold for blind spot detection"
+        domain_sensitivity: "medium"
+        atc_field: "theta_blind_spot"
+        target_task: "TASK-ATC-P2-006"
+        rationale: "Related to Johari classification"
+
+      - name: "ENTROPY_THRESHOLD"
+        file: "crates/context-graph-core/src/types/fingerprint/johari/core.rs"
+        line: 47
+        current_value: 0.5
+        type: "f32"
+        purpose: "Johari entropy boundary for quadrant classification"
+        domain_sensitivity: "medium"
+        atc_field: "theta_johari"
+        target_task: "TASK-ATC-P2-006"
+        rationale: "Per-embedder threshold per constitution"
+
+      - name: "COHERENCE_THRESHOLD"
+        file: "crates/context-graph-core/src/types/fingerprint/johari/core.rs"
+        line: 50
+        current_value: 0.5
+        type: "f32"
+        purpose: "Johari coherence boundary for quadrant classification"
+        domain_sensitivity: "medium"
+        atc_field: "theta_johari"
+        target_task: "TASK-ATC-P2-006"
+        rationale: "Symmetric with entropy threshold"
+
+  should_migrate:
+    count: 6
+    description: "Thresholds that would benefit from domain adaptation"
+    thresholds:
+      # === Autonomous Service Thresholds ===
+      - name: "DEFAULT_RELEVANCE_THRESHOLD"
+        file: "crates/context-graph-core/src/autonomous/services/obsolescence_detector.rs"
+        line: 17
+        current_value: 0.3
+        type: "f32"
+        purpose: "Low relevance detection threshold"
+        domain_sensitivity: "medium"
+        atc_field: "theta_obsolescence_low"
+        target_task: "TASK-ATC-P2-007"
+        rationale: "Domain-specific memory curation"
+
+      - name: "MEDIUM_CONFIDENCE_THRESHOLD"
+        file: "crates/context-graph-core/src/autonomous/services/obsolescence_detector.rs"
+        line: 21
+        current_value: 0.6
+        type: "f32"
+        purpose: "Medium confidence obsolescence detection"
+        domain_sensitivity: "medium"
+        atc_field: "theta_obsolescence_mid"
+        target_task: "TASK-ATC-P2-007"
+        rationale: "Domain-specific memory curation"
+
+      - name: "HIGH_CONFIDENCE_THRESHOLD"
+        file: "crates/context-graph-core/src/autonomous/services/obsolescence_detector.rs"
+        line: 20
+        current_value: 0.8
+        type: "f32"
+        purpose: "High confidence obsolescence detection"
+        domain_sensitivity: "medium"
+        atc_field: "theta_obsolescence_high"
+        target_task: "TASK-ATC-P2-007"
+        rationale: "Domain-specific memory curation"
+
+      - name: "SLOPE_THRESHOLD"
+        file: "crates/context-graph-core/src/autonomous/services/drift_detector.rs"
+        line: 283
+        current_value: 0.005
+        type: "f32"
+        purpose: "Drift slope detection threshold"
+        domain_sensitivity: "low"
+        atc_field: "theta_drift_slope"
+        target_task: "TASK-ATC-P2-007"
+        rationale: "May become domain-adaptive in future"
+
+      - name: "DEFAULT_THRESHOLD (UTL Johari)"
+        file: "crates/context-graph-utl/src/johari/classifier.rs"
+        line: 55
+        current_value: 0.5
+        type: "f32"
+        purpose: "UTL Johari classification threshold"
+        domain_sensitivity: "medium"
+        atc_field: "theta_johari"
+        target_task: "TASK-ATC-P2-006"
+        rationale: "Should use shared JohariThresholds"
+
+      - name: "DUPLICATE_THRESHOLD"
+        file: "crates/context-graph-core/src/config/constants.rs"
+        line: 55
+        current_value: 0.90
+        type: "f32"
+        purpose: "Duplicate detection threshold"
+        domain_sensitivity: "medium"
+        atc_field: "theta_dup"
+        target_task: "TASK-ATC-P2-002"
+        rationale: "Already in DomainThresholds - verify usage"
+
+  evaluate:
+    count: 8
+    description: "Thresholds requiring domain expert review before classification"
+    thresholds:
+      # === Neuromodulation Thresholds ===
+      - name: "DA_DECAY_RATE"
+        file: "crates/context-graph-core/src/neuromod/dopamine.rs"
+        line: 32
+        current_value: 0.05
+        type: "f32"
+        purpose: "Dopamine decay rate"
+        domain_sensitivity: "unknown"
+        notes: "Bio-inspired constant - may not need domain adaptation"
+
+      - name: "DA_WORKSPACE_INCREMENT"
+        file: "crates/context-graph-core/src/neuromod/dopamine.rs"
+        line: 35
+        current_value: 0.2
+        type: "f32"
+        purpose: "Dopamine increment on workspace access"
+        domain_sensitivity: "unknown"
+        notes: "Bio-inspired constant - may not need domain adaptation"
+
+      - name: "SEROTONIN_BASELINE"
+        file: "crates/context-graph-core/src/neuromod/serotonin.rs"
+        line: 29
+        current_value: 0.5
+        type: "f32"
+        purpose: "Serotonin baseline level"
+        domain_sensitivity: "unknown"
+        notes: "Bio-inspired constant - may not need domain adaptation"
+
+      - name: "SEROTONIN_DECAY"
+        file: "crates/context-graph-core/src/neuromod/serotonin.rs"
+        line: 32
+        current_value: 0.02
+        type: "f32"
+        purpose: "Serotonin decay rate"
+        domain_sensitivity: "unknown"
+        notes: "Bio-inspired constant"
+
+      - name: "ACH_BASELINE"
+        file: "crates/context-graph-core/src/neuromod/acetylcholine.rs"
+        line: 30
+        current_value: 0.5
+        type: "f32"
+        purpose: "Acetylcholine baseline"
+        domain_sensitivity: "unknown"
+        notes: "Bio-inspired constant"
+
+      - name: "NE_THRESHOLD"
+        file: "crates/context-graph-core/src/neuromod/noradrenaline.rs"
+        line: 31
+        current_value: 0.6
+        type: "f32"
+        purpose: "Noradrenaline arousal threshold"
+        domain_sensitivity: "low"
+        notes: "Arousal gate - potentially domain-adaptive"
+
+      # === Embedder Validation Thresholds ===
+      - name: "SIN_WAVE_ENERGY_THRESHOLD"
+        file: "crates/context-graph-warm/src/cuda_alloc/constants.rs"
+        line: 54
+        current_value: 0.80
+        type: "f32"
+        purpose: "Validation threshold for CUDA sin wave energy"
+        domain_sensitivity: "none"
+        notes: "Hardware validation - likely static"
+
+      - name: "GOLDEN_SIMILARITY_THRESHOLD"
+        file: "crates/context-graph-warm/src/cuda_alloc/constants.rs"
+        line: 59
+        current_value: 0.99
+        type: "f32"
+        purpose: "Golden ratio validation threshold"
+        domain_sensitivity: "none"
+        notes: "Hardware validation - likely static"
+
+  static:
+    count: 6
+    description: "Intentionally static constants that should NOT be migrated"
+    rationale_required: true
+    thresholds:
+      - name: "LENGTH_SCALE"
+        file: "crates/context-graph-core/src/atc/level4_bayesian.rs"
+        line: 54
+        current_value: 0.1
+        type: "f32"
+        purpose: "Gaussian Process length scale hyperparameter"
+        rationale: "GP hyperparameter - not a behavioral threshold"
+
+      - name: "NOISE_VARIANCE"
+        file: "crates/context-graph-core/src/atc/level4_bayesian.rs"
+        line: 56
+        current_value: 0.01
+        type: "f32"
+        purpose: "Gaussian Process noise variance"
+        rationale: "GP hyperparameter - not a behavioral threshold"
+
+      - name: "MIN_SIGNAL_THRESHOLD"
+        file: "crates/context-graph-core/src/similarity/multi_utl.rs"
+        line: 293
+        current_value: 0.001
+        type: "f32"
+        purpose: "Minimum signal for numerical stability"
+        rationale: "Numerical stability constant - prevents division by zero"
+
+      - name: "MIN_APERTURE"
+        file: "crates/context-graph-core/src/graph/entailment/cones/operations.rs"
+        line: 32
+        current_value: 0.000001
+        type: "f32"
+        purpose: "Minimum cone aperture for numerical stability"
+        rationale: "Numerical stability constant - prevents degenerate cones"
+
+      - name: "EPSILON"
+        file: "various"
+        line: "various"
+        current_value: 0.0001
+        type: "f32"
+        purpose: "Machine epsilon for floating point comparison"
+        rationale: "Universal numerical constant"
+
+      - name: "MAX_GPU_USAGE"
+        file: "crates/context-graph-core/src/dream/mod.rs"
+        line: 80
+        current_value: 0.30
+        type: "f32"
+        purpose: "Maximum GPU usage for dream activation"
+        rationale: "Hardware constraint - not domain-dependent"
+
+summary:
+  total_thresholds: 35
+  requires_migration: 21
+  already_using_atc: 3
+  intentionally_static: 6
+  pending_evaluation: 8
+
+migration_plan:
+  phase_1:
+    task: "TASK-ATC-P2-001"
+    description: "Discovery and inventory (this document)"
+    status: "complete"
+
+  phase_2:
+    task: "TASK-ATC-P2-002"
+    description: "Extend DomainThresholds struct"
+    new_fields: 14
+    status: "ready"
+
+  phase_3:
+    task: "TASK-ATC-P2-003"
+    description: "Migrate GWT layer thresholds"
+    thresholds: ["GW_THRESHOLD", "HYPERSYNC_THRESHOLD", "FRAGMENTATION_THRESHOLD"]
+    status: "ready"
+
+  phase_4:
+    task: "TASK-ATC-P2-004"
+    description: "Migrate bio-nervous layer thresholds"
+    thresholds: ["MIN_MEMORY_SIMILARITY", "MIN_HIT_SIMILARITY", "DEFAULT_CONSOLIDATION_THRESHOLD"]
+    status: "ready"
+
+  phase_5:
+    task: "TASK-ATC-P2-005"
+    description: "Migrate dream layer thresholds"
+    thresholds: ["ACTIVITY_THRESHOLD", "MIN_SEMANTIC_LEAP", "SHORTCUT_CONFIDENCE_THRESHOLD"]
+    status: "ready"
+
+  phase_6:
+    task: "TASK-ATC-P2-006"
+    description: "Migrate Johari classification thresholds"
+    thresholds: ["ENTROPY_THRESHOLD", "COHERENCE_THRESHOLD", "BLIND_SPOT_THRESHOLD", "DEFAULT_THRESHOLD"]
+    status: "ready"
+
+  phase_7:
+    task: "TASK-ATC-P2-007"
+    description: "Migrate autonomous services thresholds"
+    thresholds: ["DEFAULT_RELEVANCE_THRESHOLD", "MEDIUM_CONFIDENCE_THRESHOLD", "HIGH_CONFIDENCE_THRESHOLD", "SLOPE_THRESHOLD"]
+    status: "ready"
+
+  phase_8:
+    task: "TASK-ATC-P2-008"
+    description: "Validation and integration testing"
+    status: "ready"
+
+---
+# Document Metadata
+generated_by: "TASK-ATC-P2-001 Specification Agent"
+validated_by: "Pending"
+last_updated: "2026-01-11"

@@ -14,12 +14,22 @@ This specification defines the implementation of specialized entropy (ΔS) compu
 
 ### Problem Statement
 
-The current `EmbedderEntropyFactory` routes E7 (Code), E10 (Multimodal), E11 (Entity), and E12 (LateInteraction) to `DefaultKnnEntropy`. This violates the principle that entropy computations should be semantically appropriate for each embedding space:
+The current `EmbedderEntropyFactory` routes E7 (Code), E10 (Multimodal), E11 (Entity), and E12 (LateInteraction) to `DefaultKnnEntropy`. This violates the principle that entropy computations should be semantically appropriate for each embedding space.
 
-- **E7 (ContentHash/Code)**: Should use Jaccard distance for fingerprint/hash comparison
-- **E10 (SemanticContext/Multimodal)**: Should use domain-specific entropy with cross-modal awareness
-- **E11 (TemporalDecay/Entity)**: Should use exponential decay entropy reflecting temporal relevance
-- **E12 (EmotionalValence/LateInteraction)**: Should use affective computing metrics with token-level MaxSim
+**Constitution.yaml delta_sc.ΔS_methods specifies:**
+
+| Embedder | Constitution Method | Current State |
+|----------|---------------------|---------------|
+| **E7 (Code)** | GMM+KNN Hybrid: ΔS=0.5xGMM+0.5xKNN | DefaultKnnEntropy (WRONG) |
+| **E10 (Multimodal)** | Cross-modal KNN: ΔS=avg(d_text,d_image) | DefaultKnnEntropy (WRONG) |
+| **E11 (Entity)** | TransE: ΔS=\|\|h+r-t\|\| | DefaultKnnEntropy (WRONG) |
+| **E12 (LateInteraction)** | Token KNN: ΔS=max_token(d_k) | DefaultKnnEntropy (WRONG) |
+
+**Semantic Requirements:**
+- **E7 (Code)**: Hybrid GMM+KNN captures both cluster membership and local density
+- **E10 (Multimodal)**: Cross-modal KNN handles text/image modality differences
+- **E11 (Entity)**: TransE captures knowledge graph relationship translations
+- **E12 (LateInteraction)**: MaxSim captures token-level precision in ColBERT embeddings
 
 ### Business Impact
 
@@ -33,23 +43,27 @@ Without specialized entropy methods:
 
 ## User Stories
 
-### US-UTL-003-01: Code Fingerprint Entropy
+### US-UTL-003-01: Code Hybrid GMM+KNN Entropy
 
 **Priority:** must-have
 
 **Narrative:**
 As the UTL learning system,
-I want to compute entropy for code embeddings using Jaccard distance on active feature sets,
-So that code similarity is measured by structural fingerprint overlap rather than vector distance.
+I want to compute entropy for code embeddings using a hybrid GMM+KNN approach,
+So that code similarity captures both cluster membership (GMM) and local density (KNN).
 
 **Acceptance Criteria:**
 ```gherkin
-Given two code embeddings with overlapping AST features
-When computing ΔS using JaccardCodeEntropy
-Then the entropy reflects the proportion of non-overlapping features
+Given two code embeddings from similar code structures
+When computing ΔS using HybridGmmKnnEntropy
+Then ΔS = 0.5 x GMM_component + 0.5 x KNN_component
+And GMM_component measures cluster membership probability
+And KNN_component measures k-nearest neighbor distance
 And identical code yields ΔS near 0
 And completely different code yields ΔS near 1
 ```
+
+**Constitution Reference:** `E7: "GMM+KNN: ΔS=0.5×GMM+0.5×KNN"`
 
 ### US-UTL-003-02: Multimodal Context Entropy
 
@@ -69,23 +83,26 @@ And the calculation uses modality-aware weighting
 And outputs remain in [0, 1] per AP-10
 ```
 
-### US-UTL-003-03: Temporal Entity Entropy
+### US-UTL-003-03: TransE Entity Entropy
 
 **Priority:** must-have
 
 **Narrative:**
 As the UTL learning system,
-I want to compute entropy for entity embeddings using exponential decay functions,
-So that older entity references contribute less to current surprise calculations.
+I want to compute entropy for entity embeddings using TransE distance,
+So that knowledge graph relationships are measured by translation distance in embedding space.
 
 **Acceptance Criteria:**
 ```gherkin
-Given entity embeddings with timestamps
-When computing ΔS using ExponentialDecayEntropy
-Then recent entities have higher influence on similarity
-And the decay follows λ_decay = 0.1 per day baseline
-And configurable half-life allows domain customization
+Given entity embeddings representing (head, relation, tail) triples
+When computing ΔS using TransEEntropy
+Then ΔS is computed as ||h + r - t|| normalized to [0, 1]
+And valid translations (h + r ≈ t) yield low ΔS
+And invalid translations yield high ΔS
+And the algorithm supports both L1 and L2 norms
 ```
+
+**Constitution Reference:** `E11: "TransE: ΔS=||h+r-t||"`
 
 ### US-UTL-003-04: Token-Level MaxSim Entropy
 
@@ -113,13 +130,13 @@ And the method handles variable-length sequences correctly
 
 | ID | Story Ref | Priority | Description | Rationale |
 |----|-----------|----------|-------------|-----------|
-| REQ-UTL-003-01 | US-UTL-003-01 | must | Create `JaccardCodeEntropy` implementing `EmbedderEntropy` trait for E7 | Constitution requires Jaccard for fingerprint comparison |
-| REQ-UTL-003-02 | US-UTL-003-01 | must | `JaccardCodeEntropy.compute_delta_s()` must use active dimension sets | Code AST features are sparse-like |
-| REQ-UTL-003-03 | US-UTL-003-02 | must | Create `CrossModalEntropy` implementing `EmbedderEntropy` trait for E10 | Multimodal needs cross-domain awareness |
-| REQ-UTL-003-04 | US-UTL-003-02 | must | `CrossModalEntropy` must weight intra-modal vs cross-modal components | Domain-specific semantic coherence |
-| REQ-UTL-003-05 | US-UTL-003-03 | must | Create `ExponentialDecayEntropy` implementing `EmbedderEntropy` trait for E11 | Temporal relevance decay |
-| REQ-UTL-003-06 | US-UTL-003-03 | must | Configurable decay constant λ with default 0.1/day | Customizable per domain |
-| REQ-UTL-003-07 | US-UTL-003-04 | must | Create `MaxSimTokenEntropy` implementing `EmbedderEntropy` trait for E12 | ColBERT MaxSim is the correct metric |
+| REQ-UTL-003-01 | US-UTL-003-01 | must | Create `HybridGmmKnnEntropy` implementing `EmbedderEntropy` trait for E7 | Constitution: E7 uses GMM+KNN hybrid |
+| REQ-UTL-003-02 | US-UTL-003-01 | must | `HybridGmmKnnEntropy.compute_delta_s()` uses 0.5*GMM + 0.5*KNN weighting | Per constitution delta_sc.ΔS_methods |
+| REQ-UTL-003-03 | US-UTL-003-02 | must | Create `CrossModalEntropy` implementing `EmbedderEntropy` trait for E10 | Constitution: E10 uses cross-modal KNN |
+| REQ-UTL-003-04 | US-UTL-003-02 | must | `CrossModalEntropy` computes avg(d_text, d_image) for modality awareness | Per constitution delta_sc.ΔS_methods |
+| REQ-UTL-003-05 | US-UTL-003-03 | must | Create `TransEEntropy` implementing `EmbedderEntropy` trait for E11 | Constitution: E11 uses TransE |
+| REQ-UTL-003-06 | US-UTL-003-03 | must | `TransEEntropy` computes \|\|h+r-t\|\| with L1 or L2 norm | Per constitution delta_sc.ΔS_methods |
+| REQ-UTL-003-07 | US-UTL-003-04 | must | Create `MaxSimTokenEntropy` implementing `EmbedderEntropy` trait for E12 | Constitution: E12 uses max_token(d_k) |
 | REQ-UTL-003-08 | US-UTL-003-04 | must | Handle variable-length token sequences in MaxSim | Token count varies per content |
 | REQ-UTL-003-09 | all | must | Update `EmbedderEntropyFactory::create()` to route E7, E10, E11, E12 | Wire new implementations |
 | REQ-UTL-003-10 | all | must | All implementations return ΔS in [0.0, 1.0] with no NaN/Infinity | AP-10 compliance |
@@ -140,8 +157,9 @@ And the method handles variable-length sequences correctly
 | Related Req | Scenario | Expected Behavior |
 |-------------|----------|-------------------|
 | REQ-UTL-003-01 | Empty current embedding | Return `Err(UtlError::EmptyInput)` |
-| REQ-UTL-003-02 | All dimensions inactive (zeros) | Return ΔS = 1.0 - smoothing_factor |
-| REQ-UTL-003-05 | All timestamps identical | Uniform weighting, fallback to KNN-like |
+| REQ-UTL-003-02 | GMM not yet fitted (insufficient history) | Use KNN-only fallback |
+| REQ-UTL-003-03 | Modality detection ambiguous (near 0.5) | Use equal weighting |
+| REQ-UTL-003-05 | Invalid TransE triple (NaN distance) | Return fallback value with warning |
 | REQ-UTL-003-07 | Single-token sequence | MaxSim degenerates to cosine similarity |
 | REQ-UTL-003-08 | Zero-length token sequence in history | Skip that history item, continue |
 | REQ-UTL-003-10 | NaN in input embedding | Return `Err(UtlError::EntropyError)` |
@@ -164,18 +182,19 @@ And the method handles variable-length sequences correctly
 
 | ID | Type | Req Ref | Description | Inputs | Expected |
 |----|------|---------|-------------|--------|----------|
-| TC-UTL-003-01 | unit | REQ-UTL-003-01 | Jaccard identical code | Same embedding | ΔS ≈ 0 |
-| TC-UTL-003-02 | unit | REQ-UTL-003-01 | Jaccard disjoint code | Non-overlapping | ΔS ≈ 1 |
-| TC-UTL-003-03 | unit | REQ-UTL-003-02 | Jaccard partial overlap | 50% overlap | ΔS ≈ 0.5 |
-| TC-UTL-003-04 | unit | REQ-UTL-003-03 | CrossModal consistent | Same modality | Lower ΔS |
-| TC-UTL-003-05 | unit | REQ-UTL-003-05 | Decay recent matches | t=now | High weight |
-| TC-UTL-003-06 | unit | REQ-UTL-003-05 | Decay old matches | t=30d ago | Low weight |
-| TC-UTL-003-07 | unit | REQ-UTL-003-07 | MaxSim identical tokens | Same sequence | ΔS ≈ 0 |
-| TC-UTL-003-08 | unit | REQ-UTL-003-08 | MaxSim variable length | Different lengths | Valid ΔS |
-| TC-UTL-003-09 | unit | REQ-UTL-003-09 | Factory routes E7 | Embedder::Code | JaccardCodeEntropy |
-| TC-UTL-003-10 | unit | REQ-UTL-003-10 | All return valid range | Any valid input | ΔS in [0,1] |
-| TC-UTL-003-11 | unit | REQ-UTL-003-10 | Empty history | Empty vec | ΔS = 1.0 |
-| TC-UTL-003-12 | unit | ERR-UTL-003-01 | Empty input error | Empty current | EmptyInput error |
+| TC-UTL-003-01 | unit | REQ-UTL-003-01 | E7 Hybrid GMM+KNN identical | Same embedding | ΔS ≈ 0 |
+| TC-UTL-003-02 | unit | REQ-UTL-003-01 | E7 Hybrid GMM+KNN distant | Far from all clusters | ΔS ≈ 1 |
+| TC-UTL-003-03 | unit | REQ-UTL-003-02 | E7 Weight balance | 0.5 GMM + 0.5 KNN | Weights sum to 1 |
+| TC-UTL-003-04 | unit | REQ-UTL-003-03 | E10 CrossModal same modality | Same modality neighbors | Lower ΔS |
+| TC-UTL-003-05 | unit | REQ-UTL-003-05 | E11 TransE valid triple | h+r≈t | ΔS near 0 |
+| TC-UTL-003-06 | unit | REQ-UTL-003-05 | E11 TransE invalid triple | h+r far from t | High ΔS |
+| TC-UTL-003-07 | unit | REQ-UTL-003-07 | E12 MaxSim identical tokens | Same sequence | ΔS ≈ 0 |
+| TC-UTL-003-08 | unit | REQ-UTL-003-08 | E12 MaxSim variable length | Different token counts | Valid ΔS |
+| TC-UTL-003-09 | unit | REQ-UTL-003-09 | Factory routes E7 | Embedder::Code | HybridGmmKnnEntropy |
+| TC-UTL-003-10 | unit | REQ-UTL-003-09 | Factory routes E11 | Embedder::Entity | TransEEntropy |
+| TC-UTL-003-11 | unit | REQ-UTL-003-10 | All return valid range | Any valid input | ΔS in [0,1] |
+| TC-UTL-003-12 | unit | REQ-UTL-003-10 | Empty history | Empty vec | ΔS = 1.0 |
+| TC-UTL-003-13 | unit | ERR-UTL-003-01 | Empty input error | Empty current | EmptyInput error |
 
 ### Integration Tests
 
@@ -204,10 +223,12 @@ And the method handles variable-length sequences correctly
 | Term | Definition |
 |------|------------|
 | ΔS | Entropy/surprise delta, measuring novelty of an embedding relative to history |
-| Jaccard | Set similarity: intersection/union of active dimensions |
+| GMM | Gaussian Mixture Model: probabilistic clustering for density estimation |
+| KNN | K-Nearest Neighbors: local density estimation via neighbor distances |
+| GMM+KNN Hybrid | Combined approach: 0.5*GMM + 0.5*KNN for robust entropy |
 | MaxSim | ColBERT metric: max(cos(q_i, d_j)) for each query token |
 | Cross-modal | Spanning multiple content modalities (text, code, images) |
-| Exponential decay | Time-based weighting: w(t) = exp(-λ * (now - t)) |
+| TransE | Knowledge graph embedding: h + r ≈ t for relationship modeling |
 
 ---
 

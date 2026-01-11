@@ -495,6 +495,64 @@ Date: YYYY-MM-DD
 
 ---
 
+## Acceptance Criteria Checklist
+
+### Prerequisite Verification
+- [ ] TASK-ATC-P2-001 complete (threshold inventory exists)
+- [ ] TASK-ATC-P2-002 complete (DomainThresholds extended)
+- [ ] TASK-ATC-P2-003 complete (GWT thresholds migrated)
+- [ ] TASK-ATC-P2-004 complete (Layer thresholds migrated)
+- [ ] TASK-ATC-P2-005 complete (Dream thresholds migrated)
+- [ ] TASK-ATC-P2-006 complete (Johari thresholds migrated)
+- [ ] TASK-ATC-P2-007 complete (Autonomous thresholds migrated)
+
+### Regression Testing
+- [ ] `cargo test --all` passes with 0 failures
+- [ ] No new test failures compared to pre-migration baseline
+- [ ] All existing functionality preserved
+
+### Performance Verification
+- [ ] Single threshold lookup < 1000ns (NFR-ATC-001)
+- [ ] All threshold names lookup < 20000ns
+- [ ] All domains lookup < 6000ns
+- [ ] Benchmark run in release mode: `cargo bench --bench atc_thresholds`
+
+### Domain Behavior Verification
+- [ ] All 6 domains initialize successfully
+- [ ] All 6 domains pass `is_valid()` checks
+- [ ] Domain strictness ordering correct (Medical > Code > Legal > Research = General > Creative)
+- [ ] General domain matches old hardcoded defaults exactly
+
+### Backward Compatibility
+- [ ] GwtThresholds::default_general() matches old values
+- [ ] LayerThresholds::default_general() matches old values
+- [ ] DreamThresholds::default_general() matches old values
+- [ ] JohariThresholds::default_general() matches old values
+- [ ] AutonomousThresholds::default_general() matches old values
+
+### EWMA Observability
+- [ ] `observe_threshold()` records observations
+- [ ] `get_drift_status()` returns drift information
+- [ ] Threshold usage observable by Level 1 EWMA
+
+### Documentation
+- [ ] Integration test file created: `tests/integration/atc_migration_tests.rs`
+- [ ] Benchmark file created: `tests/benchmarks/atc_thresholds.rs`
+- [ ] Validation report generated: `specs/tasks/ATC-MIGRATION-VALIDATION.md`
+- [ ] All deprecated items documented in report
+
+### Deprecation Audit
+- [ ] Count of deprecated constants documented
+- [ ] Each deprecated item has migration path documented
+- [ ] No compilation errors from deprecations
+
+### Final Sign-off
+- [ ] Validation report marked PASS
+- [ ] All acceptance criteria checked
+- [ ] Migration ready for production
+
+---
+
 ## Notes
 
 - This is a validation task, not implementation
@@ -507,3 +565,4 @@ Date: YYYY-MM-DD
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation (blocked on TASK-ATC-P2-003 through 007)

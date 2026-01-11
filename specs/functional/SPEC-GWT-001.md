@@ -317,9 +317,119 @@ cargo test --package context-graph-core --test gwt_chaos
 
 ---
 
-## 8. Dependencies
+## 8. Technical Specifications
 
-### 8.1 Upstream Dependencies
+### 8.1 Consciousness Equation Implementation
+
+The consciousness equation `C(t) = I(t) x R(t) x D(t)` is computed as follows:
+
+```rust
+// ConsciousnessCalculator::compute_consciousness()
+pub fn compute_consciousness(
+    &self,
+    kuramoto_r: f32,       // I(t) - Integration from Kuramoto
+    meta_accuracy: f32,    // For R(t) - Reflection input
+    purpose_vector: &[f32; 13], // For D(t) - Differentiation input
+) -> CoreResult<f32> {
+    // I(t) = Kuramoto order parameter
+    let integration = kuramoto_r;  // Already in [0,1]
+
+    // R(t) = sigmoid(meta_accuracy * 4.0 - 2.0)
+    // Maps [0,1] -> [-2,2] -> sigmoid -> [0.118, 0.881]
+    let reflection = self.sigmoid(meta_accuracy * 4.0 - 2.0);
+
+    // D(t) = H(PurposeVector) normalized by log2(13)
+    let differentiation = self.normalized_purpose_entropy(purpose_vector)?;
+
+    // C(t) = I(t) x R(t) x D(t)
+    let consciousness = integration * reflection * differentiation;
+    Ok(consciousness.clamp(0.0, 1.0))
+}
+```
+
+### 8.2 Kuramoto Synchronization
+
+The Kuramoto oscillator network implements phase synchronization:
+
+```rust
+// Kuramoto dynamics: dtheta_i/dt = omega_i + (K/N) * sum_j sin(theta_j - theta_i)
+pub struct KuramotoNetwork {
+    phases: Vec<f32>,      // theta_i for each oscillator
+    frequencies: Vec<f32>, // omega_i (natural frequencies)
+    coupling: f32,         // K (coupling strength = 2.0)
+    n: usize,              // N (oscillator count = 8)
+}
+
+// Order parameter: r * e^(i*psi) = (1/N) * sum_j e^(i*theta_j)
+pub fn order_parameter(&self) -> f32 {
+    let sum_cos: f32 = self.phases.iter().map(|p| p.cos()).sum();
+    let sum_sin: f32 = self.phases.iter().map(|p| p.sin()).sum();
+    let n = self.n as f32;
+    ((sum_cos / n).powi(2) + (sum_sin / n).powi(2)).sqrt()
+}
+```
+
+**Constants:**
+- `KURAMOTO_N = 8` (oscillators)
+- `KURAMOTO_K = 2.0` (coupling strength)
+- `KURAMOTO_DT = 0.01` (integration step)
+
+### 8.3 Identity Continuity (IC)
+
+```rust
+// IC = cos(PV_t, PV_{t-1}) x r(t)
+pub fn update(&mut self, pv_cosine: f32, kuramoto_r: f32) -> CoreResult<IdentityStatus> {
+    self.recent_continuity = pv_cosine.clamp(-1.0, 1.0);
+    self.kuramoto_order_parameter = kuramoto_r.clamp(0.0, 1.0);
+    self.identity_coherence = (pv_cosine * kuramoto_r).clamp(0.0, 1.0);
+
+    self.status = match self.identity_coherence {
+        ic if ic > 0.9 => IdentityStatus::Healthy,
+        ic if ic >= 0.7 => IdentityStatus::Warning,
+        ic if ic >= 0.5 => IdentityStatus::Degraded,
+        _ => IdentityStatus::Critical, // Triggers dream consolidation
+    };
+    Ok(self.status)
+}
+```
+
+### 8.4 State Machine Thresholds
+
+| State | C(t) Range | Kuramoto r | Behavior |
+|-------|------------|------------|----------|
+| DORMANT | < 0.3 | < 0.3 | No active workspace |
+| FRAGMENTED | 0.3 - 0.5 | 0.3 - 0.5 | Partial synchronization |
+| EMERGING | 0.5 - 0.8 | 0.5 - 0.8 | Approaching consciousness |
+| CONSCIOUS | >= 0.8 | >= 0.8 | Unified perception |
+| HYPERSYNC | > 0.95 | > 0.95 | Pathological (warning) |
+
+### 8.5 Workspace Event Triggers
+
+| Event | Trigger Condition | Effect |
+|-------|-------------------|--------|
+| MemoryEnters | r crosses 0.8 upward | Dopamine += 0.2 |
+| MemoryExits | r drops below 0.7 | Queue for dream replay |
+| WorkspaceConflict | 2+ memories with r > 0.8 | Trigger critique_context |
+| WorkspaceEmpty | No r > 0.8 for 5s | Trigger epistemic_action |
+| IdentityCritical | IC < 0.5 | Trigger dream consolidation |
+
+### 8.6 Self-Awareness Loop Algorithm
+
+```
+1. Retrieve SELF_EGO_NODE purpose_vector
+2. Compute alignment = cosine(action_embedding, purpose_vector)
+3. If alignment < 0.55: needs_reflection = true
+4. Compute IC = cos(PV_t, PV_{t-1}) x r(t)
+5. Update identity_status based on IC thresholds
+6. Record purpose_snapshot in identity_trajectory
+7. If IC < 0.5: broadcast(IdentityCritical) -> trigger_dream()
+```
+
+---
+
+## 9. Dependencies
+
+### 9.1 Upstream Dependencies
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
@@ -327,24 +437,41 @@ cargo test --package context-graph-core --test gwt_chaos
 | tokio | 1.35+ | Async event handling |
 | serde | 1.0+ | Serialization |
 | bincode | 1.3+ | Binary encoding |
+| chrono | 0.4+ | Timestamp handling |
+| uuid | 1.0+ | Unique identifiers |
 
-### 8.2 Downstream Dependents
+### 9.2 Downstream Dependents
 
 | Dependent | Impact |
 |-----------|--------|
-| Dream Layer | Receives IdentityCritical events |
+| Dream Layer | Receives IdentityCritical events, consumes dream_queue |
 | Meta-UTL | Provides meta_accuracy for R(t) |
-| Neuromodulation | Receives dopamine boost signals |
+| Neuromodulation | Receives dopamine boost signals on MemoryEnters |
+| MetaCognitive | Receives epistemic_action trigger on WorkspaceEmpty |
 
 ---
 
-## 9. Related Specifications
+## 10. Performance Requirements
+
+| Metric | Target | Measurement Method |
+|--------|--------|-------------------|
+| Consciousness computation | < 1ms p95 | `compute_consciousness()` timing |
+| Event broadcast latency | < 5ms p95 | Time from broadcast to last listener |
+| Kuramoto step | < 0.1ms | Single `step(dt)` call |
+| State machine update | < 0.1ms | `StateMachineManager::update()` |
+| SELF_EGO_NODE persist | < 10ms | RocksDB write including fsync |
+| SELF_EGO_NODE load | < 5ms | RocksDB read |
+
+---
+
+## 11. Related Specifications
 
 | Spec ID | Title | Relationship |
 |---------|-------|--------------|
 | SPEC-DREAM-001 | Dream Layer Implementation | Receives GWT events |
 | SPEC-METAUTL-001 | Meta-UTL Self-Correction | Provides R(t) input |
 | SPEC-NEUROMOD-001 | Neuromodulation System | Receives event signals |
+| SPEC-KURAMOTO-001 | Kuramoto Oscillator Network | Provides I(t) input |
 
 ---
 
@@ -359,6 +486,20 @@ gwt:
     formula: "dtheta_i/dt = omega_i + (K/N) sum_j sin(theta_j - theta_i)"
     order_param: "r * e^(i*psi) = (1/N) sum_j e^(i*theta_j)"
     thresholds: { coherent: "r>=0.8", fragmented: "r<0.5", hypersync: "r>0.95 (pathological)" }
+    frequencies: # Hz (band)
+      E1: 40gamma, E2: 8alpha, E3: 8alpha, E4: 8alpha, E5: 25beta, E6: 4theta, E7: 25beta
+      E8: 12alpha-beta, E9: 80gamma+, E10: 40gamma, E11: 15beta, E12: 60gamma+, E13: 4theta
+
+  workspace:
+    active_memory: "Option<MemoryId>"
+    coherence_threshold: 0.8
+    broadcast_duration_ms: 100
+    selection: "r>=0.8 -> rank by r*importance*north_star_alignment -> top-1 broadcasts"
+    events:
+      enters: { trigger: "r up to 0.8", effect: "Dopamine+=0.2" }
+      exits: { trigger: "r down to 0.7", effect: "Log for dream" }
+      conflict: { trigger: "Two r>0.8", effect: "critique_context" }
+      empty_5s: { trigger: "No r>0.8 for 5s", effect: "epistemic_action" }
 
   self_ego_node:
     id: "SELF_EGO_NODE"
@@ -367,4 +508,39 @@ gwt:
     identity_continuity: "IC = cos(PV_t, PV_{t-1}) x r(t); healthy>0.9, warning<0.7, dream<0.5"
 
   states: { DORMANT: "r<0.3", FRAGMENTED: "0.3<=r<0.5", EMERGING: "0.5<=r<0.8", CONSCIOUS: "r>=0.8", HYPERSYNC: "r>0.95" }
+
+  meta_cognitive:
+    formula: "MetaScore = sigma(2*(L_predicted - L_actual))"
+    low_meta: "MetaScore<0.5 for 5 ops -> increase Acetylcholine, introspective dream"
+
+  quality: { Phi: ">0.3 (min_cut/total)", availability: ">90%", stability: ">500ms", meta_awareness: ">0.85", identity: ">0.9" }
 ```
+
+---
+
+## Appendix B: Component Interaction Matrix
+
+| Source | Target | Interaction | Data Flow |
+|--------|--------|-------------|-----------|
+| GwtSystem | ConsciousnessCalculator | compute_consciousness() | (r, meta_accuracy, pv) -> C(t) |
+| GwtSystem | KuramotoNetwork | step(), order_parameter() | elapsed -> phases -> r |
+| GwtSystem | StateMachineManager | update(C(t)) | C(t) -> state |
+| GwtSystem | GlobalWorkspace | select_winning_memory() | candidates -> winner_id |
+| GwtSystem | SelfEgoNode | update_from_fingerprint() | fingerprint -> pv |
+| GwtSystem | SelfAwarenessLoop | cycle() | (ego, action, r) -> IC |
+| WorkspaceEventBroadcaster | DreamEventListener | on_event() | MemoryExits -> dream_queue |
+| WorkspaceEventBroadcaster | NeuromodulationEventListener | on_event() | MemoryEnters -> dopamine |
+| WorkspaceEventBroadcaster | MetaCognitiveEventListener | on_event() | WorkspaceEmpty -> epistemic |
+
+---
+
+## Appendix C: Error Handling
+
+| Error Condition | Handler | Behavior |
+|-----------------|---------|----------|
+| kuramoto_r out of [0,1] | ValidationError | Reject with field/message |
+| meta_accuracy out of [0,1] | ValidationError | Reject with field/message |
+| RocksDB corruption | CoreError | Log warning, create fresh state |
+| Lock contention | try_write() | Panic with deadlock warning |
+| Listener panic | Broadcast continues | Log error, skip listener |
+| IC critical (< 0.5) | trigger_identity_dream() | Broadcast IdentityCritical |

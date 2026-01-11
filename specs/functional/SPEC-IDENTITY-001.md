@@ -368,13 +368,168 @@ graph TD
 ## 10. Open Questions
 
 1. **Persistence scope:** Should IC history be persisted to RocksDB or only maintained in memory?
-   - **Tentative answer:** Memory for now, persistence in TASK-GWT-P1-001 for SELF_EGO_NODE
+   - **RESOLVED:** Memory for now, persistence in TASK-GWT-P1-001 for SELF_EGO_NODE. IC history is transient per session.
 
 2. **Crisis backoff:** Should there be a cooldown between crisis protocol invocations?
-   - **Tentative answer:** Yes, 30-second minimum between IdentityCritical emissions
+   - **RESOLVED:** Yes, 30-second minimum between IdentityCritical emissions (CRISIS_EVENT_COOLDOWN constant).
 
 3. **Dream integration:** How tightly coupled should crisis protocol be to DreamController?
-   - **Tentative answer:** Loosely coupled via WorkspaceEvent; Dream system subscribes to IdentityCritical
+   - **RESOLVED:** Loosely coupled via WorkspaceEvent; Dream system subscribes to IdentityCritical. Crisis protocol only emits events, does not invoke dream directly.
+
+---
+
+## 11. Implementation Architecture
+
+### 11.1 Component Diagram
+
+```
++---------------------------+
+|    WorkspaceEventBroadcaster   |
++---------------------------+
+            |
+            | MemoryEnters events
+            v
++---------------------------+
+| IdentityContinuityListener |
++---------------------------+
+            |
+            | compute_continuity()
+            v
++---------------------------+
+| IdentityContinuityMonitor  |
+|  - PurposeVectorHistory    |
+|  - last_result             |
+|  - crisis_threshold        |
++---------------------------+
+            |
+            | detect_crisis()
+            v
++---------------------------+
+|   CrisisDetectionResult    |
++---------------------------+
+            |
+            | if entering_critical
+            v
++---------------------------+
+|     CrisisProtocol         |
++---------------------------+
+            |
+            | emit IdentityCritical
+            v
++---------------------------+
+| WorkspaceEventBroadcaster  |
++---------------------------+
+            |
+            v
++---------------------------+
+|   DreamController          |
+|   (subscriber)             |
++---------------------------+
+```
+
+### 11.2 Data Flow
+
+1. **MemoryEnters** event triggers IdentityContinuityListener
+2. Listener extracts purpose vector from fingerprint
+3. Listener calls `monitor.compute_continuity(pv, kuramoto_r)`
+4. Monitor computes IC = cos(PV_t, PV_{t-1}) x r(t)
+5. Listener calls `monitor.detect_crisis()`
+6. If entering_critical, listener executes `protocol.execute(detection, monitor)`
+7. Protocol may emit IdentityCritical via broadcaster
+8. Dream system receives event and triggers consolidation
+
+### 11.3 Thread Safety Model
+
+All shared state uses `Arc<RwLock<T>>` pattern:
+- `Arc<RwLock<IdentityContinuityMonitor>>` - shared by listener
+- `Arc<RwLock<SelfEgoNode>>` - shared by protocol for snapshots
+- `Arc<RwLock<WorkspaceBroadcaster>>` - shared for event emission
+- `Arc<RwLock<KuramotoNetwork>>` - read-only access for r(t)
+
+Read locks preferred for performance; write locks only for mutations.
+
+---
+
+## 12. Session Persistence
+
+### 12.1 Session Boundary Behavior
+
+When a session ends:
+1. Current IC state is NOT persisted (transient)
+2. SelfEgoNode.identity_trajectory IS persisted (via TASK-GWT-P1-001)
+3. New session starts with IC = 1.0 (first vector assumption)
+
+### 12.2 Rationale
+
+IC tracks continuity within a session. Cross-session continuity is handled by SelfEgoNode persistence, not IC monitoring. This prevents false crisis detection on session boundaries.
+
+---
+
+## 13. Performance Considerations
+
+### 13.1 Budgets
+
+| Operation | Budget | Rationale |
+|-----------|--------|-----------|
+| cosine_similarity_13d | < 1us | Hot path, called per memory enter |
+| compute_continuity | < 1ms | Real-time monitoring |
+| detect_crisis | < 100us | Simple comparisons |
+| crisis_protocol.execute | < 5ms | May involve RwLock acquisition |
+| Full IC cycle | < 5ms | NFR-IDENTITY-002 |
+
+### 13.2 Optimization Notes
+
+- Use SIMD for cosine similarity if available (future optimization)
+- Avoid allocations in hot path
+- Use VecDeque for O(1) history operations
+- Cache last_detection result to avoid recomputation
+
+---
+
+## 14. Monitoring and Observability
+
+### 14.1 Metrics to Expose
+
+```rust
+// Prometheus-style metrics
+contextgraph_identity_coherence_gauge         // Current IC value [0,1]
+contextgraph_identity_status_enum             // 0=Critical, 1=Degraded, 2=Warning, 3=Healthy
+contextgraph_identity_crisis_count_total      // Total crisis events emitted
+contextgraph_identity_continuity_compute_ms   // Histogram of computation times
+contextgraph_identity_trajectory_length       // Number of snapshots stored
+```
+
+### 14.2 Logging Guidelines
+
+```rust
+// Trace level: Every IC computation
+tracing::trace!("IC computed: value={:.4}, status={:?}", ic, status);
+
+// Debug level: Status transitions
+tracing::debug!("Identity status changed: {:?} -> {:?}", prev, curr);
+
+// Warn level: Crisis events
+tracing::warn!("Identity crisis: IC={:.4}, entering_critical={}", ic, entering);
+
+// Error level: Only actual errors (panic prevention, invalid state)
+tracing::error!("IC computation failed: {:?}", err);
+```
+
+---
+
+## 15. Security Considerations
+
+### 15.1 Input Validation
+
+1. Purpose vectors MUST be validated for NaN/Infinity before computation
+2. Kuramoto r MUST be clamped to [0, 1]
+3. Reject malformed fingerprints gracefully (skip IC, log warning)
+
+### 15.2 Denial of Service Prevention
+
+1. Rate limit crisis event emissions (30s cooldown)
+2. Limit identity_trajectory to 1000 entries
+3. Bound computation time (fail gracefully if exceeded)
 
 ---
 
@@ -383,3 +538,4 @@ graph TD
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | Claude Opus 4.5 | Initial specification |
+| 1.1.0 | 2026-01-11 | Claude Opus 4.5 | Added implementation architecture, session persistence, performance, monitoring, security sections |

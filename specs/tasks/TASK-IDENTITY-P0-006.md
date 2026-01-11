@@ -33,6 +33,11 @@ This task creates the `IdentityContinuityListener` that subscribes to workspace 
 
 Per TASK-GWT-P1-002, workspace events are already wired to subsystem listeners. This task adds the identity monitoring as another listener.
 
+**CRITICAL:** The current `WorkspaceEvent::MemoryEnters` does NOT include a fingerprint field. This task must:
+1. Add an optional `fingerprint: Option<TeleologicalFingerprint>` field to `MemoryEnters`
+2. Populate the fingerprint when broadcasting
+3. Use the fingerprint's purpose_vector for IC computation
+
 ---
 
 ## Input Context Files
@@ -324,8 +329,37 @@ None - additions go to existing files.
 
 | File | Changes |
 |------|---------|
+| `crates/context-graph-core/src/gwt/workspace.rs` | Update WorkspaceEvent::MemoryEnters to include fingerprint field |
 | `crates/context-graph-core/src/gwt/listeners.rs` | Add IdentityContinuityListener |
 | `crates/context-graph-core/src/gwt/mod.rs` | Add identity_listener() to GwtSystem, register listener |
+
+---
+
+## WorkspaceEvent Modification
+
+```rust
+// File: crates/context-graph-core/src/gwt/workspace.rs
+
+/// Events fired by workspace state changes
+#[derive(Debug, Clone)]
+pub enum WorkspaceEvent {
+    /// Memory entered workspace (r crossed 0.8 upward)
+    MemoryEnters {
+        id: Uuid,
+        order_parameter: f32,
+        timestamp: DateTime<Utc>,
+        /// TASK-IDENTITY-P0-006: Fingerprint for IC computation
+        /// Contains purpose_vector for identity continuity calculation
+        fingerprint: Option<TeleologicalFingerprint>,
+    },
+    // ... other variants unchanged
+}
+```
+
+**Migration Notes:**
+1. All existing code that constructs `MemoryEnters` must be updated to include `fingerprint`
+2. Existing tests should pass with `fingerprint: None` initially
+3. Callers should populate fingerprint when available
 
 ---
 
@@ -487,8 +521,83 @@ mod identity_continuity_listener_tests {
 
 ---
 
+## Implementation Checklist
+
+- [ ] Update `WorkspaceEvent::MemoryEnters` to include `fingerprint: Option<TeleologicalFingerprint>`
+- [ ] Update all existing code that constructs `MemoryEnters` events
+- [ ] Define `IdentityContinuityListener` struct with all fields
+- [ ] Implement `IdentityContinuityListener::new()`
+- [ ] Implement `IdentityContinuityListener::process_event()`
+- [ ] Handle missing fingerprint gracefully (skip IC computation)
+- [ ] Extract purpose vector from fingerprint
+- [ ] Get Kuramoto r from event or network
+- [ ] Call monitor.compute_continuity()
+- [ ] Call monitor.detect_crisis()
+- [ ] Execute crisis protocol if not Healthy
+- [ ] Emit IdentityCritical if allowed by cooldown
+- [ ] Implement async getter methods
+- [ ] Implement `WorkspaceEventListener` trait
+- [ ] Implement `last_detection()` getter for MCP exposure
+- [ ] Register listener with WorkspaceBroadcaster in GwtSystem
+- [ ] Add `identity_listener()` method to GwtSystem
+- [ ] Add unit tests for IC computation on event
+- [ ] Add unit tests for missing fingerprint handling
+- [ ] Add unit tests for crisis event emission
+- [ ] Add integration test with full event flow
+- [ ] Verify processing time < 5ms
+- [ ] Run clippy with `-D warnings`
+
+---
+
+## GwtSystem Registration
+
+```rust
+// File: crates/context-graph-core/src/gwt/mod.rs
+
+impl GwtSystem {
+    pub fn new(/* ... */) -> Self {
+        // ... existing initialization ...
+
+        // TASK-IDENTITY-P0-006: Create and register identity listener
+        let identity_listener = Arc::new(IdentityContinuityListener::new(
+            ego_node.clone(),
+            broadcaster.clone(),
+            kuramoto.clone(),
+        ));
+
+        // Register with broadcaster
+        broadcaster.write().await.register_listener(
+            Box::new(IdentityContinuityListenerAdapter::new(identity_listener.clone()))
+        ).await;
+
+        Self {
+            // ... existing fields ...
+            identity_listener,
+        }
+    }
+
+    pub fn identity_listener(&self) -> Arc<IdentityContinuityListener> {
+        self.identity_listener.clone()
+    }
+
+    pub fn identity_coherence(&self) -> f32 {
+        // Sync wrapper for async method
+        tokio::runtime::Handle::current()
+            .block_on(self.identity_listener.identity_coherence())
+    }
+
+    pub fn identity_status(&self) -> IdentityStatus {
+        tokio::runtime::Handle::current()
+            .block_on(self.identity_listener.identity_status())
+    }
+}
+```
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | Claude Opus 4.5 | Initial task specification |
+| 1.1.0 | 2026-01-11 | Claude Opus 4.5 | Added implementation checklist and GwtSystem registration guidance |

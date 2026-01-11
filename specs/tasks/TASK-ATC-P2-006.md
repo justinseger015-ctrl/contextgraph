@@ -414,6 +414,53 @@ let quadrant = JohariQuadrant::classify_with_thresholds(delta_s, delta_c, &thres
 
 ---
 
+## Acceptance Criteria Checklist
+
+### JohariThresholds Struct
+- [ ] `JohariThresholds` struct created in `types/fingerprint/johari/thresholds.rs`
+- [ ] Fields: entropy, coherence, blind_spot
+- [ ] `from_atc(atc, domain)` factory method implemented
+- [ ] `default_general()` returns exact old values (0.50, 0.50, 0.50)
+- [ ] `is_valid()` method checks range [0.35, 0.65]
+- [ ] `Default` trait implemented
+
+### Core Crate Migration
+- [ ] `ENTROPY_THRESHOLD` marked `#[deprecated]` in johari/core.rs
+- [ ] `COHERENCE_THRESHOLD` marked `#[deprecated]` in johari/core.rs
+- [ ] `classify_with_thresholds(delta_s, delta_c, thresholds)` method added
+- [ ] Old `classify()` method deprecated, calls new method with defaults
+- [ ] `pub mod thresholds` added to johari/mod.rs
+
+### Config Constants Migration
+- [ ] `BLIND_SPOT_THRESHOLD` marked `#[deprecated]` in config/constants.rs
+- [ ] Deprecation message references JohariThresholds.blind_spot
+
+### UTL Crate Migration
+- [ ] `DEFAULT_THRESHOLD` removed or deprecated in classifier.rs
+- [ ] UTL classifier imports `JohariThresholds` from core crate
+- [ ] Classification uses shared thresholds
+
+### Quadrant Classification
+- [ ] Open: delta_s < threshold AND delta_c > threshold
+- [ ] Blind: delta_s > threshold AND delta_c < threshold
+- [ ] Hidden: delta_s < threshold AND delta_c < threshold
+- [ ] Unknown: delta_s > threshold AND delta_c > threshold
+- [ ] Classification consistent between core and UTL
+
+### Testing
+- [ ] TC-ATC-006-001: Default matches old constants
+- [ ] TC-ATC-006-002: Quadrant classification correct
+- [ ] TC-ATC-006-003: Threshold affects classification
+- [ ] TC-ATC-006-004: Blind spot detection works
+- [ ] Both core and UTL tests pass
+- [ ] Cross-crate classification consistent
+
+### Future Considerations
+- [ ] Per-embedder threshold hooks documented
+- [ ] JohariThresholds extensible for future per-embedder support
+
+---
+
 ## Notes
 
 - Johari thresholds are symmetric by default (entropy = coherence = 0.5)
@@ -426,3 +473,4 @@ let quadrant = JohariQuadrant::classify_with_thresholds(delta_s, delta_c, &thres
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

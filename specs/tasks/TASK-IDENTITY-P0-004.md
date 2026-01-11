@@ -454,8 +454,67 @@ mod crisis_detection_tests {
 
 ---
 
+## Implementation Checklist
+
+- [ ] Define `CRISIS_EVENT_COOLDOWN` constant (30 seconds)
+- [ ] Define `CrisisDetectionResult` struct with all fields
+- [ ] Add `previous_status: IdentityStatus` field to `IdentityContinuityMonitor`
+- [ ] Add `last_event_time: Option<Instant>` field to `IdentityContinuityMonitor`
+- [ ] Add `last_detection: Option<CrisisDetectionResult>` field to monitor
+- [ ] Implement `status_ordinal()` helper function
+- [ ] Implement `IdentityContinuityMonitor::detect_crisis()`
+- [ ] Correctly compute `status_changed` flag
+- [ ] Correctly compute `entering_crisis` flag (from Healthy to lower)
+- [ ] Correctly compute `entering_critical` flag (to Critical only)
+- [ ] Correctly compute `recovering` flag (ordinal improvement)
+- [ ] Implement cooldown check logic
+- [ ] Implement `previous_status()` getter
+- [ ] Implement `status_changed()` method
+- [ ] Implement `entering_critical()` method
+- [ ] Implement `mark_event_emitted()` method
+- [ ] Implement `last_detection()` getter for MCP exposure
+- [ ] Add unit tests for all status transitions
+- [ ] Add unit tests for cooldown logic
+- [ ] Add unit tests for first computation edge case
+- [ ] Run clippy with `-D warnings`
+
+---
+
+## State Machine
+
+```
+                 +---------+
+                 | Healthy |
+                 +---------+
+                      |
+                      | IC drops below 0.9
+                      v
+                 +---------+
+          +----->| Warning |<-----+
+          |      +---------+      |
+          |           |           |
+          |           | IC drops  | IC rises
+          |           v           |
+          |      +---------+      |
+          +------| Degraded|------+
+          |      +---------+      |
+          |           |           |
+          |           | IC drops  | IC rises
+          |           v           |
+          |      +----------+     |
+          +------|  Critical|-----+
+                 +----------+
+                      |
+                      | Triggers IdentityCritical event
+                      v
+                 [Dream System]
+```
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | Claude Opus 4.5 | Initial task specification |
+| 1.1.0 | 2026-01-11 | Claude Opus 4.5 | Added implementation checklist and state machine diagram |

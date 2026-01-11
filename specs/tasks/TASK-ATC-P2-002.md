@@ -407,6 +407,43 @@ fn test_unknown_threshold_returns_default() {
 
 ---
 
+## Acceptance Criteria Checklist
+
+### Struct Extension
+- [ ] `DomainThresholds` struct has all 19 threshold fields
+- [ ] All new fields have documentation comments
+- [ ] All new fields have correct default values per domain
+- [ ] Struct implements `Debug`, `Clone`
+
+### Domain Initialization
+- [ ] `DomainThresholds::new(Domain)` populates all fields
+- [ ] Strictness scaling applied correctly (+/- based on threshold type)
+- [ ] Medical domain has strictest thresholds
+- [ ] Creative domain has loosest thresholds
+- [ ] General domain matches old hardcoded defaults exactly
+
+### Validation
+- [ ] `is_valid()` checks all 19 fields for range compliance
+- [ ] `is_valid()` checks monotonicity (obsolescence_high > mid > low)
+- [ ] `clamp()` respects all new field ranges
+- [ ] `blend_with_similar()` includes all new fields
+
+### ThresholdAccessor Trait
+- [ ] Trait defined in `accessor.rs`
+- [ ] `get_threshold(name, domain)` returns correct values
+- [ ] `get_threshold_or_default()` falls back to General
+- [ ] `observe_threshold_usage()` calls Level 1 EWMA
+- [ ] `list_threshold_names()` returns all 19 names
+- [ ] Unknown threshold names return 0.5 and log warning
+
+### Integration
+- [ ] `mod accessor` added to `atc/mod.rs`
+- [ ] Re-exports added: `pub use accessor::ThresholdAccessor`
+- [ ] All existing ATC tests pass
+- [ ] New tests cover all acceptance criteria
+
+---
+
 ## Notes
 
 - All new threshold ranges are derived from constitution.yaml and Gap Analysis
@@ -418,3 +455,4 @@ fn test_unknown_threshold_returns_default() {
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

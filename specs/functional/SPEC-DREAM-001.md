@@ -5,12 +5,70 @@
 | Field | Value |
 |-------|-------|
 | **Spec ID** | SPEC-DREAM-001 |
-| **Version** | 1.0.0 |
-| **Status** | Draft |
+| **Version** | 1.1.0 |
+| **Status** | Approved |
 | **Created** | 2026-01-11 |
+| **Updated** | 2026-01-11 |
 | **Owner** | ContextGraph Core Team |
 | **Priority** | P0 - Critical Blocker |
 | **Related Specs** | SPEC-GWT-001, SPEC-UTL-001 |
+
+---
+
+## CRITICAL IMPLEMENTATION PHILOSOPHY
+
+> **This section is MANDATORY reading for all implementers.**
+
+### NO STUBS, NO WORKAROUNDS, NO FALLBACKS
+
+The Dream Layer implementation MUST follow these absolute rules:
+
+| Rule | Description | Violation Response |
+|------|-------------|-------------------|
+| **NO STUB CODE** | Every function MUST have real implementation. No `todo!()`, no placeholder returns, no simulated data. | Build MUST fail |
+| **NO MOCK DATA** | All data MUST come from real memory store. No hardcoded test values in production paths. | Immediate error |
+| **FAIL FAST** | If something is wrong, error out immediately with descriptive message. No silent failures. | Panic/Error propagation |
+| **NO BACKWARDS COMPATIBILITY** | System works completely or fails completely. No degraded mode. | Hard error |
+| **REAL INTEGRATION ONLY** | Must use actual `MemoryStore`, `EdgeStore`, and `GraphStore` implementations. | Compilation error |
+
+### Error Philosophy
+
+```rust
+// WRONG - Silent failure with fallback
+fn get_memories() -> Vec<Memory> {
+    match store.get_recent() {
+        Ok(mems) => mems,
+        Err(_) => vec![]  // ❌ FORBIDDEN - hiding the error
+    }
+}
+
+// CORRECT - Fail fast with context
+fn get_memories() -> Result<Vec<Memory>, DreamError> {
+    store.get_recent().map_err(|e| {
+        error!("Memory store unreachable during NREM replay: {}", e);
+        DreamError::MemoryStoreUnavailable { source: e, phase: "nrem_replay" }
+    })
+}
+```
+
+### Logging Requirements
+
+Every error MUST include:
+1. **Phase**: Which dream phase (NREM/REM/Trigger)
+2. **Operation**: What was being attempted
+3. **Context**: Relevant IDs, counts, or state
+4. **Source**: Original error if wrapping
+
+```rust
+error!(
+    phase = "nrem",
+    operation = "hebbian_update",
+    edge_id = %edge.id,
+    current_weight = edge.weight,
+    "Hebbian calculation produced NaN: phi_i={}, phi_j={}, eta={}",
+    phi_i, phi_j, eta
+);
+```
 
 ---
 
@@ -163,16 +221,51 @@ Implement the Dream Layer with:
 | EC-DREAM-009 | Multiple interrupts during single dream | First interrupt wins, subsequent ignored | REQ-DREAM-014 |
 | EC-DREAM-010 | No 3+ hop paths exist | No shortcuts created, amortizer empty | REQ-DREAM-016 |
 
-### 4.2 Error States
+### 4.2 Error States (FAIL FAST)
 
-| ID | Condition | Error Code | Recovery Action |
-|----|-----------|------------|-----------------|
-| ERR-DREAM-001 | NaN in Hebbian calculation | `LayerError::NaN` | Skip update, log warning, continue |
-| ERR-DREAM-002 | Poincare norm >= 1.0 after projection | `LayerError::InvalidNorm` | Force projection to 0.99999 |
-| ERR-DREAM-003 | GPU monitoring unavailable | `LayerError::GpuUnavailable` | Continue without GPU trigger |
-| ERR-DREAM-004 | Memory store unreachable | `StorageError::Unavailable` | Abort dream, return partial report |
-| ERR-DREAM-005 | Wake latency exceeds 100ms | `LayerError::WakeTimeout` | Log violation, return error |
-| ERR-DREAM-006 | Shortcut creation fails | `StorageError::EdgeInsert` | Skip shortcut, log error, continue |
+> **All errors MUST propagate immediately. No silent recovery. No fallbacks.**
+
+| ID | Condition | Error Code | Action (FAIL FAST) |
+|----|-----------|------------|-------------------|
+| ERR-DREAM-001 | NaN in Hebbian calculation | `DreamError::HebbianNaN { phi_i, phi_j, eta }` | **HARD ERROR** - Return Err immediately, log full context |
+| ERR-DREAM-002 | Poincare norm >= 1.0 after projection | `DreamError::InvalidPoincareNorm { norm, position }` | **HARD ERROR** - This indicates math bug, must fix |
+| ERR-DREAM-003 | GPU monitoring unavailable | `DreamError::GpuMonitoringFailed { source }` | **HARD ERROR** - System must have GPU monitoring |
+| ERR-DREAM-004 | Memory store unreachable | `DreamError::MemoryStoreUnavailable { source, phase }` | **HARD ERROR** - Cannot proceed without memory store |
+| ERR-DREAM-005 | Wake latency exceeds 100ms | `DreamError::WakeLatencyViolation { actual_ms, max_ms }` | **HARD ERROR** - Constitution violation, must fix |
+| ERR-DREAM-006 | Shortcut creation fails | `DreamError::ShortcutCreationFailed { source, target, reason }` | **HARD ERROR** - Storage layer issue, propagate |
+| ERR-DREAM-007 | Edge store unreachable | `DreamError::EdgeStoreUnavailable { source, operation }` | **HARD ERROR** - Cannot do Hebbian without edges |
+| ERR-DREAM-008 | Invalid entropy value | `DreamError::InvalidEntropyValue { value }` | **HARD ERROR** - Entropy must be in [0.0, 1.0] |
+
+### 4.3 Error Type Definition
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum DreamError {
+    #[error("Hebbian calculation produced NaN: phi_i={phi_i}, phi_j={phi_j}, eta={eta}")]
+    HebbianNaN { phi_i: f32, phi_j: f32, eta: f32 },
+
+    #[error("Poincare point outside unit ball: norm={norm} at position {position:?}")]
+    InvalidPoincareNorm { norm: f32, position: [f32; 64] },
+
+    #[error("GPU monitoring failed: {source}")]
+    GpuMonitoringFailed { source: Box<dyn std::error::Error + Send + Sync> },
+
+    #[error("Memory store unavailable during {phase}: {source}")]
+    MemoryStoreUnavailable { source: Box<dyn std::error::Error + Send + Sync>, phase: &'static str },
+
+    #[error("Wake latency violation: {actual_ms}ms > {max_ms}ms")]
+    WakeLatencyViolation { actual_ms: u64, max_ms: u64 },
+
+    #[error("Shortcut creation failed from {source} to {target}: {reason}")]
+    ShortcutCreationFailed { source: Uuid, target: Uuid, reason: String },
+
+    #[error("Edge store unavailable during {operation}: {source}")]
+    EdgeStoreUnavailable { source: Box<dyn std::error::Error + Send + Sync>, operation: &'static str },
+
+    #[error("Invalid entropy value: {value} (must be in [0.0, 1.0])")]
+    InvalidEntropyValue { value: f32 },
+}
+```
 
 ---
 
@@ -482,6 +575,8 @@ dream-debug = []                              # Extra logging
 
 ## 9. Traceability Matrix
 
+### 9.1 Requirement to Task Mapping
+
 | Requirement | Task | Test |
 |-------------|------|------|
 | REQ-DREAM-001 | TASK-DREAM-P0-003 | UT-DREAM-001, UT-DREAM-002 |
@@ -497,15 +592,188 @@ dream-debug = []                              # Extra logging
 | REQ-DREAM-011 | TASK-DREAM-P0-005 | UT-DREAM-013 |
 | REQ-DREAM-012 | TASK-DREAM-P0-005 | UT-DREAM-014, IT-DREAM-005 |
 | REQ-DREAM-013 | TASK-DREAM-P0-005 | UT-DREAM-015, IT-DREAM-006 |
-| REQ-DREAM-014 | TASK-DREAM-P0-006 | IT-DREAM-004, CT-DREAM-004 |
+| REQ-DREAM-014 | TASK-DREAM-P0-006 | IT-DREAM-004, CT-DREAM-004, BM-DREAM-003 |
 | REQ-DREAM-015 | TASK-DREAM-P0-006 | BM-DREAM-004 |
 | REQ-DREAM-016 | TASK-DREAM-P0-003 | UT-DREAM-016, IT-DREAM-007 |
 | REQ-DREAM-017 | TASK-DREAM-P0-003 | UT-DREAM-017 |
 | REQ-DREAM-018 | TASK-DREAM-P0-003 | IT-DREAM-007 |
 
+### 9.2 Task Dependency Graph
+
+```
+TASK-DREAM-P0-001 (Types & Interfaces)
+        |
+        +---> TASK-DREAM-P0-002 (Poincare Math)
+        |            |
+        |            +---> TASK-DREAM-P0-004 (Hyperbolic Walk)
+        |                          |
+        +---> TASK-DREAM-P0-003 (Hebbian Learning)
+        |            |             |
+        |            +-------------+
+        |                          |
+        +---> TASK-DREAM-P0-005 (Dream Triggers)
+                     |             |
+                     +-------------+
+                                   |
+                                   v
+                     TASK-DREAM-P0-006 (Wake Controller & Integration)
+```
+
+### 9.3 NFR to Test Mapping
+
+| NFR | Benchmark Test | Acceptance Threshold |
+|-----|---------------|---------------------|
+| NFR-DREAM-001 | BM-DREAM-001 | NREM duration <= 180s |
+| NFR-DREAM-002 | BM-DREAM-002 | REM duration <= 120s |
+| NFR-DREAM-003 | BM-DREAM-003 | Wake latency p99 < 100ms |
+| NFR-DREAM-004 | BM-DREAM-004 | GPU usage < 30% |
+| NFR-DREAM-005 | CT-DREAM-001, CT-DREAM-002 | 100% abort success |
+| NFR-DREAM-006 | IT-DREAM-001 | Compression ratio > 1.0 |
+| NFR-DREAM-007 | BM-DREAM-001 | Handles 10K+ memories |
+
+### 9.4 Task Summary Table
+
+| Task ID | Title | Layer | Effort | Status |
+|---------|-------|-------|--------|--------|
+| TASK-DREAM-P0-001 | Types and Interfaces | 1 (Foundation) | 2h | Specified |
+| TASK-DREAM-P0-002 | Poincare Ball Math Utilities | 1 (Foundation) | 3h | Specified |
+| TASK-DREAM-P0-003 | Hebbian Learning Implementation | 2 (Logic) | 4h | Specified |
+| TASK-DREAM-P0-004 | Hyperbolic Random Walk | 2 (Logic) | 4h | Specified |
+| TASK-DREAM-P0-005 | Dream Trigger Implementation | 2 (Logic) | 3h | Specified |
+| TASK-DREAM-P0-006 | Wake Controller & MCP Integration | 3 (Surface) | 4h | Specified |
+| **TOTAL** | | | **20h** | |
+
 ---
 
-## 10. Appendix
+## 10. GWT Workspace Integration
+
+### 10.1 Event Flow
+
+```
+                    GWT Workspace
+                         |
+    +--------------------+--------------------+
+    |                    |                    |
+    v                    v                    v
+query_event        entropy_update       gpu_usage_update
+    |                    |                    |
+    v                    v                    v
+WakeController    EntropyCalculator    GpuMonitor
+    |                    |                    |
+    |                    +--------------------+
+    |                              |
+    v                              v
+abort_dream              TriggerManager
+    |                              |
+    +------------------------------+
+                   |
+                   v
+            DreamScheduler
+                   |
+    +--------------+---------------+
+    |                              |
+    v                              v
+NREM Phase                    REM Phase
+    |                              |
+    +------------------------------+
+                   |
+                   v
+         MCP Event Broadcaster
+                   |
+    +--------------+--------------+
+    |              |              |
+    v              v              v
+dream_started  blind_spot   dream_completed
+               discovered
+```
+
+### 10.2 MCP Event Schemas
+
+```yaml
+dream_cycle_started:
+  type: object
+  required: [session_id, trigger_reason, timestamp_ms]
+  properties:
+    session_id: { type: string, format: uuid }
+    trigger_reason: { type: string, enum: [idle_timeout, high_entropy, gpu_overload, manual] }
+    timestamp_ms: { type: integer }
+    expected_nrem_duration_ms: { type: integer, default: 180000 }
+    expected_rem_duration_ms: { type: integer, default: 120000 }
+
+nrem_phase_completed:
+  type: object
+  required: [session_id, timestamp_ms, memories_replayed, edges_strengthened, duration_ms]
+  properties:
+    session_id: { type: string, format: uuid }
+    timestamp_ms: { type: integer }
+    memories_replayed: { type: integer }
+    edges_strengthened: { type: integer }
+    edges_pruned: { type: integer }
+    duration_ms: { type: integer }
+    compression_ratio: { type: number }
+
+rem_phase_completed:
+  type: object
+  required: [session_id, timestamp_ms, queries_generated, blind_spots_found, duration_ms]
+  properties:
+    session_id: { type: string, format: uuid }
+    timestamp_ms: { type: integer }
+    queries_generated: { type: integer }
+    blind_spots_found: { type: integer }
+    walk_distance: { type: number }
+    duration_ms: { type: integer }
+    average_semantic_leap: { type: number }
+
+blind_spot_discovered:
+  type: object
+  required: [session_id, timestamp_ms, blind_spot_id, poincare_position, semantic_distance]
+  properties:
+    session_id: { type: string, format: uuid }
+    timestamp_ms: { type: integer }
+    blind_spot_id: { type: string, format: uuid }
+    poincare_position: { type: array, items: { type: number }, minItems: 64, maxItems: 64 }
+    semantic_distance: { type: number, minimum: 0.7 }
+    confidence: { type: number, minimum: 0, maximum: 1 }
+
+dream_cycle_completed:
+  type: object
+  required: [session_id, timestamp_ms, completed, wake_reason, total_duration_ms]
+  properties:
+    session_id: { type: string, format: uuid }
+    timestamp_ms: { type: integer }
+    completed: { type: boolean }
+    wake_reason: { type: string }
+    shortcuts_created: { type: integer }
+    total_duration_ms: { type: integer }
+    wake_latency_ms: { type: integer }
+
+wake_triggered:
+  type: object
+  required: [session_id, timestamp_ms, reason, phase]
+  properties:
+    session_id: { type: string, format: uuid }
+    timestamp_ms: { type: integer }
+    reason: { type: string, enum: [external_query, gpu_over_budget, manual_abort, cycle_complete] }
+    phase: { type: string, enum: [nrem, rem, idle] }
+    latency_ms: { type: integer }
+```
+
+### 10.3 Subscription Topics
+
+| Topic | Subscribers | Purpose |
+|-------|------------|---------|
+| `dream.cycle.started` | GWT Workspace, Logging | Notify workspace of dream entry |
+| `dream.cycle.completed` | GWT Workspace, Metrics | Notify workspace of dream exit |
+| `dream.phase.nrem.completed` | Metrics, Analytics | NREM statistics |
+| `dream.phase.rem.completed` | Metrics, Analytics | REM statistics |
+| `dream.blind_spot.discovered` | Knowledge Graph, Metrics | New exploration target |
+| `dream.shortcut.created` | Knowledge Graph | New edge for faster retrieval |
+| `dream.wake.triggered` | GWT Workspace, Alerting | Immediate wake notification |
+| `dream.gpu.warning` | Alerting, Auto-scaling | GPU budget concern |
+
+---
+
+## 11. Appendix
 
 ### A. Formula Reference
 
@@ -514,24 +782,59 @@ dream-debug = []                              # Extra logging
 dw_ij = eta * phi_i * phi_j
 w_new = (w_old * (1 - decay)) + dw_ij
 w_final = clamp(w_new, floor, cap)
+
+Where:
+- eta = 0.01 (learning rate)
+- phi_i, phi_j in [0.0, 1.0] (activation levels)
+- decay = 0.001 (weight decay per cycle)
+- floor = 0.05 (minimum weight before pruning)
+- cap = 1.0 (maximum weight)
 ```
 
 **Mobius Addition (Poincare Ball):**
 ```
-p' = (p + v) / (1 + <p,v>)
-where <p,v> is the inner product
+Full formula:
+p' = ((1 + 2<p,v> + ||v||^2)p + (1 - ||p||^2)v) / (1 + 2<p,v> + ||p||^2 ||v||^2)
+
+Simplified (for small v):
+p' ~ (p + v) / (1 + <p,v>)
+
+Where:
+- p is current position (norm < 1)
+- v is velocity/direction vector
+- <p,v> is inner product
+- ||.|| is Euclidean norm
+```
+
+**Geodesic Distance (Poincare Ball):**
+```
+d(p, q) = acosh(1 + 2||p - q||^2 / ((1 - ||p||^2)(1 - ||q||^2)))
+
+Where:
+- p, q are points in the Poincare ball (norm < 1)
+- acosh(x) = ln(x + sqrt(x^2 - 1))
 ```
 
 **Kuramoto Synchronization:**
 ```
 d(theta_i)/dt = omega_i + (K/N) * sum_j(sin(theta_j - theta_i))
 r * e^(i*psi) = (1/N) * sum_j(e^(i*theta_j))
+
+Where:
+- K = 10.0 (coupling strength during NREM)
+- theta_i is phase of oscillator i
+- omega_i is natural frequency
+- r is order parameter (synchronization measure)
 ```
 
 **Exploration Softmax:**
 ```
 P(i) = exp(score_i / T) / sum_j(exp(score_j / T))
-where T = 2.0 (temperature)
+
+Where:
+- T = 2.0 (temperature, Constitution mandate)
+- Higher T = more uniform distribution (exploration)
+- Lower T = more peaked distribution (exploitation)
 ```
 
 ### B. Related Constitution Sections
@@ -540,3 +843,38 @@ where T = 2.0 (temperature)
 - Section `gwt.mental_checks`
 - Section `neuromod`
 - Section `layer.L5_Coherence`
+
+### C. Implementation Priority Order
+
+1. **TASK-DREAM-P0-001** (Types) - Foundation, no dependencies
+2. **TASK-DREAM-P0-002** (Poincare Math) - Depends on 001
+3. **TASK-DREAM-P0-003** (Hebbian) - Depends on 001
+4. **TASK-DREAM-P0-004** (Hyperbolic Walk) - Depends on 001, 002
+5. **TASK-DREAM-P0-005** (Triggers) - Depends on 001
+6. **TASK-DREAM-P0-006** (Integration) - Depends on all above
+
+### D. Constitution Constraint Summary
+
+| Constraint | Value | Enforcement Point |
+|------------|-------|-------------------|
+| NREM duration | 3 min | DreamController deadline |
+| REM duration | 2 min | DreamController deadline |
+| Activity threshold | 0.15 | DreamScheduler trigger |
+| Idle trigger duration | 10 min | DreamScheduler timer |
+| Entropy threshold | 0.7 | EntropyWindow check |
+| Entropy window | 5 min | EntropyWindow duration |
+| GPU trigger | 80% | GpuMonitor threshold |
+| GPU budget (dream) | 30% | WakeController check |
+| Wake latency | < 100ms | WakeController measurement |
+| REM queries | 100 max | RemPhase counter |
+| Semantic leap | >= 0.7 | BlindSpot filter |
+| Shortcut hops | 3+ | AmortizedLearner filter |
+| Shortcut traversals | 5+ | AmortizedLearner counter |
+| Shortcut confidence | >= 0.7 | AmortizedLearner gate |
+| Learning rate | 0.01 | HebbianConfig default |
+| Weight decay | 0.001 | HebbianConfig default |
+| Weight floor | 0.05 | HebbianEngine pruning |
+| Weight cap | 1.0 | HebbianEngine clamping |
+| Coupling strength | 10.0 | HebbianConfig (Kuramoto K) |
+| Temperature | 2.0 | HyperbolicWalkConfig default |
+| Recency bias | 0.8 | NremPhase memory selection |

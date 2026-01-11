@@ -363,6 +363,51 @@ controller.should_trigger_dream(activity, &thresholds)
 
 ---
 
+## Acceptance Criteria Checklist
+
+### DreamThresholds Struct
+- [ ] `DreamThresholds` struct created in `dream/thresholds.rs`
+- [ ] Fields: activity, semantic_leap, shortcut_confidence
+- [ ] `from_atc(atc, domain)` factory method implemented
+- [ ] `default_general()` returns exact old values (0.15, 0.70, 0.70)
+- [ ] `is_valid()` method checks all field ranges
+- [ ] `Default` trait implemented
+
+### Constant Migration
+- [ ] `ACTIVITY_THRESHOLD` marked `#[deprecated]`
+- [ ] `MIN_SEMANTIC_LEAP` marked `#[deprecated]`
+- [ ] `SHORTCUT_CONFIDENCE_THRESHOLD` marked `#[deprecated]`
+- [ ] All deprecation messages reference replacement
+
+### Method Updates
+- [ ] `should_trigger_dream(activity, thresholds)` implemented
+- [ ] `is_valid_semantic_leap(distance, thresholds)` implemented
+- [ ] `can_create_shortcut(confidence, thresholds)` implemented
+
+### Module Integration
+- [ ] `pub mod thresholds` added to `dream/mod.rs`
+- [ ] `pub use thresholds::DreamThresholds` re-exported
+
+### Domain Behavior (INVERSE relationship)
+- [ ] Creative domain activity < Code domain activity (dreams sooner)
+- [ ] Creative domain semantic_leap < Code domain (more exploration)
+- [ ] Code domain shortcut_confidence > Creative domain (more conservative)
+- [ ] General domain matches old hardcoded defaults exactly
+
+### Static Threshold Verification
+- [ ] `MAX_GPU_USAGE` remains static (hardware constraint)
+- [ ] NREM/REM duration constants remain static
+
+### Testing
+- [ ] TC-ATC-005-001: Default matches old constants
+- [ ] TC-ATC-005-002: Creative domain dreams more aggressively
+- [ ] TC-ATC-005-003: Should trigger dream uses threshold
+- [ ] TC-ATC-005-004: Semantic leap validation works
+- [ ] TC-ATC-005-005: Shortcut creation respects threshold
+- [ ] All existing dream tests pass
+
+---
+
 ## Notes
 
 - Dream layer thresholds inversely correlate with domain strictness
@@ -375,3 +420,4 @@ controller.should_trigger_dream(activity, &thresholds)
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

@@ -444,15 +444,17 @@ async fn test_steering_feedback_modulates_dopamine() {
 
 ### 7.1 Requirement to Task Mapping
 
-| Requirement | Task ID | Status |
-|-------------|---------|--------|
-| FR-NEURO-001-01 | TASK-NEURO-P2-001 | Pending |
-| FR-NEURO-001-02 | TASK-NEURO-P2-001 | Pending |
-| FR-NEURO-001-03 | TASK-NEURO-P2-001 | Pending |
-| FR-NEURO-001-04 | TASK-NEURO-P2-001 | Pending |
-| NFR-NEURO-001-01 | TASK-NEURO-P2-001 | Pending |
-| NFR-NEURO-001-02 | TASK-NEURO-P2-001 | Pending |
-| NFR-NEURO-001-03 | TASK-NEURO-P2-001 | Pending |
+| Requirement | Task ID | Status | Layer |
+|-------------|---------|--------|-------|
+| FR-NEURO-001-01 | TASK-NEURO-P2-001 | Ready | logic |
+| FR-NEURO-001-02 | TASK-NEURO-P2-001 | Ready | logic |
+| FR-NEURO-001-03 | TASK-NEURO-P2-002 | Ready | surface |
+| FR-NEURO-001-04 | TASK-NEURO-P2-001 | Ready | logic |
+| NFR-NEURO-001-01 | TASK-NEURO-P2-001 | Ready | logic |
+| NFR-NEURO-001-02 | TASK-NEURO-P2-001 | Ready | logic |
+| NFR-NEURO-001-03 | TASK-NEURO-P2-001 | Ready | logic |
+| Cascade Effects | TASK-NEURO-P2-003 | Ready | logic |
+| MCP Integration | TASK-NEURO-P2-002 | Ready | surface |
 
 ### 7.2 Gap Analysis Reference
 
@@ -465,7 +467,152 @@ This specification addresses **REFINEMENT 3** from the Master Consciousness Gap 
 
 ---
 
-## 8. Approval
+## 8. Cascade Effects
+
+### 8.1 Dopamine Cascade to Subsystems
+
+When dopamine changes via `on_goal_progress()`, the following cascade effects occur:
+
+```
+on_goal_progress(delta)
+    |
+    v
+DA_new = clamp(DA + delta * 0.1, 1.0, 5.0)
+    |
+    +---> hopfield.beta = DA_new
+    |         |
+    |         +---> Retrieval sharpness changes
+    |         |         High DA (5): Sharp, focused retrieval
+    |         |         Low DA (1): Diffuse, exploratory retrieval
+    |         |
+    |         +---> Memory workspace entry probability
+    |                   High DA: More selective, high-phi only
+    |                   Low DA: Broader inclusion
+    |
+    +---> Steering edge weight modulation
+              |
+              +---> get_modulated_weight() uses DA
+                        w_eff = base * (1 + steering_reward * 0.2)
+                        (DA indirectly affects edge selection)
+```
+
+### 8.2 Cross-Neuromodulator Interactions
+
+Dopamine changes can trigger secondary effects on other neuromodulators:
+
+| Trigger Condition | Effect | Rationale |
+|-------------------|--------|-----------|
+| DA > 4.0 (high reward) | 5HT += 0.05 | Success breeds positive mood |
+| DA < 2.0 (low reward) | 5HT -= 0.05 | Failure lowers mood |
+| DA change > 0.3 | NE += 0.1 | Significant change increases alertness |
+| Sustained DA > 4.5 for 30s | ACh triggers (via GWT) | High performance triggers learning boost |
+
+**Note**: Cross-neuromodulator effects are OPTIONAL refinements for future implementation. The core DA feedback loop is the primary deliverable.
+
+### 8.3 Integration with UTL (Unified Theory of Learning)
+
+The dopamine level affects UTL operations:
+
+```rust
+/// UTL learning rate modifier based on dopamine
+fn get_utl_modifier(da: f32) -> f32 {
+    // High DA = focused learning on high-reward patterns
+    // Low DA = exploratory learning across patterns
+    match da {
+        d if d >= 4.0 => 1.2,  // 20% boost for high-value patterns
+        d if d >= 3.0 => 1.0,  // Normal learning rate
+        d if d >= 2.0 => 0.9,  // Slightly reduced for low-confidence
+        _ => 0.8,              // Exploratory mode
+    }
+}
+```
+
+### 8.4 Integration with GWT (Global Workspace Theory)
+
+Dopamine affects GWT workspace dynamics:
+
+| DA Level | Workspace Behavior | Competition Threshold |
+|----------|-------------------|----------------------|
+| 5.0 | Sharp focus | phi > 0.8 required |
+| 4.0 | Focused | phi > 0.7 required |
+| 3.0 (baseline) | Balanced | phi > 0.5 required |
+| 2.0 | Exploratory | phi > 0.3 required |
+| 1.0 | Broad scan | phi > 0.2 required |
+
+The `hopfield.beta` parameter directly controls the softmax temperature in workspace competition, affecting which memories reach consciousness.
+
+---
+
+## 9. MCP Integration Specification
+
+### 9.1 Steering Handler Integration Point
+
+The MCP steering handler SHALL invoke `on_goal_progress()` after computing steering feedback.
+
+**File**: `crates/context-graph-mcp/src/handlers/steering.rs`
+
+**Integration Pattern**:
+
+```rust
+impl Handlers {
+    pub(super) async fn call_get_steering_feedback(
+        &self,
+        id: Option<JsonRpcId>,
+    ) -> JsonRpcResponse {
+        // ... existing metric collection ...
+
+        // Compute steering feedback
+        let feedback = steering.compute_feedback(/* ... */);
+
+        // NEW: Invoke direct DA modulation
+        // Access neuromod manager from shared state
+        if let Ok(mut neuromod) = self.neuromod_manager.try_write() {
+            neuromod.on_goal_progress(feedback.reward.value);
+            debug!(
+                delta = feedback.reward.value,
+                "Steering feedback -> DA modulation"
+            );
+        } else {
+            warn!("Could not acquire neuromod lock for goal progress");
+            // Non-fatal: continue with response
+        }
+
+        self.tool_result_with_pulse(id, json!({
+            // ... existing response ...
+            "neuromod_updated": true,
+            "da_delta": feedback.reward.value * dopamine::DA_GOAL_SENSITIVITY
+        }))
+    }
+}
+```
+
+### 9.2 Handlers Struct Requirements
+
+The `Handlers` struct must include a reference to `NeuromodulationManager`:
+
+```rust
+pub struct Handlers {
+    // ... existing fields ...
+
+    /// Neuromodulation manager for DA/5HT/NE control
+    /// Wrapped in Arc<RwLock> for thread-safe access
+    pub neuromod_manager: Arc<RwLock<NeuromodulationManager>>,
+}
+```
+
+### 9.3 Error Handling
+
+| Error Condition | Behavior | Logging |
+|----------------|----------|---------|
+| Neuromod lock unavailable | Continue without DA update | WARN level |
+| DA update fails | Continue with response | ERROR level |
+| NaN in reward value | Skip DA update | WARN level |
+
+The MCP response should NEVER fail due to neuromodulation errors. The steering feedback is the primary response; DA modulation is a side effect.
+
+---
+
+## 10. Approval
 
 | Role | Name | Date | Signature |
 |------|------|------|-----------|

@@ -434,6 +434,58 @@ detector.check_obsolescence_with_thresholds(relevance, &thresholds)
 
 ---
 
+## Acceptance Criteria Checklist
+
+### AutonomousThresholds Struct
+- [ ] `AutonomousThresholds` struct created in `autonomous/thresholds.rs`
+- [ ] Fields: obsolescence_low, obsolescence_mid, obsolescence_high, drift_slope
+- [ ] `from_atc(atc, domain)` factory method implemented
+- [ ] `default_general()` returns exact old values (0.30, 0.60, 0.80, 0.005)
+- [ ] `is_valid()` method checks ranges and monotonicity
+- [ ] `Default` trait implemented
+
+### Monotonicity Enforcement
+- [ ] `is_valid()` asserts obsolescence_high > obsolescence_mid > obsolescence_low
+- [ ] Invalid monotonicity rejected by validation
+- [ ] Range checks: low [0.20, 0.50], mid [0.45, 0.75], high [0.65, 0.90]
+
+### Obsolescence Detector Migration
+- [ ] `DEFAULT_RELEVANCE_THRESHOLD` marked `#[deprecated]`
+- [ ] `HIGH_CONFIDENCE_THRESHOLD` marked `#[deprecated]`
+- [ ] `MEDIUM_CONFIDENCE_THRESHOLD` marked `#[deprecated]`
+- [ ] `check_obsolescence_with_thresholds(relevance, thresholds)` implemented
+- [ ] Returns ObsolescenceLevel enum (High, Medium, Low, None)
+
+### Drift Detector Migration
+- [ ] `SLOPE_THRESHOLD` marked `#[deprecated]`
+- [ ] `is_significant_drift_with_threshold(slope, thresholds)` implemented
+- [ ] Uses `slope.abs() > thresholds.drift_slope`
+
+### Module Integration
+- [ ] `pub mod thresholds` added to `autonomous/mod.rs`
+- [ ] `pub use thresholds::AutonomousThresholds` re-exported
+
+### Domain Behavior
+- [ ] Medical domain obsolescence thresholds > Creative domain (more conservative)
+- [ ] Code domain obsolescence thresholds > Creative domain
+- [ ] General domain matches old hardcoded defaults exactly
+- [ ] Drift slope currently static (future domain adaptation documented)
+
+### Testing
+- [ ] TC-ATC-007-001: Default matches old constants
+- [ ] TC-ATC-007-002: Monotonicity enforced
+- [ ] TC-ATC-007-003: Invalid monotonicity rejected
+- [ ] TC-ATC-007-004: Domain strictness affects thresholds
+- [ ] TC-ATC-007-005: Obsolescence detection correct
+- [ ] TC-ATC-007-006: Drift detection correct
+- [ ] All existing autonomous tests pass
+
+### Excluded from Migration
+- [ ] `DEFAULT_ALPHA` in threshold_learner.rs remains internal to Level 1 ATC
+- [ ] Scheduler timing constants remain static
+
+---
+
 ## Notes
 
 - Obsolescence thresholds must maintain strict ordering (high > mid > low)
@@ -446,3 +498,4 @@ detector.check_obsolescence_with_thresholds(relevance, &thresholds)
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

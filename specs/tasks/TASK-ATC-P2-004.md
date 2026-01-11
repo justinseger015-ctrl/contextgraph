@@ -418,6 +418,51 @@ layer.search_with_threshold(&query, &thresholds)
 
 ---
 
+## Acceptance Criteria Checklist
+
+### LayerThresholds Struct
+- [ ] `LayerThresholds` struct created in `layers/thresholds.rs`
+- [ ] Fields: memory_similarity, reflex_hit, consolidation
+- [ ] `from_atc(atc, domain)` factory method implemented
+- [ ] `default_general()` returns exact old values (0.50, 0.85, 0.10)
+- [ ] `is_valid()` method checks all field ranges
+- [ ] `Default` trait implemented
+
+### Constant Migration - Memory Layer
+- [ ] `MIN_MEMORY_SIMILARITY` marked `#[deprecated]`
+- [ ] `search_with_threshold(query, k, thresholds)` method added
+- [ ] Old `search()` method deprecated, calls new method with defaults
+
+### Constant Migration - Reflex Layer
+- [ ] `MIN_HIT_SIMILARITY` marked `#[deprecated]`
+- [ ] `lookup_with_threshold(key, thresholds)` method added
+- [ ] Old methods deprecated with new method references
+
+### Constant Migration - Learning Layer
+- [ ] `DEFAULT_CONSOLIDATION_THRESHOLD` marked `#[deprecated]`
+- [ ] `should_consolidate(utl_score, thresholds)` method added
+- [ ] Consolidation check uses thresholds.consolidation
+
+### Module Integration
+- [ ] `pub mod thresholds` added to `layers/mod.rs`
+- [ ] `pub use thresholds::LayerThresholds` re-exported
+- [ ] No circular dependencies between layers
+
+### Domain Behavior
+- [ ] Medical domain memory_similarity > Creative domain
+- [ ] Medical domain reflex_hit > Creative domain
+- [ ] General domain matches old hardcoded defaults exactly
+
+### Testing
+- [ ] TC-ATC-004-001: Default matches old constants
+- [ ] TC-ATC-004-002: Domain strictness affects thresholds
+- [ ] TC-ATC-004-003: Memory search respects threshold
+- [ ] TC-ATC-004-004: Reflex cache hit threshold works
+- [ ] TC-ATC-004-005: Consolidation trigger respects threshold
+- [ ] All existing layer tests pass
+
+---
+
 ## Notes
 
 - Each layer operates independently with its own threshold subset
@@ -430,3 +475,4 @@ layer.search_with_threshold(&query, &thresholds)
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

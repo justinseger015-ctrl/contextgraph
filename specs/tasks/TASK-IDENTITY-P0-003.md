@@ -529,8 +529,51 @@ mod identity_continuity_monitor_tests {
 
 ---
 
+## Implementation Checklist
+
+- [ ] Define `IC_CRISIS_THRESHOLD` constant (0.7)
+- [ ] Define `IC_CRITICAL_THRESHOLD` constant (0.5)
+- [ ] Implement `cosine_similarity_13d()` function
+- [ ] Handle zero magnitude vectors in cosine similarity
+- [ ] Define `IdentityContinuityMonitor` struct with all fields
+- [ ] Implement `IdentityContinuityMonitor::new()`
+- [ ] Implement `IdentityContinuityMonitor::with_threshold()`
+- [ ] Implement `IdentityContinuityMonitor::compute_continuity()`
+- [ ] Handle first vector case (return IC = 1.0)
+- [ ] Handle zero Kuramoto r case (return IC = 0.0)
+- [ ] Clamp negative cosine values to 0.0
+- [ ] Update history after computation
+- [ ] Store last_result for retrieval
+- [ ] Implement all getter methods
+- [ ] Add unit tests for identical vectors
+- [ ] Add unit tests for orthogonal vectors
+- [ ] Add unit tests for opposite vectors
+- [ ] Add unit tests for zero vectors
+- [ ] Add unit tests for crisis threshold boundary
+- [ ] Add benchmark for cosine_similarity_13d (< 1us target)
+- [ ] Run clippy with `-D warnings`
+
+---
+
+## Relationship to Existing Code
+
+The existing `SelfAwarenessLoop.cosine_similarity()` method can be extracted and renamed to `cosine_similarity_13d()` for reuse. The `IdentityContinuityMonitor` is a new component that wraps `PurposeVectorHistory` and provides the continuous monitoring interface.
+
+```rust
+// Existing (ego_node.rs)
+impl SelfAwarenessLoop {
+    fn cosine_similarity(&self, v1: &[f32; 13], v2: &[f32; 13]) -> f32 { ... }
+}
+
+// New (ego_node.rs) - extract as public function
+pub fn cosine_similarity_13d(v1: &[f32; 13], v2: &[f32; 13]) -> f32 { ... }
+```
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | Claude Opus 4.5 | Initial task specification |
+| 1.1.0 | 2026-01-11 | Claude Opus 4.5 | Added implementation checklist and relationship to existing code |

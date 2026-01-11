@@ -582,3 +582,230 @@ RUST_LOG=debug cargo test -p context-graph-mcp delta_sc -- --nocapture
 - Property tests catch edge cases that unit tests might miss
 - Performance tests should run on consistent hardware for reliable results
 - Consider adding mutation testing in future iterations
+
+---
+
+## Appendix A: Per-Embedder Delta-S Test Cases
+
+This appendix specifies comprehensive tests for each of the 13 embedder Delta-S calculation methods per constitution.yaml delta_sc.Delta_S_methods.
+
+### A.1 E1 (Semantic) - GMM+Mahalanobis Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E1-01 | Identical embedding | current == history[0] | Delta-S < 0.1 | Low surprise for identical |
+| TC-E1-02 | Very different embedding | orthogonal vector | Delta-S > 0.8 | High surprise for novel |
+| TC-E1-03 | Cluster member | current near cluster centroid | Delta-S < 0.3 | Low surprise in-cluster |
+| TC-E1-04 | Outlier | current far from all clusters | Delta-S > 0.7 | High surprise for outlier |
+| TC-E1-05 | Empty history | history = [] | Delta-S = 1.0 | Maximum surprise |
+| TC-E1-06 | Dimension 1024 | correct embedding size | No error | ARCH-05 compliance |
+
+### A.2 E2-E4, E8 (Temporal, Graph) - KNN Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E2-01 | K neighbors closer than average | d_k < mean | Delta-S < 0.5 | Familiar pattern |
+| TC-E2-02 | K neighbors farther than average | d_k > mean | Delta-S > 0.5 | Surprising pattern |
+| TC-E2-03 | K=1 edge case | only 1 neighbor | Valid Delta-S | Graceful handling |
+| TC-E2-04 | K > history size | k=10, history=3 | Uses all history | Fallback behavior |
+| TC-E2-05 | Sigmoid normalization | extreme distances | Delta-S in [0,1] | Bounded output |
+
+### A.3 E5 (Causal) - Asymmetric KNN Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E5-01 | Cause-to-effect query | direction=forward | Delta-S * 1.2 | Direction modifier |
+| TC-E5-02 | Effect-to-cause query | direction=backward | Delta-S * 0.8 | Direction modifier |
+| TC-E5-03 | Neutral direction | direction=neutral | Delta-S * 1.0 | No modification |
+| TC-E5-04 | Modifier bounds | extreme modifiers | Delta-S in [0,1] | Clamping works |
+| TC-E5-05 | Causal chain | A->B->C pattern | Transitivity check | Relationship preserved |
+
+### A.4 E6 (Sparse) - IDF/Jaccard Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E6-01 | Identical active dims | same sparse pattern | Delta-S = 0.0 | Perfect match |
+| TC-E6-02 | Disjoint active dims | no overlap | Delta-S = 1.0 | No match |
+| TC-E6-03 | Partial overlap | 50% shared dims | Delta-S ~ 0.5 | Proportional |
+| TC-E6-04 | IDF weighting | rare dims match | Lower Delta-S | Rare matches valuable |
+| TC-E6-05 | Common dims match | frequent dims match | Higher Delta-S | Common matches less valuable |
+| TC-E6-06 | Empty sparse | all below threshold | Delta-S = 1.0 | Edge case |
+
+### A.5 E7 (Code) - GMM+KNN Hybrid Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E7-01 | Weight sum | gmm_w + knn_w | = 1.0 | Invariant |
+| TC-E7-02 | GMM dominates | code cluster pattern | Result ~ GMM | Structural match |
+| TC-E7-03 | KNN dominates | local novelty | Result ~ KNN | Local surprise |
+| TC-E7-04 | Balanced case | mixed pattern | 0.5*GMM + 0.5*KNN | Interpolation |
+| TC-E7-05 | Code dimension | 1536D embedding | No error | Correct size |
+
+### A.6 E9 (Hdc) - Hamming Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E9-01 | Identical binary | same bits | Delta-S = 0.0 | No Hamming distance |
+| TC-E9-02 | All bits differ | inverted | Delta-S = 1.0 | Maximum distance |
+| TC-E9-03 | Half bits differ | 50% flip | Delta-S ~ 0.5 | Proportional |
+| TC-E9-04 | Binarization | continuous input | Valid binary | Threshold applied |
+| TC-E9-05 | Prototype learning | repeated patterns | Lower Delta-S | Learning works |
+
+### A.7 E10 (Multimodal) - Cross-modal KNN Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E10-01 | Aligned modalities | same surprise all | Low penalty | Consistent content |
+| TC-E10-02 | Misaligned modalities | varied surprise | Higher penalty | Inconsistent |
+| TC-E10-03 | Text-only surprise | text differs | Partial Delta-S | Modality isolation |
+| TC-E10-04 | Image-only surprise | image differs | Partial Delta-S | Modality isolation |
+| TC-E10-05 | Dimension splits | 256+256+256=768 | Correct parsing | Structure preserved |
+
+### A.8 E11 (Entity) - TransE Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E11-01 | Same entity | current == history | Delta-S ~ 0.0 | Identity relation |
+| TC-E11-02 | Related entity | h + r approx current | Low Delta-S | Translation match |
+| TC-E11-03 | Unrelated entity | far from all | Delta-S ~ 1.0 | No translation path |
+| TC-E11-04 | Running stats | many samples | Mean converges | Online learning |
+| TC-E11-05 | Entity dimension | 384D | No error | Correct size |
+
+### A.9 E12 (LateInteraction) - MaxSim Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E12-01 | Identical tokens | same sequence | Delta-S ~ 0.0 | Perfect MaxSim |
+| TC-E12-02 | No token overlap | disjoint vocab | Delta-S ~ 1.0 | Zero MaxSim |
+| TC-E12-03 | Partial overlap | some shared tokens | Moderate Delta-S | Partial match |
+| TC-E12-04 | Variable length | different token counts | Valid Delta-S | Handles lengths |
+| TC-E12-05 | Token dimension | 128D per token | Correct parsing | Structure preserved |
+| TC-E12-06 | ColBERT scoring | MaxSim sum/count | Normalized | Per-token average |
+
+### A.10 E13 (KeywordSplade) - Jaccard Tests
+
+| ID | Test | Input | Expected Output | Rationale |
+|----|------|-------|-----------------|-----------|
+| TC-E13-01 | Same keywords | identical active | Delta-S = 0.0 | Perfect Jaccard |
+| TC-E13-02 | No overlap | disjoint keywords | Delta-S = 1.0 | Zero Jaccard |
+| TC-E13-03 | Subset match | A subset B | Proportional Delta-S | Jaccard formula |
+| TC-E13-04 | Smoothing | edge cases | No division by zero | Laplace smoothing |
+| TC-E13-05 | Sparse dimension | ~30K sparse | Efficient computation | Sparse math |
+
+---
+
+## Appendix B: Delta-C Component Tests
+
+### B.1 Coherence Components
+
+| Component | Weight | Test Cases |
+|-----------|--------|------------|
+| Connectivity | 0.4 | Graph connectivity, isolated nodes, hub nodes |
+| ClusterFit | 0.4 | Within-cluster, between-cluster, boundary points |
+| Consistency | 0.2 | Stable fingerprint, evolving fingerprint, drift |
+
+### B.2 Coherence Formula Verification
+
+```rust
+#[tokio::test]
+async fn test_delta_c_formula_exact() {
+    // Given known component values
+    let connectivity = 0.8;
+    let cluster_fit = 0.6;
+    let consistency = 0.9;
+
+    // When Delta-C is computed
+    let delta_c = compute_delta_c(connectivity, cluster_fit, consistency);
+
+    // Then it matches the constitution formula exactly
+    let expected = 0.4 * connectivity + 0.4 * cluster_fit + 0.2 * consistency;
+    assert!((delta_c - expected).abs() < 0.0001);
+    assert_eq!(expected, 0.74); // 0.32 + 0.24 + 0.18
+}
+```
+
+---
+
+## Appendix C: Johari Classification Tests
+
+### C.1 Quadrant Boundary Tests
+
+| Quadrant | Delta-S | Delta-C | Test Cases |
+|----------|---------|---------|------------|
+| Open | <= 0.5 | > 0.5 | (0.5, 0.51), (0.0, 1.0), (0.49, 0.99) |
+| Blind | > 0.5 | <= 0.5 | (0.51, 0.5), (1.0, 0.0), (0.99, 0.49) |
+| Hidden | <= 0.5 | <= 0.5 | (0.5, 0.5), (0.0, 0.0), (0.49, 0.49) |
+| Unknown | > 0.5 | > 0.5 | (0.51, 0.51), (1.0, 1.0), (0.99, 0.99) |
+
+### C.2 Threshold Variation Tests
+
+```rust
+#[tokio::test]
+async fn test_johari_custom_threshold() {
+    // Test with adaptive threshold from constitution
+    // Range: [0.35, 0.65] per adaptive_thresholds.priors.theta_joh
+
+    for threshold in [0.35, 0.45, 0.5, 0.55, 0.65] {
+        let delta_s = 0.5;
+        let delta_c = 0.5;
+
+        let quadrant = classify_johari(delta_s, delta_c, threshold);
+
+        // At exactly threshold, verify classification
+        if delta_s <= threshold && delta_c > threshold {
+            assert_eq!(quadrant, JohariQuadrant::Open);
+        }
+        // ... other cases
+    }
+}
+```
+
+---
+
+## Appendix D: Performance Benchmarks
+
+### D.1 Per-Embedder Latency Targets
+
+| Embedder | Target Latency | Rationale |
+|----------|---------------|-----------|
+| E1 (GMM) | < 3ms | GMM inference |
+| E2-4, E8 (KNN) | < 1ms | Simple distance |
+| E5 (Asymmetric) | < 1.5ms | KNN + modifier |
+| E6 (Sparse IDF) | < 2ms | Sparse iteration |
+| E7 (Hybrid) | < 4ms | GMM + KNN |
+| E9 (Hamming) | < 0.5ms | Binary XOR |
+| E10 (Cross-modal) | < 3ms | 3x modality |
+| E11 (TransE) | < 1ms | L2 distance |
+| E12 (MaxSim) | < 3ms | Token iteration |
+| E13 (Jaccard) | < 1ms | Sparse Jaccard |
+| **Total** | **< 20ms** | All 13 embedders |
+
+### D.2 Benchmark Test
+
+```rust
+#[tokio::test]
+async fn benchmark_all_embedders() {
+    let config = SurpriseConfig::default();
+    let calculators = EmbedderEntropyFactory::create_all(&config);
+
+    let mut total_time = Duration::ZERO;
+
+    for (idx, calculator) in calculators.iter().enumerate() {
+        let dim = embedder_dimension(Embedder::from_index(idx).unwrap());
+        let current = vec![0.5f32; dim];
+        let history: Vec<Vec<f32>> = vec![vec![0.6f32; dim]; 10];
+
+        let start = Instant::now();
+        for _ in 0..100 {
+            let _ = calculator.compute_delta_s(&current, &history, 5);
+        }
+        let elapsed = start.elapsed() / 100;
+
+        total_time += elapsed;
+        println!("E{}: {:?}", idx + 1, elapsed);
+    }
+
+    println!("Total (13 embedders): {:?}", total_time);
+    assert!(total_time.as_millis() < 20, "Total latency exceeded 20ms");
+}
+```

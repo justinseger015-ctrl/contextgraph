@@ -349,6 +349,45 @@ self.should_enter_workspace(coherence, &thresholds)
 
 ---
 
+## Acceptance Criteria Checklist
+
+### GwtThresholds Struct
+- [ ] `GwtThresholds` struct created with fields: gate, hypersync, fragmentation
+- [ ] `from_atc(atc, domain)` factory method implemented
+- [ ] `default_general()` returns exact old values (0.70, 0.95, 0.50)
+- [ ] `is_valid()` method checks all field ranges
+
+### Constant Migration
+- [ ] `GW_THRESHOLD` marked `#[deprecated]` with migration note
+- [ ] `HYPERSYNC_THRESHOLD` marked `#[deprecated]` with migration note
+- [ ] `FRAGMENTATION_THRESHOLD` marked `#[deprecated]` with migration note
+- [ ] Deprecation warnings compile successfully
+
+### Method Updates
+- [ ] `should_broadcast(coherence, thresholds)` uses `thresholds.gate`
+- [ ] `is_hypersync(order_param, thresholds)` uses `thresholds.hypersync`
+- [ ] `is_fragmented(order_param, thresholds)` uses `thresholds.fragmentation`
+- [ ] Old methods marked deprecated with new method references
+
+### Domain Behavior
+- [ ] Medical domain gate > Code domain gate > Creative domain gate
+- [ ] General domain matches old hardcoded defaults exactly
+- [ ] Hypersync threshold relatively stable across domains
+
+### Testing
+- [ ] TC-ATC-003-001: Default matches old constants
+- [ ] TC-ATC-003-002: Domain thresholds differ correctly
+- [ ] TC-ATC-003-003: Should broadcast uses threshold
+- [ ] TC-ATC-003-004: Hypersync detection works
+- [ ] All existing GWT tests pass
+
+### Backward Compatibility
+- [ ] Old constant usage still compiles (with warnings)
+- [ ] No behavior change for General domain
+- [ ] Fallback to `GwtThresholds::default_general()` when ATC unavailable
+
+---
+
 ## Notes
 
 - GWT thresholds are critical for consciousness behavior
@@ -361,3 +400,4 @@ self.should_enter_workspace(coherence, &thresholds)
 
 **Created:** 2026-01-11
 **Author:** Specification Agent
+**Status:** Ready for implementation

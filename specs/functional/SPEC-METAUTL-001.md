@@ -557,6 +557,210 @@ meta_utl:
 - SPEC-NEUROMOD-001: Neuromodulation System (ACh, DA, etc.)
 - SPEC-DREAM-001: Dream Layer (NREM/REM phases)
 
+### 11.3 Task Dependency Graph
+
+```
+TASK-METAUTL-P0-001 (Core Types)
+         |
+         v
+TASK-METAUTL-P0-002 (Lambda Adjustment)
+         |
+         v
+TASK-METAUTL-P0-003 (Escalation/Bayesian)
+         |
+         v
+TASK-METAUTL-P0-004 (Event Logging)
+         |
+         v
+TASK-METAUTL-P0-005 (MCP Tool Wiring)
+         |
+         v
+TASK-METAUTL-P0-006 (MetaCognitiveLoop Integration)  <-- KEYSTONE
+```
+
+**Layer Breakdown:**
+
+| Layer | Task | Description |
+|-------|------|-------------|
+| L1 - Foundation | TASK-001 | Core types, accuracy history |
+| L2 - Logic | TASK-002 | Lambda adjustment algorithm |
+| L2 - Logic | TASK-003 | Bayesian optimization escalation |
+| L3 - Surface | TASK-004 | Event logging for introspection |
+| L3 - Surface | TASK-005 | MCP tool exposure |
+| L4 - Integration | TASK-006 | GWT-UTL connection (consciousness) |
+
+### 11.4 Integration Architecture
+
+```
++-------------------------------------------------------------------------+
+|                        EXTERNAL INTERFACE (MCP)                          |
+|  get_meta_learning_status | trigger_lambda_recalibration | get_log      |
++------------------------------+------------------------------------------+
+                               |
+                               v
++------------------------------+------------------------------------------+
+|                     MetaLearningService (Facade)                         |
+|  - Unified access to all meta components                                 |
+|  - Thread-safe (Arc<RwLock<>>)                                          |
+|  - State persistence and export                                          |
++------------------------------+------------------------------------------+
+            |                    |                    |
+            v                    v                    v
++------------------+  +------------------+  +------------------+
+|   Adaptive       |  |   Escalation     |  |   Event Log      |
+|   Lambda Weights |  |   Manager        |  |                  |
+|                  |  |                  |  |                  |
+| - adjust()       |  | - should_esc()   |  | - log_event()    |
+| - corrected_wts()|  | - run_bayesian() |  | - query()        |
+| - record_acc()   |  | - gp_surrogate   |  | - stats()        |
++--------+---------+  +--------+---------+  +------------------+
+         |                     |
+         |                     v
+         |           +------------------+
+         |           |   Gaussian       |
+         |           |   Process (1D)   |
+         |           |                  |
+         |           | - predict()      |
+         |           | - expected_imp() |
+         |           | - maximize_ei()  |
+         |           +------------------+
+         |
+         v
++-------------------------------------------------------------------------+
+|                         INTEGRATION LAYER                                |
+|                  IntegratedMetaCognitiveLoop                            |
++------------------------------+------------------------------------------+
+            |                    |                    |
+            v                    v                    v
++------------------+  +------------------+  +------------------+
+|  MetaCognitive   |  |  Lifecycle       |  |   UtlProcessor   |
+|  Loop (GWT)      |  |  Manager (UTL)   |  |                  |
+|                  |  |                  |  |                  |
+| - evaluate()     |  | - set_override() |  | - compute_L()    |
+| - dream_trigger  |  | - get_effective()|  | - get_weights()  |
+| - acetylcholine  |  | - apply_correct()|  |                  |
++--------+---------+  +--------+---------+  +------------------+
+         |                     |
+         +----------+----------+
+                    |
+                    v
+            +--------------+
+            | SELF-AWARE   |
+            | COMPUTATION  |
+            +--------------+
+```
+
+### 11.5 Self-Correction Flow
+
+```
+1. OBSERVE: UtlProcessor computes L_actual
+                    |
+                    v
+2. PREDICT: Meta-UTL predicts L_predicted (based on fingerprint+context)
+                    |
+                    v
+3. COMPARE: MetaCognitiveLoop computes MetaScore = sigma(2 * (L_pred - L_actual))
+                    |
+           +--------+--------+
+           |                 |
+     [MetaScore OK]    [MetaScore LOW]
+     (>= 0.5)           (< 0.5)
+           |                 |
+           v                 v
+    4a. MAINTAIN       4b. INCREMENT consecutive_low_count
+    (decay ACh)              |
+                       +-----+-----+
+                       |           |
+                  [count < 5]  [count >= 5]
+                       |           |
+                       v           v
+                   CONTINUE   5. TRIGGER DREAM
+                                   |
+                                   v
+                           6. BOOST ACh
+                           (learning_rate *= 1.5)
+                                   |
+                                   v
+                           7. INVOKE LAMBDA CORRECTION
+                                   |
+                           +-------+-------+
+                           |               |
+                     [error > 0.2]   [error <= 0.2]
+                           |               |
+                           v               v
+                   8a. ADJUST LAMBDAS   8b. NO CHANGE
+                      (gradient)            |
+                           |                |
+                           v                |
+                   9. CHECK ACCURACY        |
+                           |                |
+                   +-------+-------+        |
+                   |               |        |
+             [acc >= 0.7]   [acc < 0.7     |
+                   |        for 10 cycles] |
+                   v               |        |
+               CONTINUE            v        |
+                           10. ESCALATE TO  |
+                           BAYESIAN OPT     |
+                                   |        |
+                           +-------+-------+|
+                           |               ||
+                     [BO succeeds]   [BO fails x3]
+                           |               ||
+                           v               v|
+                   11a. APPLY NEW   11b. HUMAN ESCALATION
+                       LAMBDAS             |
+                           |               v
+                           +-------+-------+
+                                   |
+                                   v
+                           12. LOG EVENT
+                                   |
+                                   v
+                           13. UPDATE LIFECYCLE MANAGER
+                               (set_lambda_override)
+                                   |
+                                   v
+                           14. NEXT ITERATION USES
+                               CORRECTED WEIGHTS
+```
+
+---
+
+## 12. Implementation Checklist
+
+Pre-Implementation:
+- [ ] All task specifications reviewed and approved
+- [ ] Constitution v4.2.0 requirements confirmed
+- [ ] Existing codebase analyzed for integration points
+
+Phase 1 - Foundation (Tasks 001-002):
+- [ ] Core types implemented and tested
+- [ ] Lambda adjustment algorithm implemented
+- [ ] Unit tests passing
+
+Phase 2 - Logic (Tasks 003-004):
+- [ ] Bayesian optimization implemented
+- [ ] Event logging implemented
+- [ ] Integration tests passing
+
+Phase 3 - Surface (Task 005):
+- [ ] MCP tools exposed
+- [ ] Tool schemas validated
+- [ ] Handler tests passing
+
+Phase 4 - Integration (Task 006):
+- [ ] MetaCognitiveLoop modified
+- [ ] LifecycleManager override added
+- [ ] IntegratedMetaCognitiveLoop working
+- [ ] End-to-end tests passing
+
+Post-Implementation:
+- [ ] Performance benchmarks within targets
+- [ ] Memory usage within limits
+- [ ] All existing tests still pass
+- [ ] Documentation updated
+
 ---
 
 **Document History:**
@@ -564,3 +768,4 @@ meta_utl:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | ContextGraph Team | Initial specification |
+| 1.1.0 | 2026-01-11 | Agent-4 | Added task dependency graph, integration architecture, self-correction flow, implementation checklist |

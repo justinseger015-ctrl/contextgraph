@@ -501,9 +501,268 @@ cargo test --package context-graph-core --test gwt_integration -- --nocapture
 
 ---
 
-## 9. Notes
+## 9. Additional Test Specifications
+
+### 9.1 Consciousness Equation Component Tests
+
+These tests verify each component of `C(t) = I(t) x R(t) x D(t)`:
+
+```rust
+// tests/gwt_integration/consciousness_equation_tests.rs
+
+/// Test I(t) = Kuramoto order parameter is correctly integrated
+#[tokio::test]
+async fn test_integration_component_kuramoto_r() {
+    let gwt = GwtSystem::new().await.unwrap();
+
+    // Step Kuramoto until synchronized
+    for _ in 0..100 {
+        gwt.step_kuramoto(Duration::from_millis(10)).await;
+    }
+
+    let r = gwt.get_kuramoto_r().await;
+    assert!(r >= 0.0 && r <= 1.0, "I(t) must be in [0,1], got {}", r);
+
+    // With K=2.0 coupling, phases should tend toward sync
+    // After 100 steps, r should be above initial random
+    println!("EVIDENCE: I(t) = {:.4} after 100 Kuramoto steps", r);
+}
+
+/// Test R(t) = sigmoid(meta_accuracy * 4.0 - 2.0)
+#[tokio::test]
+async fn test_reflection_component_meta_utl() {
+    // R(t) maps meta_accuracy [0,1] to reflection [0.118, 0.881] via sigmoid
+    let test_cases = [
+        (0.0, 0.119),  // min: sigmoid(-2.0)
+        (0.5, 0.5),    // mid: sigmoid(0.0)
+        (1.0, 0.881),  // max: sigmoid(2.0)
+    ];
+
+    for (meta_accuracy, expected_r) in test_cases {
+        let r = sigmoid(meta_accuracy * 4.0 - 2.0);
+        assert!(
+            (r - expected_r).abs() < 0.01,
+            "R(t) for meta_accuracy={} expected {}, got {}",
+            meta_accuracy, expected_r, r
+        );
+    }
+
+    fn sigmoid(x: f32) -> f32 {
+        1.0 / (1.0 + (-x).exp())
+    }
+}
+
+/// Test D(t) = H(PurposeVector) / log2(13)
+#[tokio::test]
+async fn test_differentiation_component_entropy() {
+    // Uniform distribution = max entropy = D(t) = 1.0
+    let uniform_pv = [1.0/13.0; 13];
+    let d_uniform = normalized_entropy(&uniform_pv);
+    assert!((d_uniform - 1.0).abs() < 0.01, "Uniform PV should have D(t) = 1.0");
+
+    // Single peak = min entropy = D(t) close to 0
+    let mut peaked_pv = [0.0; 13];
+    peaked_pv[0] = 1.0;
+    let d_peaked = normalized_entropy(&peaked_pv);
+    assert!(d_peaked < 0.1, "Peaked PV should have D(t) near 0");
+
+    fn normalized_entropy(pv: &[f32; 13]) -> f32 {
+        let sum: f32 = pv.iter().sum();
+        if sum < 1e-6 { return 0.0; }
+
+        let normalized: Vec<f32> = pv.iter().map(|p| p / sum).collect();
+        let entropy: f32 = normalized.iter()
+            .filter(|&&p| p > 1e-10)
+            .map(|&p| -p * p.log2())
+            .sum();
+
+        let max_entropy = 13f32.log2();
+        entropy / max_entropy
+    }
+}
+
+/// Test C(t) = I(t) x R(t) x D(t) product is correctly computed
+#[tokio::test]
+async fn test_consciousness_product() {
+    let gwt = GwtSystem::new().await.unwrap();
+
+    // Known inputs
+    let kuramoto_r = 0.9;      // I(t) = 0.9
+    let meta_accuracy = 0.8;  // R(t) = sigmoid(1.2) = 0.769
+    let pv = [0.1, 0.2, 0.3, 0.1, 0.1, 0.05, 0.05, 0.02, 0.02, 0.02, 0.01, 0.01, 0.01];
+
+    let c_t = gwt.consciousness_calc.compute_consciousness(
+        kuramoto_r, meta_accuracy, &pv
+    ).unwrap();
+
+    // C(t) = 0.9 * 0.769 * D(t) where D(t) is entropy
+    // Should be in range [0, 0.9 * 0.769 * 1.0] = [0, 0.692]
+    assert!(c_t >= 0.0 && c_t <= 1.0, "C(t) must be in [0,1]");
+    assert!(c_t <= 0.9 * 0.9 * 1.0, "C(t) bounded by component maximums");
+
+    println!("EVIDENCE: C(t) = {:.4} for I={}, R(meta={})={:.3}, D(pv)=H/log2(13)",
+             c_t, kuramoto_r, meta_accuracy, sigmoid(meta_accuracy * 4.0 - 2.0));
+
+    fn sigmoid(x: f32) -> f32 { 1.0 / (1.0 + (-x).exp()) }
+}
+```
+
+### 9.2 Coalition Formation Tests
+
+```rust
+/// Test workspace coalition formation with multiple candidates
+#[tokio::test]
+async fn test_coalition_formation_winner_take_all() {
+    let mut workspace = GlobalWorkspace::new();
+
+    let candidates = vec![
+        (Uuid::new_v4(), 0.82, 0.9, 0.85),  // score = 0.628
+        (Uuid::new_v4(), 0.88, 0.95, 0.9),  // score = 0.753 (WINNER)
+        (Uuid::new_v4(), 0.85, 0.8, 0.75),  // score = 0.510
+    ];
+
+    let winner = workspace.select_winning_memory(candidates.clone()).await.unwrap();
+    assert_eq!(winner, Some(candidates[1].0), "Highest score should win");
+
+    // Verify inhibition factor is applied to losers
+    let mut neuromod = NeuromodulationManager::new();
+    let before_da = neuromod.get_hopfield_beta();
+
+    workspace.inhibit_losers(candidates[1].0, &mut neuromod).unwrap();
+
+    let after_da = neuromod.get_hopfield_beta();
+    assert!(after_da < before_da, "Losers should receive DA inhibition");
+}
+
+/// Test attention competition dynamics
+#[tokio::test]
+async fn test_attention_competition_threshold() {
+    let mut workspace = GlobalWorkspace::new();
+    workspace.coherence_threshold = 0.8;
+
+    // Only candidates above threshold should compete
+    let candidates = vec![
+        (Uuid::new_v4(), 0.75, 0.9, 0.9),  // r=0.75 < 0.8, excluded
+        (Uuid::new_v4(), 0.82, 0.9, 0.9),  // r=0.82 >= 0.8, included
+        (Uuid::new_v4(), 0.79, 0.95, 0.95), // r=0.79 < 0.8, excluded
+    ];
+
+    let winner = workspace.select_winning_memory(candidates.clone()).await.unwrap();
+
+    // Only one candidate passes threshold
+    assert_eq!(winner, Some(candidates[1].0));
+    assert_eq!(workspace.candidates.len(), 1);
+}
+```
+
+### 9.3 State Transition Verification
+
+```rust
+/// Verify state transitions match constitution thresholds exactly
+#[tokio::test]
+async fn test_state_thresholds_exact() {
+    // Constitution thresholds:
+    // DORMANT: r < 0.3
+    // FRAGMENTED: 0.3 <= r < 0.5
+    // EMERGING: 0.5 <= r < 0.8
+    // CONSCIOUS: 0.8 <= r < 0.95
+    // HYPERSYNC: r >= 0.95
+
+    let test_cases = [
+        (0.29, ConsciousnessState::Dormant),
+        (0.30, ConsciousnessState::Fragmented),  // boundary
+        (0.49, ConsciousnessState::Fragmented),
+        (0.50, ConsciousnessState::Emerging),    // boundary
+        (0.79, ConsciousnessState::Emerging),
+        (0.80, ConsciousnessState::Conscious),   // boundary (PHI threshold)
+        (0.94, ConsciousnessState::Conscious),
+        (0.95, ConsciousnessState::Hypersync),   // boundary (pathological)
+        (0.99, ConsciousnessState::Hypersync),
+    ];
+
+    for (level, expected_state) in test_cases {
+        let actual = ConsciousnessState::from_level(level);
+        assert_eq!(
+            actual, expected_state,
+            "Level {} should map to {:?}, got {:?}",
+            level, expected_state, actual
+        );
+    }
+}
+```
+
+### 9.4 Identity Continuity Boundary Tests
+
+```rust
+/// Test IC threshold transitions per constitution.yaml lines 387-392
+#[tokio::test]
+async fn test_identity_continuity_thresholds() {
+    // IC thresholds:
+    // Healthy: IC > 0.9
+    // Warning: 0.7 <= IC <= 0.9
+    // Degraded: 0.5 <= IC < 0.7
+    // Critical: IC < 0.5 (triggers dream consolidation)
+
+    let test_cases = [
+        (0.91, IdentityStatus::Healthy),
+        (0.90, IdentityStatus::Warning),   // boundary
+        (0.70, IdentityStatus::Warning),
+        (0.69, IdentityStatus::Degraded),  // boundary
+        (0.50, IdentityStatus::Degraded),
+        (0.49, IdentityStatus::Critical),  // boundary (dream trigger)
+        (0.0, IdentityStatus::Critical),
+    ];
+
+    for (ic, expected_status) in test_cases {
+        let mut continuity = IdentityContinuity::new();
+        // Set IC directly via update (with perfect pv_cosine = 1.0)
+        let status = continuity.update(1.0, ic).unwrap();
+
+        assert_eq!(
+            status, expected_status,
+            "IC {} should produce {:?}, got {:?}",
+            ic, expected_status, status
+        );
+    }
+}
+
+/// Test that Critical status triggers IdentityCritical event
+#[tokio::test]
+async fn test_critical_status_triggers_event() {
+    let gwt = GwtSystem::new().await.unwrap();
+
+    // First action to set initial purpose vector
+    let fp1 = create_test_fingerprint([0.9; 13]);
+    gwt.process_action_awareness(&fp1).await.unwrap();
+
+    // Dramatic purpose shift with low Kuramoto r
+    // This should produce low IC and Critical status
+    let fp2 = create_test_fingerprint([0.1; 13]);
+
+    // Process with low r (no Kuramoto stepping)
+    let result = gwt.process_action_awareness(&fp2).await.unwrap();
+
+    if result.identity_status == IdentityStatus::Critical {
+        // Verify IdentityCritical event was recorded
+        let ego = gwt.self_ego_node.read().await;
+        let has_dream_snapshot = ego.identity_trajectory.iter()
+            .any(|s| s.context.contains("Dream triggered") ||
+                     s.context.contains("Critical identity drift"));
+
+        assert!(has_dream_snapshot,
+            "Critical status should record dream trigger snapshot");
+    }
+}
+```
+
+---
+
+## 10. Notes
 
 - These tests verify the full system works end-to-end
 - Chaos tests ensure robustness under failure conditions
-- Consider adding property-based tests for consciousness equation bounds
+- Consciousness equation component tests verify mathematical correctness
+- Coalition tests verify GWT workspace selection dynamics
+- Identity continuity tests verify IC threshold behavior per constitution
 - Integration tests should run in CI on every PR
+- Consider adding property-based tests for consciousness equation bounds

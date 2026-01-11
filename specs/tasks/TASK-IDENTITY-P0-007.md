@@ -572,8 +572,134 @@ ToolDefinition::new(
 
 ---
 
+## Implementation Checklist
+
+- [ ] Add `last_detection: Option<CrisisDetectionResult>` field to `IdentityContinuityMonitor`
+- [ ] Implement `IdentityContinuityMonitor::last_detection()` getter
+- [ ] Add `last_detection()` method to `IdentityContinuityListener`
+- [ ] Update `call_get_ego_state()` to check for GWT system
+- [ ] Get identity_listener from GWT system
+- [ ] Call listener.identity_coherence().await
+- [ ] Call listener.identity_status().await
+- [ ] Call listener.is_in_crisis().await
+- [ ] Call listener.last_detection().await
+- [ ] Build identity_continuity JSON object with all fields
+- [ ] Handle None case when listener not available
+- [ ] Preserve backward compatibility of existing response fields
+- [ ] Convert Duration to milliseconds for time_since_last_event_ms
+- [ ] Update tool description in tools.rs
+- [ ] Add unit test for response with GWT initialized
+- [ ] Add unit test for response without GWT
+- [ ] Add unit test for backward compatibility
+- [ ] Add unit test for time values in milliseconds
+- [ ] Add unit test for entering_critical flag
+- [ ] Add unit test for recovering flag
+- [ ] Run clippy with `-D warnings`
+
+---
+
+## Backward Compatibility
+
+The enhanced `get_ego_state` response adds a new `identity_continuity` field but does NOT modify any existing fields. Existing clients that parse only the known fields will continue to work.
+
+**Existing fields (unchanged):**
+- `purpose_vector`
+- `identity_coherence`
+- `coherence_with_actions`
+- `identity_status`
+- `trajectory_length`
+- `thresholds`
+
+**New field (optional):**
+- `identity_continuity` (only present when GWT initialized)
+
+---
+
+## Response Examples
+
+### With GWT Initialized (Normal Operation)
+
+```json
+{
+  "purpose_vector": [0.8, 0.75, 0.9, 0.6, 0.7, 0.65, 0.85, 0.72, 0.78, 0.68, 0.82, 0.71, 0.76],
+  "identity_coherence": 0.95,
+  "coherence_with_actions": 0.88,
+  "identity_status": "Healthy",
+  "trajectory_length": 42,
+  "thresholds": {
+    "healthy": 0.9,
+    "warning": 0.7,
+    "degraded": 0.5,
+    "critical": 0.0
+  },
+  "identity_continuity": {
+    "current_ic": 0.92,
+    "previous_status": "Healthy",
+    "status_changed": false,
+    "entering_crisis": false,
+    "entering_critical": false,
+    "recovering": false,
+    "time_since_last_event_ms": null,
+    "can_emit_event": true,
+    "is_in_crisis": false
+  }
+}
+```
+
+### With GWT Initialized (Crisis State)
+
+```json
+{
+  "purpose_vector": [0.3, 0.2, 0.1, 0.4, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1],
+  "identity_coherence": 0.35,
+  "coherence_with_actions": 0.42,
+  "identity_status": "Critical",
+  "trajectory_length": 156,
+  "thresholds": {
+    "healthy": 0.9,
+    "warning": 0.7,
+    "degraded": 0.5,
+    "critical": 0.0
+  },
+  "identity_continuity": {
+    "current_ic": 0.35,
+    "previous_status": "Warning",
+    "status_changed": true,
+    "entering_crisis": false,
+    "entering_critical": true,
+    "recovering": false,
+    "time_since_last_event_ms": 15000,
+    "can_emit_event": false,
+    "is_in_crisis": true
+  }
+}
+```
+
+### Without GWT (Fallback)
+
+```json
+{
+  "purpose_vector": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  "identity_coherence": 0.0,
+  "coherence_with_actions": 0.0,
+  "identity_status": "Critical",
+  "trajectory_length": 0,
+  "thresholds": {
+    "healthy": 0.9,
+    "warning": 0.7,
+    "degraded": 0.5,
+    "critical": 0.0
+  }
+}
+```
+
+Note: `identity_continuity` field is absent when GWT is not initialized.
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | Claude Opus 4.5 | Initial task specification |
+| 1.1.0 | 2026-01-11 | Claude Opus 4.5 | Added implementation checklist, backward compatibility notes, and response examples |
