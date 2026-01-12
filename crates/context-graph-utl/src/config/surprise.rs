@@ -132,6 +132,22 @@ pub struct SurpriseConfig {
     /// k neighbors for multimodal KNN entropy.
     /// Range: `[1, 20]`
     pub multimodal_k_neighbors: usize,
+
+    // --- TransE (E11 Entity) ---
+
+    /// L-norm for TransE distance (1 = L1, 2 = L2).
+    /// Default: 2 (L2 per original TransE paper)
+    /// Range: `[1, 2]`
+    pub entity_transe_norm: u8,
+
+    /// Split ratio for head/relation in embedding.
+    /// Default: 0.5 (split at midpoint: 192 for 384D)
+    /// Range: `[0.1, 0.9]`
+    pub entity_split_ratio: f32,
+
+    /// k neighbors for TransE entropy averaging.
+    /// Range: `[1, 20]`
+    pub entity_k_neighbors: usize,
 }
 
 impl Default for SurpriseConfig {
@@ -167,6 +183,11 @@ impl Default for SurpriseConfig {
             multimodal_intra_weight: 0.7,
             multimodal_cross_weight: 0.3,
             multimodal_k_neighbors: 5,
+
+            // TransE (E11 Entity) - per constitution.yaml delta_methods.ΔS E11
+            entity_transe_norm: 2,
+            entity_split_ratio: 0.5,
+            entity_k_neighbors: 5,
         }
     }
 }

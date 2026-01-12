@@ -17,6 +17,7 @@
 use super::{
     AsymmetricKnnEntropy, CrossModalEntropy, DefaultKnnEntropy, EmbedderEntropy,
     GmmMahalanobisEntropy, HammingPrototypeEntropy, HybridGmmKnnEntropy, JaccardActiveEntropy,
+    TransEEntropy,
 };
 use crate::config::SurpriseConfig;
 use context_graph_core::teleological::Embedder;
@@ -78,13 +79,15 @@ impl EmbedderEntropyFactory {
             // E10 (Multimodal): Cross-modal KNN per constitution.yaml delta_methods.ΔS E10
             Embedder::Multimodal => Box::new(CrossModalEntropy::from_config(config)),
 
-            // E2-E4, E6, E8, E11-E12: Default KNN-based entropy
+            // E11 (Entity): TransE distance per constitution.yaml delta_methods.ΔS E11
+            Embedder::Entity => Box::new(TransEEntropy::from_config(config)),
+
+            // E2-E4, E6, E8, E12: Default KNN-based entropy
             Embedder::TemporalRecent
             | Embedder::TemporalPeriodic
             | Embedder::TemporalPositional
             | Embedder::Sparse
             | Embedder::Graph
-            | Embedder::Entity
             | Embedder::LateInteraction => {
                 Box::new(DefaultKnnEntropy::from_config(embedder, config))
             }
@@ -375,5 +378,33 @@ mod tests {
         .expect("Thread should complete");
 
         println!("[PASS] factory_send_sync");
+    }
+
+    #[test]
+    fn test_factory_routes_entity_to_transe() {
+        let config = SurpriseConfig::default();
+        let calculator = EmbedderEntropyFactory::create(Embedder::Entity, &config);
+
+        assert_eq!(
+            calculator.embedder_type(),
+            Embedder::Entity,
+            "Factory should create TransEEntropy for Entity"
+        );
+
+        // Test that it computes correctly with E11 dimension (384D)
+        let current = vec![0.5f32; 384];
+        let history: Vec<Vec<f32>> = vec![vec![0.5f32; 384]; 10];
+        let result = calculator.compute_delta_s(&current, &history, 5);
+
+        assert!(result.is_ok(), "TransEEntropy should compute successfully");
+        let delta_s = result.unwrap();
+        assert!(
+            (0.0..=1.0).contains(&delta_s),
+            "delta_s should be in valid range"
+        );
+        assert!(!delta_s.is_nan(), "delta_s should not be NaN");
+        assert!(!delta_s.is_infinite(), "delta_s should not be Infinite");
+
+        println!("[PASS] test_factory_routes_entity_to_transe");
     }
 }

@@ -40,6 +40,7 @@ mod gmm_mahalanobis;
 mod hamming_prototype;
 mod hybrid_gmm_knn;
 mod jaccard_active;
+mod transe;
 
 pub use asymmetric_knn::AsymmetricKnnEntropy;
 pub use cross_modal::CrossModalEntropy;
@@ -49,6 +50,7 @@ pub use gmm_mahalanobis::GmmMahalanobisEntropy;
 pub use hamming_prototype::HammingPrototypeEntropy;
 pub use hybrid_gmm_knn::HybridGmmKnnEntropy;
 pub use jaccard_active::JaccardActiveEntropy;
+pub use transe::TransEEntropy;
 
 use crate::error::UtlResult;
 use context_graph_core::teleological::Embedder;
