@@ -4,6 +4,7 @@
 pub const DEFAULT_LEARNING_RATE: f32 = 0.0005;
 
 /// Consolidation threshold - trigger when weight delta exceeds this
+#[deprecated(since = "0.5.0", note = "Use LayerThresholds.consolidation instead")]
 pub const DEFAULT_CONSOLIDATION_THRESHOLD: f32 = 0.1;
 
 /// Gradient clipping value from constitution (L4_Learning.grad_clip)

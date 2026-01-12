@@ -10,10 +10,9 @@ use std::time::Instant;
 use crate::error::{CoreError, CoreResult};
 
 use super::math::dot_product_f32;
-use super::types::{
-    CacheStats, CachedResponse, DEFAULT_BETA, DEFAULT_CACHE_CAPACITY, MIN_HIT_SIMILARITY,
-    PATTERN_DIM,
-};
+use super::types::{CacheStats, CachedResponse, DEFAULT_BETA, DEFAULT_CACHE_CAPACITY, PATTERN_DIM};
+#[allow(deprecated)]
+use super::types::MIN_HIT_SIMILARITY;
 
 // ============================================================
 // Modern Hopfield Network Cache
@@ -109,6 +108,7 @@ impl ModernHopfieldCache {
     /// # Performance
     ///
     /// This MUST complete in <100us for the reflex layer latency budget.
+    #[allow(deprecated)]
     pub fn retrieve(&self, query: &[f32]) -> Option<CachedResponse> {
         let start = Instant::now();
 

@@ -11,6 +11,7 @@ use crate::error::CoreResult;
 use crate::traits::NervousLayer;
 use crate::types::{LayerId, LayerInput, LayerOutput, LayerResult};
 
+#[allow(deprecated)]
 use super::constants::DEFAULT_CONSOLIDATION_THRESHOLD;
 use super::utl_computer::UtlWeightComputer;
 
@@ -55,6 +56,7 @@ pub struct LearningLayer {
 
 impl LearningLayer {
     /// Create a new Learning layer with default configuration.
+    #[allow(deprecated)]
     pub fn new() -> Self {
         Self {
             weight_computer: UtlWeightComputer::default(),

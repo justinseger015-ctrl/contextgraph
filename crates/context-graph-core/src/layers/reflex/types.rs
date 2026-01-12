@@ -18,6 +18,7 @@ pub const DEFAULT_BETA: f32 = 1.0;
 
 /// Minimum similarity threshold for a cache hit.
 /// Below this, we consider it a miss even if patterns exist.
+#[deprecated(since = "0.5.0", note = "Use LayerThresholds.reflex_hit instead")]
 pub const MIN_HIT_SIMILARITY: f32 = 0.85;
 
 /// Embedding dimension for cache patterns.

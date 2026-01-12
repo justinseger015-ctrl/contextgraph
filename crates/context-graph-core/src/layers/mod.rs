@@ -23,6 +23,7 @@ mod learning;
 mod memory;
 mod reflex;
 mod sensing;
+mod thresholds;
 
 #[cfg(test)]
 mod tests_full_state_verification;
@@ -35,16 +36,22 @@ pub use coherence::{
 #[allow(deprecated)]
 pub use coherence::{FRAGMENTATION_THRESHOLD, GW_THRESHOLD, HYPERSYNC_THRESHOLD};
 pub use learning::{
-    LearningLayer, UtlWeightComputer, WeightDelta, DEFAULT_CONSOLIDATION_THRESHOLD,
+    LearningLayer, UtlWeightComputer, WeightDelta,
     DEFAULT_LEARNING_RATE, GRADIENT_CLIP, TARGET_FREQUENCY_HZ,
 };
+#[allow(deprecated)]
+pub use learning::DEFAULT_CONSOLIDATION_THRESHOLD;
 pub use memory::{
     AssociativeMemory, MemoryContent, MemoryLayer, ScoredMemory, StoredMemory,
     DECAY_HALF_LIFE_HOURS, DEFAULT_MAX_RETRIEVE, DEFAULT_MHN_BETA, MEMORY_PATTERN_DIM,
-    MIN_MEMORY_SIMILARITY,
 };
+#[allow(deprecated)]
+pub use memory::MIN_MEMORY_SIMILARITY;
 pub use reflex::{
     CacheStats, CachedResponse, ModernHopfieldCache, ReflexLayer, DEFAULT_BETA,
-    DEFAULT_CACHE_CAPACITY, MIN_HIT_SIMILARITY, PATTERN_DIM,
+    DEFAULT_CACHE_CAPACITY, PATTERN_DIM,
 };
+#[allow(deprecated)]
+pub use reflex::MIN_HIT_SIMILARITY;
+pub use thresholds::LayerThresholds;
 pub use sensing::{PiiPattern, PiiScrubber, ScrubbedContent, SensingLayer, SensingMetrics};
