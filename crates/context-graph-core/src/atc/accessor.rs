@@ -5,7 +5,7 @@
 
 use super::{AdaptiveThresholdCalibration, Domain};
 
-/// All threshold names supported by the system (18 thresholds).
+/// All threshold names supported by the system (20 thresholds).
 pub const THRESHOLD_NAMES: &[&str] = &[
     // Existing fields (5 behavioral thresholds, excluding confidence_bias)
     "theta_opt",
@@ -28,9 +28,11 @@ pub const THRESHOLD_NAMES: &[&str] = &[
     // Classification thresholds (2)
     "theta_johari",
     "theta_blind_spot",
-    // Autonomous thresholds (2)
+    // Autonomous thresholds (4)
     "theta_obsolescence_low",
     "theta_obsolescence_high",
+    "theta_obsolescence_mid",
+    "theta_drift_slope",
 ];
 
 /// Unified threshold access by name.
@@ -80,6 +82,8 @@ impl ThresholdAccessor for AdaptiveThresholdCalibration {
             // Autonomous thresholds
             "theta_obsolescence_low" => thresholds.theta_obsolescence_low,
             "theta_obsolescence_high" => thresholds.theta_obsolescence_high,
+            "theta_obsolescence_mid" => thresholds.theta_obsolescence_mid,
+            "theta_drift_slope" => thresholds.theta_drift_slope,
             _ => {
                 tracing::warn!(threshold_name = %name, "Unknown threshold name requested");
                 return None;
@@ -159,10 +163,12 @@ mod tests {
     #[test]
     fn test_list_threshold_names() {
         let names = AdaptiveThresholdCalibration::list_threshold_names();
-        assert_eq!(names.len(), 18, "Expected 18 threshold names, got {}", names.len());
+        assert_eq!(names.len(), 20, "Expected 20 threshold names, got {}", names.len());
         assert!(names.contains(&"theta_opt"));
         assert!(names.contains(&"theta_gate"));
         assert!(names.contains(&"theta_obsolescence_high"));
+        assert!(names.contains(&"theta_obsolescence_mid"));
+        assert!(names.contains(&"theta_drift_slope"));
     }
 
     #[test]

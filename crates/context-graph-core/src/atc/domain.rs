@@ -123,9 +123,11 @@ pub struct DomainThresholds {
     pub theta_johari: f32,          // [0.35, 0.65] Johari boundary
     pub theta_blind_spot: f32,      // [0.35, 0.65] Blind spot detection
 
-    // === NEW: Autonomous thresholds (2) ===
+    // === NEW: Autonomous thresholds (4) ===
     pub theta_obsolescence_low: f32,  // [0.20, 0.50] Low relevance
     pub theta_obsolescence_high: f32, // [0.65, 0.90] High confidence
+    pub theta_obsolescence_mid: f32,  // [0.45, 0.75] Medium confidence
+    pub theta_drift_slope: f32,       // [0.001, 0.01] Drift detection
 }
 
 impl DomainThresholds {
@@ -171,6 +173,14 @@ impl DomainThresholds {
         let theta_obsolescence_low = 0.30 + (strictness * 0.10);  // [0.30, 0.40]
         let theta_obsolescence_high = 0.75 + (strictness * 0.10); // [0.75, 0.85]
 
+        // theta_obsolescence_mid: between low and high
+        let theta_obsolescence_mid = theta_obsolescence_low +
+            (theta_obsolescence_high - theta_obsolescence_low) * 0.5;
+
+        // theta_drift_slope: stricter domains need smaller slopes to trigger
+        // Range [0.001, 0.01], inverse of strictness (more strict = smaller threshold)
+        let theta_drift_slope = 0.01 - (strictness * 0.009);  // [0.001, 0.01]
+
         Self {
             domain,
             theta_opt,
@@ -192,6 +202,8 @@ impl DomainThresholds {
             theta_blind_spot,
             theta_obsolescence_low,
             theta_obsolescence_high,
+            theta_obsolescence_mid,
+            theta_drift_slope,
         }
     }
 
@@ -233,6 +245,8 @@ impl DomainThresholds {
         // NEW: Autonomous thresholds
         self.theta_obsolescence_low = blend(self.theta_obsolescence_low, similar.theta_obsolescence_low);
         self.theta_obsolescence_high = blend(self.theta_obsolescence_high, similar.theta_obsolescence_high);
+        self.theta_obsolescence_mid = blend(self.theta_obsolescence_mid, similar.theta_obsolescence_mid);
+        self.theta_drift_slope = blend(self.theta_drift_slope, similar.theta_drift_slope);
     }
 
     /// Check if thresholds are valid (monotonicity, ranges).
@@ -276,6 +290,15 @@ impl DomainThresholds {
         if !(0.65..=0.90).contains(&self.theta_obsolescence_high) { return false; }
         if self.theta_obsolescence_high <= self.theta_obsolescence_low { return false; }
 
+        // theta_obsolescence_mid
+        if !(0.45..=0.75).contains(&self.theta_obsolescence_mid) { return false; }
+        // Must be between low and high
+        if !(self.theta_obsolescence_mid > self.theta_obsolescence_low
+            && self.theta_obsolescence_mid < self.theta_obsolescence_high) { return false; }
+
+        // theta_drift_slope
+        if !(0.001..=0.01).contains(&self.theta_drift_slope) { return false; }
+
         true
     }
 
@@ -313,6 +336,8 @@ impl DomainThresholds {
         // NEW: Autonomous thresholds
         self.theta_obsolescence_low = self.theta_obsolescence_low.clamp(0.20, 0.50);
         self.theta_obsolescence_high = self.theta_obsolescence_high.clamp(0.65, 0.90);
+        self.theta_obsolescence_mid = self.theta_obsolescence_mid.clamp(0.45, 0.75);
+        self.theta_drift_slope = self.theta_drift_slope.clamp(0.001, 0.01);
     }
 }
 
@@ -780,12 +805,12 @@ mod tests {
     }
 
     #[test]
-    fn test_field_count_is_19() {
-        // This test ensures we have exactly 19 fields by checking the struct size indirectly
-        // We verify by accessing all 19 fields
+    fn test_field_count_is_21() {
+        // This test ensures we have exactly 21 fields by checking the struct size indirectly
+        // We verify by accessing all 21 fields
         let t = DomainThresholds::new(Domain::General);
         let fields: Vec<f32> = vec![
-            // domain is not f32, so we count 18 f32 fields + 1 Domain
+            // domain is not f32, so we count 21 f32 fields + 1 Domain
             t.theta_opt,
             t.theta_acc,
             t.theta_warn,
@@ -805,9 +830,11 @@ mod tests {
             t.theta_blind_spot,
             t.theta_obsolescence_low,
             t.theta_obsolescence_high,
+            t.theta_obsolescence_mid,
+            t.theta_drift_slope,
         ];
-        // 19 f32 fields + 1 Domain = 20 total fields in struct
-        assert_eq!(fields.len(), 19, "Should have 19 f32 threshold fields");
+        // 21 f32 fields + 1 Domain = 22 total fields in struct
+        assert_eq!(fields.len(), 21, "Should have 21 f32 threshold fields");
         // Verify domain field exists
         assert_eq!(t.domain, Domain::General);
     }
@@ -841,9 +868,158 @@ mod tests {
             println!("  theta_blind_spot: {:.3}", t.theta_blind_spot);
             println!("  theta_obsolescence_low: {:.3}", t.theta_obsolescence_low);
             println!("  theta_obsolescence_high: {:.3}", t.theta_obsolescence_high);
+            println!("  theta_obsolescence_mid: {:.3}", t.theta_obsolescence_mid);
+            println!("  theta_drift_slope: {:.6}", t.theta_drift_slope);
             println!();
 
             assert!(t.is_valid(), "Domain {:?} thresholds should be valid", domain);
         }
+    }
+
+    // ========== NEW TESTS FOR TASK-ATC-P2-007 ==========
+
+    #[test]
+    fn test_theta_obsolescence_mid_range() {
+        for domain in [
+            Domain::Code,
+            Domain::Medical,
+            Domain::Legal,
+            Domain::Creative,
+            Domain::Research,
+            Domain::General,
+        ] {
+            let t = DomainThresholds::new(domain);
+            assert!(
+                (0.45..=0.75).contains(&t.theta_obsolescence_mid),
+                "{:?}: theta_obsolescence_mid {} out of range [0.45, 0.75]",
+                domain,
+                t.theta_obsolescence_mid
+            );
+        }
+    }
+
+    #[test]
+    fn test_theta_drift_slope_range() {
+        for domain in [
+            Domain::Code,
+            Domain::Medical,
+            Domain::Legal,
+            Domain::Creative,
+            Domain::Research,
+            Domain::General,
+        ] {
+            let t = DomainThresholds::new(domain);
+            assert!(
+                (0.001..=0.01).contains(&t.theta_drift_slope),
+                "{:?}: theta_drift_slope {} out of range [0.001, 0.01]",
+                domain,
+                t.theta_drift_slope
+            );
+        }
+    }
+
+    #[test]
+    fn test_theta_obsolescence_mid_monotonicity() {
+        for domain in [
+            Domain::Code,
+            Domain::Medical,
+            Domain::Legal,
+            Domain::Creative,
+            Domain::Research,
+            Domain::General,
+        ] {
+            let t = DomainThresholds::new(domain);
+            assert!(
+                t.theta_obsolescence_mid > t.theta_obsolescence_low,
+                "{:?}: mid {} should be > low {}",
+                domain,
+                t.theta_obsolescence_mid,
+                t.theta_obsolescence_low
+            );
+            assert!(
+                t.theta_obsolescence_mid < t.theta_obsolescence_high,
+                "{:?}: mid {} should be < high {}",
+                domain,
+                t.theta_obsolescence_mid,
+                t.theta_obsolescence_high
+            );
+        }
+    }
+
+    #[test]
+    fn test_drift_slope_inverse_strictness() {
+        let medical = DomainThresholds::new(Domain::Medical); // strictness=1.0
+        let creative = DomainThresholds::new(Domain::Creative); // strictness=0.2
+
+        // Stricter domains need smaller slope to trigger (more sensitive)
+        assert!(
+            medical.theta_drift_slope < creative.theta_drift_slope,
+            "Medical drift_slope {} should be < Creative drift_slope {}",
+            medical.theta_drift_slope,
+            creative.theta_drift_slope
+        );
+    }
+
+    #[test]
+    fn test_clamp_new_fields() {
+        let mut t = DomainThresholds::new(Domain::General);
+
+        // Set out of range
+        t.theta_obsolescence_mid = 0.0;
+        t.theta_drift_slope = 0.1;
+
+        t.clamp();
+
+        assert_eq!(t.theta_obsolescence_mid, 0.45);
+        assert_eq!(t.theta_drift_slope, 0.01);
+    }
+
+    #[test]
+    fn test_is_valid_fails_invalid_mid_below_range() {
+        let mut t = DomainThresholds::new(Domain::General);
+        t.theta_obsolescence_mid = 0.40; // Below min 0.45
+        assert!(!t.is_valid(), "Should fail for theta_obsolescence_mid below min");
+    }
+
+    #[test]
+    fn test_is_valid_fails_invalid_mid_monotonicity() {
+        let mut t = DomainThresholds::new(Domain::General);
+        // Set mid >= high (violates monotonicity)
+        t.theta_obsolescence_mid = 0.75;
+        t.theta_obsolescence_high = 0.75;
+        assert!(!t.is_valid(), "Should fail for mid >= high");
+    }
+
+    #[test]
+    fn test_is_valid_fails_invalid_drift_slope() {
+        let mut t = DomainThresholds::new(Domain::General);
+        t.theta_drift_slope = 0.02; // Above max 0.01
+        assert!(!t.is_valid(), "Should fail for theta_drift_slope above max");
+    }
+
+    #[test]
+    fn test_blend_includes_new_fields_p2_007() {
+        let mut code = DomainThresholds::new(Domain::Code);
+        let creative = DomainThresholds::new(Domain::Creative);
+
+        let original_mid = code.theta_obsolescence_mid;
+        let original_slope = code.theta_drift_slope;
+
+        code.blend_with_similar(&creative, 0.5);
+
+        // Mid should have moved toward creative
+        assert!(
+            (code.theta_obsolescence_mid - original_mid).abs() > 0.001,
+            "Mid {} should have changed from {}",
+            code.theta_obsolescence_mid,
+            original_mid
+        );
+        // Slope should have moved toward creative (higher)
+        assert!(
+            code.theta_drift_slope > original_slope,
+            "Drift slope {} should have increased from {}",
+            code.theta_drift_slope,
+            original_slope
+        );
     }
 }

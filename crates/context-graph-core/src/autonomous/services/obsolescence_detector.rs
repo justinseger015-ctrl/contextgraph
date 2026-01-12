@@ -13,11 +13,53 @@ use crate::autonomous::{
 /// Seconds per day constant for threshold calculations
 const SECONDS_PER_DAY: u64 = 86400;
 
-/// Default relevance threshold for low relevance detection
+/// Default relevance threshold for low relevance detection.
+///
+/// # Migration Notice (TASK-ATC-P2-007)
+///
+/// This constant is scheduled for removal. Use `AutonomousThresholds::obsolescence_low`
+/// from the ATC system instead:
+///
+/// ```rust,ignore
+/// use context_graph_core::autonomous::AutonomousThresholds;
+/// let thresholds = AutonomousThresholds::default_general();
+/// let relevance_threshold = thresholds.obsolescence_low; // = 0.30
+/// ```
+///
+/// For domain-aware thresholds:
+/// ```rust,ignore
+/// use context_graph_core::atc::{AdaptiveThresholdCalibration, Domain};
+/// let atc = AdaptiveThresholdCalibration::new();
+/// let thresholds = AutonomousThresholds::from_atc(&atc, Domain::Medical).unwrap();
+/// ```
 const DEFAULT_RELEVANCE_THRESHOLD: f32 = 0.3;
 
-/// Confidence thresholds for action recommendations
+/// High confidence threshold for action recommendations.
+///
+/// # Migration Notice (TASK-ATC-P2-007)
+///
+/// This constant is scheduled for removal. Use `AutonomousThresholds::obsolescence_high`
+/// from the ATC system instead:
+///
+/// ```rust,ignore
+/// use context_graph_core::autonomous::AutonomousThresholds;
+/// let thresholds = AutonomousThresholds::default_general();
+/// let high_confidence = thresholds.obsolescence_high; // = 0.80
+/// ```
 const HIGH_CONFIDENCE_THRESHOLD: f32 = 0.8;
+
+/// Medium confidence threshold for action recommendations.
+///
+/// # Migration Notice (TASK-ATC-P2-007)
+///
+/// This constant is scheduled for removal. Use `AutonomousThresholds::obsolescence_mid`
+/// from the ATC system instead:
+///
+/// ```rust,ignore
+/// use context_graph_core::autonomous::AutonomousThresholds;
+/// let thresholds = AutonomousThresholds::default_general();
+/// let medium_confidence = thresholds.obsolescence_mid; // = 0.60
+/// ```
 const MEDIUM_CONFIDENCE_THRESHOLD: f32 = 0.6;
 
 /// ObsolescenceDetector evaluates goals to determine if they are no longer relevant.

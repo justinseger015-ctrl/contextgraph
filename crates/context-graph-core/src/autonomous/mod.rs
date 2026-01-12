@@ -19,6 +19,7 @@
 //! ## Logic Layer (Services)
 //! - `services` - Active logic services implementing NORTH-008 to NORTH-020
 
+pub mod autonomous_thresholds;
 pub mod bootstrap;
 pub mod curation;
 pub mod discovery;
@@ -28,6 +29,7 @@ pub mod services;
 pub mod thresholds;
 pub mod workflow;
 
+pub use autonomous_thresholds::{AutonomousThresholds, DriftLevel, ObsolescenceLevel};
 pub use bootstrap::*;
 pub use curation::*;
 pub use discovery::{
