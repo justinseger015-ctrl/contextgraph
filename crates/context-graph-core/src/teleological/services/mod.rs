@@ -27,7 +27,9 @@ pub mod tucker_decomposer;
 
 // Re-exports
 pub use correlation_extractor::CorrelationExtractor;
-pub use feedback_learner::FeedbackLearner;
+pub use feedback_learner::{
+    FeedbackEvent, FeedbackLearner, FeedbackLearnerConfig, FeedbackType, LearningResult,
+};
 pub use fusion_engine::FusionEngine;
 pub use group_aggregator::GroupAggregator;
 pub use meaning_pipeline::MeaningPipeline;

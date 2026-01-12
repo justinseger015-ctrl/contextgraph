@@ -29,7 +29,7 @@ pub mod clustering;
 pub mod entry;
 pub mod error;
 pub mod hnsw_purpose;
-pub mod query;
+pub mod query; // Now a directory module
 
 #[cfg(test)]
 mod tests;

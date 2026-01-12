@@ -83,7 +83,9 @@ pub use gap_detection::{
 pub use subgoal_discovery::{DiscoveryConfig, DiscoveryResult, MemoryCluster, SubGoalDiscovery};
 
 // NORTH-016: WeightAdjuster
-pub use weight_adjuster::{AdjustmentReport, WeightAdjuster, WeightAdjusterConfig};
+pub use weight_adjuster::{
+    AdjustmentReason, AdjustmentReport, WeightAdjuster, WeightAdjusterConfig,
+};
 
 // NORTH-017: ObsolescenceDetector
 pub use obsolescence_detector::ObsolescenceDetector;
@@ -99,5 +101,6 @@ pub use event_optimizer::{
 
 // NORTH-020: SelfHealingManager
 pub use self_healing_manager::{
-    HealingAction, HealingResult, HealthIssue, IssueSeverity, SelfHealingConfig, SelfHealingManager,
+    HealingAction, HealingResult, HealthIssue, IssueSeverity, SelfHealingConfig,
+    SelfHealingManager, SystemHealthState, SystemOperationalStatus,
 };

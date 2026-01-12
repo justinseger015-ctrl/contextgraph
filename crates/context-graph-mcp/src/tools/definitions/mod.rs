@@ -1,0 +1,56 @@
+//! Tool definitions organized by functional category.
+//!
+//! Each submodule provides tool definitions for a specific category of MCP tools.
+
+mod atc;
+mod autonomous;
+mod causal;
+mod core;
+mod dream;
+mod gwt;
+mod neuromod;
+mod steering;
+mod teleological;
+mod utl;
+
+use crate::tools::types::ToolDefinition;
+
+/// Get all tool definitions for the `tools/list` response.
+///
+/// Returns the complete list of MCP tools exposed by the Context Graph server.
+/// Currently returns 36 tools across 10 categories.
+pub fn get_tool_definitions() -> Vec<ToolDefinition> {
+    let mut tools = Vec::with_capacity(36);
+
+    // Core tools (6)
+    tools.extend(core::definitions());
+
+    // GWT tools (6)
+    tools.extend(gwt::definitions());
+
+    // UTL tools (1)
+    tools.extend(utl::definitions());
+
+    // ATC tools (3)
+    tools.extend(atc::definitions());
+
+    // Dream tools (4)
+    tools.extend(dream::definitions());
+
+    // Neuromod tools (2)
+    tools.extend(neuromod::definitions());
+
+    // Steering tools (1)
+    tools.extend(steering::definitions());
+
+    // Causal tools (1)
+    tools.extend(causal::definitions());
+
+    // Teleological tools (5)
+    tools.extend(teleological::definitions());
+
+    // Autonomous tools (7)
+    tools.extend(autonomous::definitions());
+
+    tools
+}
