@@ -26,9 +26,11 @@ mod classification;
 mod core;
 mod impls;
 mod serialization;
+mod thresholds;
 
 #[cfg(test)]
 mod tests;
 
-// Re-export the main type
+// Re-export the main types
 pub use self::core::JohariFingerprint;
+pub use self::thresholds::JohariThresholds;

@@ -6,6 +6,7 @@
 use crate::types::JohariQuadrant;
 
 use super::core::JohariFingerprint;
+use super::thresholds::JohariThresholds;
 use super::NUM_EMBEDDERS;
 
 impl JohariFingerprint {
@@ -26,19 +27,13 @@ impl JohariFingerprint {
     ///
     /// # Boundary Behavior
     /// At exactly threshold (0.5), treats as:
-    /// - entropy = 0.5 -> low entropy (< test uses >=)
-    /// - coherence = 0.5 -> low coherence (> test uses >)
+    /// - entropy = 0.5 -> high entropy (>= threshold)
+    /// - coherence = 0.5 -> low coherence (<= threshold)
+    ///
+    /// Uses `JohariThresholds::default_general()` for legacy compatibility.
     #[inline]
     pub fn classify_quadrant(entropy: f32, coherence: f32) -> JohariQuadrant {
-        let low_entropy = entropy < Self::ENTROPY_THRESHOLD;
-        let high_coherence = coherence > Self::COHERENCE_THRESHOLD;
-
-        match (low_entropy, high_coherence) {
-            (true, true) => JohariQuadrant::Open,     // Low S, High C
-            (true, false) => JohariQuadrant::Hidden,  // Low S, Low C
-            (false, false) => JohariQuadrant::Blind,  // High S, Low C
-            (false, true) => JohariQuadrant::Unknown, // High S, High C
-        }
+        JohariThresholds::default_general().classify(entropy, coherence)
     }
 
     /// Get dominant (highest weight) quadrant for an embedder.

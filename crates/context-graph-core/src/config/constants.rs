@@ -105,12 +105,20 @@ pub mod johari {
     ///
     /// Constitution: `utl.johari` (all quadrant definitions use 0.5)
     /// This is the midpoint that separates high/low for both ΔS and ΔC.
+    #[deprecated(
+        since = "0.5.0",
+        note = "Use JohariThresholds from types::fingerprint::johari instead"
+    )]
     pub const BOUNDARY: f32 = 0.5;
 
     /// Default blind spot detection threshold.
     ///
     /// Constitution: `utl.johari.Blind` - when external signals exceed this,
     /// a memory may be in a blind spot (known by others, not by self).
+    #[deprecated(
+        since = "0.5.0",
+        note = "Use JohariThresholds.blind_spot from types::fingerprint::johari instead"
+    )]
     pub const BLIND_SPOT_THRESHOLD: f32 = 0.5;
 }
 
@@ -206,8 +214,11 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_johari_boundary_matches_constitution() {
         // Johari boundary is 0.5 per constitution.yaml utl.johari
+        // NOTE: These constants are deprecated; use JohariThresholds instead.
+        // This test is kept to ensure backwards compatibility.
         assert!(
             (johari::BOUNDARY - 0.5).abs() < f32::EPSILON,
             "BOUNDARY must be 0.5 per constitution"

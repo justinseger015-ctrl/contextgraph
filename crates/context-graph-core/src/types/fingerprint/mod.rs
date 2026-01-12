@@ -56,7 +56,7 @@ pub use purpose::{AlignmentThreshold, PurposeVector};
 pub use evolution::{EvolutionTrigger, PurposeSnapshot};
 
 // Re-export Johari types (TASK-F003) ✅
-pub use johari::JohariFingerprint;
+pub use johari::{JohariFingerprint, JohariThresholds};
 
 // Re-export TeleologicalFingerprint (TASK-F002)
 pub use teleological::TeleologicalFingerprint;

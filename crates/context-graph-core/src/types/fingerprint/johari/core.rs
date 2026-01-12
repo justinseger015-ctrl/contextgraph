@@ -44,9 +44,17 @@ pub struct JohariFingerprint {
 
 impl JohariFingerprint {
     /// Entropy threshold for Johari classification (from constitution.yaml line 192)
+    #[deprecated(
+        since = "0.5.0",
+        note = "Use JohariThresholds.entropy from types::fingerprint::johari instead"
+    )]
     pub const ENTROPY_THRESHOLD: f32 = 0.5;
 
     /// Coherence threshold for Johari classification (from constitution.yaml line 193)
+    #[deprecated(
+        since = "0.5.0",
+        note = "Use JohariThresholds.coherence from types::fingerprint::johari instead"
+    )]
     pub const COHERENCE_THRESHOLD: f32 = 0.5;
 
     /// Quadrant index mapping (matches JohariQuadrant enum order)

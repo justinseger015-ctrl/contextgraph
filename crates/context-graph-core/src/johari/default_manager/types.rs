@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::config::constants::johari as johari_constants;
 use crate::traits::TeleologicalMemoryStore;
+use crate::types::fingerprint::JohariThresholds;
 use crate::types::JohariTransition;
 
 /// Default implementation using TeleologicalMemoryStore.
@@ -21,7 +21,7 @@ pub struct DefaultJohariManager<S: TeleologicalMemoryStore> {
 
     /// Threshold for blind spot detection.
     ///
-    /// Constitution: `utl.johari.Blind` - default 0.5 via `johari_constants::BLIND_SPOT_THRESHOLD`
+    /// Constitution: `utl.johari.Blind` - default 0.5 via `JohariThresholds::default_general().blind_spot`
     pub(crate) blind_spot_threshold: f32,
 
     /// Maximum transition history per memory (default: 100)
@@ -38,7 +38,7 @@ impl<S: TeleologicalMemoryStore> DefaultJohariManager<S> {
     pub fn new(store: Arc<S>) -> Self {
         Self {
             store,
-            blind_spot_threshold: johari_constants::BLIND_SPOT_THRESHOLD,
+            blind_spot_threshold: JohariThresholds::default_general().blind_spot,
             max_history_per_memory: 100,
             transitions: Arc::new(RwLock::new(Vec::new())),
         }
@@ -79,7 +79,7 @@ pub struct DynDefaultJohariManager {
 
     /// Threshold for blind spot detection.
     ///
-    /// Constitution: `utl.johari.Blind` - default 0.5 via `johari_constants::BLIND_SPOT_THRESHOLD`
+    /// Constitution: `utl.johari.Blind` - default 0.5 via `JohariThresholds::default_general().blind_spot`
     pub(crate) blind_spot_threshold: f32,
 
     /// Maximum transition history per memory (default: 100)
@@ -96,7 +96,7 @@ impl DynDefaultJohariManager {
     pub fn new(store: Arc<dyn TeleologicalMemoryStore>) -> Self {
         Self {
             store,
-            blind_spot_threshold: johari_constants::BLIND_SPOT_THRESHOLD,
+            blind_spot_threshold: JohariThresholds::default_general().blind_spot,
             max_history_per_memory: 100,
             transitions: Arc::new(RwLock::new(Vec::new())),
         }
