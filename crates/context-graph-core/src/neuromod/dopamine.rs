@@ -34,6 +34,10 @@ pub const DA_DECAY_RATE: f32 = 0.05;
 /// Dopamine increase per workspace entry event
 pub const DA_WORKSPACE_INCREMENT: f32 = 0.2;
 
+/// Dopamine adjustment sensitivity for goal progress events.
+/// Maximum reward (+1.0) increases DA by 0.1; maximum penalty (-1.0) decreases by 0.1.
+pub const DA_GOAL_SENSITIVITY: f32 = 0.1;
+
 /// Dopamine level state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DopamineLevel {
@@ -136,6 +140,53 @@ impl DopamineModulator {
     /// Set dopamine value directly (for testing or initialization)
     pub fn set_value(&mut self, value: f32) {
         self.level.value = value.clamp(DA_MIN, DA_MAX);
+    }
+
+    /// Handle goal progress event from steering subsystem.
+    ///
+    /// Adjusts dopamine based on goal achievement delta:
+    /// - Positive delta (goal progress): DA increases
+    /// - Negative delta (goal regression): DA decreases
+    ///
+    /// # Arguments
+    /// * `delta` - Goal progress delta from SteeringReward.value [-1, 1]
+    ///
+    /// # Effects
+    /// * DA adjusted by delta * DA_GOAL_SENSITIVITY
+    /// * Clamped to [DA_MIN, DA_MAX]
+    /// * Updates last_trigger if adjustment is non-zero
+    pub fn on_goal_progress(&mut self, delta: f32) {
+        // Guard against NaN - FAIL FAST with warning
+        if delta.is_nan() {
+            tracing::warn!("on_goal_progress received NaN delta - skipping adjustment");
+            return;
+        }
+
+        // Calculate adjustment
+        let adjustment = delta * DA_GOAL_SENSITIVITY;
+
+        // Skip if adjustment is effectively zero (avoids unnecessary timestamp updates)
+        if adjustment.abs() <= f32::EPSILON {
+            return;
+        }
+
+        // Store old value for logging
+        let old_value = self.level.value;
+
+        // Apply adjustment with clamping
+        self.level.value = (self.level.value + adjustment).clamp(DA_MIN, DA_MAX);
+
+        // Update trigger timestamp
+        self.level.last_trigger = Some(chrono::Utc::now());
+
+        // Log the adjustment
+        tracing::debug!(
+            delta = delta,
+            adjustment = adjustment,
+            old_value = old_value,
+            new_value = self.level.value,
+            "Dopamine adjusted on goal progress"
+        );
     }
 }
 
@@ -243,5 +294,207 @@ mod tests {
 
         assert!((modulator.value() - DA_BASELINE).abs() < f32::EPSILON);
         assert!(modulator.level().last_trigger.is_none());
+    }
+
+    // =========================================================================
+    // on_goal_progress tests (TASK-NEURO-P2-001)
+    // =========================================================================
+
+    #[test]
+    fn test_dopamine_on_goal_progress_positive() {
+        let mut modulator = DopamineModulator::new();
+        let initial = modulator.value();
+
+        modulator.on_goal_progress(0.5);
+
+        let expected = initial + 0.5 * DA_GOAL_SENSITIVITY;
+        assert!(
+            (modulator.value() - expected).abs() < f32::EPSILON,
+            "Expected {}, got {}",
+            expected,
+            modulator.value()
+        );
+    }
+
+    #[test]
+    fn test_dopamine_on_goal_progress_negative() {
+        let mut modulator = DopamineModulator::new();
+        let initial = modulator.value();
+
+        modulator.on_goal_progress(-0.5);
+
+        let expected = initial - 0.5 * DA_GOAL_SENSITIVITY;
+        assert!(
+            (modulator.value() - expected).abs() < f32::EPSILON,
+            "Expected {}, got {}",
+            expected,
+            modulator.value()
+        );
+    }
+
+    #[test]
+    fn test_dopamine_on_goal_progress_ceiling_clamp() {
+        let mut modulator = DopamineModulator::new();
+        modulator.set_value(DA_MAX);
+
+        modulator.on_goal_progress(1.0);
+
+        assert!(
+            (modulator.value() - DA_MAX).abs() < f32::EPSILON,
+            "Should clamp to DA_MAX={}, got {}",
+            DA_MAX,
+            modulator.value()
+        );
+    }
+
+    #[test]
+    fn test_dopamine_on_goal_progress_floor_clamp() {
+        let mut modulator = DopamineModulator::new();
+        modulator.set_value(DA_MIN);
+
+        modulator.on_goal_progress(-1.0);
+
+        assert!(
+            (modulator.value() - DA_MIN).abs() < f32::EPSILON,
+            "Should clamp to DA_MIN={}, got {}",
+            DA_MIN,
+            modulator.value()
+        );
+    }
+
+    #[test]
+    fn test_dopamine_on_goal_progress_zero_delta() {
+        let mut modulator = DopamineModulator::new();
+        let initial = modulator.value();
+        let initial_trigger = modulator.level().last_trigger.clone();
+
+        modulator.on_goal_progress(0.0);
+
+        assert!(
+            (modulator.value() - initial).abs() < f32::EPSILON,
+            "Zero delta should not change value"
+        );
+        assert_eq!(
+            modulator.level().last_trigger, initial_trigger,
+            "Zero delta should not update last_trigger"
+        );
+    }
+
+    #[test]
+    fn test_dopamine_on_goal_progress_updates_trigger() {
+        let mut modulator = DopamineModulator::new();
+        assert!(
+            modulator.level().last_trigger.is_none(),
+            "Fresh modulator should have no last_trigger"
+        );
+
+        modulator.on_goal_progress(0.5);
+
+        assert!(
+            modulator.level().last_trigger.is_some(),
+            "Non-zero delta should set last_trigger"
+        );
+    }
+
+    #[test]
+    fn test_dopamine_on_goal_progress_nan_handling() {
+        let mut modulator = DopamineModulator::new();
+        let initial = modulator.value();
+
+        modulator.on_goal_progress(f32::NAN);
+
+        assert!(
+            (modulator.value() - initial).abs() < f32::EPSILON,
+            "NaN delta should not change value"
+        );
+    }
+
+    // =========================================================================
+    // Full State Verification (FSV) tests (TASK-NEURO-P2-001)
+    // =========================================================================
+
+    #[test]
+    fn test_fsv_goal_progress_source_of_truth() {
+        // === STEP 1: Establish baseline state ===
+        let mut modulator = DopamineModulator::new();
+
+        println!("=== BEFORE STATE ===");
+        println!("  value: {}", modulator.level().value);
+        println!("  last_trigger: {:?}", modulator.level().last_trigger);
+
+        let before_value = modulator.level().value;
+        let before_trigger = modulator.level().last_trigger.clone();
+
+        // === STEP 2: Execute the operation ===
+        modulator.on_goal_progress(0.5);
+
+        // === STEP 3: Read Source of Truth DIRECTLY ===
+        println!("=== AFTER STATE (Source of Truth) ===");
+        println!("  value: {}", modulator.level().value);
+        println!("  last_trigger: {:?}", modulator.level().last_trigger);
+
+        let after_value = modulator.level().value;
+        let after_trigger = modulator.level().last_trigger.clone();
+
+        // === STEP 4: Verify changes in Source of Truth ===
+        let expected_delta = 0.5 * DA_GOAL_SENSITIVITY; // 0.05
+        let actual_delta = after_value - before_value;
+
+        println!("=== VERIFICATION ===");
+        println!("  expected_delta: {}", expected_delta);
+        println!("  actual_delta: {}", actual_delta);
+        println!("  trigger_updated: {}", after_trigger != before_trigger);
+
+        assert!(
+            (actual_delta - expected_delta).abs() < f32::EPSILON,
+            "Source of Truth verification FAILED: expected delta {}, got {}",
+            expected_delta,
+            actual_delta
+        );
+
+        assert!(
+            after_trigger.is_some() && after_trigger != before_trigger,
+            "Source of Truth verification FAILED: last_trigger should be updated"
+        );
+    }
+
+    #[test]
+    fn test_edge_case_zero_input() {
+        let mut modulator = DopamineModulator::new();
+        println!(
+            "BEFORE: value={}, trigger={:?}",
+            modulator.value(),
+            modulator.level().last_trigger
+        );
+        modulator.on_goal_progress(0.0);
+        println!(
+            "AFTER:  value={}, trigger={:?}",
+            modulator.value(),
+            modulator.level().last_trigger
+        );
+        // Verify: value unchanged, trigger unchanged
+        assert!((modulator.value() - DA_BASELINE).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_edge_case_maximum_limit() {
+        let mut modulator = DopamineModulator::new();
+        modulator.set_value(DA_MAX - 0.01); // Just below max
+        println!("BEFORE: value={}", modulator.value());
+        modulator.on_goal_progress(1.0); // Attempt to exceed max
+        println!("AFTER:  value={}", modulator.value());
+        // Verify: value clamped to DA_MAX (5.0)
+        assert!((modulator.value() - DA_MAX).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_edge_case_invalid_nan() {
+        let mut modulator = DopamineModulator::new();
+        let before = modulator.value();
+        println!("BEFORE: value={}", before);
+        modulator.on_goal_progress(f32::NAN);
+        println!("AFTER:  value={}", modulator.value());
+        // Verify: value unchanged
+        assert!((modulator.value() - before).abs() < f32::EPSILON);
     }
 }

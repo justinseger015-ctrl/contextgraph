@@ -286,6 +286,17 @@ impl NeuromodulationManager {
         self.serotonin.on_negative_event(magnitude);
     }
 
+    /// Handle goal progress from steering subsystem.
+    ///
+    /// Propagates goal achievement/regression to dopamine modulator.
+    /// This provides direct neurochemical response to steering feedback.
+    ///
+    /// # Arguments
+    /// * `delta` - Goal progress delta from SteeringReward.value [-1, 1]
+    pub fn on_goal_progress(&mut self, delta: f32) {
+        self.dopamine.on_goal_progress(delta);
+    }
+
     // Parameter accessors
 
     /// Get Hopfield beta (dopamine)
@@ -518,5 +529,45 @@ mod tests {
             timestamp: Instant::now(),
         };
         assert!(state_high.is_learning_elevated());
+    }
+
+    // =========================================================================
+    // on_goal_progress tests (TASK-NEURO-P2-001)
+    // =========================================================================
+
+    #[test]
+    fn test_manager_on_goal_progress_positive() {
+        use crate::neuromod::dopamine::DA_GOAL_SENSITIVITY;
+
+        let mut manager = NeuromodulationManager::new();
+        let initial = manager.get_hopfield_beta();
+
+        manager.on_goal_progress(0.8);
+
+        let expected = initial + 0.8 * DA_GOAL_SENSITIVITY;
+        assert!(
+            (manager.get_hopfield_beta() - expected).abs() < f32::EPSILON,
+            "Expected {}, got {}",
+            expected,
+            manager.get_hopfield_beta()
+        );
+    }
+
+    #[test]
+    fn test_manager_on_goal_progress_negative() {
+        use crate::neuromod::dopamine::DA_GOAL_SENSITIVITY;
+
+        let mut manager = NeuromodulationManager::new();
+        let initial = manager.get_hopfield_beta();
+
+        manager.on_goal_progress(-0.6);
+
+        let expected = initial - 0.6 * DA_GOAL_SENSITIVITY;
+        assert!(
+            (manager.get_hopfield_beta() - expected).abs() < f32::EPSILON,
+            "Expected {}, got {}",
+            expected,
+            manager.get_hopfield_beta()
+        );
     }
 }

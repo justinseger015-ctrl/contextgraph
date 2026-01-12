@@ -61,7 +61,9 @@ pub mod state;
 
 // Re-exports for convenience
 pub use acetylcholine::{AcetylcholineProvider, ACH_BASELINE, ACH_MAX};
-pub use dopamine::{DopamineLevel, DopamineModulator, DA_BASELINE, DA_MAX, DA_MIN};
+pub use dopamine::{
+    DopamineLevel, DopamineModulator, DA_BASELINE, DA_GOAL_SENSITIVITY, DA_MAX, DA_MIN,
+};
 pub use noradrenaline::{NoradrenalineLevel, NoradrenalineModulator, NE_BASELINE, NE_MAX, NE_MIN};
 pub use serotonin::{
     SerotoninLevel, SerotoninModulator, NUM_EMBEDDING_SPACES, SEROTONIN_BASELINE, SEROTONIN_MAX,
