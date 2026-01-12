@@ -1,6 +1,5 @@
 //! Persistence and legacy format tests.
 
-use crate::index::config::EmbedderIndex;
 use crate::index::hnsw_impl::{HnswMultiSpaceIndex, RealHnswIndex};
 use crate::index::manager::MultiSpaceIndexManager;
 use crate::types::fingerprint::{SemanticFingerprint, SparseVector};

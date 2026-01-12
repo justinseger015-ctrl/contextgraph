@@ -18,9 +18,3 @@ mod helpers;
 mod fsv_tests;
 mod edge_cases;
 mod weight_constraint_tests;
-
-// Re-export all test items for backwards compatibility
-pub use helpers::*;
-pub use fsv_tests::*;
-pub use edge_cases::*;
-pub use weight_constraint_tests::*;

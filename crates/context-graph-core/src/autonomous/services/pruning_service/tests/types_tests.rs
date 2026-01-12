@@ -1,6 +1,6 @@
 //! Tests for PruningService types
 
-use chrono::{Duration, Utc};
+use chrono::Utc;
 
 use crate::autonomous::curation::MemoryId;
 use crate::autonomous::services::pruning_service::types::{

@@ -38,5 +38,3 @@ mod drift_check;
 mod north_star_update;
 mod full_state_verification;
 
-// Re-export helpers for use by other test modules
-pub(crate) use helpers::get_goal_ids_from_hierarchy;

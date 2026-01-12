@@ -1,7 +1,6 @@
 //! Tests for SubGoalDiscovery service.
 
 use crate::autonomous::bootstrap::GoalId;
-use crate::autonomous::curation::MemoryId;
 use crate::autonomous::evolution::{GoalEvolutionConfig, GoalLevel, SubGoalCandidate};
 
 use super::super::cluster::MemoryCluster;

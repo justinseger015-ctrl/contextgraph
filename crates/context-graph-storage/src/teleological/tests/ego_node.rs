@@ -3,7 +3,6 @@
 //! TASK-GWT-P1-001: EGO_NODE Persistence Tests
 
 use crate::teleological::{RocksDbTeleologicalStore, serialization};
-use super::helpers::create_real_fingerprint;
 use context_graph_core::gwt::ego_node::{PurposeSnapshot as EgoPurposeSnapshot, SelfEgoNode};
 use chrono::Utc;
 use uuid::Uuid;

@@ -9,7 +9,6 @@ use crate::autonomous::{AlignmentBucket, RetrievalStats};
 
 use super::learner::ThresholdLearner;
 use super::types::{NUM_EMBEDDERS, RECALIBRATION_CHECK_INTERVAL_SECS};
-use crate::autonomous::AdaptiveThresholdConfig;
 
 #[test]
 fn test_should_recalibrate_after_observations() {

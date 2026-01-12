@@ -6,6 +6,3 @@
 mod fixtures;
 mod integration;
 mod unit;
-
-// Re-export fixtures for use in submodules
-pub(crate) use fixtures::*;

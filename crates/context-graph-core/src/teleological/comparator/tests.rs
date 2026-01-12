@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::teleological::comparator::{BatchComparator, ComparisonResult, TeleologicalComparator};
+    use crate::teleological::comparator::{BatchComparator, TeleologicalComparator};
     use crate::teleological::{ComparisonValidationError, MatrixSearchConfig, SearchStrategy, SynergyMatrix};
     use crate::types::fingerprint::{SparseVector, E1_DIM, E2_DIM, E3_DIM, E4_DIM, E5_DIM, E7_DIM, E8_DIM, E9_DIM, E10_DIM, E11_DIM};
     use crate::types::SemanticFingerprint;

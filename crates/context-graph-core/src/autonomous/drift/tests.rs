@@ -9,7 +9,7 @@ use crate::types::SemanticFingerprint;
 use super::detector::TeleologicalDriftDetector;
 use super::error::DriftError;
 use super::history::{DriftHistory, DriftHistoryEntry};
-use super::types::{DriftLevel, DriftThresholds, DriftTrend, NUM_EMBEDDERS};
+use super::types::{DriftLevel, DriftThresholds, DriftTrend};
 
 // ============================================
 // TEST FIXTURE HELPERS

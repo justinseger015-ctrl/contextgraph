@@ -54,11 +54,6 @@ use crate::gwt::ego_node::SelfEgoNode;
 use crate::traits::TeleologicalStorageBackend;
 use crate::types::fingerprint::TeleologicalFingerprint;
 
-// Re-export similarity functions for internal use
-pub(crate) use similarity::{
-    compute_late_interaction_score, compute_semantic_scores, cosine_similarity,
-    get_dominant_quadrant,
-};
 
 /// In-memory implementation of TeleologicalMemoryStore.
 ///

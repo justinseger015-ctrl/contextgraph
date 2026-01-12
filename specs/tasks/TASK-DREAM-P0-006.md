@@ -9,69 +9,115 @@
 | **Layer** | 3 (Surface/Integration) |
 | **Priority** | P0 - Critical |
 | **Effort** | 4 hours |
-| **Dependencies** | TASK-DREAM-P0-003, TASK-DREAM-P0-004, TASK-DREAM-P0-005 |
+| **Dependencies** | TASK-DREAM-P0-003 (HebbianEngine), TASK-DREAM-P0-004 (HyperbolicExplorer), TASK-DREAM-P0-005 (TriggerManager) |
 | **Blocks** | None (Final task in chain) |
+
+---
+
+## CRITICAL: Current State Audit (2026-01-12)
+
+### Files That ALREADY EXIST
+
+| File | Status | Key Exports |
+|------|--------|-------------|
+| `dream/mod.rs` | EXISTS | `WakeReason` enum, constants module, all re-exports |
+| `dream/controller.rs` | EXISTS | `DreamController`, `DreamState`, `DreamReport`, `DreamStatus` |
+| `dream/triggers.rs` | EXISTS | `TriggerManager`, `GpuMonitor`, `EntropyCalculator` |
+| `dream/types.rs` | EXISTS | `ExtendedTriggerReason`, `GpuTriggerState`, `EntropyWindow`, etc. |
+| `dream/hebbian.rs` | EXISTS | `HebbianEngine`, `EdgeUpdate`, `HebbianUpdateResult` |
+| `dream/hyperbolic_walk.rs` | EXISTS | `HyperbolicExplorer`, `DiscoveredBlindSpot`, `ExplorationResult` |
+
+### Files That DO NOT EXIST (Must Create)
+
+| File | Purpose |
+|------|---------|
+| `dream/wake_controller.rs` | Fast wake interruption with <100ms latency guarantee |
+| `dream/mcp_events.rs` | MCP event definitions for GWT workspace integration |
+
+### Key Types Already Available
+
+```rust
+// From mod.rs - WakeReason already exists
+pub enum WakeReason {
+    ExternalQuery,
+    GpuOverBudget,
+    CycleComplete,
+    ManualAbort,
+    ResourcePressure,
+    Error,
+}
+
+// From triggers.rs - GpuMonitor already exists
+pub struct GpuMonitor {
+    simulated_usage: f32,
+    use_simulated: bool,
+}
+
+// From types.rs - ExtendedTriggerReason already exists
+pub enum ExtendedTriggerReason {
+    IdleTimeout, HighEntropy, GpuOverload, MemoryPressure, Manual, Scheduled,
+}
+```
+
+### Current DreamController Structure (controller.rs)
+
+The existing `DreamController` has:
+- `interrupt_flag: Arc<AtomicBool>` - Basic interrupt mechanism
+- `abort()` method - Returns wake latency
+- GPU budget checking via `check_gpu_budget()`
+- BUT lacks dedicated `WakeController` with formal state machine
 
 ---
 
 ## 1. Objective
 
-Implement the Wake Controller for managing dream cycle interruption with guaranteed <100ms latency, GPU budget enforcement during dreams, and MCP event integration for broadcasting dream state to the workspace.
-
-This task completes the Dream Layer by:
-1. Implementing fast wake transition (<100ms) per Constitution requirement
-2. Enforcing GPU budget (<30%) during dream cycles
-3. Wiring all dream events to MCP for GWT workspace integration
-4. Integrating all components into DreamController
+Implement dedicated `WakeController` for managing dream cycle interruption with:
+1. Guaranteed <100ms wake latency (Constitution requirement)
+2. GPU budget enforcement (<30%) during dreams
+3. MCP event broadcasting for GWT workspace integration
+4. Formal state machine for wake transitions
 
 ---
 
-## 2. Input Context Files
+## 2. Constitution Reference
+
+From `docs2/constitution.yaml`:
 
 ```yaml
-must_read:
-  - path: crates/context-graph-core/src/dream/controller.rs
-    purpose: Existing DreamController for integration
-  - path: crates/context-graph-core/src/dream/nrem.rs
-    purpose: NREM phase to wire with Hebbian engine
-  - path: crates/context-graph-core/src/dream/rem.rs
-    purpose: REM phase to wire with hyperbolic explorer
-  - path: crates/context-graph-core/src/dream/scheduler.rs
-    purpose: Scheduler to wire with trigger manager
-  - path: crates/context-graph-core/src/dream/mod.rs
-    purpose: Dream module constants and types
+dream:
+  constraints:
+    wake: "<100ms"        # Line 273 - MANDATORY latency guarantee
+    gpu: "<30%"           # Line 273 - Budget during dream
+    abort_on_query: true  # Line 273 - Immediate wake on external query
 
-should_read:
-  - path: crates/context-graph-mcp/src/workspace/broadcaster.rs
-    purpose: MCP broadcasting interface (if exists)
-  - path: crates/context-graph-core/src/gwt/mod.rs
-    purpose: GWT integration points
+perf:
+  latency:
+    dream_wake: "<100ms"  # Line 130 - Performance budget
 ```
 
 ---
 
 ## 3. Files to Create/Modify
 
-### 3.1 Create: `crates/context-graph-core/src/dream/wake_controller.rs`
+### 3.1 CREATE: `crates/context-graph-core/src/dream/wake_controller.rs`
 
 ```rust
 //! Wake Controller - Fast Dream Interruption System
 //!
 //! Manages wake transitions with guaranteed <100ms latency as required by
-//! Constitution Section dream.wake. Provides resource monitoring and
-//! clean abort handling.
+//! Constitution Section dream.constraints.wake.
 //!
 //! ## Constitution Reference
 //!
-//! - wake: <100ms latency
-//! - gpu: <30% usage during dream
-//! - abort_on_query: true
+//! - wake: <100ms latency (docs2/constitution.yaml line 273)
+//! - gpu: <30% usage during dream (docs2/constitution.yaml line 273)
+//! - abort_on_query: true (docs2/constitution.yaml line 273)
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::watch;
 use tracing::{debug, error, info, warn};
@@ -83,7 +129,7 @@ use super::WakeReason;
 /// Error types for wake controller operations.
 #[derive(Debug, Error)]
 pub enum WakeError {
-    #[error("Wake latency exceeded: {actual_ms}ms > {max_ms}ms")]
+    #[error("Wake latency exceeded: {actual_ms}ms > {max_ms}ms (Constitution violation)")]
     LatencyViolation { actual_ms: u64, max_ms: u64 },
 
     #[error("GPU budget exceeded during dream: {usage:.1}% > {max:.1}%")]
@@ -96,8 +142,8 @@ pub enum WakeError {
     NotInitialized,
 }
 
-/// Wake controller state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Wake controller state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WakeState {
     /// Controller idle, no dream active
     Idle,
@@ -128,10 +174,16 @@ pub struct ResourceSnapshot {
 /// 1. Atomic interrupt flags checked at each processing step
 /// 2. Pre-allocated cleanup state
 /// 3. Non-blocking signal propagation
+///
+/// # Constitution Compliance
+///
+/// - Wake latency: <100ms (enforced, logged on violation)
+/// - GPU budget: <30% (monitored, triggers wake on violation)
+/// - Abort on query: true (external query -> immediate wake)
 #[derive(Debug)]
 pub struct WakeController {
     /// Current state
-    state: Arc<RwLock<WakeState>>,
+    state: Arc<std::sync::RwLock<WakeState>>,
 
     /// Interrupt flag (shared with dream phases)
     interrupt_flag: Arc<AtomicBool>,
@@ -141,16 +193,16 @@ pub struct WakeController {
     wake_receiver: watch::Receiver<Option<WakeReason>>,
 
     /// Wake start time (for latency measurement)
-    wake_start: Arc<RwLock<Option<Instant>>>,
+    wake_start: Arc<std::sync::RwLock<Option<Instant>>>,
 
     /// Wake completion time
-    wake_complete: Arc<RwLock<Option<Instant>>>,
+    wake_complete: Arc<std::sync::RwLock<Option<Instant>>>,
 
     /// Maximum allowed latency (Constitution: <100ms)
     max_latency: Duration,
 
     /// GPU monitor for budget enforcement
-    gpu_monitor: Arc<RwLock<GpuMonitor>>,
+    gpu_monitor: Arc<std::sync::RwLock<GpuMonitor>>,
 
     /// Maximum GPU usage during dream (Constitution: 30%)
     max_gpu_usage: f32,
@@ -158,7 +210,7 @@ pub struct WakeController {
     /// GPU check interval
     gpu_check_interval: Duration,
 
-    /// Last GPU check time
+    /// Last GPU check time (millis since process start)
     last_gpu_check: Arc<AtomicU64>,
 
     /// Wake count for statistics
@@ -174,14 +226,14 @@ impl WakeController {
         let (wake_sender, wake_receiver) = watch::channel(None);
 
         Self {
-            state: Arc::new(RwLock::new(WakeState::Idle)),
+            state: Arc::new(std::sync::RwLock::new(WakeState::Idle)),
             interrupt_flag: Arc::new(AtomicBool::new(false)),
             wake_sender,
             wake_receiver,
-            wake_start: Arc::new(RwLock::new(None)),
-            wake_complete: Arc::new(RwLock::new(None)),
+            wake_start: Arc::new(std::sync::RwLock::new(None)),
+            wake_complete: Arc::new(std::sync::RwLock::new(None)),
             max_latency: constants::MAX_WAKE_LATENCY,
-            gpu_monitor: Arc::new(RwLock::new(GpuMonitor::new())),
+            gpu_monitor: Arc::new(std::sync::RwLock::new(GpuMonitor::new())),
             max_gpu_usage: constants::MAX_GPU_USAGE,
             gpu_check_interval: Duration::from_millis(100),
             last_gpu_check: Arc::new(AtomicU64::new(0)),
@@ -197,15 +249,16 @@ impl WakeController {
 
     /// Prepare controller for a new dream cycle.
     pub fn prepare_for_dream(&self) {
-        let mut state = self.state.write();
+        let mut state = self.state.write().expect("Lock poisoned");
         *state = WakeState::Dreaming;
+        drop(state);
 
         // Reset interrupt flag
         self.interrupt_flag.store(false, Ordering::SeqCst);
 
         // Clear wake times
-        *self.wake_start.write() = None;
-        *self.wake_complete.write() = None;
+        *self.wake_start.write().expect("Lock poisoned") = None;
+        *self.wake_complete.write().expect("Lock poisoned") = None;
 
         // Send None to clear any previous wake reason
         let _ = self.wake_sender.send(None);
@@ -218,7 +271,7 @@ impl WakeController {
     /// Returns immediately after signaling; actual wake completes asynchronously.
     /// Measures latency from signal to completion.
     pub fn signal_wake(&self, reason: WakeReason) -> Result<(), WakeError> {
-        let current_state = *self.state.read();
+        let current_state = *self.state.read().expect("Lock poisoned");
 
         if current_state != WakeState::Dreaming {
             debug!("Wake signal ignored: not in dreaming state ({:?})", current_state);
@@ -227,13 +280,13 @@ impl WakeController {
 
         // Record wake start time
         {
-            let mut wake_start = self.wake_start.write();
+            let mut wake_start = self.wake_start.write().expect("Lock poisoned");
             *wake_start = Some(Instant::now());
         }
 
         // Update state
         {
-            let mut state = self.state.write();
+            let mut state = self.state.write().expect("Lock poisoned");
             *state = WakeState::Waking;
         }
 
@@ -256,19 +309,23 @@ impl WakeController {
     ///
     /// # Returns
     ///
-    /// The measured wake latency
+    /// The measured wake latency. Returns error if latency > 100ms.
+    ///
+    /// # Errors
+    ///
+    /// Returns `WakeError::LatencyViolation` if latency exceeds constitution limit.
     pub fn complete_wake(&self) -> Result<Duration, WakeError> {
         let wake_time = Instant::now();
 
         // Record completion time
         {
-            let mut wake_complete = self.wake_complete.write();
+            let mut wake_complete = self.wake_complete.write().expect("Lock poisoned");
             *wake_complete = Some(wake_time);
         }
 
         // Calculate latency
         let latency = {
-            let wake_start = self.wake_start.read();
+            let wake_start = self.wake_start.read().expect("Lock poisoned");
             wake_start
                 .map(|start| wake_time.duration_since(start))
                 .unwrap_or(Duration::ZERO)
@@ -278,7 +335,7 @@ impl WakeController {
         if latency > self.max_latency {
             self.latency_violations.fetch_add(1, Ordering::Relaxed);
             error!(
-                "Wake latency violation: {:?} > {:?}",
+                "CONSTITUTION VIOLATION: Wake latency {:?} > {:?} (max allowed)",
                 latency, self.max_latency
             );
             return Err(WakeError::LatencyViolation {
@@ -289,7 +346,7 @@ impl WakeController {
 
         // Update state
         {
-            let mut state = self.state.write();
+            let mut state = self.state.write().expect("Lock poisoned");
             *state = WakeState::Completing;
         }
 
@@ -302,12 +359,13 @@ impl WakeController {
 
     /// Reset controller to idle state.
     pub fn reset(&self) {
-        let mut state = self.state.write();
+        let mut state = self.state.write().expect("Lock poisoned");
         *state = WakeState::Idle;
+        drop(state);
 
         self.interrupt_flag.store(false, Ordering::SeqCst);
-        *self.wake_start.write() = None;
-        *self.wake_complete.write() = None;
+        *self.wake_start.write().expect("Lock poisoned") = None;
+        *self.wake_complete.write().expect("Lock poisoned") = None;
 
         let _ = self.wake_sender.send(None);
 
@@ -318,15 +376,18 @@ impl WakeController {
     ///
     /// Should be called periodically during dream.
     pub fn check_gpu_budget(&self) -> Result<(), WakeError> {
-        // Rate limit checks
-        let now_ms = Instant::now().elapsed().as_millis() as u64;
+        // Rate limit checks using monotonic counter
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
         let last_check = self.last_gpu_check.load(Ordering::Relaxed);
         if now_ms.saturating_sub(last_check) < self.gpu_check_interval.as_millis() as u64 {
             return Ok(());
         }
         self.last_gpu_check.store(now_ms, Ordering::Relaxed);
 
-        let usage = self.gpu_monitor.read().get_usage();
+        let usage = self.gpu_monitor.read().expect("Lock poisoned").get_usage();
 
         if usage > self.max_gpu_usage {
             warn!(
@@ -350,9 +411,9 @@ impl WakeController {
     /// Get current resource snapshot.
     pub fn get_resource_snapshot(&self) -> ResourceSnapshot {
         ResourceSnapshot {
-            gpu_usage: self.gpu_monitor.read().get_usage(),
-            memory_bytes: 0, // TODO: Implement memory tracking
-            cpu_usage: 0.0,  // TODO: Implement CPU tracking
+            gpu_usage: self.gpu_monitor.read().expect("Lock poisoned").get_usage(),
+            memory_bytes: 0, // Future: Implement memory tracking
+            cpu_usage: 0.0,  // Future: Implement CPU tracking
             timestamp: Instant::now(),
         }
     }
@@ -364,12 +425,12 @@ impl WakeController {
 
     /// Get current state.
     pub fn state(&self) -> WakeState {
-        *self.state.read()
+        *self.state.read().expect("Lock poisoned")
     }
 
     /// Check if currently dreaming.
     pub fn is_dreaming(&self) -> bool {
-        *self.state.read() == WakeState::Dreaming
+        *self.state.read().expect("Lock poisoned") == WakeState::Dreaming
     }
 
     /// Check if wake has been signaled.
@@ -389,7 +450,7 @@ impl WakeController {
 
     /// Update GPU usage for testing.
     pub fn set_gpu_usage(&self, usage: f32) {
-        self.gpu_monitor.write().set_simulated_usage(usage);
+        self.gpu_monitor.write().expect("Lock poisoned").set_simulated_usage(usage);
     }
 }
 
@@ -452,14 +513,13 @@ mod tests {
         let controller = WakeController::new();
         assert_eq!(controller.state(), WakeState::Idle);
         assert!(!controller.is_dreaming());
+        assert!(controller.max_latency.as_millis() < 100, "Must be <100ms per Constitution");
     }
 
     #[test]
     fn test_prepare_for_dream() {
         let controller = WakeController::new();
-
         controller.prepare_for_dream();
-
         assert_eq!(controller.state(), WakeState::Dreaming);
         assert!(controller.is_dreaming());
         assert!(!controller.is_wake_signaled());
@@ -468,10 +528,8 @@ mod tests {
     #[test]
     fn test_signal_wake() {
         let controller = WakeController::new();
-
         controller.prepare_for_dream();
         controller.signal_wake(WakeReason::ExternalQuery).unwrap();
-
         assert_eq!(controller.state(), WakeState::Waking);
         assert!(controller.is_wake_signaled());
     }
@@ -479,14 +537,12 @@ mod tests {
     #[test]
     fn test_wake_latency_success() {
         let controller = WakeController::new();
-
         controller.prepare_for_dream();
         controller.signal_wake(WakeReason::ExternalQuery).unwrap();
 
         // Complete immediately (should be well under 100ms)
         let latency = controller.complete_wake().unwrap();
-
-        assert!(latency < Duration::from_millis(100));
+        assert!(latency < Duration::from_millis(100), "Latency {:?} must be <100ms", latency);
         assert_eq!(controller.stats().wake_count, 1);
         assert_eq!(controller.stats().latency_violations, 0);
     }
@@ -494,12 +550,9 @@ mod tests {
     #[test]
     fn test_reset() {
         let controller = WakeController::new();
-
         controller.prepare_for_dream();
         controller.signal_wake(WakeReason::ManualAbort).unwrap();
-
         controller.reset();
-
         assert_eq!(controller.state(), WakeState::Idle);
         assert!(!controller.is_wake_signaled());
     }
@@ -509,7 +562,7 @@ mod tests {
         let controller = WakeController::new();
         controller.prepare_for_dream();
 
-        // Set GPU usage below budget
+        // Set GPU usage below budget (30%)
         controller.set_gpu_usage(0.2);
 
         // Reset rate limiter
@@ -589,7 +642,7 @@ mod tests {
 }
 ```
 
-### 3.2 Create: `crates/context-graph-core/src/dream/mcp_events.rs`
+### 3.2 CREATE: `crates/context-graph-core/src/dream/mcp_events.rs`
 
 ```rust
 //! MCP Event Integration for Dream Layer
@@ -599,10 +652,10 @@ mod tests {
 //!
 //! ## Event Categories
 //!
-//! 1. **Lifecycle Events**: dream_started, dream_completed
-//! 2. **Phase Events**: nrem_completed, rem_completed
-//! 3. **Discovery Events**: blind_spot_discovered, shortcut_created
-//! 4. **Resource Events**: gpu_budget_warning, wake_triggered
+//! 1. **Lifecycle Events**: DreamCycleStarted, DreamCycleCompleted
+//! 2. **Phase Events**: NremPhaseCompleted, RemPhaseCompleted
+//! 3. **Discovery Events**: BlindSpotDiscovered, ShortcutCreated
+//! 4. **Resource Events**: GpuBudgetWarning, WakeTriggered
 
 use std::time::Duration;
 
@@ -635,17 +688,9 @@ pub struct DreamCycleStarted {
 }
 
 impl DreamEvent for DreamCycleStarted {
-    fn event_type(&self) -> &'static str {
-        "dream_cycle_started"
-    }
-
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
-    }
+    fn event_type(&self) -> &'static str { "dream_cycle_started" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
 }
 
 impl DreamCycleStarted {
@@ -654,8 +699,18 @@ impl DreamCycleStarted {
             session_id: Uuid::new_v4(),
             trigger_reason: trigger_reason.to_string(),
             timestamp_ms: current_timestamp_ms(),
-            expected_nrem_duration_ms: 180_000, // 3 min
-            expected_rem_duration_ms: 120_000,  // 2 min
+            expected_nrem_duration_ms: 180_000, // 3 min per Constitution
+            expected_rem_duration_ms: 120_000,  // 2 min per Constitution
+        }
+    }
+
+    pub fn with_session_id(session_id: Uuid, trigger_reason: ExtendedTriggerReason) -> Self {
+        Self {
+            session_id,
+            trigger_reason: trigger_reason.to_string(),
+            timestamp_ms: current_timestamp_ms(),
+            expected_nrem_duration_ms: 180_000,
+            expected_rem_duration_ms: 120_000,
         }
     }
 }
@@ -673,16 +728,32 @@ pub struct NremPhaseCompleted {
 }
 
 impl DreamEvent for NremPhaseCompleted {
-    fn event_type(&self) -> &'static str {
-        "nrem_phase_completed"
-    }
+    fn event_type(&self) -> &'static str { "nrem_phase_completed" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
+}
 
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
+impl NremPhaseCompleted {
+    pub fn new(
+        session_id: Uuid,
+        memories_replayed: usize,
+        edges_strengthened: usize,
+        edges_pruned: usize,
+        duration: Duration,
+    ) -> Self {
+        Self {
+            session_id,
+            timestamp_ms: current_timestamp_ms(),
+            memories_replayed,
+            edges_strengthened,
+            edges_pruned,
+            duration_ms: duration.as_millis() as u64,
+            compression_ratio: if memories_replayed > 0 {
+                edges_pruned as f32 / memories_replayed as f32
+            } else {
+                0.0
+            },
+        }
     }
 }
 
@@ -699,16 +770,29 @@ pub struct RemPhaseCompleted {
 }
 
 impl DreamEvent for RemPhaseCompleted {
-    fn event_type(&self) -> &'static str {
-        "rem_phase_completed"
-    }
+    fn event_type(&self) -> &'static str { "rem_phase_completed" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
+}
 
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
+impl RemPhaseCompleted {
+    pub fn new(
+        session_id: Uuid,
+        queries_generated: usize,
+        blind_spots_found: usize,
+        walk_distance: f32,
+        duration: Duration,
+        average_semantic_leap: f32,
+    ) -> Self {
+        Self {
+            session_id,
+            timestamp_ms: current_timestamp_ms(),
+            queries_generated,
+            blind_spots_found,
+            walk_distance,
+            duration_ms: duration.as_millis() as u64,
+            average_semantic_leap,
+        }
     }
 }
 
@@ -725,17 +809,9 @@ pub struct DreamCycleCompleted {
 }
 
 impl DreamEvent for DreamCycleCompleted {
-    fn event_type(&self) -> &'static str {
-        "dream_cycle_completed"
-    }
-
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
-    }
+    fn event_type(&self) -> &'static str { "dream_cycle_completed" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
 }
 
 impl DreamCycleCompleted {
@@ -765,24 +841,16 @@ pub struct BlindSpotDiscovered {
     pub session_id: Uuid,
     pub timestamp_ms: u64,
     pub blind_spot_id: Uuid,
-    pub poincare_position: [f32; 64],
+    pub poincare_position: Vec<f32>, // Variable length to avoid serde issues with [f32; 64]
     pub semantic_distance: f32,
     pub confidence: f32,
     pub discovery_step: usize,
 }
 
 impl DreamEvent for BlindSpotDiscovered {
-    fn event_type(&self) -> &'static str {
-        "blind_spot_discovered"
-    }
-
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
-    }
+    fn event_type(&self) -> &'static str { "blind_spot_discovered" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
 }
 
 /// Shortcut edge created event.
@@ -798,17 +866,9 @@ pub struct ShortcutCreated {
 }
 
 impl DreamEvent for ShortcutCreated {
-    fn event_type(&self) -> &'static str {
-        "shortcut_created"
-    }
-
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
-    }
+    fn event_type(&self) -> &'static str { "shortcut_created" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
 }
 
 /// GPU budget warning event.
@@ -822,17 +882,9 @@ pub struct GpuBudgetWarning {
 }
 
 impl DreamEvent for GpuBudgetWarning {
-    fn event_type(&self) -> &'static str {
-        "gpu_budget_warning"
-    }
-
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
-    }
+    fn event_type(&self) -> &'static str { "gpu_budget_warning" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
 }
 
 /// Wake triggered event.
@@ -846,17 +898,9 @@ pub struct WakeTriggered {
 }
 
 impl DreamEvent for WakeTriggered {
-    fn event_type(&self) -> &'static str {
-        "wake_triggered"
-    }
-
-    fn session_id(&self) -> Uuid {
-        self.session_id
-    }
-
-    fn timestamp_ms(&self) -> u64 {
-        self.timestamp_ms
-    }
+    fn event_type(&self) -> &'static str { "wake_triggered" }
+    fn session_id(&self) -> Uuid { self.session_id }
+    fn timestamp_ms(&self) -> u64 { self.timestamp_ms }
 }
 
 /// MCP event broadcaster interface.
@@ -864,7 +908,7 @@ impl DreamEvent for WakeTriggered {
 /// Implementations should connect to actual MCP transport.
 pub trait DreamEventBroadcaster: Send + Sync {
     /// Broadcast a dream event.
-    fn broadcast(&self, event: &dyn erased_serde::Serialize) -> Result<(), BroadcastError>;
+    fn broadcast<E: DreamEvent>(&self, event: &E) -> Result<(), BroadcastError>;
 
     /// Check if broadcaster is connected.
     fn is_connected(&self) -> bool;
@@ -888,7 +932,7 @@ pub enum BroadcastError {
 pub struct NoOpBroadcaster;
 
 impl DreamEventBroadcaster for NoOpBroadcaster {
-    fn broadcast(&self, _event: &dyn erased_serde::Serialize) -> Result<(), BroadcastError> {
+    fn broadcast<E: DreamEvent>(&self, _event: &E) -> Result<(), BroadcastError> {
         Ok(())
     }
 
@@ -902,10 +946,10 @@ impl DreamEventBroadcaster for NoOpBroadcaster {
 pub struct LoggingBroadcaster;
 
 impl DreamEventBroadcaster for LoggingBroadcaster {
-    fn broadcast(&self, event: &dyn erased_serde::Serialize) -> Result<(), BroadcastError> {
+    fn broadcast<E: DreamEvent>(&self, event: &E) -> Result<(), BroadcastError> {
         let json = serde_json::to_string(event)
             .map_err(|e| BroadcastError::SerializationFailed(e.to_string()))?;
-        tracing::info!(target: "mcp_events", "{}", json);
+        tracing::info!(target: "mcp_events", event_type = %event.event_type(), "{}", json);
         Ok(())
     }
 
@@ -934,6 +978,7 @@ mod tests {
         assert_eq!(event.event_type(), "dream_cycle_started");
         assert_eq!(event.trigger_reason, "high_entropy");
         assert!(event.timestamp_ms > 0);
+        assert!(!event.session_id.is_nil());
     }
 
     #[test]
@@ -956,6 +1001,42 @@ mod tests {
     }
 
     #[test]
+    fn test_nrem_phase_completed() {
+        let session_id = Uuid::new_v4();
+        let event = NremPhaseCompleted::new(
+            session_id,
+            100,  // memories replayed
+            75,   // edges strengthened
+            10,   // edges pruned
+            Duration::from_secs(180),
+        );
+
+        assert_eq!(event.event_type(), "nrem_phase_completed");
+        assert_eq!(event.memories_replayed, 100);
+        assert_eq!(event.edges_strengthened, 75);
+        assert_eq!(event.edges_pruned, 10);
+        assert_eq!(event.duration_ms, 180_000);
+    }
+
+    #[test]
+    fn test_rem_phase_completed() {
+        let session_id = Uuid::new_v4();
+        let event = RemPhaseCompleted::new(
+            session_id,
+            50,   // queries generated
+            3,    // blind spots found
+            0.8,  // walk distance
+            Duration::from_secs(120),
+            0.75, // average semantic leap
+        );
+
+        assert_eq!(event.event_type(), "rem_phase_completed");
+        assert_eq!(event.queries_generated, 50);
+        assert_eq!(event.blind_spots_found, 3);
+        assert_eq!(event.duration_ms, 120_000);
+    }
+
+    #[test]
     fn test_logging_broadcaster() {
         let broadcaster = LoggingBroadcaster;
         let event = DreamCycleStarted::new(ExtendedTriggerReason::Manual);
@@ -972,112 +1053,79 @@ mod tests {
         assert!(!broadcaster.is_connected());
         broadcaster.broadcast(&event).unwrap();
     }
+
+    #[test]
+    fn test_events_serialize_to_json() {
+        let session_id = Uuid::new_v4();
+
+        // All events must serialize without error
+        let events: Vec<Box<dyn erased_serde::Serialize>> = vec![
+            Box::new(DreamCycleStarted::new(ExtendedTriggerReason::Manual)),
+            Box::new(DreamCycleCompleted::new(
+                session_id, true, WakeReason::CycleComplete, 0, Duration::ZERO, Duration::ZERO
+            )),
+            Box::new(NremPhaseCompleted::new(session_id, 0, 0, 0, Duration::ZERO)),
+            Box::new(RemPhaseCompleted::new(session_id, 0, 0, 0.0, Duration::ZERO, 0.0)),
+            Box::new(WakeTriggered {
+                session_id,
+                timestamp_ms: current_timestamp_ms(),
+                reason: "test".to_string(),
+                phase: "nrem".to_string(),
+                latency_ms: 50,
+            }),
+        ];
+
+        for event in events {
+            let json = serde_json::to_string(&event);
+            assert!(json.is_ok(), "Event serialization failed: {:?}", json.err());
+        }
+    }
 }
 ```
 
-### 3.3 Modify: `crates/context-graph-core/src/dream/mod.rs`
+### 3.3 MODIFY: `crates/context-graph-core/src/dream/mod.rs`
 
-Add new module exports:
+Add these lines after line 56 (after `pub mod types;`):
 
 ```rust
-// Add after existing modules (after line 51):
 pub mod mcp_events;
 pub mod wake_controller;
+```
 
-// Add to re-exports (after line 58):
+Add these re-exports after line 103 (after the existing re-exports):
+
+```rust
 pub use mcp_events::{
-    DreamCycleStarted,
-    DreamCycleCompleted,
-    NremPhaseCompleted,
-    RemPhaseCompleted,
     BlindSpotDiscovered,
-    ShortcutCreated,
-    GpuBudgetWarning,
-    WakeTriggered,
+    BroadcastError,
+    DreamCycleCompleted,
+    DreamCycleStarted,
     DreamEvent,
     DreamEventBroadcaster,
+    GpuBudgetWarning,
     LoggingBroadcaster,
     NoOpBroadcaster,
+    NremPhaseCompleted,
+    RemPhaseCompleted,
+    ShortcutCreated,
+    WakeTriggered,
 };
 pub use wake_controller::{
+    ResourceSnapshot,
     WakeController,
+    WakeError,
     WakeHandle,
     WakeState,
     WakeStats,
-    WakeError,
-    ResourceSnapshot,
 };
 ```
 
-### 3.4 Modify: `crates/context-graph-core/src/dream/controller.rs`
+### 3.4 DO NOT Modify Cargo.toml
 
-Update DreamController to integrate all components:
-
-```rust
-// Add imports at top:
-use super::hebbian::HebbianEngine;
-use super::hyperbolic_walk::HyperbolicExplorer;
-use super::triggers::GwtIntegration;
-use super::wake_controller::{WakeController, WakeHandle};
-use super::mcp_events::{
-    DreamCycleStarted, DreamCycleCompleted, NremPhaseCompleted, RemPhaseCompleted,
-    DreamEventBroadcaster, LoggingBroadcaster,
-};
-use super::types::{HebbianConfig, HyperbolicWalkConfig, ExtendedTriggerReason};
-
-// Add to DreamController struct:
-    /// Wake controller for interrupt handling
-    wake_controller: WakeController,
-
-    /// GWT integration for trigger management
-    gwt_integration: GwtIntegration,
-
-    /// MCP event broadcaster
-    broadcaster: Box<dyn DreamEventBroadcaster>,
-
-    /// Hebbian learning engine
-    hebbian_engine: HebbianEngine,
-
-    /// Hyperbolic explorer
-    hyperbolic_explorer: HyperbolicExplorer,
-
-// Update new() method to initialize all components:
-pub fn new() -> Self {
-    Self {
-        // ... existing fields ...
-        wake_controller: WakeController::new(),
-        gwt_integration: GwtIntegration::new(),
-        broadcaster: Box::new(LoggingBroadcaster),
-        hebbian_engine: HebbianEngine::with_defaults(),
-        hyperbolic_explorer: HyperbolicExplorer::with_defaults(),
-    }
-}
-
-// Add method to get wake handle for external systems:
-pub fn wake_handle(&self) -> WakeHandle {
-    WakeHandle::from_controller(&self.wake_controller)
-}
-
-// Add method for external query notification (triggers wake):
-pub fn on_external_query(&mut self) {
-    self.gwt_integration.on_query();
-
-    if self.is_dreaming() {
-        self.wake_controller.signal_wake(WakeReason::ExternalQuery).ok();
-    }
-}
-```
-
-### 3.5 Update: `crates/context-graph-core/Cargo.toml`
-
-Add required dependencies:
-
-```toml
-[dependencies]
-# Existing deps...
-parking_lot = "0.12"
-erased-serde = "0.4"
-```
+The current dependencies are sufficient:
+- `tokio::sync::watch` is already available from `tokio.workspace`
+- `std::sync::RwLock` is used instead of `parking_lot` (standard library)
+- `erased-serde` is NOT needed - we use generic `<E: DreamEvent>` instead
 
 ---
 
@@ -1086,6 +1134,7 @@ erased-serde = "0.4"
 ### 4.1 Type Signatures (Exact)
 
 ```rust
+// wake_controller.rs
 pub struct WakeController { /* internal */ }
 impl WakeController {
     pub fn new() -> Self;
@@ -1101,6 +1150,7 @@ impl WakeController {
     pub fn is_dreaming(&self) -> bool;
     pub fn is_wake_signaled(&self) -> bool;
     pub fn stats(&self) -> WakeStats;
+    pub fn set_gpu_usage(&self, usage: f32);
 }
 
 pub struct WakeHandle { /* internal */ }
@@ -1111,120 +1161,253 @@ impl WakeHandle {
 }
 
 pub trait DreamEventBroadcaster: Send + Sync {
-    fn broadcast(&self, event: &dyn erased_serde::Serialize) -> Result<(), BroadcastError>;
+    fn broadcast<E: DreamEvent>(&self, event: &E) -> Result<(), BroadcastError>;
     fn is_connected(&self) -> bool;
 }
 
 pub enum WakeState { Idle, Dreaming, Waking, Completing }
-pub enum WakeError { LatencyViolation, GpuBudgetExceeded, SignalFailed, NotInitialized }
+pub enum WakeError { LatencyViolation { .. }, GpuBudgetExceeded { .. }, SignalFailed { .. }, NotInitialized }
 ```
 
-### 4.2 Validation Criteria
+### 4.2 Validation Commands
 
-| Criterion | Check |
-|-----------|-------|
-| Compiles | `cargo build -p context-graph-core` |
-| Tests pass | `cargo test -p context-graph-core dream::wake_controller` |
-| Tests pass | `cargo test -p context-graph-core dream::mcp_events` |
-| No clippy warnings | `cargo clippy -p context-graph-core` |
-| Wake latency < 100ms | Signal to complete measured |
-| GPU budget enforced | Triggers wake at >30% |
-| Interrupt flag shared | All phases check same flag |
-| MCP events serializable | All events serialize to JSON |
+```bash
+# STEP 1: Build
+cargo build -p context-graph-core 2>&1 | tee /tmp/build.log
+# Expected: Compiles with NO errors
 
-### 4.3 Test Coverage Requirements
+# STEP 2: Run wake_controller tests
+cargo test -p context-graph-core wake_controller -- --nocapture 2>&1 | tee /tmp/wake_tests.log
+# Expected: All tests pass
 
-- [ ] WakeController creation
-- [ ] Prepare for dream state transition
-- [ ] Signal wake sets interrupt flag
-- [ ] Wake latency measurement
-- [ ] Wake latency violation detection
-- [ ] Reset clears all state
-- [ ] GPU budget check passes when under
-- [ ] GPU budget check triggers wake when over
-- [ ] WakeHandle signals controller
-- [ ] Interrupt flag shared between controller and phases
-- [ ] Wake subscription receives events
-- [ ] All MCP events serialize correctly
-- [ ] LoggingBroadcaster works
-- [ ] NoOpBroadcaster works
+# STEP 3: Run mcp_events tests
+cargo test -p context-graph-core mcp_events -- --nocapture 2>&1 | tee /tmp/mcp_tests.log
+# Expected: All tests pass
+
+# STEP 4: Clippy check
+cargo clippy -p context-graph-core -- -D warnings 2>&1 | tee /tmp/clippy.log
+# Expected: No errors (warnings may exist from other modules)
+
+# STEP 5: Verify exports
+cargo doc -p context-graph-core --no-deps 2>&1 | tee /tmp/doc.log
+# Expected: Documentation builds successfully
+```
 
 ---
 
-## 5. Implementation Notes
+## 5. Full State Verification Protocol
 
-### 5.1 Wake Latency Guarantee
+### 5.1 Source of Truth
 
-The <100ms wake latency is achieved through:
+| Component | Source of Truth | Verification Method |
+|-----------|-----------------|---------------------|
+| WakeController state | `WakeController.state()` | Call method, verify `WakeState` enum |
+| Interrupt flag | `AtomicBool` via `interrupt_flag()` | `flag.load(Ordering::SeqCst)` |
+| Wake latency | Return value from `complete_wake()` | Check Duration < 100ms |
+| GPU budget | `check_gpu_budget()` result | Should error if usage > 30% |
+| MCP events | JSON serialization output | Verify all fields present |
 
-1. **Atomic interrupt flag**: All phases check `interrupt_flag.load(Ordering::SeqCst)` at every loop iteration
-2. **No blocking operations**: Wake signal uses non-blocking channels
-3. **Pre-allocated state**: No allocations during wake path
-4. **Short-circuit evaluation**: Phases exit immediately on interrupt
+### 5.2 Execute & Inspect Protocol
 
-### 5.2 GPU Budget Enforcement
+After each operation:
+1. Call the method
+2. Immediately read the source of truth
+3. Compare expected vs actual
+4. Log both states
 
-- Check interval: 100ms (configurable)
-- Budget: 30% (Constitution)
-- Action: Signal wake with `WakeReason::GpuOverBudget`
-- Simulated for testing; real implementation requires NVML
+Example verification:
+```rust
+// BEFORE
+println!("BEFORE: state={:?}, signaled={}", controller.state(), controller.is_wake_signaled());
 
-### 5.3 MCP Event Schema
+// ACTION
+controller.signal_wake(WakeReason::ExternalQuery)?;
 
-All events follow schema:
-```json
-{
-  "event_type": "string",
-  "session_id": "uuid",
-  "timestamp_ms": "u64",
-  ...additional fields...
+// AFTER
+println!("AFTER: state={:?}, signaled={}", controller.state(), controller.is_wake_signaled());
+
+// VERIFY
+assert_eq!(controller.state(), WakeState::Waking);
+assert!(controller.is_wake_signaled());
+```
+
+### 5.3 Edge Case Audit (3 Required)
+
+#### Edge Case 1: Wake During Idle State
+```rust
+// Setup: Controller in Idle state (not dreaming)
+let controller = WakeController::new();
+println!("STATE BEFORE: {:?}", controller.state()); // Idle
+
+// Action: Try to signal wake when not dreaming
+let result = controller.signal_wake(WakeReason::ExternalQuery);
+println!("STATE AFTER: {:?}", controller.state()); // Still Idle
+
+// Expected: No error, state unchanged (wake ignored)
+assert!(result.is_ok());
+assert_eq!(controller.state(), WakeState::Idle);
+```
+
+#### Edge Case 2: GPU Budget Exactly at 30%
+```rust
+// Setup
+let controller = WakeController::new();
+controller.prepare_for_dream();
+controller.set_gpu_usage(0.30); // Exactly at threshold
+controller.last_gpu_check.store(0, Ordering::Relaxed);
+
+println!("GPU: 30%, STATE BEFORE: {:?}", controller.state());
+
+// Action: Check GPU budget
+let result = controller.check_gpu_budget();
+
+println!("STATE AFTER: {:?}, signaled: {}", controller.state(), controller.is_wake_signaled());
+
+// Expected: Should trigger wake (>= threshold)
+assert!(matches!(result, Err(WakeError::GpuBudgetExceeded { .. })));
+```
+
+#### Edge Case 3: Double Wake Signal
+```rust
+// Setup
+let controller = WakeController::new();
+controller.prepare_for_dream();
+
+// First wake
+controller.signal_wake(WakeReason::ExternalQuery)?;
+println!("STATE AFTER FIRST WAKE: {:?}", controller.state()); // Waking
+
+// Second wake attempt (should be ignored)
+let result = controller.signal_wake(WakeReason::ManualAbort);
+println!("STATE AFTER SECOND WAKE: {:?}", controller.state()); // Still Waking
+
+// Expected: No error, second wake ignored
+assert!(result.is_ok());
+assert_eq!(controller.state(), WakeState::Waking);
+```
+
+### 5.4 Evidence of Success Log Format
+
+```
+=== WAKE CONTROLLER VERIFICATION ===
+Timestamp: 2026-01-12T10:00:00Z
+
+TEST: test_wake_controller_creation
+  BEFORE: state=Idle, is_dreaming=false
+  ACTION: WakeController::new()
+  AFTER: state=Idle, is_dreaming=false, max_latency=99ms
+  RESULT: PASS
+
+TEST: test_signal_wake
+  BEFORE: state=Dreaming, signaled=false
+  ACTION: signal_wake(ExternalQuery)
+  AFTER: state=Waking, signaled=true
+  RESULT: PASS
+
+TEST: test_wake_latency_success
+  BEFORE: state=Waking
+  ACTION: complete_wake()
+  AFTER: state=Completing, latency=1ms, violations=0
+  RESULT: PASS (latency < 100ms)
+
+TEST: test_gpu_budget_exceeded
+  BEFORE: state=Dreaming, gpu_usage=50%
+  ACTION: check_gpu_budget()
+  AFTER: state=Waking, signaled=true
+  ERROR: GpuBudgetExceeded { usage: 50.0, max: 30.0 }
+  RESULT: PASS (correctly detected budget violation)
+
+=== ALL TESTS PASSED ===
+```
+
+---
+
+## 6. Manual Testing Checklist
+
+Run these commands and verify outputs:
+
+### 6.1 Build Verification
+```bash
+cd /home/cabdru/contextgraph
+cargo build -p context-graph-core 2>&1
+# EXPECTED: "Finished" with no errors
+```
+
+### 6.2 Test Execution
+```bash
+cargo test -p context-graph-core wake_controller -- --nocapture
+# EXPECTED: "test result: ok" with all tests passing
+```
+
+### 6.3 Integration Test (Synthetic Data)
+
+Create and run a test that exercises the full wake flow:
+
+```rust
+#[tokio::test]
+async fn integration_test_full_wake_cycle() {
+    // SYNTHETIC INPUT
+    let controller = WakeController::new();
+
+    // 1. Prepare for dream
+    controller.prepare_for_dream();
+    assert_eq!(controller.state(), WakeState::Dreaming);
+    println!("Step 1 PASS: state=Dreaming");
+
+    // 2. Simulate some dream processing
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    // 3. Signal external query wake
+    controller.signal_wake(WakeReason::ExternalQuery).unwrap();
+    assert!(controller.is_wake_signaled());
+    println!("Step 2 PASS: wake signaled");
+
+    // 4. Complete wake and measure latency
+    let latency = controller.complete_wake().unwrap();
+    assert!(latency < Duration::from_millis(100));
+    println!("Step 3 PASS: latency={:?} < 100ms", latency);
+
+    // 5. Reset and verify
+    controller.reset();
+    assert_eq!(controller.state(), WakeState::Idle);
+    println!("Step 4 PASS: reset to Idle");
+
+    // FINAL VERIFICATION
+    let stats = controller.stats();
+    assert_eq!(stats.wake_count, 1);
+    assert_eq!(stats.latency_violations, 0);
+    println!("INTEGRATION TEST PASSED: wake_count={}, violations={}", stats.wake_count, stats.latency_violations);
 }
 ```
 
-### 5.4 Constitution Compliance
+---
 
-- Wake latency: <100ms (enforced, measured)
-- GPU budget: <30% (enforced, triggers wake)
-- Abort on query: true (external query triggers immediate wake)
+## 7. Traceability
+
+| Requirement | Constitution Ref | Test |
+|-------------|-----------------|------|
+| Wake latency < 100ms | `dream.constraints.wake` (line 273) | `test_wake_latency_success` |
+| GPU budget < 30% | `dream.constraints.gpu` (line 273) | `test_gpu_budget_exceeded`, `test_gpu_budget_check_ok` |
+| Abort on query | `dream.constraints.abort_on_query` (line 273) | `test_signal_wake`, `test_interrupt_flag_sharing` |
+| Interrupt flag sharing | `dream.wake` (line 273) | `test_interrupt_flag_sharing`, `test_wake_handle` |
 
 ---
 
-## 6. Integration Checklist
+## 8. Absolute Rules
 
-After completing this task, verify:
-
-- [ ] DreamController uses WakeController for all interrupts
-- [ ] DreamController broadcasts all lifecycle events
-- [ ] NremPhase uses HebbianEngine (from TASK-003)
-- [ ] RemPhase uses HyperbolicExplorer (from TASK-004)
-- [ ] DreamScheduler uses TriggerManager (from TASK-005)
-- [ ] External query hook wired to wake signal
-- [ ] All phases check shared interrupt_flag
-- [ ] GPU monitoring integrated with wake controller
+1. **NO BACKWARDS COMPATIBILITY WORKAROUNDS** - Code must work or fail fast with clear errors
+2. **NO MOCK DATA IN TESTS** - Use real UUIDs, real time, real state
+3. **FAIL FAST** - All errors must be logged with context and propagated
+4. **VERIFY SOURCE OF TRUTH** - After every operation, read actual state to confirm
+5. **NO PARKING_LOT DEPENDENCY** - Use `std::sync::RwLock` instead
+6. **NO ERASED-SERDE DEPENDENCY** - Use generic `<E: DreamEvent>` pattern
 
 ---
 
-## 7. Estimated Effort Breakdown
+## 9. Common Pitfalls to Avoid
 
-| Phase | Duration |
-|-------|----------|
-| WakeController core | 60 min |
-| Latency measurement | 30 min |
-| GPU budget enforcement | 20 min |
-| MCP event definitions | 45 min |
-| Broadcaster implementations | 20 min |
-| DreamController integration | 30 min |
-| Unit tests | 45 min |
-| **Total** | **4 hours** |
-
----
-
-## 8. Traceability
-
-| Requirement | Test |
-|-------------|------|
-| REQ-DREAM-014 | test_wake_latency_success, test_wake_latency_violation |
-| REQ-DREAM-015 | test_gpu_budget_check_ok, test_gpu_budget_exceeded |
-| NFR-DREAM-003 | test_wake_latency_success (p99 < 100ms) |
-| NFR-DREAM-004 | test_gpu_budget_exceeded |
-| NFR-DREAM-005 | test_signal_wake, test_reset |
+1. **Do NOT use `parking_lot::RwLock`** - It's not in workspace, use `std::sync::RwLock` with `.expect("Lock poisoned")` for fail-fast behavior
+2. **Do NOT add new dependencies to Cargo.toml** - All needed deps already exist
+3. **Do NOT modify `WakeReason` enum** - It already exists in `mod.rs`
+4. **Do NOT modify `GpuMonitor`** - It already exists in `triggers.rs`
+5. **Do NOT create workarounds for failing tests** - Fix the root cause instead

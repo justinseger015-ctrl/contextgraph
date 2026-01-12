@@ -28,7 +28,6 @@ mod types;
 mod tests;
 
 // Re-export all public items for backwards compatibility
-pub use self::error::*;
 pub use self::types::*;
 
 // Compile-time assertions to ensure constants match Constitution

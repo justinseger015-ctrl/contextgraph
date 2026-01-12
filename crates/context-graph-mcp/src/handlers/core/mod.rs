@@ -23,7 +23,4 @@ mod types;
 // Re-export all public types for backwards compatibility
 pub use self::handlers::Handlers;
 pub use self::meta_utl_tracker::MetaUtlTracker;
-pub use self::types::{
-    Domain, MetaLearningEvent, MetaLearningEventType, PredictionType, SelfCorrectionConfig,
-    StoredPrediction,
-};
+pub use self::types::{PredictionType, StoredPrediction};

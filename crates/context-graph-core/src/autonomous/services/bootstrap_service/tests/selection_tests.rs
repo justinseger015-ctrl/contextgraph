@@ -1,7 +1,7 @@
 //! Selection tests for BootstrapService
 
 use crate::autonomous::services::bootstrap_service::*;
-use crate::autonomous::{BootstrapConfig, GoalId};
+use crate::autonomous::GoalId;
 
 #[test]
 fn test_select_best_goal_single_candidate() {

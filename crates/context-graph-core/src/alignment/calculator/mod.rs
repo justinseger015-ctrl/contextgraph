@@ -46,4 +46,3 @@ mod tests;
 pub use default_calculator::DefaultAlignmentCalculator;
 pub use result::AlignmentResult;
 pub use trait_def::GoalAlignmentCalculator;
-pub use weights::TeleologicalWeights;

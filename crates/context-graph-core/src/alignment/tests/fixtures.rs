@@ -2,7 +2,6 @@
 //!
 //! Provides real data types - no mocks.
 
-use crate::alignment::*;
 use crate::purpose::{GoalDiscoveryMetadata, GoalHierarchy, GoalLevel, GoalNode};
 use crate::types::fingerprint::{
     JohariFingerprint, PurposeVector, SemanticFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS,

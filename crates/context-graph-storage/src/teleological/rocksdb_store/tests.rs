@@ -2,8 +2,6 @@
 //!
 //! Comprehensive tests for CRUD operations, persistence, and trait compliance.
 
-#![cfg(test)]
-
 use super::*;
 use tempfile::TempDir;
 

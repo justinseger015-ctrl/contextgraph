@@ -2,8 +2,6 @@
 //!
 //! All 13 spaces verification and performance benchmarks.
 
-#![cfg(feature = "cuda")]
-
 use super::infrastructure::*;
 use crate::handlers::tests::{create_test_handlers_with_real_embeddings, extract_mcp_tool_data};
 use serde_json::json;

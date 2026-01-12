@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::protocol::JsonRpcId;
 use crate::handlers::tests::{create_test_handlers_with_rocksdb_store_access, extract_mcp_tool_data, make_request};
 
-use super::helpers::{create_test_fingerprint, create_test_fingerprint_with_age};
+use super::helpers::create_test_fingerprint_with_age;
 
 // ============================================================================
 // SPEC-STUBFIX-002: get_pruning_candidates FSV Tests

@@ -2,8 +2,6 @@
 //!
 //! Tests that weight profiles endpoint returns all profiles with 13 weights each.
 
-use serde_json::json;
-
 use crate::protocol::JsonRpcId;
 use crate::weights::{get_profile_names, WEIGHT_PROFILES};
 use context_graph_core::types::fingerprint::NUM_EMBEDDERS;

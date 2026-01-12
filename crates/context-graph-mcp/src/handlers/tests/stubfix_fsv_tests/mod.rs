@@ -18,6 +18,3 @@ mod steering;
 mod pruning;
 mod consolidation;
 mod rocksdb_verification;
-
-// Re-export helper functions for use by submodules
-pub(crate) use helpers::*;

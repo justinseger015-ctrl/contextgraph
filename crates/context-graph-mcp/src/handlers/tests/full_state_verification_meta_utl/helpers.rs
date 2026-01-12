@@ -6,7 +6,6 @@
 use std::sync::Arc;
 
 use parking_lot::RwLock;
-use serde_json::json;
 
 use context_graph_core::alignment::{DefaultAlignmentCalculator, GoalAlignmentCalculator};
 use context_graph_core::johari::{DynDefaultJohariManager, JohariTransitionManager};

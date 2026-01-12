@@ -3,8 +3,9 @@
 use super::{
     create_test_fingerprint, create_test_hierarchy, create_test_semantic_fingerprint,
     test_discovery, AlignmentConfig, DefaultAlignmentCalculator, GoalAlignmentCalculator,
-    LevelWeights, TeleologicalWeights, NUM_EMBEDDERS,
+    LevelWeights, NUM_EMBEDDERS,
 };
+use crate::alignment::calculator::weights::TeleologicalWeights;
 use crate::purpose::{GoalLevel, GoalNode};
 
 #[test]

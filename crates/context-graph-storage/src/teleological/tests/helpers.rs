@@ -3,7 +3,6 @@
 use context_graph_core::types::fingerprint::{
     JohariFingerprint, PurposeVector, SemanticFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS,
 };
-use uuid::Uuid;
 
 /// Create a SemanticFingerprint with zeroed embeddings for testing.
 /// NOTE: This uses zeroed data which is only suitable for serialization tests.

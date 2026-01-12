@@ -1,7 +1,6 @@
 //! Panic behavior tests (should_panic).
 
 use crate::teleological::*;
-use super::helpers::create_real_fingerprint;
 use uuid::Uuid;
 
 // =========================================================================

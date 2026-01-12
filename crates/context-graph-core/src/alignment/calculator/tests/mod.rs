@@ -5,8 +5,6 @@ mod multi_space_tests;
 mod pattern_tests;
 mod similarity_tests;
 
-use uuid::Uuid;
-
 use crate::alignment::calculator::*;
 use crate::alignment::config::AlignmentConfig;
 use crate::alignment::misalignment::MisalignmentFlags;

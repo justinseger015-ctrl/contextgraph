@@ -2,9 +2,7 @@
 
 use crate::autonomous::bootstrap::GoalId;
 use crate::autonomous::evolution::{AdjustmentReason as EvolutionAdjustmentReason, WeightAdjustment};
-use crate::autonomous::services::weight_adjuster::{
-    AdjustmentReason, WeightAdjuster, WeightAdjusterConfig,
-};
+use crate::autonomous::services::weight_adjuster::{AdjustmentReason, WeightAdjuster};
 
 // === Compute Momentum Tests ===
 

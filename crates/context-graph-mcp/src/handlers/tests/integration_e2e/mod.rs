@@ -58,5 +58,3 @@ mod real_gpu_tests;
 #[cfg(feature = "cuda")]
 mod real_gpu_benchmark;
 
-// Re-export infrastructure for any external use
-pub use infrastructure::*;

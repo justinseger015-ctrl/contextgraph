@@ -13,9 +13,7 @@ use context_graph_core::purpose::{GoalDiscoveryMetadata, GoalHierarchy, GoalLeve
 use context_graph_core::stubs::{
     InMemoryTeleologicalStore, StubMultiArrayProvider, StubUtlProcessor,
 };
-use context_graph_core::traits::{
-    MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor,
-};
+use context_graph_core::traits::{MultiArrayEmbeddingProvider, UtlProcessor};
 use context_graph_core::types::fingerprint::{
     JohariFingerprint, PurposeVector, SemanticFingerprint, TeleologicalFingerprint,
 };

@@ -2,7 +2,6 @@
 
 use uuid::Uuid;
 
-use crate::index::config::PURPOSE_VECTOR_DIM;
 use crate::index::purpose::clustering::clusterer::{KMeansPurposeClustering, StandardKMeans};
 use crate::index::purpose::clustering::config::KMeansConfig;
 use crate::index::purpose::entry::{GoalId, PurposeIndexEntry, PurposeMetadata};

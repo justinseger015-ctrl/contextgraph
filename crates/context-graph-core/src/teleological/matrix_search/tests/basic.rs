@@ -4,8 +4,7 @@
 
 use crate::teleological::groups::GroupAlignments;
 use crate::teleological::matrix_search::{
-    embedder_names, ComparisonScope, ComponentWeights, MatrixSearchConfig, SearchStrategy,
-    TeleologicalMatrixSearch,
+    embedder_names, ComparisonScope, MatrixSearchConfig, SearchStrategy, TeleologicalMatrixSearch,
 };
 use crate::teleological::synergy_matrix::SynergyMatrix;
 use crate::teleological::types::NUM_EMBEDDERS;

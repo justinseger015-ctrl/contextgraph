@@ -4,7 +4,7 @@
 //! and distance calculation in the Poincare ball model.
 
 use super::config::PoincareBallConfig;
-use super::math::{inner_product_64, norm_64, norm_squared_64, project_to_ball, validate_in_ball};
+use super::math::{inner_product_64, norm_squared_64, project_to_ball, validate_in_ball};
 
 /// Mobius addition in the Poincare ball model.
 ///
@@ -149,6 +149,7 @@ pub fn direction_toward(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::math::norm_64;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
     use crate::dream::poincare_walk::sampling::random_direction;

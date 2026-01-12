@@ -2,8 +2,6 @@
 //!
 //! Memory lifecycle and semantic relevance tests with real GPU embeddings.
 
-#![cfg(feature = "cuda")]
-
 use super::infrastructure::*;
 use crate::handlers::tests::{create_test_handlers_with_real_embeddings, extract_mcp_tool_data};
 use std::time::Instant;

@@ -48,6 +48,7 @@ pub mod amortized;
 pub mod controller;
 pub mod hebbian;
 pub mod hyperbolic_walk;
+pub mod mcp_events;
 pub mod nrem;
 pub mod poincare_walk;
 pub mod rem;
@@ -55,6 +56,7 @@ pub mod scheduler;
 pub mod thresholds;
 pub mod triggers;
 pub mod types;
+pub mod wake_controller;
 
 // Re-exports for convenience
 pub use amortized::{AmortizedLearner, PathSignature, ShortcutCandidate};
@@ -100,6 +102,29 @@ pub use types::{
     HyperbolicWalkConfig,
     NodeActivation,
     WalkStep,
+};
+pub use mcp_events::{
+    BlindSpotDiscovered,
+    BroadcastError,
+    DreamCycleCompleted,
+    DreamCycleStarted,
+    DreamEvent,
+    DreamEventBroadcaster,
+    GpuBudgetWarning,
+    LoggingBroadcaster,
+    NoOpBroadcaster,
+    NremPhaseCompleted,
+    RemPhaseCompleted,
+    ShortcutCreated,
+    WakeTriggered,
+};
+pub use wake_controller::{
+    ResourceSnapshot,
+    WakeController,
+    WakeError,
+    WakeHandle,
+    WakeState,
+    WakeStats,
 };
 
 use serde::{Deserialize, Serialize};
