@@ -29,7 +29,7 @@
 //! - Log edges for debugging (via [`NullEdgeCreator`])
 //! - Record edges for testing (via [`RecordingEdgeCreator`])
 //!
-//! When no edge creator is set, shortcuts are tracked internally but not persisted.
+//! When no edge creator is set, the system returns an error - fail fast design.
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -427,10 +427,9 @@ impl AmortizedLearner {
                 return Ok(false);
             }
         } else {
-            debug!(
-                "No edge creator set, shortcut {} -> {} tracked but not persisted",
-                edge.source, edge.target
-            );
+            return Err(crate::error::CoreError::Internal(
+                "No EdgeCreator configured. Shortcut persistence requires an EdgeCreator implementation.".into()
+            ));
         }
 
         self.shortcuts_created_this_cycle += 1;
@@ -707,7 +706,8 @@ mod tests {
 
     #[test]
     fn test_create_shortcut() {
-        let mut learner = AmortizedLearner::new();
+        let creator = Arc::new(RecordingEdgeCreator::new());
+        let mut learner = AmortizedLearner::with_edge_creator(creator);
 
         let good_candidate = ShortcutCandidate {
             source: Uuid::new_v4(),
@@ -716,7 +716,7 @@ mod tests {
             traversal_count: 6,
             combined_weight: 0.5,
             min_confidence: 0.8,
-            path_nodes: vec![],
+            path_nodes: vec![Uuid::new_v4(); 5],
         };
 
         let result = learner.create_shortcut(&good_candidate).unwrap();
@@ -727,7 +727,8 @@ mod tests {
 
     #[test]
     fn test_reset_cycle_counter() {
-        let mut learner = AmortizedLearner::new();
+        let creator = Arc::new(RecordingEdgeCreator::new());
+        let mut learner = AmortizedLearner::with_edge_creator(creator);
 
         let candidate = ShortcutCandidate {
             source: Uuid::new_v4(),
@@ -736,7 +737,7 @@ mod tests {
             traversal_count: 6,
             combined_weight: 0.5,
             min_confidence: 0.8,
-            path_nodes: vec![],
+            path_nodes: vec![Uuid::new_v4(); 5],
         };
 
         learner.create_shortcut(&candidate).unwrap();
@@ -904,7 +905,7 @@ mod tests {
     }
 
     #[test]
-    fn test_create_shortcut_without_creator() {
+    fn test_create_shortcut_without_creator_fails() {
         let mut learner = AmortizedLearner::new();
 
         let candidate = ShortcutCandidate {
@@ -917,10 +918,20 @@ mod tests {
             path_nodes: vec![Uuid::new_v4(); 5],
         };
 
-        // Should succeed even without creator
-        let result = learner.create_shortcut(&candidate).unwrap();
-        assert!(result, "Shortcut creation should succeed without creator");
-        assert_eq!(learner.shortcuts_created_this_cycle, 1);
+        // Must fail when no EdgeCreator is set - no backwards compatibility
+        let result = learner.create_shortcut(&candidate);
+        assert!(result.is_err(), "Shortcut creation MUST fail without EdgeCreator");
+
+        let err = result.unwrap_err();
+        let err_msg = format!("{}", err);
+        assert!(
+            err_msg.contains("EdgeCreator") || err_msg.contains("creator"),
+            "Error message must mention EdgeCreator: got '{}'",
+            err_msg
+        );
+
+        // Counter should NOT be incremented on failure
+        assert_eq!(learner.shortcuts_created_this_cycle, 0, "Counter must not increment on error");
     }
 
     /// Edge creator that returns false (edge already exists)
