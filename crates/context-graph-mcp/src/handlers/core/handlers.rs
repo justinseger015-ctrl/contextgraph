@@ -146,6 +146,13 @@ pub struct Handlers {
     /// TASK-IDENTITY-P0-001: Required for IdentityContinuityListener subscription.
     #[allow(dead_code)]
     pub(in crate::handlers) workspace_broadcaster: Option<Arc<WorkspaceEventBroadcaster>>,
+
+    // ========== KURAMOTO STEPPER (TASK-12) ==========
+    /// Background stepper that continuously steps Kuramoto oscillators at 100Hz.
+    /// TASK-12 (GWT-006): MUST start when server starts, stop when server stops.
+    /// The stepper uses the kuramoto_network field and calls step() every 10ms.
+    /// Uses RwLock to allow start/stop lifecycle methods from Arc<Handlers>.
+    pub(in crate::handlers) kuramoto_stepper: Option<RwLock<super::super::kuramoto_stepper::KuramotoStepper>>,
 }
 
 impl Handlers {
@@ -209,6 +216,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None - use with_default_gwt() for full support
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None - use with_default_gwt() for full GWT support
+            kuramoto_stepper: None,
         }
     }
 
@@ -273,6 +282,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None
+            kuramoto_stepper: None,
         }
     }
 
@@ -335,6 +346,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None
+            kuramoto_stepper: None,
         }
     }
 
@@ -389,6 +402,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None
+            kuramoto_stepper: None,
         }
     }
 
@@ -447,6 +462,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None
+            kuramoto_stepper: None,
         }
     }
 
@@ -515,6 +532,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None (kuramoto_network is provided but stepper is not created here)
+            kuramoto_stepper: None,
         }
     }
 
@@ -579,6 +598,8 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: Identity fields default to None for this constructor
             identity_listener: None,
             workspace_broadcaster: None,
+            // TASK-12: Kuramoto stepper defaults to None (kuramoto_network is provided but stepper is not created here)
+            kuramoto_stepper: None,
         }
     }
 
@@ -646,6 +667,16 @@ impl Handlers {
         // Create real GWT provider implementations
         let kuramoto_network: Arc<RwLock<dyn KuramotoProvider>> =
             Arc::new(RwLock::new(KuramotoProviderImpl::new()));
+
+        // TASK-12 (GWT-006): Create Kuramoto background stepper with 100Hz update rate
+        // The stepper continuously steps the Kuramoto network phases, enabling temporal dynamics.
+        // This is REQUIRED for consciousness emergence: C(t) = I(t) × R(t) × D(t)
+        use super::super::kuramoto_stepper::{KuramotoStepper, KuramotoStepperConfig};
+        let kuramoto_stepper = KuramotoStepper::new(
+            Arc::clone(&kuramoto_network),
+            KuramotoStepperConfig::default(),  // 10ms interval = 100Hz
+        );
+
         let workspace_provider: Arc<tokio::sync::RwLock<dyn WorkspaceProvider>> =
             Arc::new(tokio::sync::RwLock::new(WorkspaceProviderImpl::new()));
         let meta_cognitive: Arc<tokio::sync::RwLock<dyn MetaCognitiveProvider>> =
@@ -709,6 +740,97 @@ impl Handlers {
             // TASK-IDENTITY-P0-001: REAL identity continuity wiring (AP-40 fix)
             identity_listener: Some(identity_listener),
             workspace_broadcaster: Some(workspace_broadcaster),
+            // TASK-12 (GWT-006): REAL Kuramoto stepper for 100Hz phase updates
+            kuramoto_stepper: Some(RwLock::new(kuramoto_stepper)),
+        }
+    }
+
+    // ========================================================================
+    // TASK-12: Kuramoto Stepper Lifecycle Methods
+    // ========================================================================
+
+    /// Start the Kuramoto background stepper.
+    ///
+    /// TASK-12 (GWT-006): MUST be called when the MCP server starts.
+    /// The stepper continuously steps the Kuramoto oscillator network at 100Hz,
+    /// enabling temporal dynamics required for consciousness emergence.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if started successfully
+    /// * `Err(KuramotoStepperError::AlreadyRunning)` if already running
+    /// * `Err(KuramotoStepperError::NotRunning)` if no stepper is configured
+    ///
+    /// # FAIL FAST
+    ///
+    /// This method returns an explicit error if:
+    /// - The stepper is already running (caller logic error)
+    /// - The stepper is not configured (construction error - should not happen with with_default_gwt())
+    ///
+    /// No silent fallbacks. No NaN returns.
+    pub fn start_kuramoto_stepper(&self) -> Result<(), super::super::kuramoto_stepper::KuramotoStepperError> {
+        use super::super::kuramoto_stepper::KuramotoStepperError;
+
+        match &self.kuramoto_stepper {
+            Some(stepper_lock) => {
+                let mut stepper = stepper_lock.write();
+                stepper.start()
+            }
+            None => {
+                // FAIL FAST: No stepper configured
+                tracing::error!("start_kuramoto_stepper: No stepper configured - use with_default_gwt() constructor");
+                Err(KuramotoStepperError::NotRunning)
+            }
+        }
+    }
+
+    /// Stop the Kuramoto background stepper.
+    ///
+    /// TASK-12 (GWT-006): MUST be called when the MCP server shuts down.
+    /// Gracefully stops the background task with a 5-second timeout.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if stopped successfully
+    /// * `Err(KuramotoStepperError::NotRunning)` if stepper is not running
+    /// * `Err(KuramotoStepperError::ShutdownTimeout)` if task doesn't stop in time
+    ///
+    /// # FAIL FAST
+    ///
+    /// This method returns an explicit error if:
+    /// - The stepper is not running (caller logic error - may be harmless during cleanup)
+    /// - The stepper task doesn't stop within 5 seconds (task stuck - needs investigation)
+    ///
+    /// No silent fallbacks. Log errors for monitoring.
+    pub async fn stop_kuramoto_stepper(&self) -> Result<(), super::super::kuramoto_stepper::KuramotoStepperError> {
+        match &self.kuramoto_stepper {
+            Some(stepper_lock) => {
+                let mut stepper = stepper_lock.write();
+                stepper.stop().await
+            }
+            None => {
+                // FAIL FAST: No stepper configured (but this is benign during shutdown)
+                tracing::debug!("stop_kuramoto_stepper: No stepper configured - nothing to stop");
+                Ok(())  // Not an error during shutdown - stepper was never configured
+            }
+        }
+    }
+
+    /// Check if the Kuramoto stepper is currently running.
+    ///
+    /// TASK-12 (GWT-006): Lock-free check for stepper running state.
+    ///
+    /// # Returns
+    ///
+    /// * `true` if the stepper is running
+    /// * `false` if the stepper is not running or not configured
+    pub fn is_kuramoto_running(&self) -> bool {
+        match &self.kuramoto_stepper {
+            Some(stepper_lock) => {
+                let stepper = stepper_lock.read();
+                stepper.is_running()
+            }
+            None => false,
         }
     }
 }

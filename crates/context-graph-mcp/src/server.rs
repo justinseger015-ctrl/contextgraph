@@ -219,6 +219,19 @@ impl McpServer {
         info!("Created REAL Dream components (DreamController, DreamScheduler, AmortizedLearner) with constitution defaults");
         info!("Created REAL AdaptiveThresholdCalibration (4-level: EWMA, Temperature, Bandit, Bayesian)");
 
+        // TASK-12 (GWT-006): Start Kuramoto background stepper for 100Hz phase updates
+        // This MUST happen during server initialization for consciousness dynamics.
+        // Constitution layer_4_coherence requires continuous Kuramoto stepping.
+        if let Err(e) = handlers.start_kuramoto_stepper() {
+            error!("FATAL: Failed to start Kuramoto stepper: {:?}. Consciousness dynamics will be frozen.", e);
+            return Err(anyhow::anyhow!(
+                "Failed to start Kuramoto stepper: {:?}. \
+                 Check that with_default_gwt() constructor was used.",
+                e
+            ));
+        }
+        info!("Started Kuramoto background stepper (100Hz, 10ms interval) - consciousness dynamics active");
+
         info!("MCP Server initialization complete - TeleologicalFingerprint mode active with GWT + Neuromod + Dream + ATC");
 
         // TASK-INTEG-018: Create connection semaphore from config
@@ -286,8 +299,42 @@ impl McpServer {
             }
         }
 
+        // TASK-12 (GWT-006): Stop Kuramoto stepper gracefully
+        self.shutdown().await;
         info!("Server shutting down...");
         Ok(())
+    }
+
+    /// Gracefully shutdown the MCP server.
+    ///
+    /// TASK-12 (GWT-006): Stops the Kuramoto background stepper and other
+    /// background tasks. This should be called before the server exits.
+    ///
+    /// # Behavior
+    ///
+    /// - Stops the Kuramoto stepper with 5-second timeout
+    /// - Logs any errors but does not fail (graceful degradation on shutdown)
+    /// - Safe to call multiple times (idempotent)
+    pub async fn shutdown(&self) {
+        info!("Initiating graceful shutdown...");
+
+        // TASK-12 (GWT-006): Stop Kuramoto stepper
+        match self.handlers.stop_kuramoto_stepper().await {
+            Ok(()) => {
+                info!("Kuramoto stepper stopped gracefully");
+            }
+            Err(e) => {
+                // Log but don't fail - we're shutting down anyway
+                // NotRunning is expected if already stopped
+                if format!("{:?}", e).contains("NotRunning") {
+                    debug!("Kuramoto stepper was not running during shutdown (already stopped or never started)");
+                } else {
+                    warn!("Kuramoto stepper shutdown error: {:?}", e);
+                }
+            }
+        }
+
+        info!("Graceful shutdown complete");
     }
 
     /// Handle a single JSON-RPC request.
