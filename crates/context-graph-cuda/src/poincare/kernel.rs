@@ -86,27 +86,20 @@ pub fn get_kernel_info() -> Option<PoincareKernelInfo> {
 /// }
 /// ```
 pub fn is_poincare_gpu_available() -> bool {
-    // Use CUDA Driver API instead of Runtime API to avoid CUDA 13.1 WSL2 segfault bug
-    // Reference: cudaGetDeviceCount (Runtime) segfaults, cuDeviceGetCount (Driver) works
-    extern "C" {
-        /// Initialize the CUDA driver (Driver API)
-        fn cuInit(flags: std::os::raw::c_uint) -> i32;
-        /// Get CUDA device count (Driver API)
-        fn cuDeviceGetCount(count: *mut i32) -> i32;
-    }
+    // Use consolidated CUDA FFI from ffi module (ARCH-06 compliance)
+    use crate::ffi::{cuDeviceGetCount, cuInit, is_cuda_success};
 
     unsafe {
         // Initialize CUDA driver first (required before any Driver API call)
         let init_result = cuInit(0);
-        if init_result != 0 {
+        if !is_cuda_success(init_result) {
             return false;
         }
 
         // Get device count using Driver API
         let mut device_count: i32 = 0;
         let result = cuDeviceGetCount(&mut device_count);
-        // CUDA_SUCCESS = 0
-        if result != 0 {
+        if !is_cuda_success(result) {
             return false;
         }
 

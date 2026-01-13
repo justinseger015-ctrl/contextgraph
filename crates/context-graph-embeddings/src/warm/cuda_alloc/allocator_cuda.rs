@@ -55,31 +55,23 @@ impl WarmCudaAllocator {
     ///
     /// # Implementation Notes
     ///
+    /// Uses consolidated CUDA FFI from context-graph-cuda crate.
     /// Uses CUDA Driver API (cuDeviceGetAttribute) instead of Runtime API
     /// to avoid CUDA 13.1 WSL2 segfault bug on RTX 5090 (Blackwell).
-    /// This is consistent with the pattern used in context-graph-cuda crate.
     ///
     /// All values are queried from real hardware. NO hardcoded fallbacks.
     fn query_gpu_info_internal(device_id: u32) -> WarmResult<GpuInfo> {
-        // CUDA Driver API constants
-        const CUDA_SUCCESS: i32 = 0;
-        const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
-        const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
-
-        // FFI bindings to CUDA Driver API
-        extern "C" {
-            fn cuInit(flags: std::os::raw::c_uint) -> i32;
-            fn cuDeviceGet(device: *mut i32, ordinal: i32) -> i32;
-            fn cuDeviceGetName(name: *mut std::os::raw::c_char, len: i32, dev: i32) -> i32;
-            fn cuDeviceTotalMem_v2(bytes: *mut usize, dev: i32) -> i32;
-            fn cuDeviceGetAttribute(value: *mut i32, attrib: i32, dev: i32) -> i32;
-            fn cuDriverGetVersion(version: *mut i32) -> i32;
-        }
+        use context_graph_cuda::ffi::{
+            cuDeviceGet, cuDeviceGetAttribute, cuDeviceGetName, cuDeviceTotalMem_v2,
+            cuDriverGetVersion, cuInit, decode_driver_version, is_cuda_success,
+            CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+            CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+        };
 
         unsafe {
             // Step 1: Initialize CUDA driver
             let init_result = cuInit(0);
-            if init_result != CUDA_SUCCESS {
+            if !is_cuda_success(init_result) {
                 tracing::error!(
                     target: "warm::cuda",
                     cuda_error_code = init_result,
@@ -95,7 +87,7 @@ impl WarmCudaAllocator {
             // Step 2: Get device handle
             let mut device_handle: i32 = 0;
             let get_result = cuDeviceGet(&mut device_handle, device_id as i32);
-            if get_result != CUDA_SUCCESS {
+            if !is_cuda_success(get_result) {
                 tracing::error!(
                     target: "warm::cuda",
                     cuda_error_code = get_result,
@@ -115,7 +107,7 @@ impl WarmCudaAllocator {
             // Step 3: Query device name
             let mut name_buf = [0i8; 256];
             let name_result = cuDeviceGetName(name_buf.as_mut_ptr(), 256, device_handle);
-            let name = if name_result == CUDA_SUCCESS {
+            let name = if is_cuda_success(name_result) {
                 let c_str = std::ffi::CStr::from_ptr(name_buf.as_ptr());
                 c_str.to_string_lossy().into_owned()
             } else {
@@ -130,7 +122,7 @@ impl WarmCudaAllocator {
             // Step 4: Query total memory
             let mut total_memory: usize = 0;
             let mem_result = cuDeviceTotalMem_v2(&mut total_memory, device_handle);
-            if mem_result != CUDA_SUCCESS {
+            if !is_cuda_success(mem_result) {
                 tracing::error!(
                     target: "warm::cuda",
                     cuda_error_code = mem_result,
@@ -148,7 +140,7 @@ impl WarmCudaAllocator {
                 CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
                 device_handle,
             );
-            if major_result != CUDA_SUCCESS {
+            if !is_cuda_success(major_result) {
                 tracing::error!(
                     target: "warm::cuda",
                     cuda_error_code = major_result,
@@ -169,7 +161,7 @@ impl WarmCudaAllocator {
                 CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
                 device_handle,
             );
-            if minor_result != CUDA_SUCCESS {
+            if !is_cuda_success(minor_result) {
                 tracing::error!(
                     target: "warm::cuda",
                     cuda_error_code = minor_result,
@@ -186,10 +178,8 @@ impl WarmCudaAllocator {
             // Step 7: Query driver version
             let mut driver_ver: i32 = 0;
             let driver_result = cuDriverGetVersion(&mut driver_ver);
-            let driver_version = if driver_result == CUDA_SUCCESS {
-                // Driver version is encoded as (major * 1000 + minor * 10)
-                let major = driver_ver / 1000;
-                let minor = (driver_ver % 1000) / 10;
+            let driver_version = if is_cuda_success(driver_result) {
+                let (major, minor) = decode_driver_version(driver_ver);
                 format!("{}.{}", major, minor)
             } else {
                 tracing::warn!(
@@ -209,7 +199,7 @@ impl WarmCudaAllocator {
                 total_memory_gb = format!("{:.1} GB", total_memory as f64 / (1024.0 * 1024.0 * 1024.0)),
                 compute_capability = format!("{}.{}", cc_major, cc_minor),
                 driver_version = %driver_version,
-                "GPU info queried via CUDA Driver API (real hardware values)"
+                "GPU info queried via consolidated CUDA Driver API FFI"
             );
 
             Ok(GpuInfo {

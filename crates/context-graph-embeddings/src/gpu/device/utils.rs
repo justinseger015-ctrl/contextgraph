@@ -17,37 +17,12 @@ use candle_core::Device;
 
 use crate::gpu::GpuInfo;
 
-// CUDA error codes
-const CUDA_SUCCESS: i32 = 0;
-
-// CUDA device attribute constants (from cuda.h / CUDA Driver API)
-// See: https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html
-const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR: i32 = 75;
-const CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR: i32 = 76;
-
-// FFI bindings to CUDA Driver API
-extern "C" {
-    /// Initialize the CUDA driver (Driver API).
-    /// Must be called before any other Driver API call.
-    fn cuInit(flags: std::os::raw::c_uint) -> i32;
-
-    /// Get a CUDA device handle by ordinal.
-    fn cuDeviceGet(device: *mut i32, ordinal: i32) -> i32;
-
-    /// Get the device name as a null-terminated string.
-    /// max_len includes the null terminator.
-    fn cuDeviceGetName(name: *mut std::os::raw::c_char, len: i32, dev: i32) -> i32;
-
-    /// Get total memory on the device in bytes.
-    fn cuDeviceTotalMem_v2(bytes: *mut usize, dev: i32) -> i32;
-
-    /// Get a specific device attribute value.
-    fn cuDeviceGetAttribute(value: *mut i32, attrib: i32, dev: i32) -> i32;
-
-    /// Get the CUDA driver version.
-    /// Returns version as (major * 1000 + minor * 10).
-    fn cuDriverGetVersion(version: *mut i32) -> i32;
-}
+// Use consolidated CUDA FFI from context-graph-cuda
+use context_graph_cuda::ffi::{
+    cuDeviceGet, cuDeviceGetAttribute, cuDeviceGetName, cuDeviceTotalMem_v2,
+    cuDriverGetVersion, cuInit, decode_driver_version, is_cuda_success,
+    CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+};
 
 /// Query REAL GPU information using CUDA Driver API.
 ///
@@ -98,7 +73,7 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
     unsafe {
         // Step 1: Initialize CUDA driver
         let init_result = cuInit(0);
-        if init_result != CUDA_SUCCESS {
+        if !is_cuda_success(init_result) {
             tracing::error!(
                 target: "gpu::device",
                 cuda_error_code = init_result,
@@ -115,7 +90,7 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
         // Step 2: Get device handle
         let mut device_handle: i32 = 0;
         let get_result = cuDeviceGet(&mut device_handle, device_ordinal as i32);
-        if get_result != CUDA_SUCCESS {
+        if !is_cuda_success(get_result) {
             tracing::error!(
                 target: "gpu::device",
                 cuda_error_code = get_result,
@@ -136,7 +111,7 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
         // Step 3: Query device name
         let mut name_buf = [0i8; 256];
         let name_result = cuDeviceGetName(name_buf.as_mut_ptr(), 256, device_handle);
-        if name_result == CUDA_SUCCESS {
+        if is_cuda_success(name_result) {
             // Convert C string to Rust String
             let c_str = std::ffi::CStr::from_ptr(name_buf.as_ptr());
             name = c_str.to_string_lossy().into_owned();
@@ -156,7 +131,7 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
 
         // Step 4: Query total memory
         let mem_result = cuDeviceTotalMem_v2(&mut total_vram, device_handle);
-        if mem_result == CUDA_SUCCESS {
+        if is_cuda_success(mem_result) {
             tracing::debug!(
                 target: "gpu::device",
                 total_vram_bytes = total_vram,
@@ -178,7 +153,7 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
             CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
             device_handle,
         );
-        if major_result == CUDA_SUCCESS {
+        if is_cuda_success(major_result) {
             compute_major = cc_major as u32;
         } else {
             tracing::warn!(
@@ -195,7 +170,7 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
             CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
             device_handle,
         );
-        if minor_result == CUDA_SUCCESS {
+        if is_cuda_success(minor_result) {
             compute_minor = cc_minor as u32;
         } else {
             tracing::warn!(
@@ -215,10 +190,9 @@ fn query_gpu_info_real(device_ordinal: u32) -> GpuInfo {
         // Step 7: Query driver version
         let mut driver_ver: i32 = 0;
         let driver_result = cuDriverGetVersion(&mut driver_ver);
-        if driver_result == CUDA_SUCCESS {
-            // Driver version is encoded as (major * 1000 + minor * 10)
-            let major = driver_ver / 1000;
-            let minor = (driver_ver % 1000) / 10;
+        if is_cuda_success(driver_result) {
+            // Use consolidated helper to decode driver version
+            let (major, minor) = decode_driver_version(driver_ver);
             driver_version_str = format!("{}.{}", major, minor);
             tracing::debug!(
                 target: "gpu::device",
