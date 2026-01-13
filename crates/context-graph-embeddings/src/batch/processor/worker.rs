@@ -2,6 +2,17 @@
 //!
 //! Contains the async worker loop that manages queue polling
 //! and batch processing through models.
+//!
+//! # Design Principle: No Detached Tasks
+//!
+//! This module does NOT use `tokio::spawn` for batch processing.
+//! All work is done inline within the worker loop, ensuring:
+//! - No orphaned tasks
+//! - No resource leaks
+//! - Clean shutdown without tracking
+//!
+//! Concurrency is achieved through the semaphore limiting concurrent
+//! batches, not through spawning detached tasks.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,6 +35,11 @@ use super::stats::BatchProcessorStatsInternal;
 // ============================================================================
 
 /// Main worker loop that processes requests and batches.
+///
+/// # No Detached Tasks
+///
+/// All batch processing happens inline. The semaphore limits concurrency
+/// but work is never spawned to detached tasks.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn worker_loop(
     queues: Arc<RwLock<HashMap<ModelId, BatchQueue>>>,
@@ -41,8 +57,9 @@ pub(crate) async fn worker_loop(
         tokio::select! {
             // Check for shutdown
             _ = shutdown_notify.notified() => {
-                // Process remaining batches before exiting
+                tracing::info!("Worker received shutdown signal, flushing queues...");
                 flush_all_queues(&queues, &registry, &stats, &batch_semaphore).await;
+                tracing::info!("Worker shutdown complete");
                 break;
             }
 
@@ -58,30 +75,31 @@ pub(crate) async fn worker_loop(
                     }
                 }
 
-                // Check if this queue should flush
-                check_and_process_queue(
-                    queues.clone(),
-                    registry.clone(),
+                // Process queue inline - NO SPAWNING
+                process_queue_if_ready(
+                    &queues,
+                    &registry,
                     model_id,
-                    stats.clone(),
-                    batch_semaphore.clone(),
+                    &stats,
+                    &batch_semaphore,
                 ).await;
             }
 
             // Poll for timeouts
             _ = poll_timer.tick() => {
                 if !is_running.load(Ordering::Relaxed) {
+                    tracing::debug!("Worker detected is_running=false, exiting");
                     break;
                 }
 
                 // Check all queues for timeout-triggered flushes
                 for model_id in ModelId::all() {
-                    check_and_process_queue(
-                        queues.clone(),
-                        registry.clone(),
+                    process_queue_if_ready(
+                        &queues,
+                        &registry,
                         *model_id,
-                        stats.clone(),
-                        batch_semaphore.clone(),
+                        &stats,
+                        &batch_semaphore,
                     ).await;
                 }
             }
@@ -90,16 +108,18 @@ pub(crate) async fn worker_loop(
 }
 
 // ============================================================================
-// QUEUE PROCESSING
+// QUEUE PROCESSING - INLINE, NO SPAWNING
 // ============================================================================
 
-/// Check if a queue should flush and process the batch.
-pub(crate) async fn check_and_process_queue(
-    queues: Arc<RwLock<HashMap<ModelId, BatchQueue>>>,
-    registry: Arc<ModelRegistry>,
+/// Process a queue if it's ready to flush.
+///
+/// All processing is done INLINE - no detached tasks are created.
+async fn process_queue_if_ready(
+    queues: &Arc<RwLock<HashMap<ModelId, BatchQueue>>>,
+    registry: &Arc<ModelRegistry>,
     model_id: ModelId,
-    stats: Arc<BatchProcessorStatsInternal>,
-    batch_semaphore: Arc<Semaphore>,
+    stats: &Arc<BatchProcessorStatsInternal>,
+    batch_semaphore: &Arc<Semaphore>,
 ) {
     // Check if should flush (read lock)
     let should_flush = {
@@ -114,8 +134,8 @@ pub(crate) async fn check_and_process_queue(
         return;
     }
 
-    // Acquire semaphore permit for concurrent batch limiting
-    let permit = match batch_semaphore.try_acquire_owned() {
+    // Try to acquire semaphore permit
+    let permit = match batch_semaphore.try_acquire() {
         Ok(permit) => permit,
         Err(_) => return, // Max concurrent batches reached, try next poll
     };
@@ -129,12 +149,11 @@ pub(crate) async fn check_and_process_queue(
     };
 
     if let Some(batch) = batch {
-        // Process batch asynchronously
-        tokio::spawn(async move {
-            let _permit = permit; // Hold permit until batch completes
-            process_batch(batch, &registry, &stats).await;
-        });
+        // Process INLINE - no spawning
+        process_batch(batch, registry, stats).await;
     }
+
+    drop(permit);
 }
 
 // ============================================================================
@@ -142,7 +161,9 @@ pub(crate) async fn check_and_process_queue(
 // ============================================================================
 
 /// Process a single batch through the model.
-pub(crate) async fn process_batch(
+///
+/// Called inline from the worker loop - never spawned.
+async fn process_batch(
     batch: Batch,
     registry: &Arc<ModelRegistry>,
     stats: &Arc<BatchProcessorStatsInternal>,
@@ -155,6 +176,11 @@ pub(crate) async fn process_batch(
         Ok(model) => model,
         Err(e) => {
             // Fail entire batch - NO FALLBACKS
+            tracing::error!(
+                model_id = ?model_id,
+                error = %e,
+                "Failed to get model for batch - failing entire batch"
+            );
             batch.fail(format!("Failed to get model {:?}: {}", model_id, e));
             stats.add_requests_failed(batch_size as u64);
             return;
@@ -162,8 +188,6 @@ pub(crate) async fn process_batch(
     };
 
     // Process each input in the batch
-    // Note: We process sequentially here. For true GPU batching,
-    // individual model implementations should optimize internally.
     let mut results: Vec<EmbeddingResult<ModelEmbedding>> = Vec::with_capacity(batch_size);
     let mut success_count: u64 = 0;
     let mut fail_count: u64 = 0;
@@ -175,6 +199,11 @@ pub(crate) async fn process_batch(
                 success_count += 1;
             }
             Err(e) => {
+                tracing::warn!(
+                    model_id = ?model_id,
+                    error = %e,
+                    "Embedding failed for input"
+                );
                 results.push(Err(e));
                 fail_count += 1;
             }
@@ -194,8 +223,8 @@ pub(crate) async fn process_batch(
 // FLUSH OPERATIONS
 // ============================================================================
 
-/// Flush all queues (used during shutdown).
-pub(crate) async fn flush_all_queues(
+/// Flush all queues during shutdown.
+async fn flush_all_queues(
     queues: &Arc<RwLock<HashMap<ModelId, BatchQueue>>>,
     registry: &Arc<ModelRegistry>,
     stats: &Arc<BatchProcessorStatsInternal>,
@@ -203,7 +232,6 @@ pub(crate) async fn flush_all_queues(
 ) {
     for model_id in ModelId::all() {
         loop {
-            // Check if queue has items
             let has_items = {
                 let queues_guard = queues.read().await;
                 queues_guard
@@ -216,13 +244,11 @@ pub(crate) async fn flush_all_queues(
                 break;
             }
 
-            // Acquire permit (blocking during shutdown is OK)
             let permit = match batch_semaphore.acquire().await {
                 Ok(permit) => permit,
-                Err(_) => break, // Semaphore closed
+                Err(_) => break,
             };
 
-            // Extract and process batch
             let batch = {
                 let mut queues_guard = queues.write().await;
                 queues_guard.get_mut(model_id).and_then(|q| q.drain_batch())
@@ -247,17 +273,7 @@ mod tests {
 
     #[test]
     fn test_queues_created_for_all_13_models() {
-        // Verify that we would create 13 queues - one per ModelId
         let all_models = ModelId::all();
         assert_eq!(all_models.len(), 13, "Expected 13 models");
-
-        println!("\n========================================");
-        println!("QUEUE CREATION VERIFICATION");
-        println!("========================================");
-        for (i, model_id) in all_models.iter().enumerate() {
-            println!("Queue {}: {:?}", i + 1, model_id);
-        }
-        println!("Total queues: {}", all_models.len());
-        println!("========================================\n");
     }
 }

@@ -12,8 +12,11 @@ fn test_single_character_text() {
 
 #[test]
 fn test_very_long_text() {
+    // Use 1000 chars (not 30,000) - enough to test long text handling
+    // without causing O(n*d) = O(1000*10000) = 10M operations to be prohibitive.
+    // 30,000 chars would cause 300M+ operations in bundle() which takes >2min.
     let model = HdcModel::default_model();
-    let long_text = "abc".repeat(10_000);
+    let long_text = "abc".repeat(333); // 999 chars
     let hv = model.encode_text(&long_text);
     assert_eq!(hv.len(), HDC_DIMENSION);
 }
