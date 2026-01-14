@@ -102,6 +102,8 @@ impl Handlers {
             tool_names::GET_AMORTIZED_SHORTCUTS => {
                 self.call_get_amortized_shortcuts(id, arguments).await
             }
+            // TASK-37: GPU status tool
+            tool_names::GET_GPU_STATUS => self.call_get_gpu_status(id).await,
             // TASK-NEUROMOD-MCP: Neuromodulation tools
             tool_names::GET_NEUROMODULATION_STATE => self.call_get_neuromodulation_state(id).await,
             tool_names::ADJUST_NEUROMODULATOR => {

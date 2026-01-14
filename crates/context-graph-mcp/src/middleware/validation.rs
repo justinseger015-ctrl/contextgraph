@@ -1,104 +1,3 @@
-# TASK-36: Add Parameter Validation Middleware
-
-```xml
-<task_spec id="TASK-MCP-010" version="2.0">
-<metadata>
-  <title>Add parameter validation middleware</title>
-  <status>complete</status>
-  <layer>surface</layer>
-  <sequence>36</sequence>
-  <implements><requirement_ref>REQ-MCP-010</requirement_ref></implements>
-  <depends_on></depends_on>
-  <estimated_hours>4</estimated_hours>
-</metadata>
-```
-
----
-
-## AI AGENT CONTEXT (READ FIRST)
-
-### What This Task Is
-Create a **centralized validation middleware module** for MCP tool parameters. Currently, each handler (there are 50+ handlers) does inline parameter validation with inconsistent error messages. This task creates reusable validation functions that:
-1. Validate common patterns (UUIDs, string lengths, numeric ranges)
-2. Return consistent error messages **with field names included**
-3. Support JsonSchema-based validation via `schemars` crate
-
-### Why This Matters (Constitution Reference)
-- **ISS-012** (MEDIUM): Parameter validation is inconsistent across handlers
-- **SEC-01**: "Validate/sanitize all input" - constitution.yaml line 119
-- **AP-14**: "No .unwrap() in library code" - must use Result types
-
-### Current State Analysis
-The middleware directory exists at `crates/context-graph-mcp/src/middleware/` with:
-- `mod.rs` - Exports `CognitivePulse` only
-- `cognitive_pulse.rs` - Real-time UTL state middleware
-
-**NO validation.rs exists yet.** You are creating it from scratch.
-
----
-
-## CODEBASE FACTS (Verified 2026-01-13)
-
-### Directory Structure
-```
-crates/context-graph-mcp/src/
-├── middleware/
-│   ├── mod.rs              # MODIFY: add `pub mod validation;`
-│   ├── cognitive_pulse.rs  # DO NOT TOUCH
-│   └── validation.rs       # CREATE: new file
-├── lib.rs                  # Already exports `pub mod middleware;`
-├── protocol.rs             # Contains error_codes module (INVALID_PARAMS = -32602)
-└── handlers/               # 50+ handler files that will use validation middleware
-```
-
-### Error Code Reference (protocol.rs lines 87-93)
-```rust
-pub mod error_codes {
-    pub const PARSE_ERROR: i32 = -32700;
-    pub const INVALID_REQUEST: i32 = -32600;
-    pub const METHOD_NOT_FOUND: i32 = -32601;
-    pub const INVALID_PARAMS: i32 = -32602;  // USE THIS
-    pub const INTERNAL_ERROR: i32 = -32603;
-}
-```
-
-### Existing Validation Patterns to Consolidate
-Current handlers do inline validation like this (handlers/dream.rs:70-80):
-```rust
-let rationale = match args.get("rationale").and_then(|v| v.as_str()) {
-    Some(r) if !r.trim().is_empty() => r.to_string(),
-    _ => {
-        return JsonRpcResponse::error(
-            id,
-            error_codes::INVALID_PARAMS,
-            "rationale is required for manual dream trigger",  // NO FIELD NAME!
-        );
-    }
-};
-```
-
-**Problem**: Error message doesn't include the field name "rationale" in a structured way.
-
-### Dependencies Already in Cargo.toml
-```toml
-# crates/context-graph-mcp/Cargo.toml (verified)
-thiserror = { workspace = true }
-serde = { workspace = true }
-serde_json = "1.0"
-uuid = { workspace = true }
-```
-
-**NOTE**: `schemars` is NOT currently a dependency. You must add it.
-
----
-
-## EXACT REQUIREMENTS
-
-### Files to Create
-
-#### 1. `crates/context-graph-mcp/src/middleware/validation.rs`
-
-```rust
 //! Parameter validation middleware for MCP tool handlers.
 //!
 //! Provides consistent validation with field-name-aware error messages.
@@ -360,11 +259,9 @@ where
     T: schemars::JsonSchema + DeserializeOwned,
 {
     // First attempt deserialization
-    serde_json::from_value::<T>(params.clone()).map_err(|e| {
-        ValidationError::SchemaViolation {
-            field: "params".to_string(),
-            details: e.to_string(),
-        }
+    serde_json::from_value::<T>(params.clone()).map_err(|e| ValidationError::SchemaViolation {
+        field: "params".to_string(),
+        details: e.to_string(),
     })
 }
 
@@ -487,7 +384,8 @@ mod tests {
 
     #[test]
     fn test_validate_13_element_array_valid() {
-        let args = json!({"weights": [0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.04]});
+        let args =
+            json!({"weights": [0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.04]});
         let result = validate_13_element_array("weights", args.get("weights"));
         assert!(result.is_ok());
         let arr = result.unwrap();
@@ -520,13 +418,18 @@ mod tests {
     #[test]
     fn test_error_code_always_invalid_params() {
         let errors = vec![
-            ValidationError::MissingRequired { field: "x".into() },
-            ValidationError::InvalidFormat { field: "x".into(), expected: "y".into() },
+            ValidationError::MissingRequired {
+                field: "x".into(),
+            },
+            ValidationError::InvalidFormat {
+                field: "x".into(),
+                expected: "y".into(),
+            },
             ValidationError::OutOfRange {
                 field: "x".into(),
                 value: "1".into(),
                 min: "0".into(),
-                max: "0".into()
+                max: "0".into(),
             },
         ];
         for err in errors {
@@ -572,233 +475,65 @@ mod tests {
     #[test]
     fn test_edge_case_boundary_values() {
         // Test exact boundary values
-        assert!(validate_range("x", 1, 1, 100).is_ok());   // min boundary
+        assert!(validate_range("x", 1, 1, 100).is_ok()); // min boundary
         assert!(validate_range("x", 100, 1, 100).is_ok()); // max boundary
-        assert!(validate_range("x", 0, 1, 100).is_err());  // just below min
+        assert!(validate_range("x", 0, 1, 100).is_err()); // just below min
         assert!(validate_range("x", 101, 1, 100).is_err()); // just above max
     }
+
+    // ========================================================================
+    // SCHEMARS INTEGRATION TEST
+    // ========================================================================
+
+    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+    struct TestInput {
+        name: String,
+        count: i32,
+    }
+
+    #[test]
+    fn test_validate_input_valid() {
+        let params = json!({"name": "test", "count": 42});
+        let result: Result<TestInput, _> = validate_input(params);
+        assert!(result.is_ok());
+        let input = result.unwrap();
+        assert_eq!(input.name, "test");
+        assert_eq!(input.count, 42);
+    }
+
+    #[test]
+    fn test_validate_input_invalid() {
+        let params = json!({"name": "test"}); // missing count
+        let result: Result<TestInput, _> = validate_input(params);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, ValidationError::SchemaViolation { .. }));
+    }
+
+    // ========================================================================
+    // OPTIONAL FLOAT TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_validate_optional_float_present() {
+        let args = json!({"threshold": 0.75});
+        let result = validate_optional_float("threshold", args.get("threshold"), 0.0, 1.0, 0.5);
+        assert!(result.is_ok());
+        assert!((result.unwrap() - 0.75).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_validate_optional_float_missing_uses_default() {
+        let args = json!({});
+        let result = validate_optional_float("threshold", args.get("threshold"), 0.0, 1.0, 0.5);
+        assert!(result.is_ok());
+        assert!((result.unwrap() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_validate_optional_float_out_of_range() {
+        let args = json!({"threshold": 1.5});
+        let result = validate_optional_float("threshold", args.get("threshold"), 0.0, 1.0, 0.5);
+        assert!(result.is_err());
+    }
 }
-```
-
-#### 2. Update `crates/context-graph-mcp/src/middleware/mod.rs`
-
-```rust
-//! MCP Middleware modules.
-//!
-//! - `cognitive_pulse`: Real-time UTL state injection
-//! - `validation`: Parameter validation with field-aware errors
-
-mod cognitive_pulse;
-pub mod validation;
-
-pub use cognitive_pulse::CognitivePulse;
-pub use validation::{
-    ValidationError,
-    validate_required_string,
-    validate_string_length,
-    validate_range,
-    validate_uuid,
-    validate_optional_int,
-    validate_optional_float,
-    validate_13_element_array,
-    validate_embedder_index,
-    validate_input,
-};
-```
-
-#### 3. Update `crates/context-graph-mcp/Cargo.toml`
-
-Add schemars dependency:
-```toml
-# Under [dependencies] section, add:
-schemars = "0.8"
-```
-
----
-
-## VERIFICATION COMMANDS
-
-### Step 1: Add Dependency and Compile
-```bash
-# Add schemars to Cargo.toml first, then:
-cargo check -p context-graph-mcp
-```
-Expected: No errors
-
-### Step 2: Run Validation Tests
-```bash
-cargo test -p context-graph-mcp validation -- --nocapture
-```
-Expected: All tests pass (15+ tests)
-
-### Step 3: Full Workspace Test
-```bash
-cargo test --workspace
-```
-Expected: No regressions
-
----
-
-## FULL STATE VERIFICATION (MANDATORY)
-
-After completing the implementation, you MUST perform these verification steps:
-
-### Source of Truth Definition
-The source of truth for this task is:
-1. **File existence**: `crates/context-graph-mcp/src/middleware/validation.rs` exists
-2. **Module export**: `pub mod validation;` in middleware/mod.rs
-3. **Test results**: All validation tests pass
-4. **Dependency**: `schemars` in Cargo.toml
-
-### Execute & Inspect Protocol
-After writing the code:
-
-```bash
-# 1. Verify file exists
-ls -la crates/context-graph-mcp/src/middleware/validation.rs
-
-# 2. Verify module is exported
-grep "pub mod validation" crates/context-graph-mcp/src/middleware/mod.rs
-
-# 3. Verify schemars dependency
-grep "schemars" crates/context-graph-mcp/Cargo.toml
-
-# 4. Run tests and capture output
-cargo test -p context-graph-mcp validation 2>&1 | tee /tmp/validation_test_output.txt
-
-# 5. Count passing tests
-grep -c "test result: ok" /tmp/validation_test_output.txt
-```
-
-### Boundary & Edge Case Audit
-Manually simulate these 3 edge cases and print before/after state:
-
-#### Edge Case 1: Empty String Validation
-```rust
-// INPUT
-let args = json!({"rationale": ""});
-// BEFORE: args.get("rationale") = Some("")
-let result = validate_required_string("rationale", args.get("rationale"));
-// AFTER: result = Err(ValidationError::MissingRequired { field: "rationale" })
-// EVIDENCE: Test test_validate_required_string_empty passes
-```
-
-#### Edge Case 2: 12-Element Array (Wrong Count)
-```rust
-// INPUT
-let args = json!({"weights": [0.1; 12]}); // 12 elements, need 13
-// BEFORE: args.get("weights").as_array().len() = 12
-let result = validate_13_element_array("weights", args.get("weights"));
-// AFTER: result = Err(ValidationError::FieldValidation { field: "weights", message: "Must have exactly 13 elements, got 12" })
-// EVIDENCE: Test test_validate_13_element_array_wrong_length passes
-```
-
-#### Edge Case 3: UUID Format Validation
-```rust
-// INPUT
-let uuid_str = "not-a-valid-uuid";
-// BEFORE: uuid_str = "not-a-valid-uuid"
-let result = validate_uuid("memory_id", uuid_str);
-// AFTER: result = Err(ValidationError::InvalidFormat { field: "memory_id", expected: "UUID (got 'not-a-valid-uuid', error: ...)" })
-// EVIDENCE: Test test_validate_uuid_invalid passes
-```
-
-### Evidence of Success Log
-After all tests pass, output this evidence:
-```
-================================================================================
-TASK-36 FULL STATE VERIFICATION - EVIDENCE LOG
-================================================================================
-Date: [TIMESTAMP]
-Task: TASK-36 (TASK-MCP-010) - Add parameter validation middleware
-
-FILE EXISTENCE:
-  crates/context-graph-mcp/src/middleware/validation.rs: EXISTS
-
-MODULE EXPORT:
-  middleware/mod.rs contains: pub mod validation; - VERIFIED
-
-DEPENDENCY:
-  Cargo.toml contains schemars = "0.8" - VERIFIED
-
-TEST RESULTS:
-  Total tests: [N]
-  Passed: [N]
-  Failed: 0
-
-EDGE CASES VERIFIED:
-  1. Empty string validation - PASS
-  2. Wrong array length (12 vs 13) - PASS
-  3. Invalid UUID format - PASS
-
-VERIFICATION STATUS: COMPLETE
-================================================================================
-```
-
----
-
-## CONSTRAINTS (MUST FOLLOW)
-
-1. **Error messages MUST include field name** - Every ValidationError variant includes `field: String`
-2. **MUST support schemars JsonSchema** - The `validate_input<T>` function uses schemars
-3. **MUST validate BEFORE handler execution** - This is middleware, runs before business logic
-4. **NO BACKWARDS COMPATIBILITY HACKS** - If validation fails, return error immediately
-5. **FAIL FAST** - No silent failures, no defaults hiding validation errors
-6. **AP-14 Compliance** - No `.unwrap()` in the validation code
-
----
-
-## OUT OF SCOPE
-
-- Modifying existing handlers to use the middleware (future tasks)
-- Individual tool schema definitions (TASK-27 through TASK-40)
-- Integration with CognitivePulse middleware
-
----
-
-## ACCEPTANCE CRITERIA
-
-- [x] `validation.rs` created with all functions from signatures
-- [x] `ValidationError` enum with 5 variants, all include field name
-- [x] `validate_input<T>` works with schemars JsonSchema
-- [x] 15+ unit tests pass (29 tests pass)
-- [x] 3 edge case tests documented with before/after state (5 edge cases verified)
-- [x] `cargo test -p context-graph-mcp validation` passes
-- [x] Full State Verification evidence log produced
-
----
-
-## WHAT SUCCESS LOOKS LIKE
-
-```bash
-$ cargo test -p context-graph-mcp validation
-   Compiling context-graph-mcp v0.1.0
-    Finished test [unoptimized + debuginfo] target(s)
-     Running unittests src/lib.rs
-
-running 18 tests
-test middleware::validation::tests::test_validate_required_string_present ... ok
-test middleware::validation::tests::test_validate_required_string_missing ... ok
-test middleware::validation::tests::test_validate_required_string_empty ... ok
-test middleware::validation::tests::test_validate_string_length_valid ... ok
-test middleware::validation::tests::test_validate_string_length_too_short ... ok
-test middleware::validation::tests::test_validate_string_length_too_long ... ok
-test middleware::validation::tests::test_validate_range_valid ... ok
-test middleware::validation::tests::test_validate_range_below_min ... ok
-test middleware::validation::tests::test_validate_range_above_max ... ok
-test middleware::validation::tests::test_validate_uuid_valid ... ok
-test middleware::validation::tests::test_validate_uuid_invalid ... ok
-test middleware::validation::tests::test_validate_optional_int_present ... ok
-test middleware::validation::tests::test_validate_optional_int_missing_uses_default ... ok
-test middleware::validation::tests::test_validate_optional_int_out_of_range ... ok
-test middleware::validation::tests::test_validate_13_element_array_valid ... ok
-test middleware::validation::tests::test_validate_13_element_array_wrong_length ... ok
-test middleware::validation::tests::test_validate_embedder_index_valid ... ok
-test middleware::validation::tests::test_validate_embedder_index_invalid ... ok
-
-test result: ok. 18 passed; 0 failed; 0 ignored
-```
-
----
-
-*Version 2.0 - Updated 2026-01-13 - Complete context for AI agent implementation*

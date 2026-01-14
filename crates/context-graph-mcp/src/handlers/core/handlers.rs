@@ -12,7 +12,9 @@ use parking_lot::RwLock;
 
 use context_graph_core::alignment::GoalAlignmentCalculator;
 use context_graph_core::atc::AdaptiveThresholdCalibration;
-use context_graph_core::dream::{AmortizedLearner, DreamController, DreamScheduler, TriggerManager};
+use context_graph_core::dream::{
+    AmortizedLearner, DreamController, DreamScheduler, GpuMonitor, StubGpuMonitor, TriggerManager,
+};
 // TASK-IDENTITY-P0-001: Import GWT identity components for shared monitor wiring
 use context_graph_core::gwt::ego_node::SelfEgoNode;
 use context_graph_core::gwt::listeners::IdentityContinuityListener;
@@ -135,6 +137,13 @@ pub struct Handlers {
     pub(in crate::handlers) trigger_manager:
         Option<Arc<RwLock<TriggerManager>>>,
 
+    // ========== GPU MONITOR (TASK-37) ==========
+    /// GpuMonitor for GPU utilization and dream eligibility status.
+    /// TASK-37: Required for get_gpu_status MCP tool.
+    /// Uses RwLock because get_utilization() is &mut self.
+    pub(in crate::handlers) gpu_monitor:
+        Option<Arc<RwLock<dyn GpuMonitor>>>,
+
     // ========== NEUROMODULATION (TASK-NEUROMOD-MCP) ==========
     /// Neuromodulation manager for controlling system behavior modulation.
     /// TASK-NEUROMOD-MCP: Required for get_neuromodulation_state, adjust_neuromodulator.
@@ -220,6 +229,8 @@ impl Handlers {
             amortized_learner: None,
             // TASK-35: TriggerManager defaults to None - use with_trigger_manager() for manual triggering
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             // TASK-NEUROMOD-MCP: Neuromod defaults to None - use with_neuromod() for full support
             neuromod_manager: None,
             // TASK-IDENTITY-P0-001: Identity fields default to None - use with_default_gwt() for full support
@@ -288,6 +299,8 @@ impl Handlers {
             amortized_learner: None,
             // TASK-35: TriggerManager defaults to None - use with_trigger_manager() for manual triggering
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             // TASK-NEUROMOD-MCP: Neuromod defaults to None
             neuromod_manager: None,
             // TASK-IDENTITY-P0-001: Identity fields default to None
@@ -354,6 +367,8 @@ impl Handlers {
             amortized_learner: None,
             // TASK-35: TriggerManager defaults to None - use with_trigger_manager() for manual triggering
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             // TASK-NEUROMOD-MCP: Neuromod defaults to None
             neuromod_manager: None,
             // TASK-IDENTITY-P0-001: Identity fields default to None
@@ -412,6 +427,8 @@ impl Handlers {
             amortized_learner: None,
             // TASK-35: TriggerManager defaults to None - use with_trigger_manager() for manual triggering
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             // TASK-NEUROMOD-MCP: Neuromod defaults to None
             neuromod_manager: None,
             // TASK-IDENTITY-P0-001: Identity fields default to None
@@ -474,6 +491,8 @@ impl Handlers {
             amortized_learner: None,
             // TASK-35: TriggerManager defaults to None - use with_trigger_manager() for manual triggering
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             // TASK-NEUROMOD-MCP: Neuromod defaults to None
             neuromod_manager: None,
             // TASK-IDENTITY-P0-001: Identity fields default to None
@@ -546,6 +565,8 @@ impl Handlers {
             amortized_learner: None,
             // TASK-35: TriggerManager defaults to None - use with_trigger_manager() for manual triggering
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             // TASK-NEUROMOD-MCP: Neuromod defaults to None
             neuromod_manager: None,
             // TASK-IDENTITY-P0-001: Identity fields default to None
@@ -616,6 +637,8 @@ impl Handlers {
             // TASK-35: TriggerManager defaults to None in this constructor
             // Use with_trigger_manager() to add after construction if needed
             trigger_manager: None,
+            // TASK-37: GpuMonitor defaults to None - use with_gpu_monitor() for GPU status
+            gpu_monitor: None,
             neuromod_manager: Some(neuromod_manager),
             // TASK-IDENTITY-P0-001: Identity fields default to None for this constructor
             identity_listener: None,
@@ -768,6 +791,9 @@ impl Handlers {
             amortized_learner: Some(amortized_learner),
             // TASK-35: REAL TriggerManager wired for manual dream triggering
             trigger_manager: Some(trigger_manager),
+            // TASK-37: Default StubGpuMonitor - use with_gpu_monitor() for NVML integration
+            // StubGpuMonitor::unavailable() returns explicit error per AP-26 (no silent 0.0)
+            gpu_monitor: Some(Arc::new(RwLock::new(StubGpuMonitor::unavailable()))),
             // TASK-NEUROMOD-MCP: REAL NeuromodulationManager wired
             neuromod_manager: Some(neuromod_manager),
             // TASK-IDENTITY-P0-001: REAL identity continuity wiring (AP-40 fix)
@@ -805,6 +831,46 @@ impl Handlers {
     #[allow(dead_code)]
     pub fn with_trigger_manager(mut self, trigger_manager: Arc<RwLock<TriggerManager>>) -> Self {
         self.trigger_manager = Some(trigger_manager);
+        self
+    }
+
+    // ========================================================================
+    // TASK-37: GpuMonitor Builder Method
+    // ========================================================================
+
+    /// Configure GpuMonitor for GPU status monitoring.
+    ///
+    /// TASK-37: Required for get_gpu_status MCP tool.
+    /// Use NvmlGpuMonitor for production systems with NVIDIA GPUs,
+    /// or StubGpuMonitor for testing.
+    ///
+    /// # Arguments
+    ///
+    /// * `gpu_monitor` - Shared GpuMonitor implementation
+    ///
+    /// # Returns
+    ///
+    /// Self with gpu_monitor configured
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use context_graph_core::dream::{StubGpuMonitor, GpuMonitor};
+    ///
+    /// // For testing with known GPU usage
+    /// let gpu_monitor: Arc<RwLock<dyn GpuMonitor>> =
+    ///     Arc::new(RwLock::new(StubGpuMonitor::with_usage(0.25)));
+    /// let handlers = Handlers::new(...)
+    ///     .with_gpu_monitor(gpu_monitor);
+    ///
+    /// // For production with NVML (requires nvml feature)
+    /// #[cfg(feature = "nvml")]
+    /// let gpu_monitor: Arc<RwLock<dyn GpuMonitor>> =
+    ///     Arc::new(RwLock::new(NvmlGpuMonitor::new()?));
+    /// ```
+    #[allow(dead_code)]
+    pub fn with_gpu_monitor(mut self, gpu_monitor: Arc<RwLock<dyn GpuMonitor>>) -> Self {
+        self.gpu_monitor = Some(gpu_monitor);
         self
     }
 

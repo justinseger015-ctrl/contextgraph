@@ -1,10 +1,12 @@
 //! Dream consolidation tool definitions.
 //! TASK-DREAM-MCP: Dream triggers, status, abort, amortized shortcuts.
+//! TASK-37: Added get_gpu_status for GPU utilization monitoring.
 
 use serde_json::json;
 use crate::tools::types::ToolDefinition;
 
-/// Returns Dream tool definitions (4 tools).
+/// Returns Dream tool definitions (5 tools).
+/// TASK-37: Added get_gpu_status tool.
 pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         // trigger_dream - Manually trigger a dream consolidation cycle
@@ -81,6 +83,21 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "description": "Maximum shortcuts to return"
                     }
                 },
+                "required": []
+            }),
+        ),
+
+        // get_gpu_status - Get GPU utilization and dream eligibility
+        // TASK-37: Exposes GpuMonitor trait from TASK-23
+        ToolDefinition::new(
+            "get_gpu_status",
+            "Get GPU utilization and dream eligibility status. Returns current GPU usage (0.0-1.0), \
+             dream eligibility (GPU < 80%), and whether dream should abort (GPU > 30%). \
+             Per constitution: dream.trigger.gpu = '<80%', dream.constraints.gpu = '<30%'. \
+             FAILS FAST with explicit error if GpuMonitor not initialized (AP-26).",
+            json!({
+                "type": "object",
+                "properties": {},
                 "required": []
             }),
         ),

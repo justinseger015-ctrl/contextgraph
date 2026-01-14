@@ -5,7 +5,7 @@ use crate::protocol::JsonRpcId;
 use super::{create_test_handlers, make_request};
 
 #[tokio::test]
-async fn test_tools_list_returns_all_35_tools() {
+async fn test_tools_list_returns_all_44_tools() {
     let handlers = create_test_handlers();
     let request = make_request("tools/list", Some(JsonRpcId::Number(1)), None);
 
@@ -24,11 +24,11 @@ async fn test_tools_list_returns_all_35_tools() {
         .as_array()
         .expect("tools must be an array");
 
-    // Verify exactly 43 tools returned:
-    // Original 6: inject_context, store_memory, get_memetic_status, get_graph_manifest, search_graph, utl_status
+    // Verify exactly 44 tools returned:
+    // Core 6: inject_context, store_memory, get_memetic_status, get_graph_manifest, search_graph, utl_status
     // GWT 7: get_consciousness_state, get_kuramoto_sync, get_workspace_status, get_ego_state, trigger_workspace_broadcast, adjust_coupling, get_coherence_state (TASK-34)
     // ATC 3 (TASK-ATC-001): get_threshold_status, get_calibration_metrics, trigger_recalibration
-    // Dream 4 (TASK-DREAM-MCP): trigger_dream, get_dream_status, abort_dream, get_amortized_shortcuts
+    // Dream 5 (TASK-DREAM-MCP, TASK-37): trigger_dream, get_dream_status, abort_dream, get_amortized_shortcuts, get_gpu_status
     // Neuromod 2 (TASK-NEUROMOD-MCP): get_neuromodulation_state, adjust_neuromodulator
     // Steering 1 (TASK-STEERING-001): get_steering_feedback
     // Causal 1 (TASK-CAUSAL-001): omni_infer
@@ -42,8 +42,8 @@ async fn test_tools_list_returns_all_35_tools() {
     // Johari 1 (TASK-MCP-005): get_johari_classification
     assert_eq!(
         tools.len(),
-        43,
-        "Must return exactly 43 tools, got {}",
+        44,
+        "Must return exactly 44 tools, got {}",
         tools.len()
     );
 }
@@ -178,5 +178,11 @@ async fn test_tools_list_contains_expected_tool_names() {
     assert!(
         tool_names.contains(&"get_coherence_state"),
         "Missing get_coherence_state tool (TASK-34)"
+    );
+
+    // Verify GPU status tool is present (TASK-37)
+    assert!(
+        tool_names.contains(&"get_gpu_status"),
+        "Missing get_gpu_status tool (TASK-37)"
     );
 }

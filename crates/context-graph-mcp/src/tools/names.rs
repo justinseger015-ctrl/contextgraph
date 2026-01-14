@@ -48,6 +48,8 @@ pub const GET_DREAM_STATUS: &str = "get_dream_status";
 pub const ABORT_DREAM: &str = "abort_dream";
 /// TASK-DREAM-MCP: Get shortcut candidates from amortized learning
 pub const GET_AMORTIZED_SHORTCUTS: &str = "get_amortized_shortcuts";
+/// TASK-37: Get GPU utilization and dream eligibility status
+pub const GET_GPU_STATUS: &str = "get_gpu_status";
 
 // ========== NEUROMODULATION TOOLS (TASK-NEUROMOD-MCP) ==========
 

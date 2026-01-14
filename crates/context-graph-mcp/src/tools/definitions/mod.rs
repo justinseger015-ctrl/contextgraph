@@ -22,14 +22,15 @@ use crate::tools::types::ToolDefinition;
 /// Get all tool definitions for the `tools/list` response.
 ///
 /// Returns the complete list of MCP tools exposed by the Context Graph server.
-/// Currently returns 42 tools across 14 categories.
+/// Currently returns 44 tools across 14 categories.
+/// TASK-37: Added get_gpu_status tool (Dream tools now 5).
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(42);
+    let mut tools = Vec::with_capacity(44);
 
     // Core tools (6)
     tools.extend(core::definitions());
 
-    // GWT tools (6)
+    // GWT tools (7) - TASK-33/34 added get_coherence_state
     tools.extend(gwt::definitions());
 
     // UTL tools (1)
@@ -38,7 +39,7 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     // ATC tools (3)
     tools.extend(atc::definitions());
 
-    // Dream tools (4)
+    // Dream tools (5) - TASK-37: Added get_gpu_status
     tools.extend(dream::definitions());
 
     // Neuromod tools (2)

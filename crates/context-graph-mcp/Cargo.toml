@@ -45,6 +45,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # UUID
 uuid = { workspace = true }
 
+# JSON Schema validation (TASK-36)
+schemars = "0.8"
+
 # Synchronization
 parking_lot = "0.12"
 futures = "0.3"

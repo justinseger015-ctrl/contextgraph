@@ -204,6 +204,12 @@ pub mod error_codes {
     /// Manual dream trigger request failed (Full State Verification failed)
     /// TASK-35: Returned when check_triggers() does not return Manual after request_manual_trigger()
     pub const DREAM_TRIGGER_FAILED: i32 = -32074;
+    /// GpuMonitor not initialized - use with_gpu_monitor() or with_default_gwt()
+    /// TASK-37: Returned when get_gpu_status is called without GpuMonitor configured
+    pub const GPU_MONITOR_NOT_INITIALIZED: i32 = -32075;
+    /// GPU utilization query failed
+    /// TASK-37: Returned when GpuMonitor.get_utilization() returns an error
+    pub const GPU_QUERY_FAILED: i32 = -32076;
 
     // Neuromodulation error codes (-32080 to -32089) - TASK-NEUROMOD-MCP
     /// Neuromodulation manager not initialized

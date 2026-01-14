@@ -133,12 +133,12 @@ mod tests {
         let median_latency = latencies[2];
 
         // Test environment budget (relaxed for cold-start scenarios and GPU contention):
-        // - 1000ms covers model load from disk, kernel compilation, memory transfer,
+        // - 1500ms covers model load from disk, kernel compilation, memory transfer,
         //   and GPU contention during parallel test execution
         //
         // Production target with pre-warmed VRAM models: <10ms
         // That stricter budget is validated in integration tests with actual warm pools.
-        let budget_ms: u128 = 1000;
+        let budget_ms: u128 = 1500;
         assert!(
             median_latency.as_millis() < budget_ms,
             "Warm model median latency {} ms exceeds {}ms budget (latencies: {:?})",

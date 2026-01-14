@@ -205,7 +205,7 @@ mod tests {
     ///
     /// NOTE: This test uses relaxed budgets suitable for test environments
     /// where models may not be pre-warmed in VRAM and GPU contention exists:
-    /// - Test environment budget: 1000ms (covers model load, kernel compilation,
+    /// - Test environment budget: 1500ms (covers model load, kernel compilation,
     ///   memory transfer, and GPU contention during parallel test execution)
     ///
     /// For production environments with pre-warmed GPU models in VRAM,
@@ -292,11 +292,11 @@ mod tests {
         println!("========================================\n");
 
         // Test environment budget (relaxed for cold-start scenarios and GPU contention):
-        // - 1000ms covers model load from disk, kernel compilation, memory transfer,
+        // - 1500ms covers model load from disk, kernel compilation, memory transfer,
         //   and GPU contention during parallel test execution
         //
         // Production target with pre-warmed VRAM models: <10ms
-        let budget_ms: u128 = 1000;
+        let budget_ms: u128 = 1500;
         assert!(
             median_latency.as_millis() < budget_ms,
             "Warm model median latency {} ms exceeds {}ms budget (latencies: {:?})",

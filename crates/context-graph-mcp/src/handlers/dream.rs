@@ -1,6 +1,7 @@
 //! Dream Consolidation MCP Handlers
 //!
 //! TASK-DREAM-MCP: MCP tool handlers for dream consolidation system.
+//! TASK-37: Added get_gpu_status for GPU utilization monitoring.
 //! NO BACKWARDS COMPATIBILITY - FAIL FAST WITH ROBUST LOGGING.
 //!
 //! ## Constitution Reference
@@ -11,12 +12,17 @@
 //! - GPU usage < 30%
 //! - Wake latency < 100ms (MANDATE)
 //!
+//! GPU thresholds (constitution.yaml):
+//! - dream.trigger.gpu = "<80%" - Eligibility to START dream
+//! - dream.constraints.gpu = "<30%" - Budget during dream (abort if exceeded)
+//!
 //! ## Tools
 //!
 //! - trigger_dream: Manually trigger dream consolidation cycle
 //! - get_dream_status: Get current dream system status
 //! - abort_dream: Abort current dream cycle (<100ms mandate)
 //! - get_amortized_shortcuts: Get shortcut candidates from amortized learning
+//! - get_gpu_status: Get GPU utilization and dream eligibility (TASK-37)
 
 use serde_json::json;
 use tracing::{debug, error, info, warn};
@@ -484,5 +490,155 @@ impl Handlers {
                 }
             }),
         )
+    }
+
+    /// get_gpu_status tool implementation.
+    ///
+    /// TASK-37: Exposes GpuMonitor trait from TASK-23.
+    /// FAIL FAST if GpuMonitor not initialized (AP-26).
+    ///
+    /// Returns:
+    /// - utilization: f32 - Current GPU usage [0.0, 1.0]
+    /// - is_eligible_for_dream: bool - GPU < 80% (constitution: dream.trigger.gpu)
+    /// - should_abort_dream: bool - GPU > 30% (constitution: dream.constraints.gpu)
+    /// - monitor_available: bool - Whether GPU monitoring is available
+    /// - error: Option<string> - Error message if query failed
+    ///
+    /// # Constitution Compliance
+    ///
+    /// - dream.trigger.gpu = "<80%" - Eligibility to START dream
+    /// - dream.constraints.gpu = "<30%" - Budget during dream (abort if exceeded)
+    /// - AP-26: No silent failures - returns explicit error on unavailable GPU
+    pub(super) async fn call_get_gpu_status(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
+        debug!("Handling get_gpu_status tool call");
+
+        // FAIL FAST: GpuMonitor is REQUIRED
+        let gpu_monitor = match &self.gpu_monitor {
+            Some(gm) => gm,
+            None => {
+                error!("get_gpu_status: GpuMonitor not initialized - FAIL FAST per AP-26");
+                // Return MCP tool error (isError=true) not JSON-RPC error
+                // This allows client to handle the error gracefully while still failing fast
+                return self.tool_error_with_pulse(
+                    id,
+                    &json!({
+                        "error_type": "GPU_MONITOR_NOT_INITIALIZED",
+                        "message": "GpuMonitor not initialized. Configure with with_gpu_monitor() or use with_default_gwt().",
+                        "error_code": error_codes::GPU_MONITOR_NOT_INITIALIZED
+                    }).to_string(),
+                );
+            }
+        };
+
+        // Get GPU utilization
+        let utilization_result = {
+            let mut monitor = gpu_monitor.write();
+            monitor.get_utilization()
+        };
+
+        match utilization_result {
+            Ok(utilization) => {
+                // Consolidate all threshold checks in a single lock acquisition for efficiency
+                let (is_eligible_result, should_abort_result, monitor_available) = {
+                    let mut monitor = gpu_monitor.write();
+                    let eligible = monitor.is_eligible_for_dream();
+                    let abort = monitor.should_abort_dream();
+                    let available = monitor.is_available();
+                    (eligible, abort, available)
+                };
+
+                // Handle potential errors from threshold checks - log warnings per AP-26
+                // (warn on errors, use conservative defaults: not eligible, should abort)
+                let is_eligible = match is_eligible_result {
+                    Ok(v) => v,
+                    Err(ref e) => {
+                        warn!("get_gpu_status: is_eligible_for_dream() failed: {} - defaulting to false", e);
+                        false
+                    }
+                };
+                let should_abort = match should_abort_result {
+                    Ok(v) => v,
+                    Err(ref e) => {
+                        warn!("get_gpu_status: should_abort_dream() failed: {} - defaulting to true", e);
+                        true
+                    }
+                };
+
+                info!(
+                    "get_gpu_status: utilization={:.1}%, eligible={}, should_abort={}",
+                    utilization * 100.0,
+                    is_eligible,
+                    should_abort
+                );
+
+                self.tool_result_with_pulse(
+                    id,
+                    json!({
+                        "utilization": utilization,
+                        "utilization_percent": format!("{:.1}%", utilization * 100.0),
+                        "is_eligible_for_dream": is_eligible,
+                        "should_abort_dream": should_abort,
+                        "monitor_available": monitor_available,
+                        "thresholds": {
+                            "eligibility": {
+                                "threshold": 0.80,
+                                "threshold_percent": "80%",
+                                "description": "GPU < 80% to START dream",
+                                "constitution_ref": "dream.trigger.gpu = '<80%'"
+                            },
+                            "budget": {
+                                "threshold": 0.30,
+                                "threshold_percent": "30%",
+                                "description": "GPU > 30% must ABORT dream",
+                                "constitution_ref": "dream.constraints.gpu = '<30%'"
+                            }
+                        }
+                    }),
+                )
+            }
+            Err(e) => {
+                // Per AP-26: Return explicit error, not silent 0.0
+                warn!("get_gpu_status: GPU query failed: {}", e);
+
+                // Return partial response with error details
+                self.tool_result_with_pulse(
+                    id,
+                    json!({
+                        "utilization": null,
+                        "utilization_percent": null,
+                        "is_eligible_for_dream": null,
+                        "should_abort_dream": null,
+                        "monitor_available": false,
+                        "error": e.to_string(),
+                        "error_type": match e {
+                            context_graph_core::dream::GpuMonitorError::NvmlNotAvailable =>
+                                "nvml_not_available",
+                            context_graph_core::dream::GpuMonitorError::NoDevices =>
+                                "no_devices",
+                            context_graph_core::dream::GpuMonitorError::NvmlInitFailed(_) =>
+                                "nvml_init_failed",
+                            context_graph_core::dream::GpuMonitorError::DeviceAccessFailed { .. } =>
+                                "device_access_failed",
+                            context_graph_core::dream::GpuMonitorError::UtilizationQueryFailed(_) =>
+                                "utilization_query_failed",
+                            context_graph_core::dream::GpuMonitorError::Disabled =>
+                                "disabled",
+                        },
+                        "thresholds": {
+                            "eligibility": {
+                                "threshold": 0.80,
+                                "threshold_percent": "80%",
+                                "constitution_ref": "dream.trigger.gpu = '<80%'"
+                            },
+                            "budget": {
+                                "threshold": 0.30,
+                                "threshold_percent": "30%",
+                                "constitution_ref": "dream.constraints.gpu = '<30%'"
+                            }
+                        }
+                    }),
+                )
+            }
+        }
     }
 }
