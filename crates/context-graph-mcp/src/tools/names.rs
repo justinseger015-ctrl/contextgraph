@@ -101,6 +101,16 @@ pub const TRIGGER_CONSOLIDATION: &str = "trigger_consolidation";
 pub const DISCOVER_SUB_GOALS: &str = "discover_sub_goals";
 /// TASK-AUTONOMOUS-MCP: Get comprehensive autonomous system status
 pub const GET_AUTONOMOUS_STATUS: &str = "get_autonomous_status";
+/// SPEC-AUTONOMOUS-001: Get Meta-UTL learner state (accuracy, domain_stats, lambda_weights)
+pub const GET_LEARNER_STATE: &str = "get_learner_state";
+/// SPEC-AUTONOMOUS-001: Record learning outcome for Meta-UTL prediction
+pub const OBSERVE_OUTCOME: &str = "observe_outcome";
+/// SPEC-AUTONOMOUS-001: Execute pruning on identified candidates (NORTH-012)
+pub const EXECUTE_PRUNE: &str = "execute_prune";
+/// SPEC-AUTONOMOUS-001: Get system-wide health status (UTL, GWT, Dream, Storage)
+pub const GET_HEALTH_STATUS: &str = "get_health_status";
+/// SPEC-AUTONOMOUS-001: Trigger self-healing protocol for subsystem (NORTH-020)
+pub const TRIGGER_HEALING: &str = "trigger_healing";
 
 // ========== META-UTL TOOLS (TASK-MCP-P0-001) ==========
 

@@ -143,6 +143,12 @@ impl Handlers {
             tool_names::GET_AUTONOMOUS_STATUS => {
                 self.call_get_autonomous_status(id, arguments).await
             }
+            // SPEC-AUTONOMOUS-001: 5 new autonomous tools
+            tool_names::GET_LEARNER_STATE => self.call_get_learner_state(id, arguments).await,
+            tool_names::OBSERVE_OUTCOME => self.call_observe_outcome(id, arguments).await,
+            tool_names::EXECUTE_PRUNE => self.call_execute_prune(id, arguments).await,
+            tool_names::GET_HEALTH_STATUS => self.call_get_health_status(id, arguments).await,
+            tool_names::TRIGGER_HEALING => self.call_trigger_healing(id, arguments).await,
             // TASK-MCP-P0-001: Meta-learning self-correction tools
             tool_names::GET_META_LEARNING_STATUS => {
                 self.call_get_meta_learning_status(id, arguments).await

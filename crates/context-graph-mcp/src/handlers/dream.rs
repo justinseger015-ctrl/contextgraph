@@ -24,6 +24,7 @@
 //! - get_amortized_shortcuts: Get shortcut candidates from amortized learning
 //! - get_gpu_status: Get GPU utilization and dream eligibility (TASK-37)
 
+use context_graph_core::dream::DreamPhase;
 use serde_json::json;
 use tracing::{debug, error, info, warn};
 
@@ -35,10 +36,12 @@ impl Handlers {
     /// trigger_dream tool implementation.
     ///
     /// TASK-35: Wires MCP trigger_dream to TriggerManager.request_manual_trigger().
+    /// TASK-DREAM-PH-002/003: Now accepts phase parameter for targeted dream execution.
     /// FAIL FAST if TriggerManager not initialized.
     ///
     /// Arguments:
     /// - rationale: string - REQUIRED reason for manual trigger (for audit logging)
+    /// - phase: string - Optional phase (nrem/rem/full_cycle, default: full_cycle)
     /// - force: bool - Force trigger even if GPU busy (not recommended, violates constitution)
     ///
     /// Returns:
@@ -87,6 +90,21 @@ impl Handlers {
 
         // Parse force parameter
         let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        // TASK-DREAM-PH-002/003: Parse phase parameter (default: full_cycle per PRD)
+        let phase = match args.get("phase").and_then(|v| v.as_str()) {
+            Some("nrem") => DreamPhase::Nrem,
+            Some("rem") => DreamPhase::Rem,
+            Some("full_cycle") | None => DreamPhase::FullCycle,
+            Some(invalid) => {
+                warn!("trigger_dream: invalid phase '{}', must be nrem/rem/full_cycle", invalid);
+                return JsonRpcResponse::error(
+                    id,
+                    error_codes::INVALID_PARAMS,
+                    format!("Invalid phase '{}'. Must be 'nrem', 'rem', or 'full_cycle'", invalid),
+                );
+            }
+        };
 
         // Check GPU eligibility (unless forced)
         // Constitution: dream.trigger.gpu = "<80%"
@@ -153,13 +171,15 @@ impl Handlers {
         }
 
         // REQUEST MANUAL TRIGGER - This is the key operation
+        // TASK-DREAM-PH-003: Pass phase parameter to TriggerManager
         {
             let mut manager = trigger_manager.write();
-            manager.request_manual_trigger();
+            manager.request_manual_trigger(phase);
         }
 
         info!(
-            "trigger_dream: Manual trigger ACCEPTED, rationale: '{}', GPU: {}%, forced: {}",
+            "trigger_dream: Manual trigger ACCEPTED, phase: {:?}, rationale: '{}', GPU: {}%, forced: {}",
+            phase,
             rationale,
             (gpu_utilization * 100.0).round(),
             force
@@ -170,7 +190,7 @@ impl Handlers {
             let manager = trigger_manager.read();
             matches!(
                 manager.check_triggers(),
-                Some(context_graph_core::dream::types::ExtendedTriggerReason::Manual)
+                Some(context_graph_core::dream::types::ExtendedTriggerReason::Manual { .. })
             )
         };
 
@@ -188,6 +208,7 @@ impl Handlers {
             json!({
                 "triggered": true,
                 "trigger_reason": "Manual",
+                "phase": phase.to_string(),  // TASK-DREAM-PH-003: Include requested phase
                 "gpu_utilization": gpu_utilization,
                 "gpu_eligible": gpu_eligible,
                 "rationale_logged": rationale,

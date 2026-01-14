@@ -439,6 +439,54 @@ impl Default for EntropyWindow {
     }
 }
 
+// ============================================================================
+// DREAM PHASE TYPES
+// ============================================================================
+
+/// Dream phase for granular control.
+///
+/// Allows triggering specific phases instead of full cycle.
+/// Per constitution DREAM-001, DREAM-002, DREAM-003.
+///
+/// # TECH-DREAM-PHASE-001
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DreamPhase {
+    /// NREM phase only: memory consolidation, pruning weak edges
+    Nrem,
+    /// REM phase only: creative recombination, shortcut learning
+    Rem,
+    /// Full cycle: NREM followed by REM (default behavior)
+    #[default]
+    FullCycle,
+}
+
+impl std::fmt::Display for DreamPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nrem => write!(f, "nrem"),
+            Self::Rem => write!(f, "rem"),
+            Self::FullCycle => write!(f, "full_cycle"),
+        }
+    }
+}
+
+impl std::str::FromStr for DreamPhase {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "nrem" => Ok(Self::Nrem),
+            "rem" => Ok(Self::Rem),
+            "full_cycle" | "fullcycle" | "full" => Ok(Self::FullCycle),
+            _ => Err(format!(
+                "Invalid dream phase '{}'. Valid values: nrem, rem, full_cycle",
+                s
+            )),
+        }
+    }
+}
+
 /// GPU utilization trigger state.
 ///
 /// Monitors GPU usage to ensure dreams stay within budget.
@@ -546,7 +594,7 @@ impl Default for GpuTriggerState {
 /// Reason for triggering a dream cycle (extended).
 ///
 /// Priority order (highest to lowest):
-/// 1. Manual - User-initiated
+/// 1. Manual - User-initiated with optional phase selection
 /// 2. IdentityCritical - IC < 0.5 threshold (AP-26, AP-38, IDENTITY-007)
 /// 3. GpuOverload - GPU approaching 30% budget
 /// 4. HighEntropy - Entropy > 0.7 for 5 minutes
@@ -556,7 +604,11 @@ impl Default for GpuTriggerState {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ExtendedTriggerReason {
     /// User/system manual trigger (highest priority)
-    Manual,
+    /// Contains the phase to execute (default: FullCycle)
+    Manual {
+        /// The dream phase to execute
+        phase: DreamPhase,
+    },
 
     /// Identity Continuity crisis (IC < 0.5)
     /// Constitution: AP-26, AP-38, IDENTITY-007
@@ -585,7 +637,13 @@ pub enum ExtendedTriggerReason {
 impl std::fmt::Display for ExtendedTriggerReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Manual => write!(f, "manual"),
+            Self::Manual { phase } => {
+                if *phase == DreamPhase::FullCycle {
+                    write!(f, "manual")
+                } else {
+                    write!(f, "manual({})", phase)
+                }
+            }
             Self::IdentityCritical { ic_value } => {
                 write!(f, "identity_critical(IC={:.3})", ic_value)
             }
@@ -803,7 +861,18 @@ mod tests {
 
     #[test]
     fn test_extended_trigger_reason_display() {
-        assert_eq!(ExtendedTriggerReason::Manual.to_string(), "manual");
+        assert_eq!(
+            ExtendedTriggerReason::Manual { phase: DreamPhase::FullCycle }.to_string(),
+            "manual"
+        );
+        assert_eq!(
+            ExtendedTriggerReason::Manual { phase: DreamPhase::Nrem }.to_string(),
+            "manual(nrem)"
+        );
+        assert_eq!(
+            ExtendedTriggerReason::Manual { phase: DreamPhase::Rem }.to_string(),
+            "manual(rem)"
+        );
         assert_eq!(
             ExtendedTriggerReason::IdentityCritical { ic_value: 0.423 }.to_string(),
             "identity_critical(IC=0.423)"
@@ -866,6 +935,127 @@ mod tests {
 
         assert_eq!(a, b, "Same IC values should be equal");
         assert_ne!(a, c, "Different IC values should not be equal");
-        assert_ne!(a, ExtendedTriggerReason::Manual, "Different variants should not be equal");
+        assert_ne!(a, ExtendedTriggerReason::Manual { phase: DreamPhase::FullCycle }, "Different variants should not be equal");
+    }
+
+    // ============================================================================
+    // DREAM PHASE TESTS - TASK-DREAM-PH-001
+    // ============================================================================
+
+    #[test]
+    fn test_dream_phase_default() {
+        assert_eq!(DreamPhase::default(), DreamPhase::FullCycle);
+    }
+
+    #[test]
+    fn test_dream_phase_display() {
+        assert_eq!(DreamPhase::Nrem.to_string(), "nrem");
+        assert_eq!(DreamPhase::Rem.to_string(), "rem");
+        assert_eq!(DreamPhase::FullCycle.to_string(), "full_cycle");
+    }
+
+    #[test]
+    fn test_dream_phase_from_str() {
+        assert_eq!("nrem".parse::<DreamPhase>().unwrap(), DreamPhase::Nrem);
+        assert_eq!("rem".parse::<DreamPhase>().unwrap(), DreamPhase::Rem);
+        assert_eq!("full_cycle".parse::<DreamPhase>().unwrap(), DreamPhase::FullCycle);
+    }
+
+    #[test]
+    fn test_dream_phase_from_str_case_insensitive() {
+        assert_eq!("NREM".parse::<DreamPhase>().unwrap(), DreamPhase::Nrem);
+        assert_eq!("REM".parse::<DreamPhase>().unwrap(), DreamPhase::Rem);
+        assert_eq!("Full_Cycle".parse::<DreamPhase>().unwrap(), DreamPhase::FullCycle);
+    }
+
+    #[test]
+    fn test_dream_phase_from_str_aliases() {
+        assert_eq!("fullcycle".parse::<DreamPhase>().unwrap(), DreamPhase::FullCycle);
+        assert_eq!("full".parse::<DreamPhase>().unwrap(), DreamPhase::FullCycle);
+    }
+
+    #[test]
+    fn test_dream_phase_from_str_invalid() {
+        assert!("invalid".parse::<DreamPhase>().is_err());
+        assert!("".parse::<DreamPhase>().is_err());
+        assert!("nrem_phase".parse::<DreamPhase>().is_err());
+    }
+
+    #[test]
+    fn test_dream_phase_serialization() {
+        // Test serde serialization
+        let nrem = DreamPhase::Nrem;
+        let json = serde_json::to_string(&nrem).expect("serialization should succeed");
+        assert_eq!(json, "\"nrem\"");
+
+        let rem = DreamPhase::Rem;
+        let json = serde_json::to_string(&rem).expect("serialization should succeed");
+        assert_eq!(json, "\"rem\"");
+
+        let full = DreamPhase::FullCycle;
+        let json = serde_json::to_string(&full).expect("serialization should succeed");
+        assert_eq!(json, "\"full_cycle\"");
+    }
+
+    #[test]
+    fn test_dream_phase_deserialization() {
+        let nrem: DreamPhase = serde_json::from_str("\"nrem\"").expect("deserialization should succeed");
+        assert_eq!(nrem, DreamPhase::Nrem);
+
+        let rem: DreamPhase = serde_json::from_str("\"rem\"").expect("deserialization should succeed");
+        assert_eq!(rem, DreamPhase::Rem);
+
+        let full: DreamPhase = serde_json::from_str("\"full_cycle\"").expect("deserialization should succeed");
+        assert_eq!(full, DreamPhase::FullCycle);
+    }
+
+    #[test]
+    fn test_dream_phase_equality_and_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(DreamPhase::Nrem);
+        set.insert(DreamPhase::Rem);
+        set.insert(DreamPhase::FullCycle);
+
+        assert_eq!(set.len(), 3);
+        assert!(set.contains(&DreamPhase::Nrem));
+        assert!(set.contains(&DreamPhase::Rem));
+        assert!(set.contains(&DreamPhase::FullCycle));
+
+        // Insert duplicate
+        set.insert(DreamPhase::Nrem);
+        assert_eq!(set.len(), 3, "Duplicate should not increase set size");
+    }
+
+    #[test]
+    fn test_manual_trigger_with_phase() {
+        let manual_full = ExtendedTriggerReason::Manual { phase: DreamPhase::FullCycle };
+        let manual_nrem = ExtendedTriggerReason::Manual { phase: DreamPhase::Nrem };
+        let manual_rem = ExtendedTriggerReason::Manual { phase: DreamPhase::Rem };
+
+        // Different phases should not be equal
+        assert_ne!(manual_full, manual_nrem);
+        assert_ne!(manual_full, manual_rem);
+        assert_ne!(manual_nrem, manual_rem);
+
+        // Same phases should be equal
+        let manual_full_2 = ExtendedTriggerReason::Manual { phase: DreamPhase::FullCycle };
+        assert_eq!(manual_full, manual_full_2);
+    }
+
+    #[test]
+    fn test_manual_trigger_serialization_with_phase() {
+        let manual = ExtendedTriggerReason::Manual { phase: DreamPhase::Nrem };
+        let json = serde_json::to_string(&manual).expect("serialization should succeed");
+
+        // Should contain Manual and nrem
+        assert!(json.contains("Manual"));
+        assert!(json.contains("nrem"));
+
+        // Round-trip test
+        let deserialized: ExtendedTriggerReason =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+        assert_eq!(deserialized, manual);
     }
 }

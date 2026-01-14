@@ -1,10 +1,13 @@
 //! Autonomous North Star system tool definitions.
 //! TASK-AUTONOMOUS-MCP: Bootstrap, drift, correction, pruning, consolidation, sub-goals, status.
+//! SPEC-AUTONOMOUS-001: Added 5 missing tools (get_learner_state, observe_outcome, execute_prune,
+//!                      get_health_status, trigger_healing).
 
 use serde_json::json;
 use crate::tools::types::ToolDefinition;
 
-/// Returns Autonomous tool definitions (7 tools).
+/// Returns Autonomous tool definitions (12 tools).
+/// SPEC-AUTONOMOUS-001: Added 5 new tools per constitution NORTH-009, NORTH-012, NORTH-020.
 pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         // auto_bootstrap_north_star - Initialize autonomous services from teleological embeddings
@@ -214,6 +217,140 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     }
                 },
                 "required": []
+            }),
+        ),
+
+        // ========== SPEC-AUTONOMOUS-001: 5 NEW TOOLS (NORTH-009, NORTH-012, NORTH-020) ==========
+
+        // get_learner_state - Get Meta-UTL learner state (NORTH-009, METAUTL-004)
+        ToolDefinition::new(
+            "get_learner_state",
+            "Get Meta-UTL learner state including accuracy, prediction count, domain-specific stats, \
+             and lambda weights. Per NORTH-009: Monitors learning accuracy and lambda evolution. \
+             Per METAUTL-004: Domain-specific accuracy tracking required.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "Optional domain filter (e.g., 'Code', 'Medical', 'General')"
+                    }
+                },
+                "required": []
+            }),
+        ),
+
+        // observe_outcome - Record learning outcome for Meta-UTL (NORTH-009, METAUTL-001)
+        ToolDefinition::new(
+            "observe_outcome",
+            "Record actual outcome for a Meta-UTL prediction. Per NORTH-009: Enables self-correction \
+             through outcome observation. Per METAUTL-001: prediction_error > 0.2 triggers lambda adjustment. \
+             Prediction history TTL is 24 hours.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "prediction_id": {
+                        "type": "string",
+                        "description": "UUID of the prediction to update"
+                    },
+                    "actual_outcome": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Actual outcome value (0.0-1.0)"
+                    },
+                    "context": {
+                        "type": "object",
+                        "properties": {
+                            "domain": {
+                                "type": "string",
+                                "description": "Domain of the prediction (Code, Medical, General)"
+                            },
+                            "query_type": {
+                                "type": "string",
+                                "description": "Type of query (retrieval, classification, etc.)"
+                            }
+                        },
+                        "description": "Optional context for the outcome"
+                    }
+                },
+                "required": ["prediction_id", "actual_outcome"]
+            }),
+        ),
+
+        // execute_prune - Execute graph pruning on candidates (NORTH-012)
+        ToolDefinition::new(
+            "execute_prune",
+            "Execute pruning on identified candidate nodes. Per NORTH-012: Completes the pruning workflow \
+             started by get_pruning_candidates. Uses soft delete with 30-day recovery per SEC-06. \
+             SELF_EGO_NODE is protected and cannot be pruned.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "node_ids": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "minItems": 0,
+                        "description": "Array of node UUIDs to prune"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "enum": ["staleness", "low_alignment", "redundancy", "orphan"],
+                        "description": "Reason for pruning (for audit logging)"
+                    },
+                    "cascade": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Also prune dependent nodes and edges"
+                    }
+                },
+                "required": ["node_ids", "reason"]
+            }),
+        ),
+
+        // get_health_status - Get system-wide health status (NORTH-020)
+        ToolDefinition::new(
+            "get_health_status",
+            "Get health status for all major subsystems: UTL, GWT, Dream, Storage. \
+             Per NORTH-020: Provides unified health view to identify degradation before cascading failures. \
+             Returns overall_status (healthy/degraded/critical) and per-subsystem metrics.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "subsystem": {
+                        "type": "string",
+                        "enum": ["utl", "gwt", "dream", "storage", "all"],
+                        "default": "all",
+                        "description": "Specific subsystem to query, or 'all' for complete health"
+                    }
+                },
+                "required": []
+            }),
+        ),
+
+        // trigger_healing - Trigger self-healing protocol (NORTH-020)
+        ToolDefinition::new(
+            "trigger_healing",
+            "Trigger self-healing protocol for a degraded subsystem. Per NORTH-020: Autonomous recovery \
+             without manual intervention. Healing actions vary by subsystem and severity: \
+             UTL resets lambda weights, GWT resets Kuramoto phases, Dream aborts/resets scheduler, \
+             Storage compacts RocksDB and clears caches.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "subsystem": {
+                        "type": "string",
+                        "enum": ["utl", "gwt", "dream", "storage"],
+                        "description": "Subsystem to heal"
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": ["low", "medium", "high", "critical"],
+                        "default": "medium",
+                        "description": "Healing severity (affects action aggressiveness)"
+                    }
+                },
+                "required": ["subsystem"]
             }),
         ),
     ]

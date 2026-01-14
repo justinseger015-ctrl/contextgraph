@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::types::ExtendedTriggerReason;
+#[cfg(test)]
+use super::types::DreamPhase;
 use super::WakeReason;
 
 /// Base trait for dream events.
@@ -412,7 +414,12 @@ mod tests {
     #[test]
     fn test_dream_cycle_started_with_session_id() {
         let session_id = Uuid::new_v4();
-        let event = DreamCycleStarted::with_session_id(session_id, ExtendedTriggerReason::Manual);
+        let event = DreamCycleStarted::with_session_id(
+            session_id,
+            ExtendedTriggerReason::Manual {
+                phase: DreamPhase::FullCycle,
+            },
+        );
 
         assert_eq!(event.session_id, session_id);
         assert_eq!(event.trigger_reason, "manual");
@@ -569,7 +576,9 @@ mod tests {
     #[test]
     fn test_logging_broadcaster() {
         let broadcaster = LoggingBroadcaster;
-        let event = DreamCycleStarted::new(ExtendedTriggerReason::Manual);
+        let event = DreamCycleStarted::new(ExtendedTriggerReason::Manual {
+            phase: DreamPhase::FullCycle,
+        });
 
         assert!(broadcaster.is_connected());
         broadcaster.broadcast(&event).unwrap();
@@ -589,7 +598,9 @@ mod tests {
         let session_id = Uuid::new_v4();
 
         // Test DreamCycleStarted
-        let event1 = DreamCycleStarted::new(ExtendedTriggerReason::Manual);
+        let event1 = DreamCycleStarted::new(ExtendedTriggerReason::Manual {
+            phase: DreamPhase::FullCycle,
+        });
         let json1 = serde_json::to_string(&event1);
         assert!(json1.is_ok(), "DreamCycleStarted serialization failed: {:?}", json1.err());
 

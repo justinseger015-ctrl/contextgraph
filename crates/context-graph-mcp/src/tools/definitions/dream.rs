@@ -11,12 +11,14 @@ pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         // trigger_dream - Manually trigger a dream consolidation cycle
         // TASK-35: Updated to require rationale and use TriggerManager
+        // TASK-DREAM-PH-002: Added phase parameter per PRD Section 5.2
         ToolDefinition::new(
             "trigger_dream",
             "Manually trigger a dream consolidation cycle via TriggerManager. \
              Requires rationale for audit logging. GPU must be < 80% eligible. \
              Manual triggers have highest priority and bypass cooldown. \
-             Returns immediately; actual dream executes in background scheduler.",
+             Returns immediately; actual dream executes in background scheduler. \
+             Phase controls which dream phases run (nrem=consolidation, rem=discovery, full_cycle=both).",
             json!({
                 "type": "object",
                 "properties": {
@@ -25,6 +27,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "minLength": 1,
                         "maxLength": 1024,
                         "description": "REQUIRED: Reason for manual trigger (for audit logging)"
+                    },
+                    "phase": {
+                        "type": "string",
+                        "enum": ["nrem", "rem", "full_cycle"],
+                        "default": "full_cycle",
+                        "description": "Dream phase to execute: 'nrem' (Hebbian consolidation), 'rem' (hyperbolic walk), or 'full_cycle' (both)"
                     },
                     "force": {
                         "type": "boolean",

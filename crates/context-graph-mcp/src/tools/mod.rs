@@ -47,11 +47,13 @@ mod tests {
         // + 1 Merge tool (TASK-MCP-003) = 44 total
         // + 1 Johari classification tool (TASK-MCP-005) = 45 total
         // + 1 Kuramoto state tool (TASK-39) = 46 total
+        // + 5 SPEC-AUTONOMOUS-001 tools = 51 total (get_learner_state, observe_outcome, execute_prune, get_health_status, trigger_healing)
         // NOTE: GWT now has 9 tools (TASK-33/34 added get_coherence_state, TASK-38 added get_identity_continuity, TASK-39 added get_kuramoto_state)
         // NOTE: Dream now has 5 tools (TASK-37 added get_gpu_status)
+        // NOTE: Autonomous now has 12 tools (7 original + 5 SPEC-AUTONOMOUS-001)
         // NOTE: 6 manual North Star tools REMOVED (created single 1024D embeddings
         // incompatible with 13-embedder teleological arrays)
-        assert_eq!(tools.len(), 46);
+        assert_eq!(tools.len(), 51);
 
         let tool_names: Vec<_> = tools.iter().map(|t| t.name.as_str()).collect();
 
@@ -116,6 +118,13 @@ mod tests {
         assert!(tool_names.contains(&"trigger_consolidation"));
         assert!(tool_names.contains(&"discover_sub_goals"));
         assert!(tool_names.contains(&"get_autonomous_status"));
+
+        // SPEC-AUTONOMOUS-001: 5 new tools for learner, pruning, health
+        assert!(tool_names.contains(&"get_learner_state"));
+        assert!(tool_names.contains(&"observe_outcome"));
+        assert!(tool_names.contains(&"execute_prune"));
+        assert!(tool_names.contains(&"get_health_status"));
+        assert!(tool_names.contains(&"trigger_healing"));
 
         // Epistemic tools (TASK-MCP-001)
         assert!(tool_names.contains(&"epistemic_action"));

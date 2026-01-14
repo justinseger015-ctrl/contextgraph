@@ -82,6 +82,12 @@ pub struct GwtSystem {
     /// Shared with the registered IdentityContinuityListener for state queries.
     /// The listener processes events; this Arc provides query access.
     pub identity_monitor: Arc<RwLock<IdentityContinuityMonitor>>,
+
+    /// TriggerManager for IC-based dream triggering (TECH-GWT-IC-001)
+    ///
+    /// Shared with DreamEventListener for IC crisis handling.
+    /// DreamScheduler also reads this to check trigger state.
+    pub trigger_manager: Arc<parking_lot::Mutex<crate::dream::TriggerManager>>,
 }
 
 impl GwtSystem {
@@ -105,11 +111,16 @@ impl GwtSystem {
         let epistemic_action_triggered = Arc::new(AtomicBool::new(false));
         let self_ego_node = Arc::new(RwLock::new(SelfEgoNode::new()));
 
+        // TECH-GWT-IC-001: Create TriggerManager for IC-based dream triggering
+        let trigger_manager = Arc::new(parking_lot::Mutex::new(crate::dream::TriggerManager::new()));
+
         // Create event broadcaster
         let event_broadcaster = Arc::new(WorkspaceEventBroadcaster::new());
 
         // Create and register listeners
-        let dream_listener = DreamEventListener::new(Arc::clone(&dream_queue));
+        // TECH-GWT-IC-001: Wire TriggerManager to DreamEventListener for IC-based dream triggering
+        let dream_listener = DreamEventListener::new(Arc::clone(&dream_queue))
+            .with_trigger_manager(Arc::clone(&trigger_manager));
         let neuromod_listener = NeuromodulationEventListener::new(Arc::clone(&neuromod_manager));
         let meta_listener = MetaCognitiveEventListener::new(
             Arc::clone(&meta_cognitive),
@@ -156,6 +167,7 @@ impl GwtSystem {
             dream_queue,
             epistemic_action_triggered,
             identity_monitor,
+            trigger_manager,
         })
     }
 
@@ -236,6 +248,15 @@ impl GwtSystem {
     /// Get the number of purpose vectors in IC history
     pub async fn identity_history_len(&self) -> usize {
         self.identity_monitor.read().await.history_len()
+    }
+
+    /// Get reference to the TriggerManager for external use.
+    ///
+    /// Returns Arc clone for DreamScheduler integration.
+    ///
+    /// # TECH-GWT-IC-001
+    pub fn trigger_manager(&self) -> Arc<parking_lot::Mutex<crate::dream::TriggerManager>> {
+        Arc::clone(&self.trigger_manager)
     }
 
     // === TASK-IDENTITY-P0-007: MCP Tool Exposure Methods ===

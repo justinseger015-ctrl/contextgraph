@@ -24,7 +24,7 @@ use super::types::ToolDefinition;
 /// use context_graph_mcp::tools::{ToolRegistry, register_all_tools};
 ///
 /// let registry = register_all_tools();
-/// assert_eq!(registry.len(), 46);
+/// assert_eq!(registry.len(), 51);
 ///
 /// // O(1) lookup
 /// if let Some(tool) = registry.get("inject_context") {
@@ -115,12 +115,12 @@ impl Default for ToolRegistry {
     }
 }
 
-/// Register all 46 Context Graph MCP tools.
+/// Register all 51 Context Graph MCP tools.
 ///
 /// Uses existing definitions from tools/definitions/ modules.
 /// FAIL FAST: Panics on duplicate registration or wrong tool count.
 ///
-/// # Tool Categories (46 total)
+/// # Tool Categories (51 total)
 ///
 /// | Category | Count | Source |
 /// |----------|-------|--------|
@@ -133,7 +133,7 @@ impl Default for ToolRegistry {
 /// | Steering | 1 | definitions/steering.rs |
 /// | Causal | 1 | definitions/causal.rs |
 /// | Teleological | 5 | definitions/teleological.rs |
-/// | Autonomous | 7 | definitions/autonomous.rs |
+/// | Autonomous | 12 | definitions/autonomous.rs |
 /// | Meta-UTL | 3 | definitions/meta_utl.rs |
 /// | Epistemic | 1 | definitions/epistemic.rs |
 /// | Merge | 1 | definitions/merge.rs |
@@ -143,7 +143,7 @@ impl Default for ToolRegistry {
 ///
 /// Panics if:
 /// - Any tool name is registered twice (duplicate detection)
-/// - Total tool count is not exactly 46 (indicates missing/extra tools)
+/// - Total tool count is not exactly 51 (indicates missing/extra tools)
 pub fn register_all_tools() -> ToolRegistry {
     use super::definitions;
 
@@ -194,11 +194,11 @@ pub fn register_all_tools() -> ToolRegistry {
         registry.register(tool);
     }
 
-    // FAIL FAST: Verify exactly 46 tools are registered
+    // FAIL FAST: Verify exactly 51 tools are registered
     let actual_count = registry.len();
     assert_eq!(
-        actual_count, 46,
-        "TASK-41: Expected 46 tools, got {}. Check definitions modules for missing/extra tools.",
+        actual_count, 51,
+        "TASK-41: Expected 51 tools, got {}. Check definitions modules for missing/extra tools.",
         actual_count
     );
 
@@ -218,13 +218,13 @@ mod tests {
     }
 
     #[test]
-    fn test_register_all_tools_returns_46() {
+    fn test_register_all_tools_returns_51() {
         println!("\n=== FSV TEST: register_all_tools (TASK-41) ===");
 
         let registry = register_all_tools();
 
         println!("FSV-1: Tool count = {}", registry.len());
-        assert_eq!(registry.len(), 46, "Must have exactly 46 tools");
+        assert_eq!(registry.len(), 51, "Must have exactly 51 tools");
 
         // Verify critical tools exist
         let critical_tools = [
@@ -262,7 +262,7 @@ mod tests {
         }
 
         println!("\n=== FSV EVIDENCE (TASK-41) ===");
-        println!(" 46 tools registered");
+        println!(" 51 tools registered");
         println!(" All critical tools present");
         println!("=== FSV TEST PASSED (TASK-41) ===\n");
     }
@@ -310,7 +310,7 @@ mod tests {
     fn test_list_returns_all_tools_sorted() {
         let registry = register_all_tools();
         let tools = registry.list();
-        assert_eq!(tools.len(), 46);
+        assert_eq!(tools.len(), 51);
 
         // Verify sorted by name
         for i in 1..tools.len() {
@@ -327,7 +327,7 @@ mod tests {
     fn test_tool_names_returns_sorted_names() {
         let registry = register_all_tools();
         let names = registry.tool_names();
-        assert_eq!(names.len(), 46);
+        assert_eq!(names.len(), 51);
 
         // Verify sorted
         for i in 1..names.len() {

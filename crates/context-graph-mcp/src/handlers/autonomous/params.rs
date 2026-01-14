@@ -157,3 +157,83 @@ pub struct GetAutonomousStatusParams {
     #[serde(default = "default_history_count")]
     pub history_count: usize,
 }
+
+// ============================================================================
+// SPEC-AUTONOMOUS-001: Parameter Structs for 5 New Tools
+// ============================================================================
+
+/// Parameters for get_learner_state tool.
+/// SPEC-AUTONOMOUS-001: NORTH-009, METAUTL-004
+#[derive(Debug, Deserialize)]
+pub struct GetLearnerStateParams {
+    /// Optional domain filter (e.g., "Code", "Medical", "General")
+    pub domain: Option<String>,
+}
+
+/// Parameters for observe_outcome tool.
+/// SPEC-AUTONOMOUS-001: NORTH-009, METAUTL-001
+#[derive(Debug, Deserialize)]
+pub struct ObserveOutcomeParams {
+    /// UUID of the prediction to update
+    pub prediction_id: String,
+
+    /// Actual outcome value (0.0-1.0)
+    pub actual_outcome: f32,
+
+    /// Optional context for the outcome
+    pub context: Option<ObserveOutcomeContext>,
+}
+
+/// Context for observe_outcome.
+#[derive(Debug, Deserialize)]
+pub struct ObserveOutcomeContext {
+    /// Domain of the prediction (Code, Medical, General)
+    pub domain: Option<String>,
+
+    /// Type of query (retrieval, classification, etc.)
+    pub query_type: Option<String>,
+}
+
+/// Parameters for execute_prune tool.
+/// SPEC-AUTONOMOUS-001: NORTH-012
+#[derive(Debug, Deserialize)]
+pub struct ExecutePruneParams {
+    /// Array of node UUIDs to prune
+    pub node_ids: Vec<String>,
+
+    /// Reason for pruning (for audit logging)
+    pub reason: String,
+
+    /// Also prune dependent nodes and edges (default: false)
+    #[serde(default)]
+    pub cascade: bool,
+}
+
+/// Parameters for get_health_status tool.
+/// SPEC-AUTONOMOUS-001: NORTH-020
+#[derive(Debug, Deserialize)]
+pub struct GetHealthStatusParams {
+    /// Specific subsystem to query, or "all" (default: "all")
+    #[serde(default = "default_all_subsystem")]
+    pub subsystem: String,
+}
+
+pub(super) fn default_all_subsystem() -> String {
+    "all".to_string()
+}
+
+/// Parameters for trigger_healing tool.
+/// SPEC-AUTONOMOUS-001: NORTH-020
+#[derive(Debug, Deserialize)]
+pub struct TriggerHealingParams {
+    /// Subsystem to heal (utl, gwt, dream, storage)
+    pub subsystem: String,
+
+    /// Healing severity (affects action aggressiveness)
+    #[serde(default = "default_medium_severity")]
+    pub severity: String,
+}
+
+pub(super) fn default_medium_severity() -> String {
+    "medium".to_string()
+}

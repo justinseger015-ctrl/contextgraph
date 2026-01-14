@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use tracing::{debug, info};
 
-use super::types::{EntropyWindow, ExtendedTriggerReason, GpuTriggerState};
+use super::types::{DreamPhase, EntropyWindow, ExtendedTriggerReason, GpuTriggerState};
 
 /// GPU utilization thresholds per Constitution.
 ///
@@ -301,8 +301,11 @@ pub struct TriggerManager {
     /// GPU utilization state
     gpu_state: GpuTriggerState,
 
-    /// Whether manual trigger was requested
-    manual_trigger: bool,
+    /// Manual trigger with requested phase (TASK-DREAM-PH-002).
+    ///
+    /// - `None`: No manual trigger requested
+    /// - `Some(phase)`: Manual trigger requested for specific phase
+    manual_trigger: Option<DreamPhase>,
 
     /// Last trigger reason (for reporting)
     last_trigger_reason: Option<ExtendedTriggerReason>,
@@ -334,7 +337,7 @@ impl TriggerManager {
             current_ic: None,
             entropy_window: EntropyWindow::new(), // Uses Constitution defaults
             gpu_state: GpuTriggerState::new(),    // Uses Constitution defaults
-            manual_trigger: false,
+            manual_trigger: None, // TASK-DREAM-PH-002: Now stores Option<DreamPhase>
             last_trigger_reason: None,
             last_trigger_time: None,
             enabled: true,
@@ -357,7 +360,7 @@ impl TriggerManager {
             current_ic: None,
             entropy_window: EntropyWindow::new(),
             gpu_state: GpuTriggerState::new(),
-            manual_trigger: false,
+            manual_trigger: None, // TASK-DREAM-PH-002: Now stores Option<DreamPhase>
             last_trigger_reason: None,
             last_trigger_time: None,
             enabled: true,
@@ -485,17 +488,21 @@ impl TriggerManager {
         }
     }
 
-    /// Request a manual dream trigger.
+    /// Request a manual dream trigger with specific phase.
     ///
+    /// TASK-DREAM-PH-002: Now accepts a phase parameter.
     /// Manual triggers have highest priority and bypass cooldown.
-    pub fn request_manual_trigger(&mut self) {
-        info!("Manual dream trigger requested");
-        self.manual_trigger = true;
+    ///
+    /// # Arguments
+    /// * `phase` - The dream phase to execute (Nrem, Rem, or FullCycle)
+    pub fn request_manual_trigger(&mut self, phase: DreamPhase) {
+        info!("Manual dream trigger requested with phase: {:?}", phase);
+        self.manual_trigger = Some(phase);
     }
 
     /// Clear manual trigger flag.
     pub fn clear_manual_trigger(&mut self) {
-        self.manual_trigger = false;
+        self.manual_trigger = None;
     }
 
     /// Check all trigger conditions and return highest priority trigger.
@@ -524,7 +531,8 @@ impl TriggerManager {
         }
 
         // Check cooldown (manual trigger bypasses cooldown)
-        if !self.manual_trigger {
+        // TASK-DREAM-PH-002: manual_trigger is now Option<DreamPhase>
+        if self.manual_trigger.is_none() {
             if let Some(last_time) = self.last_trigger_time {
                 if last_time.elapsed() < self.trigger_cooldown {
                     return None;
@@ -532,9 +540,9 @@ impl TriggerManager {
             }
         }
 
-        // Priority 1: Manual (highest)
-        if self.manual_trigger {
-            return Some(ExtendedTriggerReason::Manual);
+        // Priority 1: Manual (highest) - TASK-DREAM-PH-002: Use stored phase
+        if let Some(phase) = self.manual_trigger {
+            return Some(ExtendedTriggerReason::Manual { phase });
         }
 
         // Priority 2: IdentityCritical (CONSTITUTION CRITICAL - AP-26, AP-38)
@@ -572,8 +580,8 @@ impl TriggerManager {
         self.last_trigger_reason = Some(reason);
         self.last_trigger_time = Some(Instant::now());
 
-        // Reset states
-        self.manual_trigger = false;
+        // Reset states - TASK-DREAM-PH-002: manual_trigger is now Option
+        self.manual_trigger = None;
         self.gpu_state.mark_triggered();
         self.entropy_window.clear();
     }
@@ -586,7 +594,7 @@ impl TriggerManager {
 
         self.gpu_state.reset();
         self.entropy_window.clear();
-        self.manual_trigger = false;
+        self.manual_trigger = None; // TASK-DREAM-PH-002
     }
 
     /// Get time remaining in cooldown, if any.
@@ -1318,13 +1326,13 @@ mod tests {
 
         assert!(!manager.should_trigger());
 
-        manager.request_manual_trigger();
+        manager.request_manual_trigger(DreamPhase::FullCycle);
 
         assert!(manager.should_trigger());
-        assert_eq!(
+        assert!(matches!(
             manager.check_triggers(),
-            Some(ExtendedTriggerReason::Manual)
-        );
+            Some(ExtendedTriggerReason::Manual { .. })
+        ));
     }
 
     #[test]
@@ -1332,11 +1340,13 @@ mod tests {
         let mut manager = TriggerManager::with_cooldown(Duration::from_secs(3600)); // 1 hour
 
         // Trigger and start cooldown
-        manager.request_manual_trigger();
-        manager.mark_triggered(ExtendedTriggerReason::Manual);
+        manager.request_manual_trigger(DreamPhase::FullCycle);
+        manager.mark_triggered(ExtendedTriggerReason::Manual {
+            phase: DreamPhase::FullCycle,
+        });
 
         // Another manual trigger should bypass cooldown
-        manager.request_manual_trigger();
+        manager.request_manual_trigger(DreamPhase::FullCycle);
         assert!(
             manager.should_trigger(),
             "Manual trigger should bypass cooldown"
@@ -1467,8 +1477,10 @@ mod tests {
             "No cooldown initially"
         );
 
-        manager.request_manual_trigger();
-        manager.mark_triggered(ExtendedTriggerReason::Manual);
+        manager.request_manual_trigger(DreamPhase::FullCycle);
+        manager.mark_triggered(ExtendedTriggerReason::Manual {
+            phase: DreamPhase::FullCycle,
+        });
 
         let remaining = manager.cooldown_remaining();
         assert!(remaining.is_some(), "Should have cooldown after trigger");
@@ -1484,7 +1496,7 @@ mod tests {
         manager.set_enabled(false);
 
         // None of these should trigger
-        manager.request_manual_trigger();
+        manager.request_manual_trigger(DreamPhase::FullCycle);
         manager.update_gpu_usage(0.95);
         manager.update_entropy(0.99);
 
@@ -1774,11 +1786,11 @@ mod tests {
         );
 
         // Add manual - should take priority
-        manager.request_manual_trigger();
-        assert_eq!(
+        manager.request_manual_trigger(DreamPhase::FullCycle);
+        assert!(matches!(
             manager.check_triggers(),
-            Some(ExtendedTriggerReason::Manual)
-        );
+            Some(ExtendedTriggerReason::Manual { .. })
+        ));
     }
 
     // ============ Identity Continuity Trigger Tests ============
@@ -1860,13 +1872,13 @@ mod tests {
         manager.update_identity_coherence(0.3);
 
         // Request manual trigger
-        manager.request_manual_trigger();
+        manager.request_manual_trigger(DreamPhase::FullCycle);
 
         // Manual should have highest priority
-        assert_eq!(
+        assert!(matches!(
             manager.check_triggers(),
-            Some(ExtendedTriggerReason::Manual)
-        );
+            Some(ExtendedTriggerReason::Manual { .. })
+        ));
     }
 
     #[test]

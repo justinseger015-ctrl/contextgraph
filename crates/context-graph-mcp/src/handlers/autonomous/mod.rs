@@ -1,6 +1,7 @@
 //! NORTH Autonomous System MCP Handlers
 //!
 //! TASK-AUTONOMOUS-MCP: MCP tool handlers for autonomous North Star management.
+//! SPEC-AUTONOMOUS-001: Added 5 new tools (learner, health, execute_prune).
 //! NO BACKWARDS COMPATIBILITY - FAIL FAST WITH ROBUST LOGGING.
 //!
 //! ## Tools Implemented
@@ -12,6 +13,11 @@
 //! 5. `trigger_consolidation` - Trigger memory consolidation using ConsolidationService
 //! 6. `discover_sub_goals` - Discover potential sub-goals using SubGoalDiscovery
 //! 7. `get_autonomous_status` - Get comprehensive status from all services
+//! 8. `get_learner_state` - Get Meta-UTL learner state (NORTH-009)
+//! 9. `observe_outcome` - Record learning outcome (NORTH-009)
+//! 10. `execute_prune` - Execute pruning on candidates (NORTH-012)
+//! 11. `get_health_status` - Get system-wide health (NORTH-020)
+//! 12. `trigger_healing` - Trigger self-healing (NORTH-020)
 //!
 //! ## FAIL FAST Policy
 //!
@@ -25,14 +31,18 @@
 //! - `error_codes`: Autonomous-specific error codes
 //! - `bootstrap`: Bootstrap handler implementation
 //! - `drift`: Drift detection and correction handlers
-//! - `maintenance`: Pruning and consolidation handlers
+//! - `maintenance`: Pruning, consolidation, and execute_prune handlers
 //! - `discovery`: Sub-goal discovery handler
 //! - `status`: Autonomous status handler
+//! - `learner`: Meta-UTL learner state and outcome handlers (SPEC-AUTONOMOUS-001)
+//! - `health`: System health and healing handlers (SPEC-AUTONOMOUS-001)
 
 mod bootstrap;
 mod discovery;
 mod drift;
 mod error_codes;
+mod health;
+mod learner;
 mod maintenance;
 mod params;
 mod status;
@@ -43,9 +53,10 @@ mod tests;
 // Re-export all parameter structs for backwards compatibility
 #[allow(unused_imports)]
 pub use params::{
-    AutoBootstrapParams, DiscoverSubGoalsParams, GetAlignmentDriftParams,
-    GetAutonomousStatusParams, GetPruningCandidatesParams, TriggerConsolidationParams,
-    TriggerDriftCorrectionParams,
+    AutoBootstrapParams, DiscoverSubGoalsParams, ExecutePruneParams, GetAlignmentDriftParams,
+    GetAutonomousStatusParams, GetHealthStatusParams, GetLearnerStateParams,
+    GetPruningCandidatesParams, ObserveOutcomeParams, TriggerConsolidationParams,
+    TriggerDriftCorrectionParams, TriggerHealingParams,
 };
 
 // Re-export error codes module for backwards compatibility

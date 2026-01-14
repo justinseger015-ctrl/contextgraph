@@ -108,6 +108,7 @@ pub use triggers::{
 #[cfg(feature = "nvml")]
 pub use triggers::NvmlGpuMonitor;
 pub use types::{
+    DreamPhase,
     EntropyWindow,
     ExtendedTriggerReason,
     GpuTriggerState,

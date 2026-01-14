@@ -9,7 +9,7 @@
 //! Run with: cargo test -p context-graph-core --test triggers_fsv_manual_test -- --nocapture
 
 use context_graph_core::dream::{
-    EntropyCalculator, EntropyWindow, ExtendedTriggerReason, GpuMonitor, GpuMonitorError,
+    DreamPhase, EntropyCalculator, EntropyWindow, ExtendedTriggerReason, GpuMonitor, GpuMonitorError,
     GpuTriggerState, StubGpuMonitor, TriggerManager, gpu_thresholds,
 };
 use std::thread;
@@ -165,7 +165,7 @@ fn fsv_5_3_edge_case_3_disabled_manager_ignores_all() {
     println!("AFTER disable: is_enabled={}", manager.is_enabled());
 
     // Try all triggers
-    manager.request_manual_trigger();
+    manager.request_manual_trigger(DreamPhase::FullCycle);
     manager.update_gpu_usage(0.99);
     manager.update_entropy(0.99);
 
@@ -346,14 +346,17 @@ fn fsv_test_case_3_priority_order() {
     );
 
     // Request manual - should take highest priority
-    manager.request_manual_trigger();
+    manager.request_manual_trigger(DreamPhase::FullCycle);
     println!(
         "After manual request: check_triggers={:?} (Manual has highest priority)",
         manager.check_triggers()
     );
-    assert_eq!(
-        manager.check_triggers(),
-        Some(ExtendedTriggerReason::Manual)
+    assert!(
+        matches!(
+            manager.check_triggers(),
+            Some(ExtendedTriggerReason::Manual { .. })
+        ),
+        "Expected Manual trigger"
     );
 
     println!("\n=== Test Case 3 PASSED ===\n");

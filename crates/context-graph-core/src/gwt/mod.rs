@@ -95,3 +95,6 @@ pub use workspace::{
 
 // Re-export from system - the main GwtSystem orchestrator
 pub use system::GwtSystem;
+
+// Re-export TriggerManager from dream module for external use (TECH-GWT-IC-001)
+pub use crate::dream::TriggerManager;

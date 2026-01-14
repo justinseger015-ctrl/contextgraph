@@ -14,7 +14,7 @@ use std::time::Duration;
 use context_graph_core::dream::{
     WakeController, WakeError, WakeHandle, WakeReason, WakeState,
     DreamCycleStarted, DreamCycleCompleted, DreamEventBroadcaster,
-    LoggingBroadcaster, NoOpBroadcaster, WakeTriggered, ExtendedTriggerReason,
+    LoggingBroadcaster, NoOpBroadcaster, WakeTriggered, ExtendedTriggerReason, DreamPhase,
 };
 use uuid::Uuid;
 
@@ -400,7 +400,9 @@ fn fsv_mcp_events_broadcaster_integration() {
     let noop = NoOpBroadcaster;
     assert!(!noop.is_connected(), "NoOp should not be connected");
 
-    let event = DreamCycleStarted::new(ExtendedTriggerReason::Manual);
+    let event = DreamCycleStarted::new(ExtendedTriggerReason::Manual {
+        phase: DreamPhase::FullCycle,
+    });
     let result = noop.broadcast(&event);
     assert!(result.is_ok(), "NoOp broadcast should succeed");
     println!("NoOpBroadcaster: PASS");
