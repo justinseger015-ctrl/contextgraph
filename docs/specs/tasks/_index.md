@@ -167,11 +167,11 @@ Layer 3: Surface (Depends on Logic) - CLI Commands  │
 | 012-TASK-SESSION-12 | ✅ Completed | 2026-01-15 | 2026-01-15 | ✅ | <!-- restore.rs with 5 tests -->
 | 013-TASK-SESSION-13 | ✅ Completed | 2026-01-15 | 2026-01-15 | ✅ | <!-- persist.rs with 5 tests -->
 | 014-TASK-SESSION-14 | ✅ Completed | 2026-01-15 | 2026-01-15 | ✅ | <!-- check_identity.rs with 10 tests -->
-| 015-TASK-SESSION-15 | ⏳ Pending | - | - | - |
-| 016-TASK-SESSION-16 | ⏳ Pending | - | - | - |
-| 017-TASK-SESSION-17 | ⏳ Pending | - | - | - |
+| 015-TASK-SESSION-15 | ✅ Completed | 2026-01-15 | 2026-01-15 | ✅ | <!-- inject.rs with 14 tests -->
+| 016-TASK-SESSION-16 | ✅ Completed | 2026-01-15 | 2026-01-15 | ✅ | <!-- .claude/settings.json hooks -->
+| 017-TASK-SESSION-17 | ✅ Completed | 2026-01-15 | 2026-01-15 | ✅ | <!-- error.rs with 13 tests -->
 
-**Progress: 14/17 tasks (82.4%)**
+**Progress: 17/17 tasks (100%)**
 
 ---
 
