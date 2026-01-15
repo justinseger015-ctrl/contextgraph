@@ -125,6 +125,10 @@ impl RocksDbTeleologicalStore {
                     return Err(e);
                 }
             }
+
+            // NOTE: We let RocksDB detect corruption during open rather than pre-checking.
+            // RocksDB knows exactly which files it needs, avoiding false positives.
+            // If open fails with corruption, we transform the error below.
         }
 
         // Create shared block cache
@@ -151,10 +155,7 @@ impl RocksDbTeleologicalStore {
         // Open database with all column families
         let db = DB::open_cf_descriptors(&db_opts, &path_str, cf_descriptors).map_err(|e| {
             error!("Failed to open RocksDB at '{}': {}", path_str, e);
-            TeleologicalStoreError::OpenFailed {
-                path: path_str.clone(),
-                message: e.to_string(),
-            }
+            Self::transform_corruption_error(&path_str, e)
         })?;
 
         // Create per-embedder index registry (12 HNSW indexes)
@@ -272,6 +273,315 @@ impl RocksDbTeleologicalStore {
                 })
             }
         }
+    }
+
+    /// Transform RocksDB errors into detailed, user-friendly error types.
+    ///
+    /// When RocksDB's open fails with corruption-related errors, this function
+    /// transforms them into `CorruptionDetected` errors with:
+    /// - Database path
+    /// - Missing file details (extracted from error message)
+    /// - Recovery options
+    ///
+    /// This approach is more reliable than pre-checking because RocksDB knows
+    /// exactly which files it needs, avoiding false positives.
+    fn transform_corruption_error(path: &str, error: rocksdb::Error) -> TeleologicalStoreError {
+        let err_msg = error.to_string();
+
+        // Check for corruption patterns in the error message
+        let is_corruption = err_msg.contains("Corruption")
+            || (err_msg.contains("No such file or directory") && err_msg.contains(".sst"))
+            || (err_msg.contains("MANIFEST")
+                && (err_msg.contains("corrupted") || err_msg.contains("missing")));
+
+        if !is_corruption {
+            return TeleologicalStoreError::OpenFailed {
+                path: path.to_string(),
+                message: err_msg,
+            };
+        }
+
+        // Extract missing SST file from error message
+        // Pattern: "While open a file for random read: /path/000682.sst: No such file"
+        // NOTE: Uses '/' as path separator since RocksDB errors use Unix-style paths
+        // even on Windows. This is a best-effort extraction for debugging context.
+        let mut missing_files = Vec::new();
+        for part in err_msg.split_whitespace() {
+            if part.ends_with(".sst") || part.ends_with(".sst:") {
+                if let Some(filename) = part.trim_end_matches(':').rsplit('/').next() {
+                    missing_files.push(filename.to_string());
+                }
+            }
+        }
+
+        // Get MANIFEST file from error message if present
+        let manifest_file = err_msg
+            .split_whitespace()
+            .find(|s| s.contains("MANIFEST-"))
+            .map(|s| {
+                s.trim_matches(|c: char| !c.is_alphanumeric() && c != '-')
+                    .to_string()
+            })
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let missing_files_str = if missing_files.is_empty() {
+            "see error details".to_string()
+        } else {
+            missing_files.join(", ")
+        };
+
+        error!(
+            "FAIL FAST: CORRUPTION DETECTED at '{}' - RocksDB reports: {}",
+            path, err_msg
+        );
+        error!(
+            "Recovery options: (1) Delete database and restore from backup, \
+             (2) Use 'ldb repair' tool (may lose data), \
+             (3) Restore from snapshot"
+        );
+
+        TeleologicalStoreError::CorruptionDetected {
+            path: path.to_string(),
+            missing_count: missing_files.len().max(1),
+            missing_files: missing_files_str,
+            manifest_file,
+        }
+    }
+
+    /// Detect database corruption by verifying MANIFEST references only existing SST files.
+    ///
+    /// NOTE: This function is currently unused. We rely on RocksDB's own
+    /// corruption detection and transform its errors via `transform_corruption_error`.
+    /// Keeping this for potential future use or manual corruption checks.
+    #[allow(dead_code)]
+    fn detect_database_corruption<P: AsRef<Path>>(path: P) -> TeleologicalStoreResult<()> {
+        let path_ref = path.as_ref();
+        let path_str = path_ref.to_string_lossy().to_string();
+
+        // Step 1: Read CURRENT file to get MANIFEST filename
+        let current_path = path_ref.join("CURRENT");
+        if !current_path.exists() {
+            debug!("No CURRENT file at '{}' - new database, skipping corruption check", path_str);
+            return Ok(());
+        }
+
+        let manifest_name = match fs::read_to_string(&current_path) {
+            Ok(content) => content.trim().to_string(),
+            Err(e) => {
+                warn!("Cannot read CURRENT file at '{}': {} - skipping corruption check", path_str, e);
+                return Ok(());
+            }
+        };
+
+        let manifest_path = path_ref.join(&manifest_name);
+        if !manifest_path.exists() {
+            error!(
+                "FAIL FAST: CURRENT file references '{}' but MANIFEST does not exist at '{}'",
+                manifest_name,
+                manifest_path.display()
+            );
+            return Err(TeleologicalStoreError::CorruptionDetected {
+                path: path_str,
+                missing_count: 1,
+                missing_files: manifest_name.clone(),
+                manifest_file: manifest_name,
+            });
+        }
+
+        info!("Checking database integrity: MANIFEST={}", manifest_name);
+
+        // Step 2: Scan MANIFEST for SST file references
+        // RocksDB stores file numbers in the MANIFEST. We look for patterns that
+        // indicate SST file numbers (6-digit numbers that would form .sst files)
+        let manifest_bytes = match fs::read(&manifest_path) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!(
+                    "FAIL FAST: Cannot read MANIFEST '{}': {}",
+                    manifest_path.display(), e
+                );
+                return Err(TeleologicalStoreError::OpenFailed {
+                    path: path_str,
+                    message: format!("Cannot read MANIFEST '{}': {}", manifest_name, e),
+                });
+            }
+        };
+
+        // Extract potential SST file numbers from MANIFEST
+        // RocksDB's VersionEdit uses variable-length encoding, but SST file numbers
+        // often appear as recognizable patterns. We scan for likely file numbers.
+        let referenced_sst_files = Self::extract_sst_references_from_manifest(&manifest_bytes);
+
+        // Step 3: Get existing SST files
+        let existing_sst_files: std::collections::HashSet<u64> = match fs::read_dir(path_ref) {
+            Ok(entries) => entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    if name.ends_with(".sst") {
+                        // Extract number from "000XXX.sst" format
+                        name.strip_suffix(".sst")
+                            .and_then(|s| s.parse::<u64>().ok())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            Err(e) => {
+                warn!("Cannot enumerate SST files at '{}': {}", path_str, e);
+                return Ok(()); // Can't verify, let RocksDB handle it
+            }
+        };
+
+        debug!(
+            "Found {} existing SST files, MANIFEST references {} potential files",
+            existing_sst_files.len(),
+            referenced_sst_files.len()
+        );
+
+        // Step 4: Find missing SST files with smart filtering
+        //
+        // The varint heuristic finds many false positives (field tags, sizes, etc.).
+        // To avoid false positives, we only flag files as missing if:
+        // 1. There are existing SST files (so we have a reference point)
+        // 2. The missing file number is ABOVE max_existing but within a reasonable buffer
+        //
+        // This catches the REAL corruption case:
+        // - MANIFEST references file 682
+        // - But only files up to 649 exist
+        // - Difference: file 682 was being written when shutdown occurred
+        //
+        // This AVOIDS false positives:
+        // - MANIFEST contains many varint numbers (field tags, sizes, etc.)
+        // - These might decode to numbers like 14, 16, 18 within existing file range
+        // - But they're not real missing files
+        //
+        // If NO existing files, let RocksDB handle it - can't reliably detect corruption.
+        if existing_sst_files.is_empty() {
+            debug!("No existing SST files - skipping corruption check (new or empty DB)");
+            return Ok(());
+        }
+
+        let max_existing = *existing_sst_files.iter().max().unwrap_or(&0);
+        // Only flag files ABOVE max_existing but within reasonable buffer
+        // This catches: referenced file 682 when max existing is 649
+        // Buffer of 100 allows for files that might have been legitimately deleted
+        let upper_bound = max_existing + 100;
+
+        let missing_files: Vec<u64> = referenced_sst_files
+            .iter()
+            .filter(|num| {
+                // Only consider files ABOVE max existing (corruption from incomplete writes)
+                // and within a reasonable upper bound (to filter out very high false positives)
+                **num > max_existing && **num <= upper_bound &&
+                // And not already existing (sanity check)
+                !existing_sst_files.contains(num)
+            })
+            .cloned()
+            .collect();
+
+        if !missing_files.is_empty() {
+            let missing_file_names: Vec<String> = missing_files
+                .iter()
+                .map(|num| format!("{:06}.sst", num))
+                .collect();
+
+            error!(
+                "FAIL FAST: CORRUPTION DETECTED at '{}' - MANIFEST '{}' references {} missing SST files: [{}]",
+                path_str,
+                manifest_name,
+                missing_files.len(),
+                missing_file_names.join(", ")
+            );
+            error!(
+                "Recovery options: (1) Delete database and restore from backup, \
+                 (2) Use 'ldb repair' tool (may lose data), \
+                 (3) Restore from snapshot"
+            );
+
+            return Err(TeleologicalStoreError::CorruptionDetected {
+                path: path_str,
+                missing_count: missing_files.len(),
+                missing_files: missing_file_names.join(", "),
+                manifest_file: manifest_name,
+            });
+        }
+
+        info!(
+            "Database integrity check passed: {} SST files verified",
+            existing_sst_files.len()
+        );
+        Ok(())
+    }
+
+    /// Extract SST file number references from MANIFEST binary data.
+    ///
+    /// RocksDB's MANIFEST uses a log-structured format with VersionEdit records.
+    /// Each record contains file additions/deletions encoded as varint file numbers.
+    ///
+    /// This function uses a targeted approach focusing on varint-encoded numbers,
+    /// which is how RocksDB actually stores file numbers in the MANIFEST.
+    ///
+    /// Note: Currently unused - we rely on RocksDB's own corruption detection.
+    #[allow(dead_code)]
+    fn extract_sst_references_from_manifest(manifest_bytes: &[u8]) -> std::collections::HashSet<u64> {
+        let mut referenced_files = std::collections::HashSet::new();
+
+        // RocksDB uses protobuf-style variable-length integer encoding (varint).
+        // File numbers are encoded as varints in VersionEdit records.
+        // We scan for varint-encoded numbers in the reasonable file number range.
+
+        let mut i = 0;
+        while i < manifest_bytes.len() {
+            if let Some((num, bytes_read)) = Self::decode_varint(&manifest_bytes[i..]) {
+                // Filter to plausible SST file numbers:
+                // - Greater than 0 (file numbers start at 1)
+                // - Less than 100,000 (reasonable upper bound for most databases)
+                //   Most databases won't have more than 100k SST files
+                // - Varint encoding means small numbers use fewer bytes,
+                //   so this catches the most common patterns
+                if num > 0 && num < 100_000 {
+                    referenced_files.insert(num);
+                }
+                // Move forward by at least 1 byte to avoid infinite loops
+                i += bytes_read.max(1);
+            } else {
+                i += 1;
+            }
+        }
+
+        referenced_files
+    }
+
+    /// Decode a variable-length integer (varint) from bytes.
+    ///
+    /// Returns the decoded number and number of bytes consumed.
+    /// Note: Currently unused - we rely on RocksDB's own corruption detection.
+    #[allow(dead_code)]
+    fn decode_varint(bytes: &[u8]) -> Option<(u64, usize)> {
+        if bytes.is_empty() {
+            return None;
+        }
+
+        let mut result: u64 = 0;
+        let mut shift = 0;
+
+        for (i, &byte) in bytes.iter().enumerate() {
+            if i >= 10 {
+                // Varint too long (max 10 bytes for u64)
+                return None;
+            }
+
+            result |= ((byte & 0x7F) as u64) << shift;
+            shift += 7;
+
+            if byte & 0x80 == 0 {
+                // End of varint
+                return Some((result, i + 1));
+            }
+        }
+
+        None // Incomplete varint
     }
 }
 

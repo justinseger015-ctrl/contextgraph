@@ -75,6 +75,33 @@ pub enum TeleologicalStoreError {
     #[error("Stale lock detected at '{path}' but cleanup failed: {message}")]
     StaleLockCleanupFailed { path: String, message: String },
 
+    /// Database corruption detected - FAIL FAST.
+    ///
+    /// This error is raised when MANIFEST references SST files that don't exist,
+    /// indicating database corruption (likely from unclean shutdown during
+    /// compaction or flush).
+    ///
+    /// # Recovery
+    ///
+    /// Manual intervention required. Options:
+    /// 1. Delete corrupted database and recreate from backup
+    /// 2. Use `ldb repair` tool (may lose some data)
+    /// 3. Restore from a known-good snapshot
+    ///
+    /// NO automatic recovery is attempted - system fails fast for explicit debugging.
+    #[error("CORRUPTION DETECTED at '{path}': MANIFEST references {missing_count} missing SST files: [{missing_files}]. \
+             Manual intervention required. See error details for recovery options.")]
+    CorruptionDetected {
+        /// Database path
+        path: String,
+        /// Number of missing SST files
+        missing_count: usize,
+        /// Comma-separated list of missing SST file names
+        missing_files: String,
+        /// MANIFEST file that references the missing files
+        manifest_file: String,
+    },
+
     /// Internal error (should never happen).
     #[error("Internal error: {0}")]
     Internal(String),

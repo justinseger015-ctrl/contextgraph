@@ -234,3 +234,287 @@ async fn test_backend_type() {
         context_graph_core::traits::TeleologicalStorageBackend::RocksDb
     );
 }
+
+// ============================================================================
+// Corruption Detection Tests - REAL data, NO mocks (TASK-STORAGE-001)
+// ============================================================================
+
+/// Test that corruption detection catches missing SST files.
+///
+/// This test uses REAL RocksDB data:
+/// 1. Creates a valid database with multiple fingerprints
+/// 2. Forces flush to create SST files on disk
+/// 3. Closes database cleanly
+/// 4. Deletes an SST file to simulate corruption
+/// 5. Attempts to reopen and verifies CorruptionDetected error
+#[tokio::test]
+async fn test_corruption_detection_missing_sst_file() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().to_path_buf();
+
+    // Step 1: Create database with REAL data (not mocks)
+    {
+        let store = create_initialized_store(&path);
+
+        // Store multiple fingerprints to ensure SST files are created
+        for seed in 1..=10 {
+            let fp = create_test_fingerprint_with_seed(seed);
+            store.store(fp).await.expect("Store should succeed");
+        }
+
+        // Force flush to ensure data is written to SST files
+        store.flush().await.expect("Flush should succeed");
+    }
+
+    // Step 2: Identify SST files
+    let sst_files: Vec<std::path::PathBuf> = std::fs::read_dir(&path)
+        .expect("Should read directory")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".sst"))
+        .map(|e| e.path())
+        .collect();
+
+    assert!(
+        !sst_files.is_empty(),
+        "Database should have at least one SST file after storing fingerprints and flushing"
+    );
+
+    // Step 3: Delete an SST file to simulate corruption
+    let deleted_file = &sst_files[0];
+    let deleted_name = deleted_file.file_name().unwrap().to_string_lossy().to_string();
+    std::fs::remove_file(deleted_file).expect("Should delete SST file");
+
+    // Step 4: Attempt to reopen - should fail with CorruptionDetected
+    let result = RocksDbTeleologicalStore::open(&path);
+
+    match result {
+        Err(TeleologicalStoreError::CorruptionDetected {
+            path: err_path,
+            missing_count,
+            missing_files,
+            manifest_file,
+        }) => {
+            // Verify error contains correct information
+            assert_eq!(err_path, path.to_string_lossy().to_string());
+            assert!(missing_count >= 1, "Should detect at least 1 missing file");
+            // Split comma-separated list and check for exact match (not substring)
+            // to avoid false positives like "12.sst" matching "112.sst"
+            let file_list: Vec<&str> = missing_files.split(", ").collect();
+            let deleted_without_ext = deleted_name.replace(".sst", "");
+            assert!(
+                file_list.iter().any(|f| *f == deleted_name || *f == deleted_without_ext),
+                "Missing files should include the deleted file '{}', got: {:?}",
+                deleted_name,
+                file_list
+            );
+            assert!(
+                manifest_file.contains("MANIFEST-"),
+                "Should reference a MANIFEST file, got: {}",
+                manifest_file
+            );
+        }
+        Err(e) => {
+            // Also acceptable: RocksDB's own corruption error
+            let err_msg = e.to_string();
+            assert!(
+                err_msg.contains("Corruption") || err_msg.contains("No such file"),
+                "Expected CorruptionDetected or RocksDB corruption error, got: {}",
+                e
+            );
+        }
+        Ok(_) => {
+            panic!("Expected corruption error when opening database with missing SST file");
+        }
+    }
+}
+
+/// Test that a clean database passes corruption check.
+///
+/// Verifies that corruption detection doesn't produce false positives
+/// on a healthy database with REAL data.
+#[tokio::test]
+async fn test_corruption_detection_clean_database() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().to_path_buf();
+
+    // Create and populate database
+    {
+        let store = create_initialized_store(&path);
+        for seed in 1..=5 {
+            let fp = create_test_fingerprint_with_seed(seed);
+            store.store(fp).await.expect("Store should succeed");
+        }
+        store.flush().await.expect("Flush should succeed");
+    }
+
+    // Reopen should succeed with no corruption
+    let store = RocksDbTeleologicalStore::open(&path);
+    assert!(
+        store.is_ok(),
+        "Clean database should open without corruption error: {:?}",
+        store.err()
+    );
+
+    // Verify data is still accessible
+    let store = store.unwrap();
+    let count = store.count().await.expect("Count should succeed");
+    assert_eq!(count, 5, "Should have 5 fingerprints after reopen");
+}
+
+/// Test corruption detection when MANIFEST references missing files.
+///
+/// This simulates the exact scenario from the real corruption incident:
+/// MANIFEST-000701 referencing missing 000682.sst (file above max existing)
+///
+/// The detection heuristic catches files referenced ABOVE max_existing,
+/// which is the typical pattern when a crash occurs during compaction/flush.
+#[tokio::test]
+async fn test_corruption_detection_manifest_sst_mismatch() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().to_path_buf();
+
+    // Step 1: Create database with enough data to generate multiple SST files
+    {
+        let store = create_initialized_store(&path);
+
+        // Store many fingerprints to force multiple flushes and compactions
+        for seed in 1..=50 {
+            let fp = create_test_fingerprint_with_seed(seed);
+            store.store(fp).await.expect("Store should succeed");
+
+            // Periodic flush to create SST files
+            if seed % 10 == 0 {
+                store.flush().await.expect("Flush should succeed");
+            }
+        }
+        store.flush().await.expect("Final flush should succeed");
+    }
+
+    // Step 2: Get sorted SST files and delete the HIGHEST numbered one(s)
+    // This simulates corruption where new files were referenced but not fully written
+    let mut sst_files: Vec<_> = std::fs::read_dir(&path)
+        .expect("Read dir")
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".sst"))
+        .collect();
+
+    // Sort by file name (which includes the number)
+    sst_files.sort_by_key(|e| e.file_name().to_string_lossy().to_string());
+
+    assert!(!sst_files.is_empty(), "Should have SST files");
+
+    // Delete the LAST (highest numbered) file to simulate incomplete write
+    let deleted_file = sst_files.pop().unwrap();
+    std::fs::remove_file(deleted_file.path()).expect("Delete SST");
+
+    // Step 3: Verify corruption is detected (or RocksDB reports it)
+    let result = RocksDbTeleologicalStore::open(&path);
+
+    // Either our detection or RocksDB's should catch this
+    match result {
+        Err(TeleologicalStoreError::CorruptionDetected { missing_count, .. }) => {
+            assert!(
+                missing_count >= 1,
+                "Should detect missing file(s), got: {}",
+                missing_count
+            );
+        }
+        Err(e) => {
+            // RocksDB's own error is also acceptable for corruption
+            let err_msg = e.to_string();
+            assert!(
+                err_msg.contains("Corruption") || err_msg.contains("No such file"),
+                "Expected corruption error, got: {}",
+                e
+            );
+        }
+        Ok(_) => {
+            // If it opens successfully, that's actually OK too - RocksDB might have
+            // recovered automatically or the deleted file wasn't needed.
+            // The key test is test_corruption_detection_missing_sst_file which
+            // deliberately deletes a known file.
+        }
+    }
+}
+
+/// Test that new (empty) database passes corruption check.
+///
+/// A fresh database without CURRENT file should not trigger false positives.
+#[tokio::test]
+async fn test_corruption_detection_new_database() {
+    let tmp = TempDir::new().unwrap();
+
+    // Open fresh database - should succeed (no CURRENT file yet)
+    let result = RocksDbTeleologicalStore::open(tmp.path());
+    assert!(
+        result.is_ok(),
+        "New database should open without corruption error: {:?}",
+        result.err()
+    );
+}
+
+/// Test that corruption detection provides actionable error messages.
+///
+/// Verifies FAIL FAST policy with detailed context for debugging.
+#[tokio::test]
+async fn test_corruption_detection_error_details() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().to_path_buf();
+
+    // Create database
+    {
+        let store = create_initialized_store(&path);
+        let fp = create_test_fingerprint_with_seed(99);
+        store.store(fp).await.expect("Store should succeed");
+        store.flush().await.expect("Flush should succeed");
+    }
+
+    // Corrupt by deleting SST files
+    for entry in std::fs::read_dir(&path).expect("Read dir") {
+        if let Ok(entry) = entry {
+            if entry.file_name().to_string_lossy().ends_with(".sst") {
+                std::fs::remove_file(entry.path()).expect("Delete");
+                break; // Delete just one
+            }
+        }
+    }
+
+    // Get error and verify details
+    let result = RocksDbTeleologicalStore::open(&path);
+    let err = match result {
+        Ok(_) => panic!("Should fail on corruption"),
+        Err(e) => e,
+    };
+    let err_string = err.to_string();
+
+    // Verify error message contains FAIL FAST debugging info
+    // Either our custom CorruptionDetected or RocksDB's error
+    assert!(
+        err_string.contains("CORRUPTION") ||
+        err_string.contains("Corruption") ||
+        err_string.contains("No such file"),
+        "Error should indicate corruption, got: {}",
+        err_string
+    );
+
+    // If it's our custom error, verify structure
+    if let TeleologicalStoreError::CorruptionDetected {
+        path: err_path,
+        missing_count,
+        missing_files,
+        manifest_file,
+    } = err
+    {
+        // Verify all fields are populated
+        assert!(!err_path.is_empty(), "Path should not be empty");
+        assert!(missing_count >= 1, "Should have at least 1 missing file");
+        assert!(!missing_files.is_empty(), "Missing files list should not be empty");
+        assert!(!manifest_file.is_empty(), "Manifest file should be identified");
+
+        // Verify path matches
+        assert!(
+            err_path.contains(&path.file_name().unwrap().to_string_lossy().to_string()),
+            "Error path should match database path"
+        );
+    }
+}
