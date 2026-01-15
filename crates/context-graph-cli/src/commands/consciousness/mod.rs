@@ -4,6 +4,7 @@
 //!
 //! - `check-identity`: Check IC and trigger dream if crisis (TASK-SESSION-08)
 //! - `brief`: Quick consciousness status for PreToolUse hook (TASK-SESSION-11)
+//! - `inject-context`: Inject session context for LLM prompts (TASK-SESSION-15)
 //!
 //! # Constitution Reference
 //! - AP-26: Exit code 1 on error, 2 on corruption
@@ -12,10 +13,12 @@
 //! - IDENTITY-002: IC thresholds (Healthy >= 0.9, Good >= 0.7, Warning >= 0.5, Degraded < 0.5)
 
 mod check_identity;
+mod inject;
 
 use clap::Subcommand;
 
 pub use check_identity::CheckIdentityArgs;
+pub use inject::InjectContextArgs;
 
 /// Consciousness subcommands
 #[derive(Subcommand)]
@@ -26,6 +29,11 @@ pub enum ConsciousnessCommands {
     /// No stdin parsing, no disk I/O (cache only). Target: <50ms p95.
     /// Output: [C:STATE r=X.XX IC=X.XX] or [C:? r=? IC=?] (cold cache)
     Brief,
+    /// Inject session context for LLM prompt integration.
+    /// Reads from cache if warm, otherwise from RocksDB storage.
+    /// Classifies Johari quadrant and recommends action.
+    /// Output formats: compact (~40 tokens), standard (~100 tokens), verbose.
+    InjectContext(InjectContextArgs),
 }
 
 /// Handle consciousness command dispatch
@@ -41,6 +49,10 @@ pub async fn handle_consciousness_command(cmd: ConsciousnessCommands) -> i32 {
             let brief = IdentityCache::format_brief();
             println!("{}", brief);
             0 // Always exit 0 - never block Claude Code
+        }
+        ConsciousnessCommands::InjectContext(args) => {
+            // TASK-SESSION-15: Inject session context for LLM prompts
+            inject::inject_context_command(args).await
         }
     }
 }

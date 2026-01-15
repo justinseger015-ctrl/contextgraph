@@ -24,6 +24,9 @@ use clap::{Parser, Subcommand};
 use tracing_subscriber::{fmt, EnvFilter};
 
 mod commands;
+mod error;
+
+pub use error::{CliExitCode, exit_code_for_error, is_corruption_indicator};
 
 /// Context Graph CLI - Session Identity and Consciousness Management
 #[derive(Parser)]
