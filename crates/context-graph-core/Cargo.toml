@@ -54,6 +54,11 @@ nvml = ["nvml-wrapper"]
 tempfile = "3.10"
 tokio = { workspace = true, features = ["test-util"] }
 rand_chacha = "0.3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "session_identity"
+harness = false
 
 [[example]]
 name = "cognitive_pulse"

@@ -711,6 +711,7 @@ dependencies = [
  "bincode",
  "chrono",
  "config",
+ "criterion",
  "dashmap",
  "half",
  "hnsw_rs",
