@@ -36,13 +36,13 @@
 </critical_rules>
 
 <current_state>
-  <!-- VERIFIED 2026-01-15 via filesystem inspection -->
+  <!-- VERIFIED 2026-01-16 via filesystem inspection - ALL SCRIPTS COMPLETE -->
   <existing_scripts>
-    <script path=".claude/hooks/session_start.sh" status="exists" executable="true"/>
-    <script path=".claude/hooks/pre_tool_use.sh" status="exists" executable="true"/>
-    <script path=".claude/hooks/session_end.sh" status="MISSING"/>
-    <script path=".claude/hooks/post_tool_use.sh" status="MISSING"/>
-    <script path=".claude/hooks/user_prompt_submit.sh" status="MISSING"/>
+    <script path=".claude/hooks/session_start.sh" status="exists" executable="true" verified="2026-01-16"/>
+    <script path=".claude/hooks/pre_tool_use.sh" status="exists" executable="true" verified="2026-01-16"/>
+    <script path=".claude/hooks/session_end.sh" status="exists" executable="true" verified="2026-01-16"/>
+    <script path=".claude/hooks/post_tool_use.sh" status="exists" executable="true" verified="2026-01-16"/>
+    <script path=".claude/hooks/user_prompt_submit.sh" status="exists" executable="true" verified="2026-01-16"/>
   </existing_scripts>
 
   <cli_implementation location="crates/context-graph-cli/src/commands/hooks/">
