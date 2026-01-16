@@ -14,7 +14,24 @@
 //! # NO BACKWARDS COMPATIBILITY
 //! This module FAILS FAST on any error. Do not add fallback logic.
 
+mod args;
+mod error;
 mod types;
+
+pub use args::{
+    GenerateConfigArgs,
+    HookType,
+    HooksCommands,
+    OutputFormat,
+    PostToolArgs,
+    PreToolArgs,
+    PromptSubmitArgs,
+    SessionEndArgs,
+    SessionStartArgs,
+    ShellType,
+};
+
+pub use error::{HookError, HookResult};
 
 pub use types::{
     ConsciousnessState,
