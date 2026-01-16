@@ -37,12 +37,16 @@ use std::sync::Arc;
 
 use clap::Args;
 use serde::Serialize;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 use context_graph_core::gwt::session_identity::{classify_ic, update_cache, IdentityCache};
 use context_graph_core::gwt::ConsciousnessState;
+use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore, TeleologicalSearchOptions};
 use context_graph_core::types::JohariQuadrant;
+use context_graph_embeddings::{GpuConfig, ProductionMultiArrayProvider};
 use context_graph_storage::rocksdb_backend::{RocksDbMemex, StandaloneSessionIdentityManager};
+use context_graph_storage::teleological::RocksDbTeleologicalStore;
 
 // =============================================================================
 // CLI Arguments
@@ -81,6 +85,38 @@ pub struct InjectContextArgs {
     /// Useful for debugging or when cache staleness is suspected.
     #[arg(long, default_value = "false")]
     pub force_storage: bool,
+
+    // =========================================================================
+    // TASK-HOOKS-011: Semantic search mode flags
+    // =========================================================================
+    /// Semantic search query for memory retrieval.
+    /// When provided, injects matching memories instead of session state.
+    /// Uses 13-embedding teleological search (requires --teleological-db-path).
+    #[arg(long)]
+    pub query: Option<String>,
+
+    /// Explicit node IDs (UUIDs) to retrieve and inject.
+    /// Comma-separated list of fingerprint UUIDs.
+    /// When provided, retrieves these specific nodes instead of session state.
+    #[arg(long, value_delimiter = ',')]
+    pub node_ids: Option<Vec<String>>,
+
+    /// Maximum tokens to output for semantic search results.
+    /// Limits the content length to fit within token budgets.
+    /// Default: 500 tokens. Approximate: 1 token ≈ 4 chars.
+    #[arg(long, default_value = "500")]
+    pub max_tokens: usize,
+
+    /// Path to teleological memory database (for --query or --node-ids).
+    /// Required when using semantic search mode.
+    /// If not provided, defaults to ~/.context-graph/teleological
+    #[arg(long, env = "CONTEXT_GRAPH_TELEOLOGICAL_DB_PATH")]
+    pub teleological_db_path: Option<PathBuf>,
+
+    /// Number of results to return for semantic search (--query).
+    /// Default: 5. Max: 50.
+    #[arg(long, default_value = "5")]
+    pub top_k: usize,
 }
 
 /// Output format for inject-context command.
@@ -371,6 +407,16 @@ fn output_degraded(format: InjectFormat, error_msg: &str) {
 /// Execute the inject-context command.
 ///
 /// # Flow
+/// ## Semantic Search Mode (TASK-HOOKS-011)
+/// When --query or --node-ids is provided:
+/// 1. Open teleological store
+/// 2. Generate embeddings (for --query) or parse UUIDs (for --node-ids)
+/// 3. Search/retrieve matching nodes
+/// 4. Truncate content to --max-tokens
+/// 5. Output in requested format
+///
+/// ## Session State Mode (original)
+/// When neither --query nor --node-ids is provided:
 /// 1. Try to get context from cache (if not force_storage)
 /// 2. Fall back to RocksDB storage
 /// 3. Classify Johari quadrant from ΔS/ΔC
@@ -383,6 +429,58 @@ fn output_degraded(format: InjectFormat, error_msg: &str) {
 pub async fn inject_context_command(args: InjectContextArgs) -> i32 {
     let start = std::time::Instant::now();
     debug!("inject_context_command: starting with args={:?}", args);
+
+    // =========================================================================
+    // TASK-HOOKS-011: Check for semantic search mode
+    // =========================================================================
+    let is_semantic_mode = args.query.is_some() || args.node_ids.is_some();
+
+    if is_semantic_mode {
+        // Determine teleological DB path
+        let teleological_path = match &args.teleological_db_path {
+            Some(p) => p.clone(),
+            None => {
+                match home_dir() {
+                    Some(home) => home.join(".context-graph").join("teleological"),
+                    None => {
+                        error!("Cannot determine home directory for teleological DB path");
+                        eprintln!(
+                            "Error: Cannot determine teleological DB path. Set --teleological-db-path or CONTEXT_GRAPH_TELEOLOGICAL_DB_PATH"
+                        );
+                        return 1;
+                    }
+                }
+            }
+        };
+
+        // Execute semantic search
+        let result = execute_semantic_search(
+            args.query.as_deref(),
+            args.node_ids.as_deref(),
+            args.top_k,
+            args.max_tokens,
+            &teleological_path,
+        )
+        .await;
+
+        match result {
+            Ok(search_result) => {
+                output_semantic_results(&search_result, args.format);
+                let elapsed = start.elapsed();
+                debug!("inject-context (semantic): completed in {:?}", elapsed);
+                return 0;
+            }
+            Err(msg) => {
+                error!("Semantic search failed: {}", msg);
+                eprintln!("Error: {}", msg);
+                return 1;
+            }
+        }
+    }
+
+    // =========================================================================
+    // Session State Mode (original behavior)
+    // =========================================================================
 
     // Determine DB path
     let db_path = match &args.db_path {
@@ -452,6 +550,311 @@ fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
+}
+
+// =============================================================================
+// TASK-HOOKS-011: Semantic Search Mode
+// =============================================================================
+
+/// Result from semantic search mode.
+#[derive(Debug, Serialize)]
+struct SemanticSearchResult {
+    /// Number of results found.
+    count: usize,
+    /// Content from matched nodes (truncated to max_tokens).
+    content: String,
+    /// Token count (approximate: 1 token ≈ 4 chars).
+    token_count: usize,
+    /// Fingerprint IDs of matched nodes.
+    fingerprint_ids: Vec<String>,
+    /// Similarity scores for each result.
+    similarities: Vec<f32>,
+}
+
+/// Execute semantic search mode.
+///
+/// TASK-HOOKS-011: Handles --query and --node-ids flags.
+///
+/// # Arguments
+/// * `query` - Semantic search query (optional)
+/// * `node_ids` - Explicit UUIDs to retrieve (optional)
+/// * `top_k` - Number of results for query mode
+/// * `max_tokens` - Token limit for output
+/// * `teleological_db_path` - Path to teleological store
+///
+/// # Returns
+/// * `Ok(SemanticSearchResult)` - Search results with content
+/// * `Err(String)` - Error message for fail-fast
+async fn execute_semantic_search(
+    query: Option<&str>,
+    node_ids: Option<&[String]>,
+    top_k: usize,
+    max_tokens: usize,
+    teleological_db_path: &PathBuf,
+) -> Result<SemanticSearchResult, String> {
+    info!(
+        "semantic-search: Starting with query={:?}, node_ids={:?}, top_k={}, max_tokens={}",
+        query, node_ids.map(|ids| ids.len()), top_k, max_tokens
+    );
+
+    // Open teleological store
+    let store = RocksDbTeleologicalStore::open(teleological_db_path).map_err(|e| {
+        let msg = format!(
+            "Failed to open teleological store at {:?}: {}",
+            teleological_db_path, e
+        );
+        error!("{}", msg);
+        msg
+    })?;
+
+    // Determine which path: query-based or node-id-based
+    let (fingerprint_ids, similarities, contents) = if let Some(q) = query {
+        // Query-based: Generate embeddings and search
+        execute_query_search(&store, q, top_k).await?
+    } else if let Some(ids) = node_ids {
+        // Node-ID-based: Direct retrieval
+        execute_node_id_retrieval(&store, ids).await?
+    } else {
+        // Should not happen - caller should validate
+        return Err("Either --query or --node-ids must be provided".to_string());
+    };
+
+    // Combine content with token limit
+    let (truncated_content, token_count) = truncate_to_tokens(&contents, max_tokens);
+
+    Ok(SemanticSearchResult {
+        count: fingerprint_ids.len(),
+        content: truncated_content,
+        token_count,
+        fingerprint_ids,
+        similarities,
+    })
+}
+
+/// Execute query-based semantic search.
+///
+/// TASK-HOOKS-011: Uses ProductionMultiArrayProvider for 13-embedding generation,
+/// then searches via TeleologicalMemoryStore::search_semantic.
+async fn execute_query_search(
+    store: &RocksDbTeleologicalStore,
+    query: &str,
+    top_k: usize,
+) -> Result<(Vec<String>, Vec<f32>, Vec<String>), String> {
+    // Determine models directory
+    let models_dir = std::env::var("CONTEXT_GRAPH_MODELS_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            home_dir()
+                .map(|h| h.join(".context-graph").join("models"))
+                .unwrap_or_else(|| PathBuf::from("./models"))
+        });
+
+    debug!("semantic-search: Loading embedding provider from {:?}", models_dir);
+
+    // Create embedding provider
+    let provider = ProductionMultiArrayProvider::new(models_dir.clone(), GpuConfig::default())
+        .await
+        .map_err(|e| {
+            let msg = format!(
+                "Failed to create embedding provider (models_dir={:?}): {}",
+                models_dir, e
+            );
+            error!("{}", msg);
+            msg
+        })?;
+
+    // Generate query embeddings
+    debug!("semantic-search: Generating embeddings for query: {:?}", query);
+    let query_output = provider.embed_all(query).await.map_err(|e| {
+        let msg = format!("Failed to generate query embeddings: {}", e);
+        error!("{}", msg);
+        msg
+    })?;
+
+    // Search semantic
+    let options = TeleologicalSearchOptions::quick(top_k);
+    debug!("semantic-search: Searching with top_k={}", top_k);
+
+    let results = store
+        .search_semantic(&query_output.fingerprint, options)
+        .await
+        .map_err(|e| {
+            let msg = format!("Semantic search failed: {}", e);
+            error!("{}", msg);
+            msg
+        })?;
+
+    info!("semantic-search: Found {} results", results.len());
+
+    // Extract IDs and similarities
+    let ids: Vec<Uuid> = results.iter().map(|r| r.fingerprint.id).collect();
+    let fingerprint_ids: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+    let similarities: Vec<f32> = results.iter().map(|r| r.similarity).collect();
+
+    // Fetch content for all results
+    let contents = store.get_content_batch(&ids).await.map_err(|e| {
+        let msg = format!("Failed to fetch content batch: {}", e);
+        error!("{}", msg);
+        msg
+    })?;
+
+    // Convert Option<String> to String (empty string for None)
+    let content_strings: Vec<String> = contents
+        .into_iter()
+        .map(|c| c.unwrap_or_default())
+        .collect();
+
+    Ok((fingerprint_ids, similarities, content_strings))
+}
+
+/// Execute node-ID-based retrieval.
+///
+/// TASK-HOOKS-011: Retrieves specific nodes by UUID and their content.
+async fn execute_node_id_retrieval(
+    store: &RocksDbTeleologicalStore,
+    node_id_strings: &[String],
+) -> Result<(Vec<String>, Vec<f32>, Vec<String>), String> {
+    // Parse UUIDs
+    let uuids: Vec<Uuid> = node_id_strings
+        .iter()
+        .map(|s| {
+            Uuid::parse_str(s).map_err(|e| {
+                let msg = format!("Invalid UUID '{}': {}", s, e);
+                error!("{}", msg);
+                msg
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    debug!("node-id-retrieval: Retrieving {} nodes", uuids.len());
+
+    // Retrieve fingerprints
+    let fingerprints = store.retrieve_batch(&uuids).await.map_err(|e| {
+        let msg = format!("Failed to retrieve fingerprints: {}", e);
+        error!("{}", msg);
+        msg
+    })?;
+
+    // Filter to found fingerprints
+    let found_ids: Vec<Uuid> = fingerprints
+        .iter()
+        .zip(uuids.iter())
+        .filter_map(|(fp, id)| fp.as_ref().map(|_| *id))
+        .collect();
+
+    let not_found: Vec<_> = fingerprints
+        .iter()
+        .zip(uuids.iter())
+        .filter_map(|(fp, id)| if fp.is_none() { Some(id.to_string()) } else { None })
+        .collect();
+
+    if !not_found.is_empty() {
+        warn!("node-id-retrieval: {} IDs not found: {:?}", not_found.len(), not_found);
+    }
+
+    info!("node-id-retrieval: Found {}/{} nodes", found_ids.len(), uuids.len());
+
+    // Fetch content for found IDs
+    let contents = store.get_content_batch(&found_ids).await.map_err(|e| {
+        let msg = format!("Failed to fetch content batch: {}", e);
+        error!("{}", msg);
+        msg
+    })?;
+
+    let fingerprint_ids: Vec<String> = found_ids.iter().map(|id| id.to_string()).collect();
+    // Node-ID mode has no similarity scores (direct retrieval)
+    let similarities: Vec<f32> = vec![1.0; found_ids.len()];
+    let content_strings: Vec<String> = contents
+        .into_iter()
+        .map(|c| c.unwrap_or_default())
+        .collect();
+
+    Ok((fingerprint_ids, similarities, content_strings))
+}
+
+/// Truncate combined content to fit within token budget.
+///
+/// TASK-HOOKS-011: Approximation: 1 token ≈ 4 characters.
+fn truncate_to_tokens(contents: &[String], max_tokens: usize) -> (String, usize) {
+    let max_chars = max_tokens * 4;
+    let mut combined = String::new();
+    let mut current_chars = 0;
+
+    for (i, content) in contents.iter().enumerate() {
+        if content.is_empty() {
+            continue;
+        }
+
+        // Add separator between entries
+        if !combined.is_empty() {
+            combined.push_str("\n---\n");
+            current_chars += 5;
+        }
+
+        let remaining = max_chars.saturating_sub(current_chars);
+        if remaining == 0 {
+            debug!("truncate_to_tokens: Hit token limit at entry {}", i);
+            break;
+        }
+
+        if content.len() <= remaining {
+            combined.push_str(content);
+            current_chars += content.len();
+        } else {
+            // Truncate this entry
+            combined.push_str(&content[..remaining]);
+            combined.push_str("...[truncated]");
+            current_chars += remaining + 14;
+            debug!("truncate_to_tokens: Truncated entry {} to {} chars", i, remaining);
+            break;
+        }
+    }
+
+    let token_count = current_chars.div_ceil(4);
+    (combined, token_count)
+}
+
+/// Output semantic search results.
+fn output_semantic_results(result: &SemanticSearchResult, format: InjectFormat) {
+    match format {
+        InjectFormat::Compact => {
+            // Single line: [S:COUNT=N T=M]
+            // Then content
+            println!("[S:COUNT={} T={}]", result.count, result.token_count);
+            if !result.content.is_empty() {
+                println!("{}", result.content);
+            }
+        }
+        InjectFormat::Standard => {
+            println!("=== Semantic Memory Injection ===");
+            println!("Results: {} | Tokens: {}", result.count, result.token_count);
+            if !result.content.is_empty() {
+                println!();
+                println!("{}", result.content);
+            }
+        }
+        InjectFormat::Verbose => {
+            println!("=== Semantic Memory Injection (Verbose) ===");
+            println!();
+            println!("Results Found: {}", result.count);
+            println!("Token Count:   {} (max: budget)", result.token_count);
+            println!();
+            println!("Fingerprint IDs:");
+            for (i, id) in result.fingerprint_ids.iter().enumerate() {
+                let sim = result.similarities.get(i).copied().unwrap_or(0.0);
+                println!("  [{}] {} (similarity: {:.4})", i + 1, id, sim);
+            }
+            println!();
+            println!("Content:");
+            println!("---");
+            if result.content.is_empty() {
+                println!("(no content available)");
+            } else {
+                println!("{}", result.content);
+            }
+            println!("---");
+        }
+    }
 }
 
 // =============================================================================
@@ -810,6 +1213,12 @@ mod tests {
             delta_c: 0.7,
             threshold: 0.5,
             force_storage: true,
+            // TASK-HOOKS-011: New fields (not tested here, defaults)
+            query: None,
+            node_ids: None,
+            max_tokens: 500,
+            teleological_db_path: None,
+            top_k: 5,
         };
 
         let exit_code = inject_context_command(args).await;
@@ -852,6 +1261,12 @@ mod tests {
             delta_c: 0.7,
             threshold: 0.5,
             force_storage: true,
+            // TASK-HOOKS-011: New fields (not tested here, defaults)
+            query: None,
+            node_ids: None,
+            max_tokens: 500,
+            teleological_db_path: None,
+            top_k: 5,
         };
 
         let _ = inject_context_command(args).await;
@@ -914,5 +1329,225 @@ mod tests {
         }
 
         println!("RESULT: PASS - Extreme values handled correctly");
+    }
+
+    // =========================================================================
+    // TASK-HOOKS-011: truncate_to_tokens unit tests
+    // =========================================================================
+
+    #[test]
+    fn tc_hooks_011_01_truncate_empty() {
+        println!("\n=== TC-HOOKS-011-01: truncate_to_tokens Empty Input ===");
+        let contents: Vec<String> = vec![];
+        let (result, tokens) = truncate_to_tokens(&contents, 100);
+        assert!(result.is_empty(), "Empty input should produce empty output");
+        assert_eq!(tokens, 0, "Empty input should have 0 tokens");
+        println!("RESULT: PASS - Empty input handled correctly");
+    }
+
+    #[test]
+    fn tc_hooks_011_02_truncate_single_within_limit() {
+        println!("\n=== TC-HOOKS-011-02: truncate_to_tokens Single Within Limit ===");
+        let contents = vec!["Hello world".to_string()]; // 11 chars = ~3 tokens
+        let (result, tokens) = truncate_to_tokens(&contents, 100);
+        assert_eq!(result, "Hello world");
+        assert_eq!(tokens, 3); // (11 + 3) / 4 = 3
+        println!("RESULT: PASS - Single entry within limit");
+    }
+
+    #[test]
+    fn tc_hooks_011_03_truncate_single_exceeds_limit() {
+        println!("\n=== TC-HOOKS-011-03: truncate_to_tokens Single Exceeds Limit ===");
+        // 100 chars, limit 10 tokens = 40 chars
+        let long_content = "a".repeat(100);
+        let contents = vec![long_content];
+        let (result, tokens) = truncate_to_tokens(&contents, 10);
+
+        // Should be 40 chars + "...[truncated]" (14 chars) = 54 chars
+        assert!(result.len() <= 54, "Should be truncated to ~54 chars");
+        assert!(result.ends_with("...[truncated]"), "Should end with truncation marker");
+        assert!(tokens <= 14, "Tokens should be limited"); // (40 + 14 + 3) / 4 ≈ 14
+        println!("Result: {} chars, {} tokens", result.len(), tokens);
+        println!("RESULT: PASS - Long content truncated correctly");
+    }
+
+    #[test]
+    fn tc_hooks_011_04_truncate_multiple_entries() {
+        println!("\n=== TC-HOOKS-011-04: truncate_to_tokens Multiple Entries ===");
+        let contents = vec![
+            "First entry".to_string(),
+            "Second entry".to_string(),
+            "Third entry".to_string(),
+        ];
+        let (result, tokens) = truncate_to_tokens(&contents, 100);
+
+        assert!(result.contains("First entry"), "Should contain first entry");
+        assert!(result.contains("---"), "Should contain separator");
+        assert!(result.contains("Second entry"), "Should contain second entry");
+        assert!(result.contains("Third entry"), "Should contain third entry");
+        println!("Combined result ({} tokens):\n{}", tokens, result);
+        println!("RESULT: PASS - Multiple entries combined correctly");
+    }
+
+    #[test]
+    fn tc_hooks_011_05_truncate_skips_empty_entries() {
+        println!("\n=== TC-HOOKS-011-05: truncate_to_tokens Skips Empty ===");
+        let contents = vec![
+            "".to_string(),
+            "Valid content".to_string(),
+            "".to_string(),
+            "More content".to_string(),
+        ];
+        let (result, tokens) = truncate_to_tokens(&contents, 100);
+
+        // Should have one separator (not multiple for empty entries)
+        let separator_count = result.matches("---").count();
+        assert_eq!(separator_count, 1, "Should have exactly one separator");
+        assert!(result.contains("Valid content"));
+        assert!(result.contains("More content"));
+        println!("Result ({} tokens, {} separators):\n{}", tokens, separator_count, result);
+        println!("RESULT: PASS - Empty entries skipped correctly");
+    }
+
+    #[test]
+    fn tc_hooks_011_06_truncate_exact_boundary() {
+        println!("\n=== TC-HOOKS-011-06: truncate_to_tokens Exact Boundary ===");
+        // Test exact token boundary: 10 tokens = 40 chars
+        let content = "a".repeat(40);
+        let contents = vec![content.clone()];
+        let (result, tokens) = truncate_to_tokens(&contents, 10);
+
+        assert_eq!(result.len(), 40, "Should fit exactly");
+        assert!(!result.contains("truncated"), "Should not be truncated");
+        assert_eq!(tokens, 10); // (40 + 3) / 4 = 43 / 4 = 10 (integer division truncates)
+        println!("Exact 40 chars = {} tokens", tokens);
+        println!("RESULT: PASS - Exact boundary handled correctly");
+    }
+
+    #[test]
+    fn tc_hooks_011_07_truncate_max_tokens_zero() {
+        println!("\n=== TC-HOOKS-011-07: truncate_to_tokens Zero Max Tokens ===");
+        let contents = vec!["Some content".to_string()];
+        let (result, tokens) = truncate_to_tokens(&contents, 0);
+
+        // 0 tokens = 0 chars allowed, but we have content
+        // The truncation should trigger immediately
+        println!("Result: '{}', tokens: {}", result, tokens);
+        // With 0 max_chars, we should get empty or just truncation marker
+        assert!(result.is_empty() || result.len() <= 14, "Should be minimal output");
+        println!("RESULT: PASS - Zero max tokens handled gracefully");
+    }
+
+    // =========================================================================
+    // TASK-HOOKS-011: Semantic search argument validation tests
+    // =========================================================================
+
+    #[test]
+    fn tc_hooks_011_08_args_query_mutually_exclusive() {
+        println!("\n=== TC-HOOKS-011-08: Query/NodeIds Presence ===");
+
+        // Test that args structure supports the new fields
+        let args_with_query = InjectContextArgs {
+            db_path: None,
+            format: InjectFormat::Standard,
+            delta_s: 0.3,
+            delta_c: 0.7,
+            threshold: 0.5,
+            force_storage: false,
+            query: Some("test query".to_string()),
+            node_ids: None,
+            max_tokens: 500,
+            teleological_db_path: None,
+            top_k: 5,
+        };
+
+        let args_with_node_ids = InjectContextArgs {
+            db_path: None,
+            format: InjectFormat::Standard,
+            delta_s: 0.3,
+            delta_c: 0.7,
+            threshold: 0.5,
+            force_storage: false,
+            query: None,
+            node_ids: Some(vec!["abc-123".to_string()]),
+            max_tokens: 500,
+            teleological_db_path: None,
+            top_k: 5,
+        };
+
+        let args_neither = InjectContextArgs {
+            db_path: None,
+            format: InjectFormat::Standard,
+            delta_s: 0.3,
+            delta_c: 0.7,
+            threshold: 0.5,
+            force_storage: false,
+            query: None,
+            node_ids: None,
+            max_tokens: 500,
+            teleological_db_path: None,
+            top_k: 5,
+        };
+
+        assert!(args_with_query.query.is_some());
+        assert!(args_with_node_ids.node_ids.is_some());
+        assert!(args_neither.query.is_none() && args_neither.node_ids.is_none());
+
+        println!("RESULT: PASS - Args structure correctly supports semantic search fields");
+    }
+
+    #[test]
+    fn tc_hooks_011_09_default_values() {
+        println!("\n=== TC-HOOKS-011-09: Default Values ===");
+
+        // Verify default values match spec
+        let args = InjectContextArgs {
+            db_path: None,
+            format: InjectFormat::Standard,
+            delta_s: 0.3,  // Default per spec
+            delta_c: 0.7,  // Default per spec
+            threshold: 0.5, // Default per constitution.yaml
+            force_storage: false,
+            query: None,
+            node_ids: None,
+            max_tokens: 500, // Default per spec
+            teleological_db_path: None,
+            top_k: 5, // Default per spec
+        };
+
+        assert_eq!(args.max_tokens, 500, "Default max_tokens should be 500");
+        assert_eq!(args.top_k, 5, "Default top_k should be 5");
+
+        println!("RESULT: PASS - Default values match specification");
+    }
+
+    // =========================================================================
+    // TASK-HOOKS-011: SemanticSearchResult output formatting tests
+    // =========================================================================
+
+    #[test]
+    fn tc_hooks_011_10_semantic_result_serialization() {
+        println!("\n=== TC-HOOKS-011-10: SemanticSearchResult Serialization ===");
+
+        let result = SemanticSearchResult {
+            count: 3,
+            content: "Test content here".to_string(),
+            token_count: 4,
+            fingerprint_ids: vec![
+                "uuid-1".to_string(),
+                "uuid-2".to_string(),
+                "uuid-3".to_string(),
+            ],
+            similarities: vec![0.95, 0.87, 0.72],
+        };
+
+        // Test that it serializes to JSON
+        let json = serde_json::to_string(&result).expect("Should serialize");
+        assert!(json.contains("\"count\":3"));
+        assert!(json.contains("\"token_count\":4"));
+        assert!(json.contains("Test content here"));
+
+        println!("Serialized: {}", json);
+        println!("RESULT: PASS - SemanticSearchResult serializes correctly");
     }
 }

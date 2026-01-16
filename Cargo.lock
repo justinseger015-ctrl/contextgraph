@@ -690,6 +690,7 @@ dependencies = [
  "anyhow",
  "clap",
  "context-graph-core",
+ "context-graph-embeddings",
  "context-graph-mcp",
  "context-graph-storage",
  "parking_lot",
@@ -701,6 +702,7 @@ dependencies = [
  "tokio-test",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
