@@ -42,6 +42,7 @@ pub mod index;
 pub mod johari;
 pub mod layers;
 pub mod marblestone;
+pub mod memory;
 pub mod monitoring;
 pub mod neuromod;
 pub mod purpose;
@@ -85,3 +86,6 @@ pub use teleological::{
 
 // Purpose module re-exports (goal hierarchy types) - TASK-CORE-010
 pub use purpose::{GoalLevel, GoalNode};
+
+// Memory capture types (Phase 1) - TASK-P1-001, TASK-P1-002
+pub use memory::{ChunkMetadata, HookType, Memory, MemorySource, ResponseType, TextChunk, MAX_CONTENT_LENGTH};
