@@ -688,11 +688,13 @@ name = "context-graph-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "context-graph-core",
  "context-graph-embeddings",
  "context-graph-mcp",
  "context-graph-storage",
+ "futures",
  "parking_lot",
  "serde",
  "serde_json",
