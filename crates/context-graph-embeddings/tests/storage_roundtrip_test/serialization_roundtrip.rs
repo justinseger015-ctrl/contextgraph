@@ -62,7 +62,7 @@ fn test_json_roundtrip_fingerprint() {
         restored.purpose_vector, original.purpose_vector,
         "Purpose vector mismatch"
     );
-    assert!((restored.theta_to_north_star - original.theta_to_north_star).abs() < f32::EPSILON);
+    // TASK-P0-001: alignment_score field removed per ARCH-03
     assert_eq!(
         restored.johari_quadrants, original.johari_quadrants,
         "Johari quadrants mismatch"

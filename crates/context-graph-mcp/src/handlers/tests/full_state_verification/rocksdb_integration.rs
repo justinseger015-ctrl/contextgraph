@@ -89,8 +89,8 @@ async fn test_rocksdb_fsv_store_creates_fingerprint() {
     println!("\n[EVIDENCE] Stored fingerprint fields from RocksDB:");
     println!("  - ID: {}", stored_fp.id);
     println!(
-        "  - theta_to_north_star: {:.4}",
-        stored_fp.theta_to_north_star
+        "  - alignment_score: {:.4}",
+        stored_fp.alignment_score
     );
     println!("  - access_count: {}", stored_fp.access_count);
     println!("  - content_hash: {}", hex::encode(stored_fp.content_hash));

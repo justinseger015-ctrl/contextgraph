@@ -24,8 +24,8 @@ async fn test_full_alignment_computation_with_real_data() {
     println!("\nBEFORE STATE:");
     println!("  - fingerprint.id: {}", fingerprint.id);
     println!(
-        "  - fingerprint.theta_to_north_star: {:.3}",
-        fingerprint.theta_to_north_star
+        "  - fingerprint.alignment_score: {:.3}",
+        fingerprint.alignment_score
     );
     println!(
         "  - fingerprint.purpose_vector.alignments[0]: {:.3}",
@@ -33,8 +33,8 @@ async fn test_full_alignment_computation_with_real_data() {
     );
     println!("  - hierarchy.len(): {}", hierarchy.len());
     println!(
-        "  - hierarchy.has_north_star(): {}",
-        hierarchy.has_north_star()
+        "  - hierarchy.has_top_level_goals(): {}",
+        hierarchy.has_top_level_goals()
     );
 
     // COMPUTE
@@ -57,8 +57,8 @@ async fn test_full_alignment_computation_with_real_data() {
     );
     println!("  - result.score.threshold: {:?}", result.score.threshold);
     println!(
-        "  - result.score.north_star_alignment: {:.3}",
-        result.score.north_star_alignment
+        "  - result.score.strategic_alignment: {:.3}",
+        result.score.strategic_alignment
     );
     println!(
         "  - result.score.strategic_alignment: {:.3}",
@@ -137,8 +137,8 @@ async fn test_critical_misalignment_detection() {
 
     println!("\nBEFORE STATE:");
     println!(
-        "  - fingerprint.theta_to_north_star: {:.3}",
-        fingerprint.theta_to_north_star
+        "  - fingerprint.alignment_score: {:.3}",
+        fingerprint.alignment_score
     );
 
     // COMPUTE
@@ -183,46 +183,36 @@ async fn test_tactical_without_strategic_pattern() {
     println!("TEST: test_tactical_without_strategic_pattern");
     println!("============================================================");
 
+    // TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
     // Create a hierarchy where tactical is high but strategic is low
     let mut hierarchy = GoalHierarchy::new();
 
-    // North Star
-    let ns = GoalNode::autonomous_goal(
-        "North Star".into(),
-        GoalLevel::NorthStar,
-        create_test_fingerprint(0.0),
-        test_discovery(),
-    )
-    .expect("FAIL: NS");
-    let ns_id = ns.id;
-    hierarchy.add_goal(ns).expect("FAIL: NS");
-
-    // Strategic with different embedding (low similarity)
+    // Strategic goal (top-level, no parent) with distinct embedding (will have LOW similarity)
     let mut s_fp = SemanticFingerprint::zeroed();
     for i in 0..s_fp.e1_semantic.len() {
+        // Use PI offset to create different embedding pattern from the test fingerprint
         s_fp.e1_semantic[i] = ((i as f32 / 128.0) + std::f32::consts::PI).sin();
     }
-    let s1 = GoalNode::child_goal(
-        "Strategic".into(),
+    let s1 = GoalNode::autonomous_goal(
+        "Strategic Goal".into(),
         GoalLevel::Strategic,
-        ns_id,
         s_fp,
         test_discovery(),
     )
-    .expect("FAIL: S1");
+    .expect("FAIL: Strategic");
     let s1_id = s1.id;
-    hierarchy.add_goal(s1).expect("FAIL: S1");
+    hierarchy.add_goal(s1).expect("FAIL: Strategic");
 
-    // Tactical with similar embedding (high similarity)
+    // Tactical goal (child of Strategic) with similar embedding (will have HIGH similarity)
     let t1 = GoalNode::child_goal(
-        "Tactical".into(),
+        "Tactical Goal".into(),
         GoalLevel::Tactical,
         s1_id,
-        create_test_fingerprint(0.0),
+        create_test_fingerprint(0.0), // Same seed as test fingerprint
         test_discovery(),
     )
-    .expect("FAIL: T1");
-    hierarchy.add_goal(t1).expect("FAIL: T1");
+    .expect("FAIL: Tactical");
+    hierarchy.add_goal(t1).expect("FAIL: Tactical");
 
     let fingerprint = create_real_fingerprint(0.8);
 
@@ -312,9 +302,9 @@ async fn test_batch_processing_with_real_data() {
     let fp3 = create_real_fingerprint(0.3);
 
     println!("\nBEFORE STATE:");
-    println!("  - fp1.theta: {:.3}", fp1.theta_to_north_star);
-    println!("  - fp2.theta: {:.3}", fp2.theta_to_north_star);
-    println!("  - fp3.theta: {:.3}", fp3.theta_to_north_star);
+    println!("  - fp1.theta: {:.3}", fp1.alignment_score);
+    println!("  - fp2.theta: {:.3}", fp2.alignment_score);
+    println!("  - fp3.theta: {:.3}", fp3.alignment_score);
 
     let calculator = DefaultAlignmentCalculator::new();
     let fingerprints: Vec<&TeleologicalFingerprint> = vec![&fp1, &fp2, &fp3];
@@ -372,12 +362,12 @@ async fn test_empty_hierarchy_error() {
     println!("  - result.is_err(): {}", result.is_err());
 
     match result {
-        Err(AlignmentError::NoNorthStar) => {
-            println!("  - error type: NoNorthStar (CORRECT)");
+        Err(AlignmentError::NoTopLevelGoals) => {
+            println!("  - error type: NoTopLevelGoals (CORRECT)");
         }
         Err(e) => {
             println!("  - unexpected error: {}", e);
-            panic!("FAIL: Expected NoNorthStar error");
+            panic!("FAIL: Expected NoTopLevelGoals error");
         }
         Ok(_) => {
             panic!("FAIL: Expected error for empty hierarchy");

@@ -36,7 +36,7 @@ use uuid::Uuid;
 /// let centroid_fingerprint = SemanticFingerprint::zeroed();
 /// let goal = GoalNode::autonomous_goal(
 ///     "Emergent ML mastery goal".to_string(),
-///     GoalLevel::NorthStar,
+///     GoalLevel::Strategic,
 ///     centroid_fingerprint,
 ///     discovery,
 /// ).unwrap();
@@ -130,7 +130,7 @@ impl GoalNode {
     ///
     /// # Panics
     ///
-    /// Panics if `level` is `GoalLevel::NorthStar` (child goals cannot be North Star).
+    /// Panics if `level` is `GoalLevel::Strategic` (Strategic goals have no parent).
     ///
     /// # Errors
     ///
@@ -142,9 +142,10 @@ impl GoalNode {
         teleological_array: TeleologicalArray,
         discovery: GoalDiscoveryMetadata,
     ) -> Result<Self, GoalNodeError> {
+        // TASK-P0-001: Updated check from NorthStar to Strategic
         assert!(
-            level != GoalLevel::NorthStar,
-            "Child goal cannot be NorthStar level"
+            level != GoalLevel::Strategic,
+            "Strategic goals cannot have a parent - they are top-level"
         );
 
         teleological_array.validate_strict()?;
@@ -167,10 +168,12 @@ impl GoalNode {
         &self.teleological_array
     }
 
-    /// Check if this is a North Star goal.
+    /// Check if this is a top-level (Strategic) goal.
+    ///
+    /// Renamed from `is_north_star()` per TASK-P0-001 (ARCH-03).
     #[inline]
-    pub fn is_north_star(&self) -> bool {
-        self.level == GoalLevel::NorthStar
+    pub fn is_top_level(&self) -> bool {
+        self.level == GoalLevel::Strategic
     }
 
     /// Check if this goal has the given ancestor.

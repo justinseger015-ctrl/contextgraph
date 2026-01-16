@@ -175,7 +175,7 @@ mod tests {
             dominant_embedders: vec![Embedder::Semantic],
             coherence_score: 0.85,
         };
-        assert_eq!(pipeline.assign_level(&candidate_ns), GoalLevel::NorthStar);
+        assert_eq!(pipeline.assign_level(&candidate_ns), GoalLevel::Strategic);
 
         // Test Strategic (size not met): size=49, coherence=0.85
         let candidate_strat_size = GoalCandidate {
@@ -241,7 +241,7 @@ mod tests {
         let parent = GoalCandidate {
             goal_id: "parent".to_string(),
             description: "Parent goal".to_string(),
-            level: GoalLevel::NorthStar,
+            level: GoalLevel::Strategic,
             confidence: 0.9,
             member_count: 50,
             centroid: base_centroid.clone(),

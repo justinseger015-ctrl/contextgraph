@@ -104,7 +104,7 @@ pub(crate) fn create_test_fingerprint(alignment: f32) -> TeleologicalFingerprint
         purpose_vector,
         johari,
         purpose_evolution: Vec::new(),
-        theta_to_north_star: alignment,
+        alignment_score: alignment,
         content_hash: [0u8; 32],
         created_at: chrono::Utc::now(),
         last_updated: chrono::Utc::now(),
@@ -112,31 +112,15 @@ pub(crate) fn create_test_fingerprint(alignment: f32) -> TeleologicalFingerprint
     }
 }
 
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 pub(crate) fn create_test_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
 
-    // Create TeleologicalArray (SemanticFingerprint) for goals
-    let ns_fp = create_test_semantic_fingerprint(0.8);
-
-    // North Star
-    let ns = GoalNode::autonomous_goal(
+    // Strategic goal (top-level, no parent)
+    let s1 = GoalNode::autonomous_goal(
         "Build the best product".into(),
-        GoalLevel::NorthStar,
-        ns_fp.clone(),
-        test_discovery(),
-    )
-    .expect("FAIL: Could not create North Star goal");
-    let ns_id = ns.id;
-    hierarchy
-        .add_goal(ns)
-        .expect("FAIL: Could not add North Star to hierarchy");
-
-    // Strategic goal
-    let s1 = GoalNode::child_goal(
-        "Improve user experience".into(),
         GoalLevel::Strategic,
-        ns_id,
-        create_test_semantic_fingerprint(0.75),
+        create_test_semantic_fingerprint(0.8),
         test_discovery(),
     )
     .expect("FAIL: Could not create Strategic goal");
@@ -145,12 +129,12 @@ pub(crate) fn create_test_hierarchy() -> GoalHierarchy {
         .add_goal(s1)
         .expect("FAIL: Could not add Strategic goal to hierarchy");
 
-    // Tactical goal
+    // Tactical goal (child of Strategic)
     let t1 = GoalNode::child_goal(
-        "Reduce page load time".into(),
+        "Improve user experience".into(),
         GoalLevel::Tactical,
         s1_id,
-        create_test_semantic_fingerprint(0.7),
+        create_test_semantic_fingerprint(0.75),
         test_discovery(),
     )
     .expect("FAIL: Could not create Tactical goal");
@@ -159,7 +143,20 @@ pub(crate) fn create_test_hierarchy() -> GoalHierarchy {
         .add_goal(t1)
         .expect("FAIL: Could not add Tactical goal to hierarchy");
 
-    // Immediate goal
+    // Tactical goal 2 (another child of Strategic)
+    let t2 = GoalNode::child_goal(
+        "Reduce page load time".into(),
+        GoalLevel::Tactical,
+        s1_id,
+        create_test_semantic_fingerprint(0.7),
+        test_discovery(),
+    )
+    .expect("FAIL: Could not create Tactical goal 2");
+    hierarchy
+        .add_goal(t2)
+        .expect("FAIL: Could not add Tactical goal 2 to hierarchy");
+
+    // Immediate goal (child of Tactical)
     let i1 = GoalNode::child_goal(
         "Optimize image loading".into(),
         GoalLevel::Immediate,

@@ -19,7 +19,7 @@ impl TeleologicalFingerprint {
             return 0.0;
         }
 
-        let current = self.theta_to_north_star;
+        let current = self.alignment_score;
         let previous =
             self.purpose_evolution[self.purpose_evolution.len() - 2].aggregate_alignment();
 
@@ -43,7 +43,7 @@ impl TeleologicalFingerprint {
 
     /// Get the current alignment status.
     pub fn alignment_status(&self) -> AlignmentThreshold {
-        AlignmentThreshold::classify(self.theta_to_north_star)
+        AlignmentThreshold::classify(self.alignment_score)
     }
 
     /// Check if this fingerprint has concerning alignment trends.

@@ -173,7 +173,7 @@ impl Handlers {
                             "id": r.fingerprint.id.to_string(),
                             "goal_alignment": r.purpose_alignment * propagation_weight,
                             "raw_alignment": r.purpose_alignment,
-                            "theta_to_north_star": r.fingerprint.theta_to_north_star,
+                            "alignment_score": r.fingerprint.alignment_score,
                             "threshold": format!("{:?}", AlignmentThreshold::classify(r.purpose_alignment))
                         })
                     })

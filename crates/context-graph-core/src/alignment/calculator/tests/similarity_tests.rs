@@ -42,21 +42,19 @@ fn test_cosine_similarity_mismatched_dims() {
 
 #[test]
 fn test_propagation_weights() {
-    assert_eq!(
-        DefaultAlignmentCalculator::get_propagation_weight(GoalLevel::NorthStar),
-        1.0
-    );
+    // TASK-P0-001: Updated for 3-level hierarchy
+    // Strategic is now top-level (was NorthStar before)
     assert_eq!(
         DefaultAlignmentCalculator::get_propagation_weight(GoalLevel::Strategic),
-        0.7
+        1.0  // Top-level gets full weight
     );
     assert_eq!(
         DefaultAlignmentCalculator::get_propagation_weight(GoalLevel::Tactical),
-        0.4
+        0.6  // Middle level
     );
     assert_eq!(
         DefaultAlignmentCalculator::get_propagation_weight(GoalLevel::Immediate),
-        0.2
+        0.3  // Lowest level
     );
-    println!("[VERIFIED] Propagation weights match TASK-L003 spec");
+    println!("[VERIFIED] Propagation weights match TASK-P0-001 spec");
 }

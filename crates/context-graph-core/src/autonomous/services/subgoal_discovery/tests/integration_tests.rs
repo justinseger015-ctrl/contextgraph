@@ -47,7 +47,7 @@ fn test_full_discovery_workflow() {
     let goals = vec![GoalId::new(), GoalId::new(), GoalId::new()];
     for candidate in &result.candidates {
         let parent = discovery.find_parent_goal(candidate, &goals);
-        if candidate.level != GoalLevel::NorthStar {
+        if candidate.level != GoalLevel::Strategic {
             assert!(parent.is_some());
         }
     }

@@ -28,7 +28,7 @@ pub(crate) const NUM_EMBEDDERS: usize = 13;
 ///
 /// Parameters:
 /// - content: Used to generate content hash and embeddings deterministically
-/// - theta: The theta_to_north_star alignment value [0.0, 1.0]
+/// - theta: The alignment_score alignment value [0.0, 1.0]
 /// - access_count: Number of times this fingerprint has been accessed
 pub(crate) fn create_test_fingerprint(content: &str, theta: f32, access_count: u64) -> TeleologicalFingerprint {
     let content_hash = {
@@ -43,7 +43,7 @@ pub(crate) fn create_test_fingerprint(content: &str, theta: f32, access_count: u
 
     let mut fp = TeleologicalFingerprint::new(semantic, purpose_vector, johari, content_hash);
     // Override theta and access_count for test control
-    fp.theta_to_north_star = theta;
+    fp.alignment_score = theta;
     fp.access_count = access_count;
     fp
 }

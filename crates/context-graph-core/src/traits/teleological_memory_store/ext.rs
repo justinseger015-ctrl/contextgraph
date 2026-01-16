@@ -85,7 +85,7 @@ pub trait TeleologicalMemoryStoreExt: TeleologicalMemoryStore {
 
         Ok(results
             .into_iter()
-            .filter(|r| r.fingerprint.theta_to_north_star < alignment::CRITICAL)
+            .filter(|r| r.fingerprint.alignment_score < alignment::CRITICAL)
             .map(|r| r.fingerprint)
             .collect())
     }

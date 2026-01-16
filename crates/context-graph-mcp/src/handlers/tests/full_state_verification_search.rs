@@ -155,7 +155,7 @@ async fn test_full_state_verification_store_search_delete_cycle() {
     println!("   - Fingerprint ID in store: {}", retrieved_fp.id);
     println!(
         "   - Theta to North Star: {:.4}",
-        retrieved_fp.theta_to_north_star
+        retrieved_fp.alignment_score
     );
     println!("   - Access count: {}", retrieved_fp.access_count);
     println!(
@@ -364,7 +364,7 @@ async fn test_full_state_verification_store_search_delete_cycle() {
     println!("  - Embedding spaces: 13 (E1-E13)");
     println!(
         "  - Theta alignment: {:.4}",
-        retrieved_fp.theta_to_north_star
+        retrieved_fp.alignment_score
     );
     println!("======================================================================\n");
 }

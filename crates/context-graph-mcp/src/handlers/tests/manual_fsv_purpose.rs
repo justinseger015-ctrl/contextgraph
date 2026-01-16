@@ -30,6 +30,7 @@ use crate::handlers::Handlers;
 use crate::protocol::{JsonRpcId, JsonRpcRequest};
 
 /// Create handlers with DIRECT ACCESS to Source of Truth for verification.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 fn create_verifiable_system() -> (
     Handlers,
     Arc<InMemoryTeleologicalStore>,
@@ -46,29 +47,31 @@ fn create_verifiable_system() -> (
     let mut hierarchy = GoalHierarchy::new();
     let discovery = GoalDiscoveryMetadata::bootstrap();
 
-    let ns_goal = GoalNode::autonomous_goal(
-        "Test North Star Goal".into(),
-        GoalLevel::NorthStar,
+    // Strategic goal 1 (top-level, no parent)
+    let s1_goal = GoalNode::autonomous_goal(
+        "Test Strategic Goal 1".into(),
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create North Star");
-    let ns_id = ns_goal.id;
+    .expect("Failed to create Strategic goal 1");
+    let s1_id = s1_goal.id;
     hierarchy
-        .add_goal(ns_goal)
-        .expect("Failed to add North Star");
+        .add_goal(s1_goal)
+        .expect("Failed to add Strategic goal 1");
 
-    let s1_goal = GoalNode::child_goal(
-        "Test Strategic Goal".into(),
-        GoalLevel::Strategic,
-        ns_id,
+    // Tactical goal - child of Strategic
+    let t1_goal = GoalNode::child_goal(
+        "Test Tactical Goal".into(),
+        GoalLevel::Tactical,
+        s1_id,
         SemanticFingerprint::zeroed(),
         discovery,
     )
-    .expect("Failed to create strategic goal");
+    .expect("Failed to create Tactical goal");
     hierarchy
-        .add_goal(s1_goal)
-        .expect("Failed to add strategic goal");
+        .add_goal(t1_goal)
+        .expect("Failed to add Tactical goal");
 
     // We need to wrap in RwLock to share with handlers
     let hierarchy_lock = Arc::new(RwLock::new(hierarchy));
@@ -132,11 +135,11 @@ async fn manual_fsv_purpose_handlers() {
     let (initial_goal_count, has_north_star, north_star_info) = {
         let hierarchy_read = hierarchy.read();
         let ns_info = hierarchy_read
-            .north_star()
+            .top_level_goals().first()
             .map(|ns| (ns.id, ns.description.clone()));
         (
             hierarchy_read.len(),
-            hierarchy_read.has_north_star(),
+            hierarchy_read.has_top_level_goals(),
             ns_info,
         )
     }; // guard dropped here
@@ -204,7 +207,7 @@ async fn manual_fsv_purpose_handlers() {
     );
     println!(
         "   ├─ Theta to North Star: {:.4}",
-        stored_fp.theta_to_north_star
+        stored_fp.alignment_score
     );
     println!("   └─ Created at: {:?}", stored_fp.created_at);
 
@@ -266,8 +269,8 @@ async fn manual_fsv_purpose_handlers() {
     let pv_mean: f32 = fp_from_store.purpose_vector.alignments.iter().sum::<f32>() / 13.0;
     println!("   ├─ Fingerprint still exists: {}", fp_from_store.id);
     println!(
-        "   ├─ Fingerprint theta_to_north_star: {:.4}",
-        fp_from_store.theta_to_north_star
+        "   ├─ Fingerprint alignment_score: {:.4}",
+        fp_from_store.alignment_score
     );
     println!("   └─ Purpose vector mean: {:.4}", pv_mean);
 
@@ -338,7 +341,7 @@ async fn manual_fsv_purpose_handlers() {
             .map(|(_, _, uuid)| hierarchy_read.get(uuid).is_some())
             .collect();
         let ns = hierarchy_read
-            .north_star()
+            .top_level_goals().first()
             .map(|ns| (ns.id, ns.description.clone()));
         (count, exists_map, ns)
     }; // guard dropped here
@@ -556,7 +559,7 @@ async fn manual_fsv_purpose_handlers() {
         "   │      Purpose vector[0..3]: {:?}",
         &final_fp.purpose_vector.alignments[0..3]
     );
-    println!("   │      Theta to NS: {:.4}", final_fp.theta_to_north_star);
+    println!("   │      Theta to NS: {:.4}", final_fp.alignment_score);
     println!("   └─ END OF STORE");
     println!();
 
@@ -564,8 +567,8 @@ async fn manual_fsv_purpose_handlers() {
     println!("🎯 GoalHierarchy - Final State:");
     let hierarchy_read = hierarchy.read();
     println!("   ├─ Total goals: {}", hierarchy_read.len());
-    println!("   ├─ Has North Star: {}", hierarchy_read.has_north_star());
-    if let Some(ns) = hierarchy_read.north_star() {
+    println!("   ├─ Has North Star: {}", hierarchy_read.has_top_level_goals());
+    if let Some(ns) = hierarchy_read.top_level_goals().first() {
         println!("   ├─ North Star: {} - {}", ns.id, ns.description);
     }
 

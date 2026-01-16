@@ -68,7 +68,7 @@ fn test_multi_space_alignment_uses_all_13_embedders() {
     // Create a goal using new API
     let goal = GoalNode::autonomous_goal(
         "Test goal".into(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         create_test_semantic_fingerprint(0.5),
         test_discovery(),
     )
@@ -128,7 +128,7 @@ fn test_multi_space_weighted_aggregation() {
 
     let goal = GoalNode::autonomous_goal(
         "Test goal".into(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         create_test_semantic_fingerprint(0.8),
         test_discovery(),
     )

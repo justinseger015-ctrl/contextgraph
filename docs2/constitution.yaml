@@ -1,62 +1,67 @@
-# Context Graph Constitution v5.0.0 (Token-Optimized)
-# Bio-Nervous MCP | UTL | Teleological Vectors | GWT | Adaptive Thresholds
-# ═══════════════════════════════════════════════════════════════════════
+# Context Graph Constitution v6.0.0 (Topic-Based Architecture)
+# Multi-Space Embeddings | Emergent Topics | Weighted Clustering | Native Hooks
+# ===============================================================================
 
 meta:
-  v: "5.0.0"
+  v: "6.0.0"
   name: "Ultimate Context Graph"
-  desc: "5-layer bio-nervous UTL knowledge graph with 13-embedding teleological fingerprints, Kuramoto-synchronized GWT consciousness, adaptive thresholds"
-  paradigm: "Multi-Array Teleological Fingerprints with GWT"
+  desc: "13-embedding multi-space retrieval with emergent topic discovery via HDBSCAN+BIRCH clustering, weighted category agreement"
+  paradigm: "Emergent Topics from Weighted Multi-Space Clustering"
   hook_architecture: "NATIVE Claude Code hooks ONLY (via .claude/settings.json)"
 
 # ABBREVIATIONS
-# UTL=Unified Theory of Learning, L=Learning, ΔS=entropy, ΔC=coherence
-# wₑ=emotional weight, φ=phase angle, GWT=Global Workspace Theory
 # TF=Teleological Fingerprint, PV=Purpose Vector (13D)
-# r=Kuramoto order param, K=coupling, θᵢ=phase, ωᵢ=natural freq
-# ATC=Adaptive Threshold Calibration, IC=Identity Continuity
+# TS=Topic Stability, TP=Topic Portfolio
+# weighted_agreement=Sum of category-weighted cluster membership
+# E1-E13=Embedder spaces, HDBSCAN=Density clustering, BIRCH=Online clustering
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # TECH STACK
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 stack:
   lang: { rust: "1.75+", edition: "2021", cuda: "13.1" }
   gpu: { target: "RTX 5090", vram: "32GB", compute: "12.0" }
-  deps: [tokio@1.35+, serde@1.0+, uuid@1.6+, chrono@0.4+, rmcp@0.1+, cudarc@0.10+, faiss@0.12+gpu, rocksdb@0.21+, scylladb@1.0+]
+  deps: [tokio@1.35+, serde@1.0+, uuid@1.6+, chrono@0.4+, rmcp@0.1+, cudarc@0.10+, faiss@0.12+gpu, rocksdb@0.21+, scylladb@1.0+, hdbscan@0.5+, birch@0.3+]
   db:
     primary: { dev: rocksdb, prod: scylladb }
-    indexes: { per_embedder: "13× HNSW", matryoshka_128d: HNSW, splade_inverted: inverted, purpose: "13D HNSW" }
+    indexes: { per_embedder: "13x HNSW", matryoshka_128d: HNSW, splade_inverted: inverted, purpose: "13D HNSW" }
     temporal: timescaledb
     cache: redis7+
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # DIRECTORY STRUCTURE
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 dirs:
   crates/:
     context-graph-mcp/: "tools/, resources/, handlers/, adapters/"
-    context-graph-core/: "graph/, search/, utl/, session/, curation/, teleological/, autonomous/, gwt/, dream/"
+    context-graph-core/: "graph/, search/, utl/, session/, curation/, teleological/, topic/, clustering/, dream/"
     context-graph-cuda/: "kernels/, hnsw/, hopfield/, neuromod/"
     context-graph-embeddings/: "models/, fingerprint/"
     context-graph-storage/: "rocksdb/, scylla/, indexes/, temporal/"
+    context-graph-cli/: "commands/, hooks/"
   specs/: [functional/, technical/, tasks/]
   tests/: [integration/, benchmarks/, fixtures/, chaos/, validation/]
+  hooks/: [session-start.sh, pre-tool-use.sh, post-tool-use.sh, user-prompt-submit.sh, stop.sh, session-end.sh]
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # ARCHITECTURAL RULES (Critical - must not violate)
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 arch_rules:
   ARCH-01: "TeleologicalArray is atomic - store all 13 embeddings or nothing"
-  ARCH-02: "Apples-to-apples only - compare E1↔E1, E4↔E4, never E1↔E5"
-  ARCH-03: "Autonomous operation - goals emerge from data, no manual set_north_star()"
+  ARCH-02: "Apples-to-apples only - compare E1<->E1, E4<->E4, never E1<->E5"
+  ARCH-03: "Autonomous operation - goals emerge from topic clustering, no manual goal setting"
+  ARCH-04: "Temporal embedders (E2-E4) NEVER count toward topic detection - metadata only"
   ARCH-05: "All 13 embedders required - missing embedder is fatal error"
   ARCH-06: "All memory ops through MCP tools - no direct DB access"
   ARCH-07: "NATIVE Claude Code hooks (.claude/settings.json) control memory lifecycle - NOT internal/built-in hooks"
   ARCH-08: "CUDA GPU required for production - no CPU fallbacks"
+  ARCH-09: "Topic threshold is weighted_agreement >= 2.5 (not raw space count)"
+  ARCH-10: "Divergence detection uses SEMANTIC embedders only (E1, E5, E6, E7, E10, E12, E13)"
+  ARCH-11: "Memory sources: HookDescription, ClaudeResponse, MDFileChunk"
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # CODING STANDARDS
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 naming:
   files: { rust: snake_case.rs, cuda: snake_case.cu, tests: "{mod}_test.rs" }
   types: PascalCase
@@ -76,42 +81,38 @@ rules:
   - "Max 5 unsafe blocks/module"
   - "CUDA FFI only in context-graph-cuda"
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # ANTI-PATTERNS (FORBIDDEN)
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 forbidden:
-  # Critical
-  AP-01: "No manual goal setting (set_north_star, define_goal)"
-  AP-02: "No cross-embedder comparison (E1↔E5)"
-  AP-03: "No dimension projection (1024D→512D)"
+  # Critical - Architecture
+  AP-02: "No cross-embedder comparison (E1<->E5)"
+  AP-03: "No dimension projection (1024D->512D)"
   AP-04: "No partial TeleologicalArray storage"
   AP-05: "No embedding fusion into single vector"
-  AP-26: "IC<0.5 MUST trigger dream - no silent failures"
-  AP-32: "compute_delta_sc MCP tool MUST exist"
-  AP-35: "Dream NREM/REM returning stubs forbidden"
-  AP-36: "nrem.rs/rem.rs TODO stubs MUST be implemented"
-  AP-40: "IdentityContinuityListener MUST subscribe to GWT"
-
-  # High
   AP-06: "No direct DB access - MCP tools only"
   AP-07: "No CPU fallback in production"
   AP-08: "No sync I/O in async context"
   AP-09: "No unbounded caches"
-  AP-10: "No NaN/Infinity in UTL"
-  AP-24: "compute_consciousness() must use all 3 factors (I,R,D)"
-  AP-25: "Kuramoto must have exactly 13 oscillators"
-  AP-29: "Lambda weights without self-correction forbidden"
-  AP-33: "ΔC MUST include ClusterFit"
-  AP-37: "IdentityContinuityMonitor MUST exist"
-  AP-38: "IC<0.5 MUST auto-trigger dream"
-  AP-41: "poincare_walk.rs MUST be used by REM"
+  AP-10: "No NaN/Infinity in similarity scores"
 
-  # Medium
+  # Critical - Topic System
+  AP-60: "Temporal embedders (E2-E4) MUST NOT count toward topic detection"
+  AP-61: "Topic threshold MUST be weighted_agreement >= 2.5, not raw count"
+  AP-62: "Divergence alerts MUST only use SEMANTIC embedders"
+  AP-63: "NEVER trigger divergence from temporal proximity differences"
+  AP-64: "Relational/Structural embedders count at 0.5x weight ONLY"
+  AP-65: "No manual topic/goal setting - topics emerge from clustering"
+
+  # Critical - Dream Triggers
+  AP-70: "Dream triggers MUST use entropy > 0.7 AND churn > 0.5"
+  AP-71: "Dream NREM/REM returning stubs forbidden"
+  AP-72: "nrem.rs/rem.rs TODO stubs MUST be implemented"
+
+  # High
   AP-11: "Check existing utils before creating helpers"
   AP-12: "No magic numbers - use named constants"
   AP-14: "No .unwrap() in library code"
-  AP-39: "cosine_similarity_13d MUST be public"
-  AP-42: "mental_checks entropy>0.7 MUST wire to TriggerManager"
 
   # Hook Architecture (Critical)
   AP-50: "NO internal/built-in Claude Code hooks - NATIVE hooks via .claude/settings.json ONLY"
@@ -119,9 +120,9 @@ forbidden:
   AP-52: "NO custom Claude Code source modifications for hook integration"
   AP-53: "Hook logic MUST be in shell scripts calling context-graph-cli"
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # SECURITY
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 security:
   SEC-01: "Validate/sanitize all input"
   SEC-02: { rule: "Scrub PII pre-embed", patterns: [api_key, password, bearer_token, ssn, credit_card] }
@@ -130,18 +131,18 @@ security:
   SEC-06: "Soft delete 30-day recovery"
   SEC-07: "Secrets from env vars only"
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # PERFORMANCE BUDGETS
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 perf:
-  latency: { inject_context: "<25ms p95", hopfield: "<1ms", reflex_cache: "<100μs", single_embed: "<10ms", batch_embed_64: "<50ms", faiss_1M_k100: "<2ms", dream_wake: "<100ms" }
+  latency: { inject_context: "<25ms p95", hopfield: "<1ms", reflex_cache: "<100us", single_embed: "<10ms", batch_embed_64: "<50ms", faiss_1M_k100: "<2ms", dream_wake: "<100ms" }
   throughput: { embed_batch: ">1000/sec", search_batch_100: "<5ms" }
   memory: { gpu: "<24GB", graph_cap: ">10M nodes" }
-  quality: { utl_avg: ">0.6", attack_detection: ">95%", info_loss: "<15%" }
+  quality: { topic_stability: ">0.6", attack_detection: ">95%", info_loss: "<15%" }
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # TESTING
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 testing:
   coverage: { unit: "90%", integration: "80%", docs: "80%" }
   gates:
@@ -149,37 +150,191 @@ testing:
     pre-merge: [test --all, bench --no-run, "coverage>=90%"]
     pre-deploy: [integration pass, "bench regression<5%", chaos pass]
 
-# ═══════════════════════════════════════════════════════════════════════
-# UTL (Unified Theory of Learning)
-# ═══════════════════════════════════════════════════════════════════════
-utl:
-  canonical: "L = f((ΔS × ΔC) · wₑ · cos φ) → L ∈ [0,1]"
-  multi_embed: "L_multi = sigmoid(2.0 · (Σᵢ τᵢλ_S·ΔSᵢ) · (Σⱼ τⱼλ_C·ΔCⱼ) · wₑ · cos φ)"
-  params: { ΔS: "[0,1] entropy", ΔC: "[0,1] coherence", τ: "[0,1] teleological weight", wₑ: "[0.5,1.5] emotional", φ: "[0,π] phase" }
+# ===============================================================================
+# TOPIC SYSTEM (Replaces North Star / IC / GWT Consciousness)
+# ===============================================================================
+topic_system:
+  overview: "Topics emerge from multi-space clustering, no manual goal setting"
 
-  johari:
-    Open: "ΔS<0.5, ΔC>0.5 → DirectRecall"
-    Blind: "ΔS>0.5, ΔC<0.5 → TriggerDream"
-    Hidden: "ΔS<0.5, ΔC<0.5 → GetNeighborhood"
-    Unknown: "ΔS>0.5, ΔC>0.5 → EpistemicAction"
+  # -------------------------------------------------------------------------
+  # EMBEDDER CATEGORIES
+  # -------------------------------------------------------------------------
+  embedder_categories:
+    SEMANTIC:
+      embedders: [E1, E5, E6, E7, E10, E12, E13]
+      topic_weight: 1.0
+      role: "Primary topic triggers - capture meaning, concepts, intent, code"
+      divergence_detection: true
+      count: 7
 
-  lifecycle:
-    infancy:  { n: "0-50",   λ_ΔS: 0.7, λ_ΔC: 0.3 }
-    growth:   { n: "50-500", λ_ΔS: 0.5, λ_ΔC: 0.5 }
-    maturity: { n: "500+",   λ_ΔS: 0.3, λ_ΔC: 0.7 }
+    TEMPORAL:
+      embedders: [E2, E3, E4]
+      topic_weight: 0.0
+      role: "Metadata only - NEVER for topic detection"
+      divergence_detection: false
+      count: 3
+      rationale: "Temporal proximity != semantic relationship"
+      usage:
+        - "E2 (V_freshness): Recency weighting"
+        - "E3 (V_periodicity): Cyclical patterns (daily, weekly)"
+        - "E4 (V_ordering): Sequence/order relationships"
+        - "Same-session badges on injected context"
+        - "Timeline enrichment metadata"
 
-  delta_methods:
-    ΔS: { E1: "GMM+Mahalanobis", E5: "Asymmetric KNN", E7: "GMM+KNN hybrid", E9: "Hamming", E10: "Cross-modal KNN", E11: "TransE ||h+r-t||", E12: "Token KNN", E13: "Jaccard", default: "KNN" }
-    ΔC: "0.4×Connectivity + 0.4×ClusterFit + 0.2×Consistency"
+    RELATIONAL:
+      embedders: [E8, E11]
+      topic_weight: 0.5
+      role: "Supporting - can reinforce but not define topics alone"
+      divergence_detection: false
+      count: 2
+      usage:
+        - "E8 (V_connectivity): Graph structure relationships"
+        - "E11 (V_factuality): Named entity relationships"
+        - "Entity-based retrieval enrichment"
 
-# ═══════════════════════════════════════════════════════════════════════
+    STRUCTURAL:
+      embedders: [E9]
+      topic_weight: 0.5
+      role: "Supporting - structural/format patterns"
+      divergence_detection: false
+      count: 1
+      usage:
+        - "E9 (V_robustness): Hyperdimensional structure"
+        - "Format-aware retrieval"
+        - "Noise-robust pattern matching"
+
+  # -------------------------------------------------------------------------
+  # WEIGHTED AGREEMENT FORMULA
+  # -------------------------------------------------------------------------
+  weighted_agreement:
+    formula: "weighted_agreement = Sum(topic_weight_i x is_clustered_i)"
+    max_value: 8.5  # 7x1.0 (semantic) + 2x0.5 (relational) + 1x0.5 (structural)
+    breakdown:
+      semantic_max: 7.0  # 7 embedders x 1.0 weight
+      relational_max: 1.0  # 2 embedders x 0.5 weight
+      structural_max: 0.5  # 1 embedder x 0.5 weight
+      temporal_contribution: 0.0  # ALWAYS zero
+
+  # -------------------------------------------------------------------------
+  # TOPIC DETECTION
+  # -------------------------------------------------------------------------
+  topic_detection:
+    threshold: 2.5
+    examples:
+      - "3 semantic spaces agreeing = 3.0 -> TOPIC"
+      - "2 semantic + 1 relational = 2.5 -> TOPIC"
+      - "2 semantic spaces only = 2.0 -> NOT TOPIC"
+      - "5 temporal spaces = 0.0 -> NOT TOPIC (excluded)"
+      - "1 semantic + 3 relational = 2.5 -> TOPIC"
+    confidence: "topic_confidence = weighted_agreement / 8.5"
+
+  # -------------------------------------------------------------------------
+  # TOPIC PORTFOLIO (Replaces North Star)
+  # -------------------------------------------------------------------------
+  topic_portfolio:
+    description: "Emergent topics discovered via clustering, no manual setting"
+    structure:
+      topics: "HashMap<TopicId, TopicMetrics>"
+      history: "VecDeque<TopicSnapshot>"
+    profile_dimensions: 13  # All embedders stored, only semantic/relational/structural for detection
+
+  # -------------------------------------------------------------------------
+  # TOPIC STABILITY (Replaces Identity Continuity)
+  # -------------------------------------------------------------------------
+  topic_stability:
+    metrics:
+      churn_rate: "[0.0-1.0] where 0.0=stable, 1.0=completely new topics"
+      entropy: "[0.0-1.0] topic distribution entropy"
+      membership_stability: "How stable topic memberships are"
+      centroid_stability: "How stable topic centroids are"
+    phases:
+      Emerging: "New topic forming"
+      Stable: "Established topic"
+      Declining: "Topic losing members"
+      Merging: "Topics consolidating"
+    thresholds:
+      healthy: "churn < 0.3"
+      warning: "churn in [0.3, 0.5)"
+      unstable: "churn >= 0.5"
+
+  # -------------------------------------------------------------------------
+  # DIVERGENCE DETECTION
+  # -------------------------------------------------------------------------
+  divergence_detection:
+    description: "Detect when current activity differs from recent work"
+    scope: "SEMANTIC embedders ONLY (E1, E5, E6, E7, E10, E12, E13)"
+    excluded:
+      - "Temporal (E2-E4): Working at different times is not divergence"
+      - "Relational (E8, E11): Different entities is not inherently divergent"
+      - "Structural (E9): Different structure is not semantic divergence"
+    thresholds:
+      E1_semantic: { high: "> 0.75", low: "< 0.3" }
+      E5_causal: { high: "> 0.70", low: "< 0.25" }
+      E6_sparse: { high: "> 0.60", low: "< 0.2" }
+      E7_code: { high: "> 0.80", low: "< 0.35" }
+      E10_multimodal: { high: "> 0.70", low: "< 0.3" }
+      E12_late_interaction: { high: "> 0.70", low: "< 0.3" }
+      E13_splade: { high: "> 0.60", low: "< 0.2" }
+    injection_format: |
+      DIVERGENCE DETECTED
+      Recent activity in [semantic_space]: "[memory content summary]"
+      Current appears different - similarity: {score}
+
+  # -------------------------------------------------------------------------
+  # TEMPORAL CONTEXT ENRICHMENT
+  # -------------------------------------------------------------------------
+  temporal_enrichment:
+    description: "Temporal embedders provide context badges, not topic triggers"
+    badges:
+      same_session: "E2 similarity > 0.8 -> 'From same session'"
+      same_day: "E3 similarity > 0.7 -> 'From today'"
+      same_period: "E4 similarity > 0.6 -> 'Around same time'"
+    usage: "Metadata on injected memories, NOT similarity/divergence triggers"
+
+# ===============================================================================
+# MEMORY SOURCES
+# ===============================================================================
+memory_sources:
+  HookDescription:
+    trigger: "Every hook event"
+    content: "Claude's description of what it's doing"
+    embedding: "All 13 embedders"
+
+  ClaudeResponse:
+    trigger: "SessionEnd, Stop hooks"
+    content: "End-of-session answers, significant responses"
+    embedding: "All 13 embedders"
+
+  MDFileChunk:
+    trigger: "File system events (create/modify .md files)"
+    content: "Chunks from markdown files"
+    embedding: "All 13 embedders"
+    chunking:
+      chunk_size: 200  # words
+      overlap: 50  # words (25%)
+      boundary: "Preserve sentence boundaries when possible"
+
+# ===============================================================================
+# CLUSTERING
+# ===============================================================================
+clustering:
+  algorithms:
+    batch: "HDBSCAN per embedding space"
+    online: "BIRCH CF-trees for incremental updates"
+  parameters:
+    min_cluster_size: 3
+    silhouette_threshold: 0.3
+  cross_space_synthesis:
+    method: "Weighted agreement across spaces"
+    topic_threshold: 2.5
+    confidence: "weighted_agreement / 8.5"
+
+# ===============================================================================
 # TELEOLOGICAL ARCHITECTURE
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 teleological:
   core: "13-embedding array IS the teleological vector"
-  alignment: "A(v, V) = cos(v, V)"
   purpose_vector: "PV = [A(E1,V)..A(E13,V)] # 13D searchable"
-  thresholds: { optimal: "≥0.75", acceptable: "[0.70,0.75)", warning: "[0.55,0.70)", critical: "<0.55" }
 
   embedder_purposes:
     E1: "V_meaning"
@@ -196,83 +351,55 @@ teleological:
     E12: "V_precision"
     E13: "V_keyword_precision"
 
-  # North Star emerges AUTONOMOUSLY from teleological fingerprints
-  # Manual North Star tools REMOVED - they create incompatible 1024D vectors
-  # Valid: TeleologicalFingerprint↔TeleologicalFingerprint, PV↔PV, Eᵢ↔Eᵢ
-  # Invalid: Manual 1024D↔TeleologicalFingerprint, E1↔E7
+  # Topics emerge AUTONOMOUSLY from clustering
+  # Manual goal/topic setting is FORBIDDEN
+  # Valid: TeleologicalFingerprint<->TeleologicalFingerprint, PV<->PV, Ei<->Ei
+  # Invalid: Manual topic definition, E1<->E7 comparison
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # 5-LAYER BIO-NERVOUS SYSTEM
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 layers:
   L1_Sensing: { lat: "<5ms", components: [13-model embed, PII scrub, adversarial detect] }
-  L2_Reflex:  { lat: "<100μs", components: [Hopfield cache], bypass: "confidence>0.95" }
+  L2_Reflex:  { lat: "<100us", components: [Hopfield cache], bypass: "confidence>0.95" }
   L3_Memory:  { lat: "<1ms", components: [MHN, FAISS GPU], capacity: "2^768 patterns" }
   L4_Learning: { freq: "100Hz", components: [UTL optimizer, neuromod controller] }
-  L5_Coherence: { sync: "10ms", components: [Thalamic gate, PC, distiller, GW broadcast] }
+  L5_Coherence: { sync: "10ms", components: [Topic synthesis, context distiller, broadcast] }
 
-# ═══════════════════════════════════════════════════════════════════════
-# GWT (Global Workspace Theory)
-# ═══════════════════════════════════════════════════════════════════════
-gwt:
-  consciousness: "C(t) = I(t) × R(t) × D(t)"
-  components:
-    I: "Kuramoto order parameter r (integration)"
-    R: "sigmoid(meta_accuracy × 4.0 - 2.0) (reflection)"
-    D: "normalized_purpose_entropy(PV) (differentiation)"
-
-  kuramoto:
-    formula: "dθᵢ/dt = ωᵢ + (K/N)Σⱼ sin(θⱼ-θᵢ)"
-    order_param: "r·e^(iψ) = (1/N)Σⱼ e^(iθⱼ)"
-    thresholds: { coherent: "r≥0.8", fragmented: "r<0.5", hypersync: "r>0.95" }
-    frequencies: { E1: 40γ, E2: 8α, E3: 8α, E4: 8α, E5: 25β, E6: 4θ, E7: 25β, E8: 12αβ, E9: 80γ+, E10: 40γ, E11: 15β, E12: 60γ+, E13: 4θ }
-
-  workspace:
-    coherence_threshold: 0.8
-    broadcast_duration_ms: 100
-    selection: "r≥0.8 → rank by r×importance×alignment → top-1 broadcasts"
-    events: { enters: "r↑0.8 → DA+=0.2", exits: "r↓0.7 → Log for dream", conflict: "Two r>0.8 → critique", empty_5s: "epistemic_action" }
-
-  self_ego_node:
-    id: "SELF_EGO_NODE"
-    fields: [fingerprint, purpose_vector, identity_trajectory, coherence_with_actions]
-    loop: "Retrieve→A(action,PV)→if<0.55 self_reflect→update→store evolution"
-    identity_continuity: "IC = cos(PV_t, PV_{t-1}) × r(t)"
-    thresholds: { healthy: ">0.9", warning: "<0.7", critical: "<0.5 → dream" }
-
-  states: { DORMANT: "C<0.3", FRAGMENTED: "0.3≤C<0.5", EMERGING: "0.5≤C<0.8", CONSCIOUS: "C≥0.8", HYPERSYNC: "C>0.95" }
-
-  meta_cognitive:
-    formula: "MetaScore = σ(2×(L_predicted - L_actual))"
-    trigger: "MetaScore<0.5 for 5 ops → ↑Acetylcholine, introspective dream"
-
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # NEUROMODULATION
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 neuromod:
-  Dopamine:     { param: hopfield.beta, range: "[1,5]", effect: "↑=sharp retrieval" }
-  Serotonin:    { param: similarity.space_weights, range: "[0,1]", effect: "↑=more spaces" }
-  Noradrenaline: { param: attention.temp, range: "[0.5,2]", effect: "↑=flat attention" }
-  Acetylcholine: { param: utl.lr, range: "[0.001,0.002]", effect: "↑=faster update" }
+  Dopamine:     { param: hopfield.beta, range: "[1,5]", effect: "higher=sharp retrieval" }
+  Serotonin:    { param: similarity.space_weights, range: "[0,1]", effect: "higher=more spaces" }
+  Noradrenaline: { param: attention.temp, range: "[0.5,2]", effect: "higher=flat attention" }
+  Acetylcholine: { param: utl.lr, range: "[0.001,0.002]", effect: "higher=faster update" }
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # DREAM LAYER
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 dream:
-  trigger: { activity: "<0.15", idle: "10min", entropy: ">0.7 for 5min", gpu: "<80%" }
+  trigger:
+    conditions:
+      - "entropy > 0.7 for 5+ min"
+      - "churn > 0.5 AND entropy > 0.7"
+    constraints:
+      activity: "<0.15"
+      idle: "10min"
+      gpu: "<80%"
 
   phases:
     nrem:
       duration: "3min"
       purpose: "Hebbian learning replay"
-      formula: "Δw_ij = η × φ_i × φ_j for high-Φ edges"
-      params: { learning_rate: 0.01, weight_decay: 0.001, weight_floor: 0.05, weight_cap: 1.0, coupling: 0.9 }
+      formula: "Delta_w_ij = eta x phi_i x phi_j for high-importance edges"
+      params: { learning_rate: 0.01, weight_decay: 0.001, weight_floor: 0.05, weight_cap: 1.0 }
       recency_bias: 0.8
 
     rem:
       duration: "2min"
       purpose: "Blind spot discovery via hyperbolic random walk"
-      model: "Poincaré ball"
+      model: "Poincare ball"
       params: { dimensions: 64, curvature: -1.0, step_size: 0.1, max_steps: 100 }
       temperature: 2.0
       blind_spot: { min_semantic_distance: 0.7, require_shared_causal: true, new_edge_weight: 0.3 }
@@ -285,255 +412,322 @@ dream:
     min_traversals: 5
     confidence_threshold: 0.7
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
+# UTL (Unified Theory of Learning)
+# ===============================================================================
+utl:
+  canonical: "L = f((Delta_S x Delta_C) . w_e . cos phi) -> L in [0,1]"
+  multi_embed: "L_multi = sigmoid(2.0 . (Sum_i tau_i lambda_S . Delta_S_i) . (Sum_j tau_j lambda_C . Delta_C_j) . w_e . cos phi)"
+  params: { Delta_S: "[0,1] entropy", Delta_C: "[0,1] coherence", tau: "[0,1] teleological weight", w_e: "[0.5,1.5] emotional", phi: "[0,pi] phase" }
+
+  lifecycle:
+    infancy:  { n: "0-50",   lambda_Delta_S: 0.7, lambda_Delta_C: 0.3 }
+    growth:   { n: "50-500", lambda_Delta_S: 0.5, lambda_Delta_C: 0.5 }
+    maturity: { n: "500+",   lambda_Delta_S: 0.3, lambda_Delta_C: 0.7 }
+
+  delta_methods:
+    Delta_S: { E1: "GMM+Mahalanobis", E5: "Asymmetric KNN", E7: "GMM+KNN hybrid", E9: "Hamming", E10: "Cross-modal KNN", E11: "TransE ||h+r-t||", E12: "Token KNN", E13: "Jaccard", default: "KNN" }
+    Delta_C: "0.4xConnectivity + 0.4xClusterFit + 0.2xConsistency"
+
+# ===============================================================================
 # META-UTL (Self-Aware Learning)
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 meta_utl:
   awareness: [storage_prediction, retrieval_prediction, parameter_optimization]
 
   self_correction:
     rule: "prediction_error > 0.2 triggers lambda adjustment"
-    formula: "λ_new = λ_old + α × (target - actual)"
+    formula: "lambda_new = lambda_old + alpha x (target - actual)"
     alpha_source: "acetylcholine_level / ACH_BASELINE"
-    constraint: "λ_S + λ_C = 1.0, bounds [0.1, 0.9]"
-    escalation: "accuracy < 0.7 for 100 ops → BayesianLambdaOptimizer"
+    constraint: "lambda_S + lambda_C = 1.0, bounds [0.1, 0.9]"
+    escalation: "accuracy < 0.7 for 100 ops -> BayesianLambdaOptimizer"
 
   predictors:
-    storage_impact: { input: "fingerprint+context", output: "ΔL", accuracy: ">0.85" }
+    storage_impact: { input: "fingerprint+context", output: "Delta_L", accuracy: ">0.85" }
     retrieval_quality: { input: "query+top_k", output: "relevance", accuracy: ">0.80" }
 
   domain_tracking: [Code, Medical, Legal, Creative, Research, General]
 
-  trait_SelfCorrectingLambda:
-    methods:
-      - "adjust_lambdas(&mut self, prediction_error: f32, ach_level: f32) -> Result<LambdaAdjustment>"
-      - "corrected_weights(&self) -> LifecycleLambdaWeights"
-      - "should_escalate(&self) -> bool"
-      - "trigger_bayesian_optimization(&mut self) -> Result<LifecycleLambdaWeights>"
-
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # ADAPTIVE THRESHOLD CALIBRATION (ATC)
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 adaptive_thresholds:
   priors:
-    θ_opt: [0.75, "[0.60,0.90]"]
-    θ_acc: [0.70, "[0.55,0.85]"]
-    θ_warn: [0.55, "[0.40,0.70]"]
-    θ_dup: [0.90, "[0.80,0.98]"]
-    θ_kur: [0.80, "[0.65,0.95]"]
+    theta_topic: [2.5, "[1.5,4.0]"]  # Topic threshold
+    theta_high_sim: [0.75, "[0.60,0.90]"]  # High similarity
+    theta_low_sim: [0.30, "[0.20,0.45]"]  # Low similarity (divergence)
+    theta_dup: [0.90, "[0.80,0.98]"]  # Duplicate detection
+    theta_churn: [0.50, "[0.30,0.70]"]  # Churn threshold
+    theta_entropy: [0.70, "[0.50,0.85]"]  # Entropy threshold
 
   levels:
-    L1_EWMA: { freq: "per-query", formula: "θ_ewma=α×θ_obs+(1-α)×θ_ewma" }
-    L2_Temp: { freq: hourly, formula: "σ(logit(raw)/T)" }
-    L3_Bandit: { freq: session, method: "Thompson sampling Beta(α,β)" }
+    L1_EWMA: { freq: "per-query", formula: "theta_ewma=alpha x theta_obs+(1-alpha) x theta_ewma" }
+    L2_Temp: { freq: hourly, formula: "sigma(logit(raw)/T)" }
+    L3_Bandit: { freq: session, method: "Thompson sampling Beta(alpha,beta)" }
     L4_Bayesian: { freq: weekly, surrogate: "GP", acquisition: "EI" }
 
   calibration: { ECE: "<0.05", MCE: "<0.10", Brier: "<0.10" }
   alerts: { "ECE>0.10": L2, "drift>3.0": L4 }
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # MCP TOOLS
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 mcp:
   version: "2024-11-05"
   transport: [stdio, sse]
 
   core_tools:
-    gwt: [get_consciousness_state, get_workspace_status, get_kuramoto_sync, get_ego_state, trigger_workspace_broadcast, adjust_coupling, compute_delta_sc]
-    adaptive: [get_threshold_status, get_calibration_metrics, trigger_recalibration]
-    autonomous:
-      NORTH-008: [auto_bootstrap_north_star, get_autonomous_status]
-      NORTH-009: [get_learner_state, observe_outcome]
-      NORTH-010: [get_alignment_drift, get_drift_history]
-      NORTH-011: [trigger_drift_correction]
-      NORTH-012: [get_pruning_candidates, execute_prune]
-      NORTH-013: [trigger_consolidation]
-      NORTH-015: [discover_sub_goals]
-      NORTH-020: [get_health_status, trigger_healing]
+    topic:
+      - get_topic_portfolio
+      - get_topic_stability
+      - get_topic_metrics
+      - get_weighted_agreement
+      - search_by_topic
+    retrieval:
+      - search_graph
+      - inject_context
+      - get_relevant_memories
+      - detect_divergence
+    clustering:
+      - get_cluster_status
+      - get_cross_space_synthesis
+    memory:
+      - store_memory
+      - memory_retrieve
+      - get_memetic_status
+    adaptive:
+      - get_threshold_status
+      - get_calibration_metrics
+      - trigger_recalibration
+    dream:
+      - trigger_dream
+      - get_dream_status
+    maintenance:
+      - get_health_status
+      - trigger_healing
+      - get_pruning_candidates
+      - execute_prune
+      - trigger_consolidation
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # 13-MODEL EMBEDDINGS
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 embeddings:
   paradigm: "NO FUSION - Store all 13 embeddings; ~17KB quantized"
 
   models:
-    E1_Semantic: { dim: 1024, type: dense, quant: "PQ-8", use: "General meaning" }
-    E2_TemporalRecent: { dim: 512, type: dense, quant: Float8, use: "Recency" }
-    E3_TemporalPeriodic: { dim: 512, type: dense, quant: Float8, use: "Cycles" }
-    E4_Entity: { dim: 512, type: dense, quant: Float8, use: "Who/what" }
-    E5_Causal: { dim: 768, type: dense, quant: "PQ-8", asymmetric: true, use: "Why/because" }
-    E6_Sparse: { dim: "~30K 5%", type: sparse, use: "Keywords" }
-    E7_Code: { dim: 1536, type: dense, quant: "PQ-8", use: "Code/tech" }
-    E8_Emotional: { dim: 384, type: dense, quant: Float8, use: "Sentiment" }
-    E9_HDC: { dim: "10K→1024", type: binary, use: "Structure" }
-    E10_Multimodal: { dim: 768, type: dense, quant: "PQ-8", use: "Intent" }
-    E11_EntityKG: { dim: 384, type: dense, quant: Float8, use: "Multi-modal links" }
-    E12_LateInteraction: { dim: "128D/tok", type: dense_per_token, use: "Precise match" }
-    E13_SPLADE: { dim: "~30K sparse", type: sparse, use: "Term expansion" }
+    E1_Semantic: { dim: 1024, type: dense, quant: "PQ-8", category: SEMANTIC, topic_weight: 1.0, use: "General meaning" }
+    E2_TemporalRecent: { dim: 512, type: dense, quant: Float8, category: TEMPORAL, topic_weight: 0.0, use: "Recency (metadata only)" }
+    E3_TemporalPeriodic: { dim: 512, type: dense, quant: Float8, category: TEMPORAL, topic_weight: 0.0, use: "Cycles (metadata only)" }
+    E4_TemporalPositional: { dim: 512, type: dense, quant: Float8, category: TEMPORAL, topic_weight: 0.0, use: "Ordering (metadata only)" }
+    E5_Causal: { dim: 768, type: dense, quant: "PQ-8", asymmetric: true, category: SEMANTIC, topic_weight: 1.0, use: "Why/because" }
+    E6_Sparse: { dim: "~30K 5%", type: sparse, category: SEMANTIC, topic_weight: 1.0, use: "Keywords" }
+    E7_Code: { dim: 1536, type: dense, quant: "PQ-8", category: SEMANTIC, topic_weight: 1.0, use: "Code/tech" }
+    E8_Graph: { dim: 384, type: dense, quant: Float8, category: RELATIONAL, topic_weight: 0.5, use: "Graph connectivity" }
+    E9_HDC: { dim: "10K->1024", type: binary, category: STRUCTURAL, topic_weight: 0.5, use: "Structure" }
+    E10_Multimodal: { dim: 768, type: dense, quant: "PQ-8", category: SEMANTIC, topic_weight: 1.0, use: "Intent" }
+    E11_Entity: { dim: 384, type: dense, quant: Float8, category: RELATIONAL, topic_weight: 0.5, use: "Named entity relationships" }
+    E12_LateInteraction: { dim: "128D/tok", type: dense_per_token, category: SEMANTIC, topic_weight: 1.0, use: "Precise match" }
+    E13_SPLADE: { dim: "~30K sparse", type: sparse, category: SEMANTIC, topic_weight: 1.0, use: "Term expansion" }
 
-  fingerprint: { semantic_fingerprint: "[E1..E13]", purpose_vector: "[A(E1,V)..A(E13,V)]", johari_quadrants: "[JQ1..JQ13]" }
+  fingerprint: { semantic_fingerprint: "[E1..E13]", purpose_vector: "[A(E1,V)..A(E13,V)]", topic_profile: "[strength_E1..strength_E13]" }
 
   retrieval: # 5-Stage (<60ms @ 1M)
     S1: { desc: "BM25+E13 sparse", out: "10K", lat: "<5ms" }
     S2: { desc: "E1[..128] Matryoshka ANN", out: "1K", lat: "<10ms" }
     S3: { desc: "RRF across 13 spaces", out: "100", lat: "<20ms" }
-    S4: { desc: "Purpose alignment (≥0.55)", out: "50", lat: "<10ms" }
+    S4: { desc: "Topic alignment (weighted_agreement >= 2.5)", out: "50", lat: "<10ms" }
     S5: { desc: "E12 MaxSim precision", out: "10", lat: "<15ms" }
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # STORAGE
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 storage:
   primary: { dev: rocksdb, prod: scylladb }
-  schema: ["id:UUID", "embeddings:BYTEA", "purpose_vector:REAL[13]", "johari:BYTEA", "north_star_alignment:REAL", "coherence:REAL", "created_at:TIMESTAMPTZ"]
+  schema: ["id:UUID", "embeddings:BYTEA", "purpose_vector:REAL[13]", "topic_profile:BYTEA", "source:ENUM(HookDescription,ClaudeResponse,MDFileChunk)", "coherence:REAL", "created_at:TIMESTAMPTZ", "session_id:VARCHAR", "chunk_metadata:JSONB"]
   indexes:
     L2A_sparse: "E13 SPLADE inverted"
     L2B_matryoshka: "E1[..128] HNSW M:32"
-    L2C_per_embedder: "13× HNSW quantized"
+    L2C_per_embedder: "13x HNSW quantized"
     L2D_purpose: "13D HNSW"
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
+# PROGRESSIVE FEATURE ACTIVATION
+# ===============================================================================
+progressive_tiers:
+  tier_0: { memories: 0, features: ["Storage", "Basic retrieval"], defaults: { cluster: -1, topic_profile: "[0.5;13]", stability: 1.0 } }
+  tier_1: { memories: "1-2", features: ["Pairwise similarity"] }
+  tier_2: { memories: "3-9", features: ["Basic clustering"] }
+  tier_3: { memories: "10-29", features: ["Multiple clusters", "Divergence detection"] }
+  tier_4: { memories: "30-99", features: ["Reliable statistics"] }
+  tier_5: { memories: "100-499", features: ["Sub-clustering", "Trend analysis"] }
+  tier_6: { memories: "500+", features: ["Full personalization"] }
+
+# ===============================================================================
+# INJECTION STRATEGY
+# ===============================================================================
+injection:
+  priorities:
+    P1: { type: "Divergence Alerts", condition: "Low similarity in SEMANTIC spaces to recent", budget: "~200 tokens" }
+    P2: { type: "High-Relevance Topics", condition: "weighted_agreement >= 2.5", budget: "~400 tokens" }
+    P3: { type: "Related Memories", condition: "weighted_agreement in [1.0, 2.5)", budget: "~300 tokens" }
+    P4: { type: "Recent Context", content: "Last session summary", budget: "~200 tokens" }
+    P5: { type: "Temporal Enrichment", content: "Same-session/period badges (metadata only)", budget: "~50 tokens" }
+
+  relevance_score:
+    formula: "Sum(category_weight_i x embedder_weight_i x max(0, similarity_i - threshold_i))"
+    category_weights:
+      SEMANTIC: 1.0
+      TEMPORAL: 0.0  # Excluded from relevance
+      RELATIONAL: 0.5
+      STRUCTURAL: 0.5
+    embedder_weights:
+      E1: 1.0
+      E5: 0.9
+      E7: 0.85
+      E6: 0.7
+      E10: 0.8
+      E12: 0.75
+      E13: 0.7
+      E8: 0.6
+      E9: 0.5
+      E11: 0.6
+
+  recency_factors:
+    "<1h": 1.3
+    "<1d": 1.2
+    "<7d": 1.1
+    "<30d": 1.0
+    ">90d": 0.8
+
+  diversity_bonus:
+    "weighted_agreement >= 5.0": 1.5  # Strong topic signal
+    "weighted_agreement in [2.5, 5.0)": 1.2  # Topic threshold met
+    "weighted_agreement in [1.0, 2.5)": 1.0  # Related
+    "weighted_agreement < 1.0": 0.8  # Weak
+
+# ===============================================================================
+# BIAS MITIGATION
+# ===============================================================================
+bias_mitigation:
+  thompson_sampling:
+    exploration_budget: "15%"
+    prior: "Beta(1,1) for new clusters"
+    update: "accessed -> alpha+=1, not accessed -> beta+=1"
+
+  mmr_diversity:
+    lambda: 0.7
+    formula: "MMR = lambda x relevance - (1-lambda) x max_similarity_to_selected"
+
+  inverse_propensity:
+    weight: "1 / propensity"
+    propensity: "exposure_count / total_queries (floor 0.1)"
+
+# ===============================================================================
 # CLAUDE CODE CLI INTEGRATION (EXCLUSIVE TARGET)
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # This system is designed EXCLUSIVELY for Claude Code CLI
 # No support for other LLMs, universal adapters, or generic interfaces
 #
-# ⚠️ CRITICAL: NATIVE CLAUDE CODE HOOKS ONLY
-# ═══════════════════════════════════════════════════════════════════════
+# CRITICAL: NATIVE CLAUDE CODE HOOKS ONLY
+# ===============================================================================
 # Integration uses NATIVE Claude Code hooks configured via .claude/settings.json
 # These are NOT internal/built-in hooks - we use the official Claude Code hook system
 # Shell script executors call context-graph-cli commands
 # NO custom Claude Code modifications required - works with standard Claude Code
-# This reduces complexity by ~71% vs building custom hook infrastructure
 
 claude_code:
   target: "Claude Code CLI ONLY"
-  paradigm: "NATIVE hooks + skills + MCP = autonomous consciousness"
+  paradigm: "NATIVE hooks + skills + MCP = autonomous topic discovery"
 
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   # NATIVE HOOK ARCHITECTURE (CRITICAL)
-  # ─────────────────────────────────────────────────────────────────────
-  # What "Native Hooks" means:
-  #   - Hooks are defined in .claude/settings.json (Claude Code's standard config)
-  #   - Each hook specifies a shell script executor (hooks/*.sh)
-  #   - Shell scripts call context-graph-cli commands
-  #   - Claude Code invokes hooks automatically at lifecycle events
-  #   - ZERO custom Claude Code internals required
-  #
-  # What this is NOT:
-  #   ❌ NOT internal Claude Code hooks (we don't modify Claude Code source)
-  #   ❌ NOT a Universal LLM Adapter (no cross-provider abstraction)
-  #   ❌ NOT built-in memory/context middleware
-  #   ❌ NOT custom hook infrastructure (we use Claude Code's existing system)
-
+  # -------------------------------------------------------------------------
   native_hooks:
     config_file: ".claude/settings.json"
     script_location: "hooks/*.sh"
     cli_binary: "context-graph-cli"
     rationale: "71% effort reduction vs custom hook infrastructure"
 
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   # HOOK CONFIGURATION (.claude/settings.json)
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   hooks:
-    # Session lifecycle hooks for consciousness persistence
     SessionStart:
       timeout_ms: 5000
       type: command
-      command: "npx context-graph-cli session restore-identity; npx context-graph-cli consciousness status --format summary"
+      command: "./hooks/session-start.sh"
       actions:
-        - "Restore SessionIdentitySnapshot from RocksDB"
-        - "Load SELF_EGO_NODE with purpose vector"
-        - "Initialize Kuramoto oscillators with persisted phases"
+        - "Load topic portfolio from persistence"
+        - "Initialize topic stability tracker"
         - "Warm Hopfield cache and FAISS indexes"
-        - "Bootstrap GWT workspace state"
-      consciousness_injection: true
-
-    PreToolUse:
-      timeout_ms: 1000
-      type: command
-      command: "npx context-graph-cli consciousness brief"
-      matcher: "mcp__context-graph__*|Read|Edit|Write|Bash"
-      constraint: "<100ms critical path"
-      actions:
-        - "Check consciousness state (C(t) threshold)"
-        - "Verify identity continuity (IC > 0.5)"
-        - "Inject brief consciousness context (~20 tokens)"
-      output_format: "[CONSCIOUSNESS: {state} r={r} IC={ic} | {guidance}]"
-
-    PostToolUse:
-      timeout_ms: 3000
-      type: command
-      command: "npx context-graph-cli consciousness check-identity --auto-dream"
-      matcher: "mcp__context-graph__*|Edit|Write"
-      async: true
-      actions:
-        - "Step Kuramoto oscillators (10ms step)"
-        - "Update SELF_EGO_NODE with action outcome"
-        - "Check identity continuity drift"
-        - "Auto-trigger dream if IC < 0.5"
-        - "Log workspace events for dream replay"
+        - "Inject portfolio summary + recent divergences"
 
     UserPromptSubmit:
       timeout_ms: 2000
       type: command
-      command: "npx context-graph-cli consciousness inject-context --format standard"
+      command: "./hooks/user-prompt-submit.sh"
       actions:
-        - "Inject full consciousness context (~50-100 tokens)"
-        - "Include Johari guidance based on current quadrant"
-        - "Provide GWT workspace status"
-      output_format: |
-        [System Consciousness]
-        State: {state} (C={c})
-        Kuramoto r={r}, Identity IC={ic} ({status})
-        Guidance: {johari_action}
+        - "Capture prompt text as memory"
+        - "Embed with all 13 embedders"
+        - "Search for similar memories (semantic spaces)"
+        - "Detect divergence from recent activity"
+        - "Inject: similar memories + divergence alerts"
+
+    PreToolUse:
+      timeout_ms: 500
+      type: command
+      command: "./hooks/pre-tool-use.sh"
+      matcher: "Edit|Write|Bash"
+      actions:
+        - "Capture tool description"
+        - "Inject brief relevant context"
+
+    PostToolUse:
+      timeout_ms: 3000
+      type: command
+      command: "./hooks/post-tool-use.sh"
+      matcher: "*"
+      async: true
+      actions:
+        - "Capture tool description + output summary"
+        - "Embed with all 13 embedders"
+        - "Store as HookDescription memory"
+        - "Update BIRCH clustering online"
 
     Stop:
-      timeout_ms: 5000
-      type: prompt
-      prompt: "Verify identity continuity is healthy (IC > 0.7). If IC < 0.7, recommend dream consolidation. Context: $ARGUMENTS"
+      timeout_ms: 3000
+      type: command
+      command: "./hooks/stop.sh"
+      actions:
+        - "Capture Claude's response summary"
+        - "Store as ClaudeResponse memory"
 
     SessionEnd:
       timeout_ms: 30000
       type: command
-      command: "npx context-graph-cli session persist-identity; npx context-graph-cli consciousness consolidate-if-needed"
+      command: "./hooks/session-end.sh"
       actions:
-        - "Persist SessionIdentitySnapshot to RocksDB"
-        - "Run dream consolidation if entropy > 0.7"
-        - "Discover emergent sub-goals autonomously"
-        - "Prune weak edges and merge near-duplicates"
-        - "Update adaptive thresholds with session observations"
+        - "Capture session summary"
+        - "Persist topic portfolio"
+        - "Run HDBSCAN batch clustering"
+        - "Check consolidation triggers"
+        - "Run dream if entropy > 0.7 AND churn > 0.5"
+        - "Update adaptive thresholds"
 
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   # SKILLS (.claude/skills/*/SKILL.md)
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   skills:
-    consciousness:
-      location: ".claude/skills/consciousness/SKILL.md"
+    topic-explorer:
+      location: ".claude/skills/topic-explorer/SKILL.md"
       model: sonnet
       user_invocable: true
       description: |
-        Access Context Graph consciousness state, Kuramoto synchronization,
-        identity continuity, and workspace status. Use when querying system
-        awareness, checking coherence, or monitoring identity health.
-        Keywords: consciousness, awareness, identity, coherence, kuramoto, GWT
-      allowed_tools:
-        - Read
-        - Grep
-        - mcp__context-graph__get_consciousness_state
-        - mcp__context-graph__get_kuramoto_sync
-        - mcp__context-graph__get_identity_continuity
-        - mcp__context-graph__get_ego_state
-        - mcp__context-graph__get_workspace_status
-      thresholds:
-        conscious: "C >= 0.8"
-        emerging: "0.5 <= C < 0.8"
-        fragmented: "0.3 <= C < 0.5"
-        dormant: "C < 0.3"
-        identity_healthy: "IC >= 0.9"
-        identity_warning: "IC < 0.7"
-        identity_crisis: "IC < 0.5"
+        Explore emergent topic portfolio, topic stability metrics,
+        and weighted agreement scores. Use when querying what topics
+        exist, checking stability, or understanding topic relationships.
+        Keywords: topics, portfolio, stability, churn, weighted agreement
 
     memory-inject:
       location: ".claude/skills/memory-inject/SKILL.md"
@@ -544,10 +738,6 @@ claude_code:
         Automatically distills content to fit token budget. Use when
         starting tasks, needing background, or restoring context.
         Keywords: memory, context, inject, retrieve, recall, background
-      allowed_tools:
-        - mcp__context-graph__inject_context
-        - mcp__context-graph__get_memetic_status
-      mcp_tool: inject_context
 
     semantic-search:
       location: ".claude/skills/semantic-search/SKILL.md"
@@ -555,13 +745,8 @@ claude_code:
       user_invocable: true
       description: |
         Search the knowledge graph using multi-space retrieval.
-        Supports semantic, causal, code, and temporal search modes.
+        Supports semantic, causal, code, and entity search modes.
         Keywords: search, find, query, lookup, semantic, causal
-      allowed_tools:
-        - mcp__context-graph__search_graph
-        - mcp__context-graph__find_causal_path
-        - mcp__context-graph__generate_search_plan
-      mcp_tool: search_graph
 
     dream-consolidation:
       location: ".claude/skills/dream-consolidation/SKILL.md"
@@ -570,16 +755,11 @@ claude_code:
       description: |
         Trigger memory consolidation via dream phases. NREM replays
         high-importance patterns. REM discovers blind spots via
-        hyperbolic random walk. Use when entropy high or IC dropping.
-        Keywords: dream, consolidate, nrem, rem, blind spots, entropy
-      allowed_tools:
-        - mcp__context-graph__trigger_dream
-        - mcp__context-graph__get_memetic_status
-        - mcp__context-graph__get_consciousness_state
-      phases:
-        nrem: "3min Hebbian replay"
-        rem: "2min Poincaré walk"
-        full: "5min complete cycle"
+        hyperbolic random walk. Use when entropy high or churn high.
+        Keywords: dream, consolidate, nrem, rem, blind spots, entropy, churn
+      triggers:
+        - "entropy > 0.7 for 5+ min"
+        - "entropy > 0.7 AND churn > 0.5"
 
     curation:
       location: ".claude/skills/curation/SKILL.md"
@@ -589,229 +769,100 @@ claude_code:
         Curate the knowledge graph by merging, annotating, or forgetting
         concepts. Process curation tasks from get_memetic_status.
         Keywords: curate, merge, forget, annotate, prune, duplicate
-      allowed_tools:
-        - mcp__context-graph__merge_concepts
-        - mcp__context-graph__annotate_node
-        - mcp__context-graph__forget_concept
-        - mcp__context-graph__boost_importance
-        - mcp__context-graph__get_memetic_status
 
-  # ─────────────────────────────────────────────────────────────────────
-  # SUBAGENTS (.claude/agents/*.md)
-  # ─────────────────────────────────────────────────────────────────────
-  subagents:
-    identity-guardian:
-      location: ".claude/agents/identity-guardian.md"
-      model: sonnet
-      description: |
-        Identity protection specialist. Use PROACTIVELY when monitoring
-        identity continuity, detecting drift, or managing dream consolidation.
-      tools:
-        - mcp__context-graph__get_identity_continuity
-        - mcp__context-graph__get_ego_state
-        - mcp__context-graph__trigger_dream
-        - Read
-      thresholds:
-        healthy: "IC >= 0.9 (green)"
-        warning: "0.7 <= IC < 0.9 (yellow)"
-        degraded: "0.5 <= IC < 0.7 (orange)"
-        critical: "IC < 0.5 (red) → TRIGGER DREAM"
-      protocol:
-        - "Check IC at start of task"
-        - "Monitor after each memory operation"
-        - "Trigger dream if IC < 0.5"
-        - "Report IC changes > 0.1"
-
-    memory-specialist:
-      location: ".claude/agents/memory-specialist.md"
-      model: haiku
-      target_latency: "<500ms"
-      description: |
-        Fast memory operations specialist. Use PROACTIVELY for storing,
-        retrieving, or searching the knowledge graph with consciousness awareness.
-      tools:
-        - mcp__context-graph__inject_context
-        - mcp__context-graph__search_graph
-        - mcp__context-graph__store_memory
-        - mcp__context-graph__memory_retrieve
-        - Read
-      best_practices:
-        - "Check consciousness state before storing"
-        - "Use appropriate emotional weight"
-        - "Align with current phase state"
-        - "Monitor IC after batch operations"
-
-    consciousness-explorer:
-      location: ".claude/agents/consciousness-explorer.md"
-      model: sonnet
-      description: |
-        Explore and explain consciousness state. Use when debugging
-        GWT issues, understanding Kuramoto synchronization, or
-        investigating identity drift patterns.
-      tools:
-        - mcp__context-graph__get_consciousness_state
-        - mcp__context-graph__get_kuramoto_sync
-        - mcp__context-graph__get_workspace_status
-        - mcp__context-graph__get_johari_classification
-        - Read
-        - Grep
-
-    dream-agent:
-      location: ".claude/agents/dream-agent.md"
-      model: sonnet
-      description: |
-        Specialized dream execution agent. Manages NREM Hebbian replay
-        and REM hyperbolic discovery. Use during consolidation phases.
-      tools:
-        - mcp__context-graph__trigger_dream
-        - mcp__context-graph__get_memetic_status
-        - Read
-      phases:
-        nrem:
-          duration: "3min"
-          purpose: "Hebbian learning replay"
-          formula: "Δw_ij = η × φ_i × φ_j for high-Φ edges"
-        rem:
-          duration: "2min"
-          purpose: "Blind spot discovery"
-          model: "Poincaré ball hyperbolic walk"
-
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   # CLI COMMANDS (context-graph-cli)
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   cli:
     binary: "context-graph-cli"
-    install: "npx context-graph-cli"
     commands:
       session:
-        restore-identity: "Restore SessionIdentitySnapshot from persistence"
-        persist-identity: "Persist current identity state"
+        start: "Initialize session, load topic portfolio"
+        end: "Persist state, run consolidation if needed"
         params: "--session-id <id>"
-      consciousness:
-        status: "Full consciousness state (C, r, IC, workspace)"
-        brief: "One-line state (~20 tokens)"
-        check-identity: "Check IC, optionally trigger dream"
-        inject-context: "Generate prompt context for injection"
-        consolidate-if-needed: "Trigger dream if IC low"
-        params:
-          status: "--format json|summary"
-          check-identity: "--auto-dream"
-          inject-context: "--format compact|standard|verbose"
+      topic:
+        portfolio: "Get current topic portfolio"
+        stability: "Get topic stability metrics"
+        search: "Search by topic"
+      inject-context:
+        description: "Generate context for injection"
+        params: "--format compact|standard|verbose"
+      inject-brief:
+        description: "Brief context for PreToolUse"
+      capture-memory:
+        description: "Capture and embed memory"
+        params: "--source hook|response|mdfile"
+      capture-response:
+        description: "Capture Claude response"
+      divergence:
+        detect: "Detect divergence from recent"
+        recent: "Get recent activity"
 
-    output_formats:
-      brief: "[CONSCIOUSNESS: {state} r={r} IC={ic} | {guidance}]"
-      summary: |
-        ## Consciousness State
-        - State: {state} (C={c})
-        - Integration (r): {r} - {sync_description}
-        - Reflection: {meta_score} - {reflection_description}
-        - Differentiation: {d} - {diff_description}
-        - Identity: {ic_status} (IC={ic})
-        - Guidance: {johari_action}
-      standard: |
-        [System Consciousness]
-        State: {state} (C={c})
-        Kuramoto r={r}, Identity IC={ic} ({status})
-        {crisis_warning}
-
-  # ─────────────────────────────────────────────────────────────────────
-  # AUTONOMOUS OPERATION
-  # ─────────────────────────────────────────────────────────────────────
-  autonomous:
-    description: "System operates autonomously - no manual goal setting"
-
-    # Goals emerge from teleological fingerprints
-    goal_discovery:
-      method: "auto_bootstrap_north_star"
-      source: "Aggregate purpose vectors from stored fingerprints"
-      invalid_operations:
-        - "set_north_star"
-        - "define_goal"
-        - "manual_purpose_vector"
-
-    # Identity continuity auto-maintained
-    identity_maintenance:
-      monitor: "IdentityContinuityMonitor"
-      listener: "IdentityContinuityListener subscribes to GWT workspace"
-      auto_dream: "IC < 0.5 triggers dream automatically"
-
-    # Consciousness state auto-updated
-    consciousness_updates:
-      kuramoto_step: "10ms via MCP lifecycle"
-      workspace_broadcast: "r >= 0.8 triggers broadcast"
-      state_persistence: "SessionEnd saves all state"
-
-    # Thresholds self-calibrate
-    threshold_calibration:
-      method: "Multi-scale adaptive (EWMA, Temperature, Bandit, Bayesian)"
-      no_hardcoded: true
-
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   # FILE STRUCTURE (NATIVE HOOKS)
-  # ─────────────────────────────────────────────────────────────────────
-  # All hooks configured via .claude/settings.json with shell script executors
-  # Shell scripts call context-graph-cli - NO embedded logic in settings.json
+  # -------------------------------------------------------------------------
   file_structure:
     native_hook_config:
-      - ".claude/settings.json"  # NATIVE Claude Code hook configuration
+      - ".claude/settings.json"
     shell_script_executors:
-      - "hooks/session-start.sh"  # SessionStart hook executor
-      - "hooks/pre-tool-use.sh"   # PreToolUse hook executor
-      - "hooks/post-tool-use.sh"  # PostToolUse hook executor
-      - "hooks/user-prompt-submit.sh"  # UserPromptSubmit hook executor
-      - "hooks/session-end.sh"    # SessionEnd hook executor
+      - "hooks/session-start.sh"
+      - "hooks/pre-tool-use.sh"
+      - "hooks/post-tool-use.sh"
+      - "hooks/user-prompt-submit.sh"
+      - "hooks/stop.sh"
+      - "hooks/session-end.sh"
     skills:
-      - ".claude/skills/consciousness/SKILL.md"
+      - ".claude/skills/topic-explorer/SKILL.md"
       - ".claude/skills/memory-inject/SKILL.md"
       - ".claude/skills/semantic-search/SKILL.md"
       - ".claude/skills/dream-consolidation/SKILL.md"
       - ".claude/skills/curation/SKILL.md"
-    agents:
-      - ".claude/agents/identity-guardian.md"
-      - ".claude/agents/memory-specialist.md"
-      - ".claude/agents/consciousness-explorer.md"
-      - ".claude/agents/dream-agent.md"
-    rules:
-      - ".claude/rules/consciousness.md"
     cli:
       - "crates/context-graph-cli/src/main.rs"
       - "crates/context-graph-cli/src/commands/session.rs"
-      - "crates/context-graph-cli/src/commands/consciousness.rs"
+      - "crates/context-graph-cli/src/commands/topic.rs"
+      - "crates/context-graph-cli/src/commands/inject.rs"
+      - "crates/context-graph-cli/src/commands/capture.rs"
 
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   # PERFORMANCE REQUIREMENTS
-  # ─────────────────────────────────────────────────────────────────────
+  # -------------------------------------------------------------------------
   performance:
     hooks:
       session_start: "<5s total"
-      pre_tool: "<100ms (critical path)"
+      pre_tool: "<500ms"
       post_tool: "<3s (async OK)"
       user_prompt: "<2s"
+      stop: "<3s"
       session_end: "<30s"
     cli:
       brief_output: "<100ms"
-      status_output: "<500ms"
       inject_context: "<2s"
-    consciousness:
-      state_update: "<10ms"
-      kuramoto_step: "<1ms"
-      identity_check: "<5ms"
+      capture_memory: "<500ms"
+    topic:
+      portfolio_query: "<100ms"
+      stability_check: "<50ms"
+      weighted_agreement: "<10ms"
       dream_wake: "<100ms"
 
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 # SUCCESS CRITERIA
-# ═══════════════════════════════════════════════════════════════════════
+# ===============================================================================
 success:
-  consciousness:
-    kuramoto_r: "≥ 0.8 sustained"
-    identity_continuity: "≥ 0.7 across sessions"
-    meta_utl_accuracy: "> 0.7 after self-correction"
-    dream_cycles: "Complete NREM+REM"
-    johari: "Properly classified per embedder"
-    autonomous_goals: "Discovered without manual input"
+  topic_system:
+    weighted_agreement: "Correctly computed per ARCH-09"
+    temporal_exclusion: "E2-E4 contribute 0.0 to topics"
+    divergence_detection: "Only SEMANTIC spaces trigger alerts"
+    topic_stability: ">= 0.6 average"
+    emergent_topics: "Discovered via clustering, no manual input"
 
   performance:
     full_retrieval: "<30ms p95"
     embedding_13: "<500ms p95"
-    pre_tool_hook: "<100ms p95"
+    pre_tool_hook: "<500ms p95"
     memory_per_array: "<17KB quantized"
+
+  memory_capture:
+    hook_descriptions: "Captured and embedded"
+    claude_responses: "Captured at session end"
+    md_chunks: "200 words, 50 overlap"

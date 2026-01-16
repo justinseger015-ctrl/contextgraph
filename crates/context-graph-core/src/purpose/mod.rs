@@ -38,7 +38,7 @@
 //! let discovery = GoalDiscoveryMetadata::bootstrap();
 //! let north_star = GoalNode::autonomous_goal(
 //!     "Emergent ML mastery goal".into(),
-//!     GoalLevel::NorthStar,
+//!     GoalLevel::Strategic,
 //!     SemanticFingerprint::zeroed(),
 //!     discovery,
 //! ).unwrap();

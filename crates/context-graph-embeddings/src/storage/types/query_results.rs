@@ -67,7 +67,7 @@ pub struct MultiSpaceQueryResult {
     /// Uses Constitution-defined weights per query type.
     pub weighted_similarity: f32,
 
-    /// Purpose alignment score (from StoredQuantizedFingerprint.theta_to_north_star).
+    /// Purpose alignment score (from StoredQuantizedFingerprint.alignment_score).
     /// Used in Stage 4 teleological filtering.
     pub purpose_alignment: f32,
 

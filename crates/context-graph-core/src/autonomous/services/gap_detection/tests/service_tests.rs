@@ -50,7 +50,7 @@ fn test_analyze_coverage_empty_goals() {
 fn test_analyze_coverage_healthy_goals() {
     let service = GapDetectionService::new();
     let goals = vec![
-        create_test_goal(GoalLevel::NorthStar, vec!["core"], 80, 40, 0.9),
+        create_test_goal(GoalLevel::Strategic, vec!["core"], 80, 40, 0.9),
         create_test_goal(GoalLevel::Strategic, vec!["security"], 60, 30, 0.85),
         create_test_goal(GoalLevel::Tactical, vec!["performance"], 50, 25, 0.8),
     ];
@@ -226,7 +226,7 @@ fn test_compute_coverage_score_single_goal() {
     let service = GapDetectionService::new();
 
     let goals = vec![create_test_goal(
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         vec!["core"],
         100,
         50,
@@ -243,7 +243,7 @@ fn test_compute_coverage_score_mixed_levels() {
     let service = GapDetectionService::new();
 
     let goals = vec![
-        create_test_goal(GoalLevel::NorthStar, vec!["core"], 100, 50, 1.0),
+        create_test_goal(GoalLevel::Strategic, vec!["core"], 100, 50, 1.0),
         create_test_goal(GoalLevel::Strategic, vec!["security"], 80, 40, 0.9),
         create_test_goal(GoalLevel::Tactical, vec!["performance"], 60, 30, 0.8),
         create_test_goal(GoalLevel::Operational, vec!["logging"], 40, 20, 0.7),
@@ -282,7 +282,7 @@ fn test_full_analysis_integration() {
 
     // Create a mix of goals with various issues
     let goals = vec![
-        create_test_goal(GoalLevel::NorthStar, vec!["core"], 80, 40, 0.9),
+        create_test_goal(GoalLevel::Strategic, vec!["core"], 80, 40, 0.9),
         create_test_goal(GoalLevel::Strategic, vec!["security"], 60, 30, 0.85),
         create_test_goal(GoalLevel::Tactical, vec!["security"], 50, 25, 0.8), // Shares domain
         create_test_goal(GoalLevel::Operational, vec!["logging"], 5, 2, 0.1), // Weak

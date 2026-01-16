@@ -106,7 +106,7 @@ async fn phase7_comprehensive_store_retrieve_fsv() {
             println!("  - {} [{}]: VERIFIED (theta={:.4}, hash={}...)",
                 domain,
                 &fp_id[..8],
-                fp.theta_to_north_star,
+                fp.alignment_score,
                 hex::encode(&fp.content_hash[..4])
             );
         } else {

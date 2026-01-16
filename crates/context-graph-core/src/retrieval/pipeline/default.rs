@@ -321,8 +321,8 @@ where
             let scored = ScoredMemory::new(
                 fingerprint.id,
                 goal_alignment, // Use alignment as score for direct filtering
-                fingerprint.theta_to_north_star,
-                fingerprint.theta_to_north_star,
+                fingerprint.alignment_score,
+                fingerprint.alignment_score,
                 goal_alignment,
                 johari_quadrant,
                 NUM_EMBEDDERS, // Assume all spaces
@@ -348,7 +348,7 @@ where
 
     async fn health_check(&self) -> CoreResult<PipelineHealth> {
         let spaces = self.executor.available_spaces();
-        let has_north_star = self.goal_hierarchy.has_north_star();
+        let has_north_star = self.goal_hierarchy.has_top_level_goals();
         let last_time = self.last_query_time.read().ok().and_then(|g| *g);
         let index_size = self.index_size.load(std::sync::atomic::Ordering::Relaxed);
 

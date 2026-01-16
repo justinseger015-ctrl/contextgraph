@@ -11,6 +11,7 @@ use super::super::{create_test_handlers, make_request};
 /// FULL STATE VERIFICATION: Complete purpose workflow test.
 ///
 /// TASK-CORE-001: Updated to remove deprecated north_star_alignment step.
+/// TASK-P0-001: Updated for 3-level hierarchy (has_north_star → has_top_level_goals).
 ///
 /// Tests the full purpose lifecycle with real data:
 /// 1. Create handlers with test hierarchy
@@ -45,10 +46,11 @@ async fn test_full_state_verification_purpose_workflow() {
     let stats = hierarchy_result
         .get("hierarchy_stats")
         .expect("Must have stats");
+    // TASK-P0-001: Check has_top_level_goals instead of has_north_star
     assert_eq!(
-        stats.get("has_north_star").and_then(|v| v.as_bool()),
+        stats.get("has_top_level_goals").and_then(|v| v.as_bool()),
         Some(true),
-        "Must have North Star configured"
+        "Must have top-level Strategic goals configured"
     );
 
     let goals = hierarchy_result
@@ -58,7 +60,7 @@ async fn test_full_state_verification_purpose_workflow() {
     assert!(!goals.is_empty(), "Must have at least one goal");
 
     println!(
-        "[FSV] STEP 1 VERIFIED: Hierarchy has {} goals with North Star",
+        "[FSV] STEP 1 VERIFIED: Hierarchy has {} goals with top-level Strategic",
         goals.len()
     );
 

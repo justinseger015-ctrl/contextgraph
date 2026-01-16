@@ -185,13 +185,12 @@ impl GapDetectionService {
         let active_ratio =
             goals.iter().filter(|g| g.metrics.is_active()).count() as f32 / goals.len() as f32;
 
-        // Weight by level (NorthStar goals matter more)
+        // TASK-P0-001: Weight by level (Strategic goals matter most now)
         let level_weighted: f32 = goals
             .iter()
             .map(|g| {
                 let level_weight = match g.level {
-                    GoalLevel::NorthStar => 2.0,
-                    GoalLevel::Strategic => 1.5,
+                    GoalLevel::Strategic => 2.0,
                     GoalLevel::Tactical => 1.0,
                     GoalLevel::Operational => 0.75,
                 };
@@ -201,8 +200,7 @@ impl GapDetectionService {
             / goals
                 .iter()
                 .map(|g| match g.level {
-                    GoalLevel::NorthStar => 2.0,
-                    GoalLevel::Strategic => 1.5,
+                    GoalLevel::Strategic => 2.0,
                     GoalLevel::Tactical => 1.0,
                     GoalLevel::Operational => 0.75,
                 })

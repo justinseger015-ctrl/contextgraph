@@ -172,33 +172,34 @@ pub(crate) fn create_test_handlers_incoherent() -> Handlers {
 }
 
 /// Create test goal hierarchy.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 fn create_test_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
     let discovery = GoalDiscoveryMetadata::bootstrap();
 
-    let ns_goal = GoalNode::autonomous_goal(
-        "Consciousness Integration Test North Star".into(),
-        GoalLevel::NorthStar,
+    // Strategic goal 1 (top-level, no parent)
+    let s1_goal = GoalNode::autonomous_goal(
+        "Consciousness Integration Test Strategic".into(),
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create North Star");
-    let ns_id = ns_goal.id;
+    .expect("Failed to create Strategic goal 1");
     hierarchy
-        .add_goal(ns_goal)
-        .expect("Failed to add North Star");
+        .add_goal(s1_goal)
+        .expect("Failed to add Strategic goal 1");
 
-    let s1_goal = GoalNode::child_goal(
+    // Strategic goal 2 (top-level, no parent)
+    let s2_goal = GoalNode::autonomous_goal(
         "Achieve coherent consciousness".into(),
         GoalLevel::Strategic,
-        ns_id,
         SemanticFingerprint::zeroed(),
         discovery,
     )
-    .expect("Failed to create strategic goal");
+    .expect("Failed to create Strategic goal 2");
     hierarchy
-        .add_goal(s1_goal)
-        .expect("Failed to add strategic goal");
+        .add_goal(s2_goal)
+        .expect("Failed to add Strategic goal 2");
 
     hierarchy
 }

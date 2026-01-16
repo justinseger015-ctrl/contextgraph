@@ -56,7 +56,7 @@ use super::splade::SpladeAlignment;
 /// let discovery = GoalDiscoveryMetadata::bootstrap();
 /// let north_star = GoalNode::autonomous_goal(
 ///     "Emergent ML mastery goal".into(),
-///     GoalLevel::NorthStar,
+///     GoalLevel::Strategic,
 ///     SemanticFingerprint::zeroed(),
 ///     discovery,
 /// ).unwrap();
@@ -313,13 +313,15 @@ impl DefaultPurposeComputer {
             return *base_alignments;
         }
 
-        let north_star = match hierarchy.north_star() {
-            Some(ns) => ns,
+        // TASK-P0-001: Changed from north_star() to top_level_goals()
+        let top_level = hierarchy.top_level_goals();
+        let top_goal = match top_level.first() {
+            Some(g) => *g,
             None => return *base_alignments,
         };
 
-        // Get child goals of North Star
-        let children = hierarchy.children(&north_star.id);
+        // Get child goals of top-level goal
+        let children = hierarchy.children(&top_goal.id);
         if children.is_empty() {
             return *base_alignments;
         }
@@ -376,14 +378,14 @@ impl PurposeVectorComputer for DefaultPurposeComputer {
         fingerprint: &SemanticFingerprint,
         config: &PurposeComputeConfig,
     ) -> Result<PurposeVector, PurposeComputeError> {
-        // Validate hierarchy has North Star
-        let north_star = config
-            .hierarchy
-            .north_star()
-            .ok_or(PurposeComputeError::NoNorthStar)?;
+        // TASK-P0-001: Validate hierarchy has top-level goals
+        let top_level_goals = config.hierarchy.top_level_goals();
+        let top_goal = top_level_goals
+            .first()
+            .ok_or(PurposeComputeError::NoTopLevelGoals)?;
 
         debug!(
-            north_star_id = %north_star.id,
+            top_goal_id = %top_goal.id,
             hierarchical_propagation = config.hierarchical_propagation,
             "Computing purpose vector"
         );
@@ -391,7 +393,7 @@ impl PurposeVectorComputer for DefaultPurposeComputer {
         // Compute base alignments for each space (apples-to-apples)
         let mut base_alignments = [0.0_f32; NUM_EMBEDDERS];
         for (space_idx, alignment) in base_alignments.iter_mut().enumerate() {
-            *alignment = self.compute_space_alignment(space_idx, fingerprint, north_star);
+            *alignment = self.compute_space_alignment(space_idx, fingerprint, top_goal);
         }
 
         // Apply hierarchical propagation if enabled
@@ -418,9 +420,9 @@ impl PurposeVectorComputer for DefaultPurposeComputer {
             "Computing purpose vectors in batch"
         );
 
-        // Validate once for all
-        if config.hierarchy.north_star().is_none() {
-            return Err(PurposeComputeError::NoNorthStar);
+        // TASK-P0-001: Validate once for all
+        if !config.hierarchy.has_top_level_goals() {
+            return Err(PurposeComputeError::NoTopLevelGoals);
         }
 
         let mut results = Vec::with_capacity(fingerprints.len());
@@ -444,9 +446,10 @@ impl PurposeVectorComputer for DefaultPurposeComputer {
         old_hierarchy: &GoalHierarchy,
         new_hierarchy: &GoalHierarchy,
     ) -> Result<PurposeVector, PurposeComputeError> {
+        // TASK-P0-001: Changed from north_star() to top_level_goals()
         debug!(
-            old_north_star = ?old_hierarchy.north_star().map(|n| n.id.to_string()),
-            new_north_star = ?new_hierarchy.north_star().map(|n| n.id.to_string()),
+            old_top_goal = ?old_hierarchy.top_level_goals().first().map(|n| n.id.to_string()),
+            new_top_goal = ?new_hierarchy.top_level_goals().first().map(|n| n.id.to_string()),
             "Recomputing purpose for goal change"
         );
 
@@ -537,7 +540,7 @@ mod tests {
         let config = PurposeComputeConfig::default(); // Empty hierarchy
 
         let result = computer.compute_purpose(&fingerprint, &config).await;
-        assert!(matches!(result, Err(PurposeComputeError::NoNorthStar)));
+        assert!(matches!(result, Err(PurposeComputeError::NoTopLevelGoals)));
         println!("[VERIFIED] compute_purpose fails without North Star");
     }
 
@@ -549,7 +552,7 @@ mod tests {
         let mut hierarchy = GoalHierarchy::new();
         let north_star = GoalNode::autonomous_goal(
             "Master ML".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )
@@ -573,7 +576,7 @@ mod tests {
         let mut hierarchy = GoalHierarchy::new();
         let north_star = GoalNode::autonomous_goal(
             "Goal".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )
@@ -599,7 +602,7 @@ mod tests {
         let mut hierarchy = GoalHierarchy::new();
         let north_star = GoalNode::autonomous_goal(
             "Goal".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )
@@ -621,7 +624,7 @@ mod tests {
         let mut old_hierarchy = GoalHierarchy::new();
         let old_ns = GoalNode::autonomous_goal(
             "Old Goal".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )
@@ -631,7 +634,7 @@ mod tests {
         let mut new_hierarchy = GoalHierarchy::new();
         let new_ns = GoalNode::autonomous_goal(
             "New Goal".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )
@@ -654,7 +657,7 @@ mod tests {
         let mut hierarchy = GoalHierarchy::new();
         let north_star = GoalNode::autonomous_goal(
             "Goal".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )
@@ -668,6 +671,7 @@ mod tests {
         println!("[VERIFIED] Hierarchical propagation can be disabled");
     }
 
+    // TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
     #[tokio::test]
     async fn test_hierarchical_propagation_with_children() {
         let computer = DefaultPurposeComputer::new();
@@ -675,27 +679,27 @@ mod tests {
 
         let mut hierarchy = GoalHierarchy::new();
 
-        // Add North Star
-        let north_star = GoalNode::autonomous_goal(
+        // Add Strategic goal (top-level)
+        let strategic = GoalNode::autonomous_goal(
             "Master ML".into(),
-            GoalLevel::NorthStar,
-            test_fingerprint(),
-            test_discovery(),
-        )
-        .unwrap();
-        let ns_id = north_star.id;
-        hierarchy.add_goal(north_star).unwrap();
-
-        // Add Strategic child
-        let strategic = GoalNode::child_goal(
-            "Learn Deep Learning".into(),
             GoalLevel::Strategic,
-            ns_id,
             test_fingerprint(),
             test_discovery(),
         )
         .unwrap();
+        let strategic_id = strategic.id;
         hierarchy.add_goal(strategic).unwrap();
+
+        // Add Tactical child (not Strategic - Strategic are top-level)
+        let tactical = GoalNode::child_goal(
+            "Learn Deep Learning".into(),
+            GoalLevel::Tactical,
+            strategic_id,
+            test_fingerprint(),
+            test_discovery(),
+        )
+        .unwrap();
+        hierarchy.add_goal(tactical).unwrap();
 
         let config = PurposeComputeConfig::with_hierarchy(hierarchy)
             .with_propagation(true)
@@ -769,7 +773,7 @@ mod tests {
         let fingerprint = test_fingerprint();
         let goal = GoalNode::autonomous_goal(
             "Test goal".into(),
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             test_fingerprint(),
             test_discovery(),
         )

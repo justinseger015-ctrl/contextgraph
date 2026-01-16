@@ -19,15 +19,15 @@ pub(crate) fn detect_patterns(
 ) -> Vec<AlignmentPattern> {
     let mut patterns = Vec::new();
 
-    // Check for North Star drift (WARNING_THRESHOLD per constitution)
-    if score.north_star_alignment < thresholds::WARNING {
+    // TASK-P0-001: Check for Strategic drift (WARNING_THRESHOLD per constitution)
+    if score.strategic_alignment < thresholds::WARNING {
         let pattern = AlignmentPattern::new(
-            PatternType::NorthStarDrift,
+            PatternType::StrategicDrift,
             format!(
-                "North Star alignment at {:.1}% is below warning threshold",
-                score.north_star_alignment * 100.0
+                "Strategic alignment at {:.1}% is below warning threshold",
+                score.strategic_alignment * 100.0
             ),
-            "Review and realign content with North Star goal",
+            "Review and realign content with Strategic goals",
         )
         .with_severity(2);
         patterns.push(pattern);

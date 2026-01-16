@@ -77,7 +77,7 @@ pub struct MergedNodeInfo {
     pub strategy_used: MergeStrategy,
     pub created_at: String,
     /// Average theta to north star of source nodes
-    pub theta_to_north_star: f32,
+    pub alignment_score: f32,
     /// Total access count from all sources
     pub total_access_count: u64,
 }
@@ -302,7 +302,7 @@ impl Handlers {
         let total_access_count: u64 = source_fingerprints.iter().map(|f| f.access_count).sum();
         let avg_theta: f32 = source_fingerprints
             .iter()
-            .map(|f| f.theta_to_north_star)
+            .map(|f| f.alignment_score)
             .sum::<f32>()
             / source_fingerprints.len() as f32;
 
@@ -400,7 +400,7 @@ impl Handlers {
                 source_count: source_fingerprints.len(),
                 strategy_used: input.merge_strategy,
                 created_at: now.to_rfc3339(),
-                theta_to_north_star: avg_theta,
+                alignment_score: avg_theta,
                 total_access_count,
             },
             error: None,
@@ -445,8 +445,8 @@ impl Handlers {
             return Ok(()); // Nothing to compare
         }
 
-        // Check theta_to_north_star spread
-        let thetas: Vec<f32> = fingerprints.iter().map(|f| f.theta_to_north_star).collect();
+        // Check alignment_score spread
+        let thetas: Vec<f32> = fingerprints.iter().map(|f| f.alignment_score).collect();
         let max_theta = thetas.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         let min_theta = thetas.iter().cloned().fold(f32::INFINITY, f32::min);
 
@@ -1169,7 +1169,7 @@ mod tests {
             source_count: 3,
             strategy_used: MergeStrategy::WeightedAverage,
             created_at: "2026-01-13T00:00:00Z".to_string(),
-            theta_to_north_star: 0.75,
+            alignment_score: 0.75,
             total_access_count: 42,
         };
         let json = serde_json::to_string(&info).expect("serialize");

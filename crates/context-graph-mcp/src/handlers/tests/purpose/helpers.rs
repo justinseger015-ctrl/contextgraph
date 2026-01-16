@@ -14,7 +14,8 @@ use super::super::make_request;
 // =============================================================================
 
 /// Extract goal IDs from the hierarchy via get_all query.
-/// Returns (north_star_id, strategic_ids, tactical_ids, immediate_ids).
+/// TASK-P0-001: Updated for 3-level hierarchy - now returns (first_strategic_id, all_strategic_ids, tactical_ids, immediate_ids).
+/// The first return value is the first Strategic goal (top-level) for backwards compatibility.
 pub(crate) async fn get_goal_ids_from_hierarchy(
     handlers: &Handlers,
 ) -> (String, Vec<String>, Vec<String>, Vec<String>) {
@@ -31,7 +32,6 @@ pub(crate) async fn get_goal_ids_from_hierarchy(
         .and_then(|v| v.as_array())
         .expect("Should have goals");
 
-    let mut north_star_id = String::new();
     let mut strategic_ids = Vec::new();
     let mut tactical_ids = Vec::new();
     let mut immediate_ids = Vec::new();
@@ -44,7 +44,6 @@ pub(crate) async fn get_goal_ids_from_hierarchy(
             .to_string();
         let level = goal.get("level").and_then(|v| v.as_str()).unwrap_or("");
         match level {
-            "NorthStar" => north_star_id = id,
             "Strategic" => strategic_ids.push(id),
             "Tactical" => tactical_ids.push(id),
             "Immediate" => immediate_ids.push(id),
@@ -52,5 +51,7 @@ pub(crate) async fn get_goal_ids_from_hierarchy(
         }
     }
 
-    (north_star_id, strategic_ids, tactical_ids, immediate_ids)
+    // TASK-P0-001: Return first Strategic as the top-level goal (was NorthStar)
+    let first_strategic = strategic_ids.first().cloned().unwrap_or_default();
+    (first_strategic, strategic_ids, tactical_ids, immediate_ids)
 }

@@ -203,8 +203,8 @@ async fn test_search_by_purpose_result_structure() {
                 "Result should have purpose_alignment"
             );
             assert!(
-                first.get("theta_to_north_star").is_some(),
-                "Result should have theta_to_north_star"
+                first.get("alignment_score").is_some(),
+                "Result should have alignment_score"
             );
             assert!(
                 first.get("purpose_vector").is_some(),

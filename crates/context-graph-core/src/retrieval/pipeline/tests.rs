@@ -38,33 +38,36 @@ fn create_test_hierarchy() -> GoalHierarchy {
     let discovery =
         GoalDiscoveryMetadata::new(DiscoveryMethod::Bootstrap, 0.9, 1, 0.85).unwrap();
 
-    let ns = GoalNode::autonomous_goal(
+    // TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
+    // Strategic goal (top-level, no parent)
+    let s1 = GoalNode::autonomous_goal(
         "Build the best product".to_string(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         ns_fp.clone(),
         discovery,
     )
-    .expect("Failed to create North Star");
-    let ns_id = ns.id;
+    .expect("Failed to create Strategic goal");
+    let s1_id = s1.id;
 
-    hierarchy.add_goal(ns).expect("Failed to add North Star");
+    hierarchy.add_goal(s1).expect("Failed to add Strategic goal");
 
     let child_fp = create_test_goal_fingerprint(0.7);
     let child_discovery =
         GoalDiscoveryMetadata::new(DiscoveryMethod::Decomposition, 0.8, 5, 0.75).unwrap();
 
-    let child = GoalNode::child_goal(
+    // Tactical goal - child of Strategic
+    let tactical = GoalNode::child_goal(
         "Improve UX".to_string(),
-        GoalLevel::Strategic,
-        ns_id,
+        GoalLevel::Tactical,
+        s1_id,
         child_fp,
         child_discovery,
     )
-    .expect("Failed to create strategic goal");
+    .expect("Failed to create Tactical goal");
 
     hierarchy
-        .add_goal(child)
-        .expect("Failed to add strategic goal");
+        .add_goal(tactical)
+        .expect("Failed to add Tactical goal");
 
     hierarchy
 }

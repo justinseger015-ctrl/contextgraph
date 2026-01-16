@@ -30,7 +30,7 @@ impl TeleologicalFingerprint {
     /// Automatically:
     /// - Generates a new UUID v4
     /// - Sets timestamps to now
-    /// - Computes initial theta_to_north_star
+    /// - Computes initial alignment_score
     /// - Records initial evolution snapshot with Created trigger
     ///
     /// # Arguments
@@ -45,7 +45,7 @@ impl TeleologicalFingerprint {
         content_hash: [u8; 32],
     ) -> Self {
         let now = Utc::now();
-        let theta_to_north_star = purpose_vector.aggregate_alignment();
+        let alignment_score = purpose_vector.aggregate_alignment();
 
         // Create initial snapshot
         let initial_snapshot = PurposeSnapshot::new(
@@ -60,7 +60,7 @@ impl TeleologicalFingerprint {
             purpose_vector,
             johari,
             purpose_evolution: vec![initial_snapshot],
-            theta_to_north_star,
+            alignment_score,
             content_hash,
             created_at: now,
             last_updated: now,
@@ -87,7 +87,7 @@ impl TeleologicalFingerprint {
     /// - Adds snapshot to evolution history
     /// - Trims history if over MAX_EVOLUTION_SNAPSHOTS
     /// - Updates last_updated timestamp
-    /// - Recalculates theta_to_north_star
+    /// - Recalculates alignment_score
     ///
     /// # Arguments
     /// * `trigger` - What caused this evolution event
@@ -104,7 +104,7 @@ impl TeleologicalFingerprint {
         }
 
         self.last_updated = Utc::now();
-        self.theta_to_north_star = self.purpose_vector.aggregate_alignment();
+        self.alignment_score = self.purpose_vector.aggregate_alignment();
     }
 
     /// Record an access event.

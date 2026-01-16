@@ -25,7 +25,7 @@ fn test_goal_with_metrics_coverage_score_zero() {
 
 #[test]
 fn test_goal_with_metrics_coverage_score_max() {
-    let goal = create_test_goal(GoalLevel::NorthStar, vec!["domain1"], 100, 50, 1.0);
+    let goal = create_test_goal(GoalLevel::Strategic, vec!["domain1"], 100, 50, 1.0);
     let score = goal.coverage_score();
     // activity = 1.0, alignment = 1.0
     // coverage = 0.6 * 1.0 + 0.4 * 1.0 = 1.0

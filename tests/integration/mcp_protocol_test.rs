@@ -139,7 +139,14 @@ impl McpTestServer {
 
 impl Drop for McpTestServer {
     fn drop(&mut self) {
+        // First send SIGKILL to terminate the process
         let _ = self.process.kill();
+        // CRITICAL: Must call wait() to reap the zombie process.
+        // Without this, the process remains in the kernel's process table
+        // as a zombie (state 'Z') until the parent process collects its
+        // exit status via wait(). This was causing zombie accumulation
+        // during test runs.
+        let _ = self.process.wait();
     }
 }
 

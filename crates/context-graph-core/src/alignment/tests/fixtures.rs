@@ -34,7 +34,7 @@ pub fn create_real_fingerprint(alignment_factor: f32) -> TeleologicalFingerprint
         purpose_vector,
         johari,
         purpose_evolution: Vec::new(),
-        theta_to_north_star: alignment_factor,
+        alignment_score: alignment_factor,
         content_hash: [0u8; 32],
         created_at: Utc::now(),
         last_updated: Utc::now(),
@@ -57,28 +57,15 @@ pub fn create_test_fingerprint(seed: f32) -> SemanticFingerprint {
     fp
 }
 
-/// Create a real GoalHierarchy with all four levels.
+/// Create a real GoalHierarchy with 3 levels.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 pub fn create_real_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
 
-    // North Star - primary goal
-    let ns = GoalNode::autonomous_goal(
-        "Revolutionize knowledge management through AI".into(),
-        GoalLevel::NorthStar,
-        create_test_fingerprint(0.0),
-        test_discovery(),
-    )
-    .expect("FAIL: Could not create North Star goal");
-    let ns_id = ns.id;
-    hierarchy
-        .add_goal(ns)
-        .expect("FAIL: Could not add North Star goal");
-
-    // Strategic goals
-    let s1 = GoalNode::child_goal(
+    // Strategic goals (top-level, no parent)
+    let s1 = GoalNode::autonomous_goal(
         "Build intelligent retrieval system".into(),
         GoalLevel::Strategic,
-        ns_id,
         create_test_fingerprint(0.1),
         test_discovery(),
     )
@@ -88,10 +75,9 @@ pub fn create_real_hierarchy() -> GoalHierarchy {
         .add_goal(s1)
         .expect("FAIL: Could not add Strategic goal 1");
 
-    let s2 = GoalNode::child_goal(
+    let s2 = GoalNode::autonomous_goal(
         "Enable semantic understanding".into(),
         GoalLevel::Strategic,
-        ns_id,
         create_test_fingerprint(0.2),
         test_discovery(),
     )
@@ -101,7 +87,7 @@ pub fn create_real_hierarchy() -> GoalHierarchy {
         .add_goal(s2)
         .expect("FAIL: Could not add Strategic goal 2");
 
-    // Tactical goals
+    // Tactical goals (children of Strategic)
     let t1 = GoalNode::child_goal(
         "Implement vector search".into(),
         GoalLevel::Tactical,
@@ -127,7 +113,7 @@ pub fn create_real_hierarchy() -> GoalHierarchy {
         .add_goal(t2)
         .expect("FAIL: Could not add Tactical goal 2");
 
-    // Immediate goals
+    // Immediate goals (children of Tactical)
     let i1 = GoalNode::child_goal(
         "Optimize query latency".into(),
         GoalLevel::Immediate,
@@ -144,36 +130,37 @@ pub fn create_real_hierarchy() -> GoalHierarchy {
 }
 
 /// Create a hierarchy with intentional misalignment for testing.
+/// TASK-P0-001: Updated for 3-level hierarchy
 pub fn create_misaligned_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
 
-    // North Star
-    let ns = GoalNode::autonomous_goal(
-        "North Star Goal".into(),
-        GoalLevel::NorthStar,
+    // Strategic goal 1 (top-level)
+    let s1 = GoalNode::autonomous_goal(
+        "Strategic Goal 1".into(),
+        GoalLevel::Strategic,
         create_test_fingerprint(0.0),
         test_discovery(),
     )
-    .expect("FAIL: North Star");
-    let ns_id = ns.id;
-    hierarchy.add_goal(ns).expect("FAIL: North Star");
+    .expect("FAIL: Strategic 1");
+    let s1_id = s1.id;
+    hierarchy.add_goal(s1).expect("FAIL: Strategic 1");
 
-    // Strategic with different embedding (will diverge)
+    // Tactical goal with different embedding (will diverge from parent)
     // Use PI offset to create different embedding pattern
     let mut divergent_fp = SemanticFingerprint::zeroed();
     for i in 0..divergent_fp.e1_semantic.len() {
         divergent_fp.e1_semantic[i] = ((i as f32 / 128.0) + std::f32::consts::PI).sin();
     }
 
-    let s1 = GoalNode::child_goal(
-        "Divergent Strategic".into(),
-        GoalLevel::Strategic,
-        ns_id,
+    let t1 = GoalNode::child_goal(
+        "Divergent Tactical".into(),
+        GoalLevel::Tactical,
+        s1_id,
         divergent_fp,
         test_discovery(),
     )
-    .expect("FAIL: Strategic");
-    hierarchy.add_goal(s1).expect("FAIL: Strategic");
+    .expect("FAIL: Tactical");
+    hierarchy.add_goal(t1).expect("FAIL: Tactical");
 
     hierarchy
 }

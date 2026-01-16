@@ -36,29 +36,32 @@ fn make_request(method: &str, id: i64, params: serde_json::Value) -> JsonRpcRequ
     }
 }
 
+// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 fn create_test_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
     let discovery = GoalDiscoveryMetadata::bootstrap();
 
-    let ns_goal = GoalNode::autonomous_goal(
-        "Test North Star".into(),
-        GoalLevel::NorthStar,
+    // Strategic goal (top-level, no parent)
+    let s1_goal = GoalNode::autonomous_goal(
+        "Test Strategic Goal".into(),
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create North Star");
-    let ns_id = ns_goal.id;
-    hierarchy.add_goal(ns_goal).unwrap();
+    .expect("Failed to create Strategic goal");
+    let s1_id = s1_goal.id;
+    hierarchy.add_goal(s1_goal).unwrap();
 
-    let s1_goal = GoalNode::child_goal(
-        "Strategic Goal".into(),
-        GoalLevel::Strategic,
-        ns_id,
+    // Tactical goal - child of Strategic
+    let t1_goal = GoalNode::child_goal(
+        "Test Tactical Goal".into(),
+        GoalLevel::Tactical,
+        s1_id,
         SemanticFingerprint::zeroed(),
         discovery,
     )
-    .expect("Failed to create strategic goal");
-    hierarchy.add_goal(s1_goal).unwrap();
+    .expect("Failed to create Tactical goal");
+    hierarchy.add_goal(t1_goal).unwrap();
 
     hierarchy
 }

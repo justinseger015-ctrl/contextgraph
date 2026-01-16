@@ -25,8 +25,8 @@ async fn test_compute_alignment_basic() {
 
     println!("\n=== Alignment Result ===");
     println!(
-        "BEFORE: fingerprint theta_to_north_star = {:.3}",
-        fingerprint.theta_to_north_star
+        "BEFORE: fingerprint alignment_score = {:.3}",
+        fingerprint.alignment_score
     );
     println!(
         "AFTER: composite_score = {:.3}",
@@ -34,7 +34,7 @@ async fn test_compute_alignment_basic() {
     );
     println!(
         "  - north_star_alignment: {:.3}",
-        result.score.north_star_alignment
+        result.score.strategic_alignment
     );
     println!(
         "  - strategic_alignment: {:.3}",
@@ -74,10 +74,10 @@ async fn test_compute_alignment_no_north_star() {
 
     assert!(result.is_err());
     match result {
-        Err(AlignmentError::NoNorthStar) => {
-            println!("[VERIFIED] NoNorthStar error returned for empty hierarchy");
+        Err(AlignmentError::NoTopLevelGoals) => {
+            println!("[VERIFIED] NoTopLevelGoals error returned for empty hierarchy");
         }
-        other => panic!("Expected NoNorthStar error, got: {:?}", other),
+        other => panic!("Expected NoTopLevelGoals error, got: {:?}", other),
     }
 }
 

@@ -80,8 +80,8 @@ async fn verify_complete_evidence_log() {
     println!("  Stored fingerprint fields:");
     println!("    - id: {}", stored_fp.id);
     println!(
-        "    - theta_to_north_star: {:.6}",
-        stored_fp.theta_to_north_star
+        "    - alignment_score: {:.6}",
+        stored_fp.alignment_score
     );
     println!("    - access_count: {}", stored_fp.access_count);
     println!("    - created_at: {}", stored_fp.created_at);

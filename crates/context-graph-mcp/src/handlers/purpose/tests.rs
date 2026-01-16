@@ -10,7 +10,7 @@ fn test_goal_to_json_structure() {
     let discovery = GoalDiscoveryMetadata::bootstrap();
     let goal = GoalNode::autonomous_goal(
         "Test North Star".into(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery,
     )
@@ -18,8 +18,8 @@ fn test_goal_to_json_structure() {
 
     // Verify GoalNode structure (id is now Uuid, not custom GoalId)
     assert!(!goal.id.is_nil()); // UUID should not be nil
-    assert_eq!(goal.level, GoalLevel::NorthStar);
-    assert!(goal.is_north_star());
+    assert_eq!(goal.level, GoalLevel::Strategic);
+    assert!(goal.is_top_level());
 
     println!("[VERIFIED] GoalNode structure is correct with new API");
 }

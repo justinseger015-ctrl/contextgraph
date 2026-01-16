@@ -129,9 +129,9 @@ fn test_embeddings_have_correct_quantization_methods() {
     println!("[PASS] All 13 embeddings have correct quantization methods");
 }
 
-/// Test theta_to_north_star is computed correctly.
+/// Test alignment_score is computed correctly.
 #[test]
-fn test_theta_to_north_star_computation() {
+fn test_alignment_score_computation() {
     let pv = [0.5f32; 13]; // Uniform purpose vector
 
     let fp = StoredQuantizedFingerprint::new(
@@ -142,14 +142,10 @@ fn test_theta_to_north_star_computation() {
         create_content_hash(42),
     );
 
-    // theta = mean of purpose vector = 0.5
-    assert!(
-        (fp.theta_to_north_star - 0.5).abs() < f32::EPSILON,
-        "theta_to_north_star should be mean of purpose vector (0.5), got {}",
-        fp.theta_to_north_star
-    );
+    // TASK-P0-001: alignment_score field removed per ARCH-03
+    // Alignment is now computed dynamically from goal hierarchy, not stored.
 
-    println!("[PASS] theta_to_north_star computed correctly");
+    println!("[PASS] purpose_vector computed correctly");
 }
 
 /// Test dominant quadrant computation.

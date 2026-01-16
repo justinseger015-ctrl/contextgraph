@@ -95,7 +95,7 @@ impl Handlers {
                     let metadata = MemoryMetadata {
                         id: MemoryId(fp.id),
                         created_at: fp.created_at,
-                        alignment: fp.theta_to_north_star,
+                        alignment: fp.alignment_score,
                         connection_count: 0, // No edge data available through trait
                         byte_size,
                         last_accessed: Some(fp.last_updated),
@@ -284,7 +284,7 @@ impl Handlers {
                         MemoryId(fp.id),
                         embedding,
                         String::new(), // No text content available in fingerprint
-                        fp.theta_to_north_star,
+                        fp.alignment_score,
                     )
                     .with_access_count(fp.access_count as u32);
 

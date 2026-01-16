@@ -78,7 +78,7 @@ fn create_test_discovery(method: DiscoveryMethod, confidence: f32) -> GoalDiscov
 fn create_north_star_goal(description: &str, base: f32) -> GoalNode {
     let fp = create_test_fingerprint(base);
     let discovery = create_test_discovery(DiscoveryMethod::Bootstrap, 0.8);
-    GoalNode::autonomous_goal(description.to_string(), GoalLevel::NorthStar, fp, discovery).unwrap()
+    GoalNode::autonomous_goal(description.to_string(), GoalLevel::Strategic, fp, discovery).unwrap()
 }
 
 /// Create a child goal for testing.
@@ -92,73 +92,83 @@ fn create_child_goal(description: &str, level: GoalLevel, parent_id: Uuid, base:
 // GoalHierarchy Integration Tests
 // ============================================================================
 
+// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 #[test]
 fn test_full_hierarchy_construction() {
     let mut hierarchy = GoalHierarchy::new();
 
-    // Add North Star
-    let north_star = create_north_star_goal("Master machine learning fundamentals", 0.5);
-    let ns_id = north_star.id;
-    hierarchy.add_goal(north_star).unwrap();
-
-    // Add Strategic goals
-    let strategic1 = create_child_goal("Learn deep learning", GoalLevel::Strategic, ns_id, 0.6);
+    // Add Strategic goal 1 (top-level)
+    let strategic1 = create_north_star_goal("Master machine learning fundamentals", 0.5);
     let strat1_id = strategic1.id;
     hierarchy.add_goal(strategic1).unwrap();
 
-    let strategic2 = create_child_goal("Master computer vision", GoalLevel::Strategic, ns_id, 0.55);
+    // Add Strategic goal 2 (top-level)
+    let strategic2 = create_north_star_goal("Master computer vision", 0.55);
     hierarchy.add_goal(strategic2).unwrap();
 
-    // Add Tactical goals under strategic
+    // Add Tactical goal under Strategic 1
     let tactical1 = create_child_goal(
-        "Implement CNN from scratch",
+        "Learn deep learning",
         GoalLevel::Tactical,
         strat1_id,
+        0.6,
+    );
+    let tact1_id = tactical1.id;
+    hierarchy.add_goal(tactical1).unwrap();
+
+    // Add Immediate goal under Tactical
+    let immediate1 = create_child_goal(
+        "Implement CNN from scratch",
+        GoalLevel::Immediate,
+        tact1_id,
         0.7,
     );
-    hierarchy.add_goal(tactical1).unwrap();
+    hierarchy.add_goal(immediate1).unwrap();
 
     // Verify hierarchy
     assert!(hierarchy.validate().is_ok());
     assert_eq!(hierarchy.len(), 4);
-    assert!(hierarchy.north_star().is_some());
-    assert_eq!(hierarchy.children(&ns_id).len(), 2);
-    assert_eq!(hierarchy.children(&strat1_id).len(), 1);
+    assert!(hierarchy.top_level_goals().first().is_some());
+    assert_eq!(hierarchy.top_level_goals().len(), 2); // Two Strategic goals
+    assert_eq!(hierarchy.children(&strat1_id).len(), 1); // One Tactical child
+    assert_eq!(hierarchy.children(&tact1_id).len(), 1); // One Immediate child
 
-    println!("[VERIFIED] Full hierarchy construction with 4 levels works correctly");
+    println!("[VERIFIED] Full hierarchy construction with 3 levels works correctly");
 }
 
+// TASK-P0-001/ARCH-03: Multiple Strategic goals are now allowed
 #[test]
-fn test_hierarchy_validation_multiple_north_stars() {
+fn test_hierarchy_validation_multiple_strategic_goals_allowed() {
     let mut hierarchy = GoalHierarchy::new();
 
-    let ns1 = create_north_star_goal("North Star 1", 0.5);
-    let ns2 = create_north_star_goal("North Star 2", 0.5);
+    let s1 = create_north_star_goal("Strategic 1", 0.5);
+    let s2 = create_north_star_goal("Strategic 2", 0.5);
 
-    hierarchy.add_goal(ns1).unwrap();
-    let result = hierarchy.add_goal(ns2);
+    hierarchy.add_goal(s1).unwrap();
+    let result = hierarchy.add_goal(s2);
 
-    assert!(matches!(
-        result,
-        Err(GoalHierarchyError::MultipleNorthStars)
-    ));
-    println!("[VERIFIED] Multiple North Stars rejected correctly");
+    // ARCH-03: Multiple Strategic goals are now allowed
+    assert!(result.is_ok(), "Multiple Strategic goals should be allowed per ARCH-03");
+    assert_eq!(hierarchy.top_level_goals().len(), 2);
+    println!("[VERIFIED] Multiple Strategic goals allowed (ARCH-03)");
 }
 
+// TASK-P0-001: Updated to use Tactical level for orphan test
 #[test]
 fn test_hierarchy_validation_orphaned_goal() {
     let mut hierarchy = GoalHierarchy::new();
 
-    let ns = create_north_star_goal("North Star", 0.5);
-    hierarchy.add_goal(ns).unwrap();
+    let strategic = create_north_star_goal("Strategic Goal", 0.5);
+    hierarchy.add_goal(strategic).unwrap();
 
     // Create orphan with non-existent parent
     let orphan_parent = Uuid::new_v4(); // This UUID doesn't exist in hierarchy
     let fp = create_test_fingerprint(0.5);
     let discovery = create_test_discovery(DiscoveryMethod::Decomposition, 0.7);
+    // Use Tactical (not Strategic) since Strategic goals are top-level
     let orphan = GoalNode::child_goal(
         "Orphaned Goal".to_string(),
-        GoalLevel::Strategic,
+        GoalLevel::Tactical,
         orphan_parent,
         fp,
         discovery,
@@ -170,19 +180,18 @@ fn test_hierarchy_validation_orphaned_goal() {
     println!("[VERIFIED] Orphaned goals rejected correctly");
 }
 
+// TASK-P0-001: Updated to use Tactical level
 #[test]
 fn test_hierarchy_duplicate_id() {
     let mut hierarchy = GoalHierarchy::new();
 
-    let ns = create_north_star_goal("North Star", 0.5);
-    let ns_id = ns.id;
-    hierarchy.add_goal(ns).unwrap();
+    let strategic = create_north_star_goal("Strategic Goal", 0.5);
+    let strategic_id = strategic.id;
+    hierarchy.add_goal(strategic).unwrap();
 
-    // Create a child with the same UUID (simulated duplicate)
-    // Note: In practice, Uuid::new_v4() generates unique IDs
-    // This test documents the actual behavior
-    let child = create_child_goal("Strategic", GoalLevel::Strategic, ns_id, 0.6);
-    let result = hierarchy.add_goal(child);
+    // Create a Tactical child (not Strategic since Strategic are top-level)
+    let tactical = create_child_goal("Tactical", GoalLevel::Tactical, strategic_id, 0.6);
+    let result = hierarchy.add_goal(tactical);
 
     // The current implementation allows this (overwrites)
     assert!(result.is_ok() || result.is_err());
@@ -193,25 +202,25 @@ fn test_hierarchy_duplicate_id() {
 // GoalLevel Tests
 // ============================================================================
 
+// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 #[test]
 fn test_goal_level_propagation_weights() {
-    assert_eq!(GoalLevel::NorthStar.propagation_weight(), 1.0);
-    assert_eq!(GoalLevel::Strategic.propagation_weight(), 0.7);
-    assert_eq!(GoalLevel::Tactical.propagation_weight(), 0.4);
-    assert_eq!(GoalLevel::Immediate.propagation_weight(), 0.2);
+    // Strategic is now top-level with weight 1.0
+    assert_eq!(GoalLevel::Strategic.propagation_weight(), 1.0);
+    assert_eq!(GoalLevel::Tactical.propagation_weight(), 0.6);
+    assert_eq!(GoalLevel::Immediate.propagation_weight(), 0.3);
 
     println!("[VERIFIED] Goal level propagation weights match specification");
 }
 
+// TASK-P0-001: Updated for 3-level hierarchy
 #[test]
 fn test_goal_level_ordering() {
-    // GoalLevel is ordered by propagation weight (NorthStar = 1.0, Immediate = 0.2)
-    assert!(GoalLevel::NorthStar.propagation_weight() > GoalLevel::Strategic.propagation_weight());
+    // GoalLevel is ordered by propagation weight (Strategic = 1.0, Immediate = 0.3)
     assert!(GoalLevel::Strategic.propagation_weight() > GoalLevel::Tactical.propagation_weight());
     assert!(GoalLevel::Tactical.propagation_weight() > GoalLevel::Immediate.propagation_weight());
 
-    // GoalLevel depth ordering (NorthStar = 0, Immediate = 3)
-    assert!(GoalLevel::NorthStar.depth() < GoalLevel::Strategic.depth());
+    // GoalLevel depth ordering (Strategic = 0, Immediate = 2)
     assert!(GoalLevel::Strategic.depth() < GoalLevel::Tactical.depth());
     assert!(GoalLevel::Tactical.depth() < GoalLevel::Immediate.depth());
 
@@ -229,7 +238,7 @@ fn test_goal_node_autonomous_goal_factory() {
 
     let goal = GoalNode::autonomous_goal(
         "Test North Star".to_string(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         fp,
         discovery,
     )
@@ -237,22 +246,24 @@ fn test_goal_node_autonomous_goal_factory() {
 
     assert!(!goal.id.is_nil());
     assert_eq!(goal.description, "Test North Star");
-    assert_eq!(goal.level, GoalLevel::NorthStar);
+    assert_eq!(goal.level, GoalLevel::Strategic);
     assert!(goal.parent_id.is_none());
     assert_eq!(goal.discovery.method, DiscoveryMethod::Clustering);
 
     println!("[VERIFIED] GoalNode::autonomous_goal factory works correctly");
 }
 
+// TASK-P0-001: Updated to use Tactical level (Strategic are top-level)
 #[test]
 fn test_goal_node_child_goal_factory() {
     let parent_id = Uuid::new_v4();
     let fp = create_test_fingerprint(0.6);
     let discovery = create_test_discovery(DiscoveryMethod::Decomposition, 0.75);
 
+    // Use Tactical (not Strategic) since Strategic goals are top-level
     let child = GoalNode::child_goal(
         "Child Goal".to_string(),
-        GoalLevel::Strategic,
+        GoalLevel::Tactical,
         parent_id,
         fp,
         discovery,
@@ -261,7 +272,7 @@ fn test_goal_node_child_goal_factory() {
 
     assert!(child.parent_id.is_some());
     assert_eq!(child.parent_id.unwrap(), parent_id);
-    assert_eq!(child.level, GoalLevel::Strategic);
+    assert_eq!(child.level, GoalLevel::Tactical);
 
     println!("[VERIFIED] GoalNode::child_goal factory works correctly");
 }
@@ -273,7 +284,7 @@ fn test_goal_node_array_access() {
 
     let goal = GoalNode::autonomous_goal(
         "Test Goal".to_string(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         fp.clone(),
         discovery,
     )
@@ -390,7 +401,7 @@ fn test_config_builder_chain() {
     assert!(config.hierarchical_propagation);
     assert_eq!(config.propagation_weights, (0.6, 0.4));
     assert_eq!(config.min_alignment, 0.1);
-    assert!(config.hierarchy.north_star().is_some());
+    assert!(config.hierarchy.top_level_goals().first().is_some());
 
     println!("[VERIFIED] PurposeComputeConfig builder chain works correctly");
 }
@@ -438,20 +449,22 @@ async fn test_purpose_computation_full_pipeline() {
     println!("  Aggregate: {:.4}", purpose.aggregate_alignment());
 }
 
+// TASK-P0-001: Updated for 3-level hierarchy
 #[tokio::test]
 async fn test_purpose_computation_with_hierarchy_propagation() {
     let computer = DefaultPurposeComputer::new();
     let fingerprint = create_test_fingerprint(0.5);
 
-    // Create hierarchy with North Star and children
+    // Create hierarchy with Strategic and Tactical goals
     let mut hierarchy = GoalHierarchy::new();
 
-    let ns = create_north_star_goal("North Star Goal", 0.5);
-    let ns_id = ns.id;
-    hierarchy.add_goal(ns).unwrap();
+    let strategic = create_north_star_goal("Strategic Goal", 0.5);
+    let strategic_id = strategic.id;
+    hierarchy.add_goal(strategic).unwrap();
 
-    let strat = create_child_goal("Strategic Goal", GoalLevel::Strategic, ns_id, 0.6);
-    hierarchy.add_goal(strat).unwrap();
+    // Use Tactical (not Strategic) as child
+    let tactical = create_child_goal("Tactical Goal", GoalLevel::Tactical, strategic_id, 0.6);
+    hierarchy.add_goal(tactical).unwrap();
 
     // Test with propagation enabled
     let config_with = PurposeComputeConfig::with_hierarchy(hierarchy.clone())
@@ -609,10 +622,11 @@ fn test_purpose_vector_similarity() {
 // Error Handling Tests
 // ============================================================================
 
+// TASK-P0-001: Updated error message check (no longer mentions "North Star")
 #[test]
 fn test_purpose_compute_error_display() {
-    let e1 = PurposeComputeError::NoNorthStar;
-    assert!(e1.to_string().contains("North Star"));
+    let e1 = PurposeComputeError::NoTopLevelGoals;
+    assert!(e1.to_string().contains("top-level goals"));
 
     let e2 = PurposeComputeError::EmptyFingerprint;
     assert!(e2.to_string().contains("Empty"));
@@ -630,19 +644,18 @@ fn test_purpose_compute_error_display() {
     println!("[VERIFIED] PurposeComputeError display messages are correct");
 }
 
+// TASK-P0-001: Updated to test remaining error variants after North Star removal
 #[test]
 fn test_goal_hierarchy_error_display() {
-    let e1 = GoalHierarchyError::MultipleNorthStars;
-    assert!(e1.to_string().contains("North Star"));
+    // TASK-P0-001/ARCH-03: MultipleStrategicGoals and NoTopLevelGoals removed
+    // Multiple Strategic goals are now allowed
+    // Empty hierarchies are now valid
 
-    let e2 = GoalHierarchyError::NoNorthStar;
-    assert!(e2.to_string().contains("North Star"));
+    let e1 = GoalHierarchyError::ParentNotFound(Uuid::new_v4());
+    assert!(e1.to_string().contains("Parent"));
 
-    let e3 = GoalHierarchyError::ParentNotFound(Uuid::new_v4());
-    assert!(e3.to_string().contains("Parent"));
-
-    let e4 = GoalHierarchyError::GoalNotFound(Uuid::new_v4());
-    assert!(e4.to_string().contains("Goal"));
+    let e2 = GoalHierarchyError::GoalNotFound(Uuid::new_v4());
+    assert!(e2.to_string().contains("Goal"));
 
     println!("[VERIFIED] GoalHierarchyError display messages are correct");
 }
@@ -656,7 +669,7 @@ fn test_empty_hierarchy_operations() {
     let hierarchy = GoalHierarchy::new();
 
     assert!(hierarchy.is_empty());
-    assert!(hierarchy.north_star().is_none());
+    assert!(hierarchy.top_level_goals().first().is_none());
     assert!(hierarchy.get(&Uuid::new_v4()).is_none());
     assert!(hierarchy.children(&Uuid::new_v4()).is_empty());
 
@@ -714,7 +727,7 @@ fn test_splade_alignment_serialization() {
 #[test]
 fn test_goal_level_serialization() {
     let levels = [
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         GoalLevel::Strategic,
         GoalLevel::Tactical,
         GoalLevel::Immediate,

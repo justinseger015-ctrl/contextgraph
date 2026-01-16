@@ -217,7 +217,7 @@ impl GoalDiscoveryPipeline {
         let coherence = candidate.coherence_score;
 
         if size >= 50 && coherence >= 0.85 {
-            GoalLevel::NorthStar
+            GoalLevel::Strategic
         } else if size >= 20 && coherence >= 0.80 {
             GoalLevel::Strategic
         } else if size >= 10 && coherence >= 0.75 {
@@ -289,12 +289,12 @@ impl GoalDiscoveryPipeline {
     }
 
     /// Convert level to ordering number.
+    /// TASK-P0-001: Removed NorthStar, Strategic is now 0.
     fn level_order(level: &GoalLevel) -> u8 {
         match level {
-            GoalLevel::NorthStar => 0,
-            GoalLevel::Strategic => 1,
-            GoalLevel::Tactical => 2,
-            GoalLevel::Operational => 3,
+            GoalLevel::Strategic => 0,
+            GoalLevel::Tactical => 1,
+            GoalLevel::Operational => 2,
         }
     }
 }

@@ -34,8 +34,9 @@ pub enum PatternType {
     CriticalMisalignment,
     /// High variance across embedding spaces
     InconsistentAlignment,
-    /// North Star misalignment (most severe)
-    NorthStarDrift,
+    /// Strategic goal misalignment (most severe)
+    /// TASK-P0-001: Renamed from NorthStarDrift
+    StrategicDrift,
     /// All goals optimally aligned (positive pattern)
     OptimalAlignment,
     /// Hierarchical coherence (positive pattern)
@@ -61,7 +62,7 @@ impl PatternType {
             Self::OptimalAlignment | Self::HierarchicalCoherence => 0,
             Self::TacticalWithoutStrategic | Self::InconsistentAlignment => 1,
             Self::DivergentHierarchy | Self::CriticalMisalignment => 2,
-            Self::NorthStarDrift => 2,
+            Self::StrategicDrift => 2,
         }
     }
 }
@@ -73,7 +74,7 @@ impl std::fmt::Display for PatternType {
             Self::DivergentHierarchy => write!(f, "Divergent Hierarchy"),
             Self::CriticalMisalignment => write!(f, "Critical Misalignment"),
             Self::InconsistentAlignment => write!(f, "Inconsistent Alignment"),
-            Self::NorthStarDrift => write!(f, "North Star Drift"),
+            Self::StrategicDrift => write!(f, "Strategic Drift"),
             Self::OptimalAlignment => write!(f, "Optimal Alignment"),
             Self::HierarchicalCoherence => write!(f, "Hierarchical Coherence"),
         }
@@ -251,7 +252,7 @@ mod tests {
         assert!(PatternType::OptimalAlignment.is_positive());
         assert!(PatternType::HierarchicalCoherence.is_positive());
         assert!(!PatternType::CriticalMisalignment.is_positive());
-        assert!(!PatternType::NorthStarDrift.is_positive());
+        assert!(!PatternType::StrategicDrift.is_positive());
 
         println!("[VERIFIED] PatternType::is_positive distinguishes good/bad patterns");
     }
@@ -261,7 +262,7 @@ mod tests {
         assert_eq!(PatternType::OptimalAlignment.default_severity(), 0);
         assert_eq!(PatternType::TacticalWithoutStrategic.default_severity(), 1);
         assert_eq!(PatternType::CriticalMisalignment.default_severity(), 2);
-        assert_eq!(PatternType::NorthStarDrift.default_severity(), 2);
+        assert_eq!(PatternType::StrategicDrift.default_severity(), 2);
 
         println!("[VERIFIED] PatternType severity levels are correct");
     }
@@ -355,9 +356,10 @@ mod tests {
 
     #[test]
     fn test_pattern_type_display() {
+        // TASK-P0-001: Renamed from NorthStarDrift
         assert_eq!(
-            format!("{}", PatternType::NorthStarDrift),
-            "North Star Drift"
+            format!("{}", PatternType::StrategicDrift),
+            "Strategic Drift"
         );
         assert_eq!(
             format!("{}", PatternType::OptimalAlignment),

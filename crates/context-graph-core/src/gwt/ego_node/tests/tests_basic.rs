@@ -177,7 +177,7 @@ fn create_test_fingerprint(alignments: [f32; 13]) -> TeleologicalFingerprint {
         purpose_vector,
         johari,
         purpose_evolution: Vec::new(),
-        theta_to_north_star: alignments.iter().sum::<f32>() / 13.0,
+        alignment_score: alignments.iter().sum::<f32>() / 13.0,
         content_hash: [0u8; 32],
         created_at: Utc::now(),
         last_updated: Utc::now(),

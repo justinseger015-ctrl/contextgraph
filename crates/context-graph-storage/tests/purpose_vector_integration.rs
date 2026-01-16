@@ -57,7 +57,7 @@ async fn test_purpose_computation_with_real_goal_hierarchy() {
 
     let north_star = GoalNode::autonomous_goal(
         "Master semantic understanding".into(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery,
     )
@@ -240,7 +240,7 @@ async fn test_purpose_vectors_differentiate_semantics() {
     let discovery = GoalDiscoveryMetadata::bootstrap();
     let north_star = GoalNode::autonomous_goal(
         "Test goal".into(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery,
     )

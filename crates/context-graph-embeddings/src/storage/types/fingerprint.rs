@@ -49,13 +49,12 @@ pub struct StoredQuantizedFingerprint {
     pub embeddings: HashMap<u8, QuantizedEmbedding>,
 
     /// 13D purpose vector (NOT quantized - only 52 bytes).
-    /// Each dimension = alignment of that embedder's output to North Star.
+    /// Each dimension = alignment of that embedder's output to emergent goals.
     /// From Constitution: "PV = [A(E1,V), A(E2,V), ..., A(E13,V)]"
     pub purpose_vector: [f32; 13],
 
-    /// Aggregate alignment to North Star (theta).
-    /// Pre-computed from purpose_vector for fast filtering in Stage 4.
-    pub theta_to_north_star: f32,
+    // REMOVED: alignment_score per TASK-P0-001 (ARCH-03)
+    // North Star alignment was a manual goal metric - goals now emerge autonomously
 
     /// Johari quadrant weights [Open, Hidden, Blind, Unknown].
     /// Aggregated from per-embedder JohariFingerprint.
@@ -131,7 +130,7 @@ impl StoredQuantizedFingerprint {
             }
         }
 
-        let theta_to_north_star = purpose_vector.iter().sum::<f32>() / 13.0;
+        // REMOVED: alignment_score computation per TASK-P0-001 (ARCH-03)
         let (dominant_quadrant, johari_confidence) =
             Self::compute_dominant_quadrant(&johari_quadrants);
         let now = chrono::Utc::now().timestamp_millis();
@@ -141,7 +140,6 @@ impl StoredQuantizedFingerprint {
             version: STORAGE_VERSION,
             embeddings,
             purpose_vector,
-            theta_to_north_star,
             johari_quadrants,
             dominant_quadrant,
             johari_confidence,
@@ -185,7 +183,7 @@ impl StoredQuantizedFingerprint {
         size += 16; // id (UUID)
         size += 1; // version
         size += 52; // purpose_vector (13 × 4 bytes)
-        size += 4; // theta_to_north_star
+        // REMOVED: alignment_score (4 bytes) per TASK-P0-001
         size += 16; // johari_quadrants (4 × 4 bytes)
         size += 1; // dominant_quadrant
         size += 4; // johari_confidence

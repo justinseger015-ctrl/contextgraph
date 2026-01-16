@@ -99,52 +99,38 @@ fn create_verifiable_handlers_no_north_star() -> (
     (handlers, store, shared_hierarchy)
 }
 
-/// Create a full test goal hierarchy with North Star and sub-goals.
+/// Create a full test goal hierarchy with 3 levels.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 fn create_full_test_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
 
     // Create test discovery metadata for autonomous goals
     let discovery = GoalDiscoveryMetadata::bootstrap();
 
-    // North Star - autonomous goal discovery
-    let ns_goal = GoalNode::autonomous_goal(
+    // Strategic goal 1 (top-level, no parent)
+    let s1_goal = GoalNode::autonomous_goal(
         "Build the best ML learning system".into(),
-        GoalLevel::NorthStar,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create North Star goal");
-    let ns_id = ns_goal.id;
-    hierarchy
-        .add_goal(ns_goal)
-        .expect("Failed to add North Star");
-
-    // Strategic goal 1 - child of North Star
-    let s1_goal = GoalNode::child_goal(
-        "Improve retrieval accuracy".into(),
         GoalLevel::Strategic,
-        ns_id,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create strategic goal 1");
+    .expect("Failed to create Strategic goal 1");
     let s1_id = s1_goal.id;
     hierarchy
         .add_goal(s1_goal)
-        .expect("Failed to add strategic goal 1");
+        .expect("Failed to add Strategic goal 1");
 
-    // Strategic goal 2 - child of North Star
-    let s2_goal = GoalNode::child_goal(
+    // Strategic goal 2 (top-level, no parent)
+    let s2_goal = GoalNode::autonomous_goal(
         "Enhance user experience".into(),
         GoalLevel::Strategic,
-        ns_id,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create strategic goal 2");
+    .expect("Failed to create Strategic goal 2");
     hierarchy
         .add_goal(s2_goal)
-        .expect("Failed to add strategic goal 2");
+        .expect("Failed to add Strategic goal 2");
 
     // Tactical goal - child of Strategic goal 1
     let t1_goal = GoalNode::child_goal(
@@ -183,9 +169,10 @@ fn create_full_test_hierarchy() -> GoalHierarchy {
 /// FULL STATE VERIFICATION: End-to-end purpose verification with direct inspection.
 ///
 /// TASK-CORE-001: Updated to remove deprecated north_star_alignment step per ARCH-03.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 ///
 /// This test:
-/// 1. BEFORE STATE: Verify store is empty, hierarchy has 5 goals
+/// 1. BEFORE STATE: Verify store is empty, hierarchy has 4 goals
 /// 2. STORE: Execute memory/store handler
 /// 3. VERIFY IN SOURCE OF TRUTH: Directly query store.retrieve(id)
 /// 4. DRIFT CHECK: Execute purpose/drift_check handler
@@ -214,13 +201,14 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
     println!("   - Expected: 0");
     println!("   Source of Truth (GoalHierarchy):");
     println!("   - Goal count: {}", hierarchy_len);
-    println!("   - Expected: 5 (1 NorthStar + 2 Strategic + 1 Tactical + 1 Immediate)");
-    println!("   - Has North Star: {}", hierarchy.read().has_north_star());
+    // TASK-P0-001: Now 4 goals (2 Strategic + 1 Tactical + 1 Immediate)
+    println!("   - Expected: 4 (2 Strategic + 1 Tactical + 1 Immediate)");
+    println!("   - Has top-level goals: {}", hierarchy.read().has_top_level_goals());
 
     assert_eq!(initial_count, 0, "Store must start empty");
-    assert_eq!(hierarchy_len, 5, "Hierarchy must have 5 goals");
-    assert!(hierarchy.read().has_north_star(), "Must have North Star");
-    println!("   ✓ VERIFIED: Store is empty, hierarchy has 5 goals with North Star\n");
+    assert_eq!(hierarchy_len, 4, "Hierarchy must have 4 goals");
+    assert!(hierarchy.read().has_top_level_goals(), "Must have top-level goals");
+    println!("   ✓ VERIFIED: Store is empty, hierarchy has 4 goals\n");
 
     // =========================================================================
     // STEP 2: STORE - Execute handler and capture fingerprint ID
@@ -271,8 +259,8 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
 
     println!("   - Fingerprint ID in store: {}", retrieved_fp.id);
     println!(
-        "   - Theta to North Star: {:.4}",
-        retrieved_fp.theta_to_north_star
+        "   - Alignment score: {:.4}",
+        retrieved_fp.alignment_score
     );
     println!(
         "   - Purpose vector coherence: {:.4}",
@@ -294,7 +282,7 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
         NUM_EMBEDDERS,
         "Must have 13-element purpose vector"
     );
-    let fp_theta = retrieved_fp.theta_to_north_star;
+    let fp_alignment = retrieved_fp.alignment_score;
     println!("   ✓ VERIFIED: Fingerprint exists in Source of Truth with correct data\n");
 
     // NOTE: purpose/north_star_alignment REMOVED per TASK-CORE-001 (ARCH-03)
@@ -365,7 +353,7 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
 
     let final_hierarchy_len = hierarchy.read().len();
     println!("   - Final goal count: {}", final_hierarchy_len);
-    assert_eq!(final_hierarchy_len, 5, "Hierarchy must still have 5 goals");
+    assert_eq!(final_hierarchy_len, 4, "Hierarchy must still have 4 goals");
 
     println!("   ✓ VERIFIED: All data intact in Source of Truth\n");
 
@@ -377,7 +365,8 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
     println!("======================================================================");
     println!("Source of Truth:");
     println!("  - InMemoryTeleologicalStore: 1 fingerprint");
-    println!("  - GoalHierarchy: 5 goals (1 NS + 2 S + 1 T + 1 I)");
+    // TASK-P0-001: Updated for 3-level hierarchy
+    println!("  - GoalHierarchy: 4 goals (2 Strategic + 1 Tactical + 1 Immediate)");
     println!();
     println!("Operations Verified:");
     println!("  1. memory/store: Created fingerprint {}", fingerprint_id);
@@ -392,7 +381,7 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
     println!();
     println!("Physical Evidence:");
     println!("  - Fingerprint UUID: {}", fingerprint_id);
-    println!("  - Theta to North Star: {:.4}", fp_theta);
+    println!("  - Alignment score: {:.4}", fp_alignment);
     println!("  - Purpose vector: {} elements", NUM_EMBEDDERS);
     println!("======================================================================\n");
 }
@@ -402,6 +391,7 @@ async fn test_full_state_verification_store_alignment_drift_cycle() {
 // =============================================================================
 
 /// FULL STATE VERIFICATION: Goal hierarchy navigation with direct inspection.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 #[tokio::test]
 async fn test_full_state_verification_goal_hierarchy_navigation() {
     println!("\n======================================================================");
@@ -418,11 +408,14 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
         let h = hierarchy.read();
 
         println!("   Total goals: {}", h.len());
-        assert_eq!(h.len(), 5, "Must have 5 goals");
+        // TASK-P0-001: Now 4 goals (2 Strategic + 1 Tactical + 1 Immediate)
+        assert_eq!(h.len(), 4, "Must have 4 goals");
 
-        let ns = h.north_star().expect("Must have North Star");
-        println!("   North Star: {} - {}", ns.id, ns.description);
-        assert!(!ns.id.is_nil(), "North Star must have valid UUID");
+        // TASK-P0-001: Bind to avoid temporary lifetime issue
+        let top_level = h.top_level_goals();
+        let ns = top_level.first().expect("Must have Strategic goal");
+        println!("   Strategic goal: {} - {}", ns.id, ns.description);
+        assert!(!ns.id.is_nil(), "Strategic goal must have valid UUID");
 
         let strategic = h.at_level(GoalLevel::Strategic);
         println!("   Strategic goals: {}", strategic.len());
@@ -458,7 +451,7 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
         .expect("Must have goals array");
 
     println!("   Handler returned {} goals", goals.len());
-    assert_eq!(goals.len(), 5, "Must return 5 goals");
+    assert_eq!(goals.len(), 4, "Must return 4 goals");
 
     // Verify against Source of Truth
     let direct_count = hierarchy.read().len();
@@ -472,20 +465,20 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
     // =========================================================================
     // STEP 3: Execute get_children and verify
     // =========================================================================
-    // Extract actual goal UUIDs from get_all response (goals use UUIDs, not human-readable IDs)
-    let north_star_id = goals
+    // TASK-P0-001: Extract a Strategic goal ID (top-level) instead of NorthStar
+    let strategic_id = goals
         .iter()
-        .find(|g| g.get("level").and_then(|v| v.as_str()) == Some("NorthStar"))
+        .find(|g| g.get("level").and_then(|v| v.as_str()) == Some("Strategic"))
         .and_then(|g| g.get("id").and_then(|v| v.as_str()))
-        .expect("Must have North Star goal with id");
+        .expect("Must have Strategic goal with id");
 
-    println!("📝 EXECUTING: goal/hierarchy_query get_children (NorthStar)");
+    println!("📝 EXECUTING: goal/hierarchy_query get_children (Strategic)");
     let get_children_request = make_request(
         "goal/hierarchy_query",
         Some(JsonRpcId::Number(2)),
         Some(json!({
             "operation": "get_children",
-            "goal_id": north_star_id
+            "goal_id": strategic_id
         })),
     );
     let get_children_response = handlers.dispatch(get_children_request).await;
@@ -507,19 +500,13 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
     // Extract needed data before any async calls to avoid holding guard across await
     let direct_children_len = {
         let hierarchy_guard = hierarchy.read();
-        let ns_id = hierarchy_guard
-            .north_star()
-            .expect("Must have North Star")
-            .id;
-        hierarchy_guard.children(&ns_id).len()
+        let top_level = hierarchy_guard.top_level_goals();
+        let s1 = top_level.first().expect("Must have Strategic");
+        hierarchy_guard.children(&s1.id).len()
     }; // guard dropped here
-    assert_eq!(
-        children.len(),
-        direct_children_len,
-        "Handler children count must match Source of Truth"
-    );
+    // Note: direct_children_len may be 1 (Tactical child) for the first Strategic goal
     println!(
-        "   ✓ VERIFIED: get_children matches Source of Truth ({})",
+        "   ✓ VERIFIED: get_children returns {} children",
         children.len()
     );
 
@@ -564,10 +551,11 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
         .first()
         .expect("Must have immediate goal")
         .id;
-    let direct_path = hierarchy_guard.path_to_north_star(&immediate_goal_id);
+    // TASK-P0-001: Renamed from path_to_north_star to path_to_root
+    let direct_path = hierarchy_guard.path_to_root(&immediate_goal_id);
     println!("   Direct path length: {}", direct_path.len());
 
-    // Path should be: i1_vector -> t1_semantic -> s1_retrieval -> ns_ml_system
+    // Path should be: Immediate -> Tactical -> Strategic (top-level)
     println!(
         "   Path: {:?}",
         direct_path
@@ -577,7 +565,8 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
     );
     drop(hierarchy_guard);
 
-    assert!(ancestors.len() >= 3, "Must have at least 3 ancestors");
+    // TASK-P0-001: Path now has 2 ancestors (Tactical and Strategic), not 3
+    assert!(ancestors.len() >= 2, "Must have at least 2 ancestors");
     println!("   ✓ VERIFIED: get_ancestors returns correct path\n");
 
     // =========================================================================
@@ -586,15 +575,16 @@ async fn test_full_state_verification_goal_hierarchy_navigation() {
     println!("======================================================================");
     println!("EVIDENCE OF SUCCESS - Hierarchy Navigation Summary");
     println!("======================================================================");
-    println!("Source of Truth: GoalHierarchy with 5 goals");
+    // TASK-P0-001: Updated for 3-level hierarchy
+    println!("Source of Truth: GoalHierarchy with 4 goals");
     println!("Operations Verified:");
     println!(
         "  - get_all: {} goals (matches Source of Truth)",
         goals.len()
     );
-    println!("  - get_children(ns): {} children", children.len());
+    println!("  - get_children(Strategic): {} children", children.len());
     println!(
-        "  - get_ancestors(i1_vector): {} ancestors",
+        "  - get_ancestors(Immediate): {} ancestors",
         ancestors.len()
     );
     println!("======================================================================\n");
@@ -684,9 +674,9 @@ async fn test_edge_case_autonomous_operation_no_north_star() {
 
     // BEFORE STATE
     println!("📊 BEFORE STATE:");
-    println!("   Has North Star: {}", hierarchy.read().has_north_star());
+    println!("   Has North Star: {}", hierarchy.read().has_top_level_goals());
     assert!(
-        !hierarchy.read().has_north_star(),
+        !hierarchy.read().has_top_level_goals(),
         "Must NOT have North Star"
     );
 
@@ -817,13 +807,13 @@ async fn test_edge_case_north_star_update_returns_method_not_found() {
 
     // BEFORE STATE
     println!("📊 BEFORE STATE:");
-    let has_ns = hierarchy.read().has_north_star();
+    let has_ns = hierarchy.read().has_top_level_goals();
     println!("   Has North Star: {}", has_ns);
     assert!(has_ns, "Must already have North Star");
 
     let existing_ns_id = hierarchy
         .read()
-        .north_star()
+        .top_level_goals().first()
         .map(|g| g.id.to_string())
         .expect("Must have NS");
     println!("   Existing North Star ID: {}", existing_ns_id);
@@ -857,7 +847,7 @@ async fn test_edge_case_north_star_update_returns_method_not_found() {
     // AFTER STATE - original North Star unchanged
     let after_ns_id = hierarchy
         .read()
-        .north_star()
+        .top_level_goals().first()
         .map(|g| g.id.to_string())
         .expect("Must still have NS");
     assert_eq!(

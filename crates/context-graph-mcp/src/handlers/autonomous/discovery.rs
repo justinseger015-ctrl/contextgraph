@@ -94,12 +94,12 @@ impl Handlers {
                     }
                 }
                 None => {
-                    // ARCH-03: Try North Star first, but work autonomously if none exists
-                    match hierarchy.north_star() {
-                        Some(ns) => (Some(ns.clone()), "under_north_star"),
+                    // TASK-P0-001/ARCH-03: Try top-level Strategic goal, but work autonomously if none exists
+                    match hierarchy.top_level_goals().first() {
+                        Some(top_goal) => (Some((*top_goal).clone()), "under_strategic"),
                         None => {
-                            // No North Star - discover goals autonomously from clustering
-                            info!("discover_sub_goals: No North Star - discovering goals autonomously (ARCH-03)");
+                            // No Strategic goals - discover goals autonomously from clustering
+                            info!("discover_sub_goals: No top-level goals - discovering goals autonomously (ARCH-03)");
                             (None, "autonomous")
                         }
                     }

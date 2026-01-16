@@ -402,59 +402,44 @@ pub(crate) async fn create_test_handlers_with_rocksdb_no_north_star() -> (Handle
     (handlers, tempdir)
 }
 
-/// Create a test goal hierarchy with North Star and sub-goals.
+/// Create a test goal hierarchy with 3 levels.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 ///
 /// Hierarchy:
-/// - NorthStar: "Build the best ML learning system"
-///   - Strategic: "Improve retrieval accuracy"
-///     - Tactical: "Implement semantic search"
-///       - Immediate: "Add vector similarity"
-///   - Strategic: "Enhance user experience"
+/// - Strategic: "Build the best ML learning system"
+///   - Tactical: "Implement semantic search"
+///     - Immediate: "Add vector similarity"
+/// - Strategic: "Enhance user experience"
 pub(crate) fn create_test_hierarchy() -> GoalHierarchy {
     let mut hierarchy = GoalHierarchy::new();
 
     // Create test discovery metadata for autonomous goals
     let discovery = GoalDiscoveryMetadata::bootstrap();
 
-    // North Star - autonomous goal discovery
-    let ns_goal = GoalNode::autonomous_goal(
+    // Strategic goal 1 (top-level, no parent)
+    let s1_goal = GoalNode::autonomous_goal(
         "Build the best ML learning system".into(),
-        GoalLevel::NorthStar,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create North Star goal");
-    let ns_id = ns_goal.id;
-    hierarchy
-        .add_goal(ns_goal)
-        .expect("Failed to add North Star");
-
-    // Strategic goal 1 - child of North Star
-    let s1_goal = GoalNode::child_goal(
-        "Improve retrieval accuracy".into(),
         GoalLevel::Strategic,
-        ns_id,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create strategic goal 1");
+    .expect("Failed to create Strategic goal 1");
     let s1_id = s1_goal.id;
     hierarchy
         .add_goal(s1_goal)
-        .expect("Failed to add strategic goal 1");
+        .expect("Failed to add Strategic goal 1");
 
-    // Strategic goal 2 - child of North Star
-    let s2_goal = GoalNode::child_goal(
+    // Strategic goal 2 (top-level, no parent)
+    let s2_goal = GoalNode::autonomous_goal(
         "Enhance user experience".into(),
         GoalLevel::Strategic,
-        ns_id,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create strategic goal 2");
+    .expect("Failed to create Strategic goal 2");
     hierarchy
         .add_goal(s2_goal)
-        .expect("Failed to add strategic goal 2");
+        .expect("Failed to add Strategic goal 2");
 
     // Tactical goal - child of Strategic goal 1
     let t1_goal = GoalNode::child_goal(

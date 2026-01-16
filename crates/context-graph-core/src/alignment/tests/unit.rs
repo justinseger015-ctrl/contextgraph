@@ -22,7 +22,7 @@ fn test_level_weights_invariant() {
     let weights = LevelWeights::default();
 
     println!("\nBEFORE STATE:");
-    println!("  - north_star: {}", weights.north_star);
+    println!("  - north_star: {}", weights.strategic);
     println!("  - strategic: {}", weights.strategic);
     println!("  - tactical: {}", weights.tactical);
     println!("  - immediate: {}", weights.immediate);
@@ -85,7 +85,7 @@ fn test_goal_score_weighted_contribution() {
     // Use literal weights from LevelWeights::default() for clarity
     // NorthStar=0.4, Strategic=0.3, Tactical=0.2, Immediate=0.1
     let test_cases = [
-        (GoalLevel::NorthStar, 0.8, 0.4, 0.32),
+        (GoalLevel::Strategic, 0.8, 0.4, 0.32),
         (GoalLevel::Strategic, 0.7, 0.3, 0.21),
         (GoalLevel::Tactical, 0.6, 0.2, 0.12),
         (GoalLevel::Immediate, 0.5, 0.1, 0.05),
@@ -165,7 +165,7 @@ fn test_pattern_type_classification() {
         PatternType::DivergentHierarchy,
         PatternType::CriticalMisalignment,
         PatternType::InconsistentAlignment,
-        PatternType::NorthStarDrift,
+        PatternType::StrategicDrift, // TASK-P0-001: Renamed from NorthStarDrift
     ];
 
     println!("\nPOSITIVE PATTERNS:");
@@ -251,8 +251,11 @@ fn test_goal_alignment_score_composite_computation() {
     println!("TEST: test_goal_alignment_score_composite_computation");
     println!("============================================================");
 
+    // TASK-P0-001: Updated for 3-level hierarchy
+    // GoalScore weights are used for individual score contribution tracking,
+    // but composite uses LevelWeights::default() = {strategic: 0.5, tactical: 0.3, immediate: 0.2}
     let scores = vec![
-        GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.90, 0.4),
+        GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.90, 0.4),
         GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.80, 0.3),
         GoalScore::new(Uuid::new_v4(), GoalLevel::Tactical, 0.70, 0.2),
         GoalScore::new(Uuid::new_v4(), GoalLevel::Immediate, 0.60, 0.1),
@@ -270,18 +273,15 @@ fn test_goal_alignment_score_composite_computation() {
 
     let result = GoalAlignmentScore::compute(scores, weights);
 
-    // Expected: (0.4*0.90 + 0.3*0.80 + 0.2*0.70 + 0.1*0.60) / 1.0
-    // = 0.36 + 0.24 + 0.14 + 0.06 = 0.80
-    let expected = 0.80;
+    // TASK-P0-001: Composite uses LevelWeights::default() = {strategic: 0.5, tactical: 0.3, immediate: 0.2}
+    // strategic_alignment = avg(0.90, 0.80) = 0.85
+    // composite = (0.5 * 0.85 + 0.3 * 0.70 + 0.2 * 0.60) / 1.0 = 0.755
+    let expected = 0.755;
 
     println!("\nAFTER STATE:");
     println!(
         "  - composite_score: {:.3} (expected {:.3})",
         result.composite_score, expected
-    );
-    println!(
-        "  - north_star_alignment: {:.3}",
-        result.north_star_alignment
     );
     println!("  - strategic_alignment: {:.3}", result.strategic_alignment);
     println!("  - tactical_alignment: {:.3}", result.tactical_alignment);
@@ -292,10 +292,19 @@ fn test_goal_alignment_score_composite_computation() {
         (result.composite_score - expected).abs() < 0.01,
         "FAIL: Composite score mismatch"
     );
-    assert_eq!(result.north_star_alignment, 0.90);
-    assert_eq!(result.strategic_alignment, 0.80);
-    assert_eq!(result.tactical_alignment, 0.70);
-    assert_eq!(result.immediate_alignment, 0.60);
+    // strategic_alignment is the AVERAGE of all Strategic scores: (0.90 + 0.80) / 2 = 0.85
+    assert!(
+        (result.strategic_alignment - 0.85).abs() < 0.001,
+        "FAIL: Strategic alignment should be average of 0.90 and 0.80 = 0.85"
+    );
+    assert!(
+        (result.tactical_alignment - 0.70).abs() < 0.001,
+        "FAIL: Tactical alignment mismatch"
+    );
+    assert!(
+        (result.immediate_alignment - 0.60).abs() < 0.001,
+        "FAIL: Immediate alignment mismatch"
+    );
 
     println!("\n[VERIFIED] GoalAlignmentScore composite computation correct");
 }
@@ -318,13 +327,13 @@ fn test_config_validation() {
         "FAIL: Valid config should pass validation"
     );
 
-    // Invalid weights
+    // Invalid weights (sum != 1.0)
+    // TASK-P0-001: Now only 3 levels (strategic, tactical, immediate)
     let invalid_config = AlignmentConfig {
         level_weights: LevelWeights {
-            north_star: 0.5,
             strategic: 0.5,
             tactical: 0.5,
-            immediate: 0.5,
+            immediate: 0.5, // Sum = 1.5 != 1.0
         },
         ..AlignmentConfig::default()
     };
@@ -344,7 +353,7 @@ fn test_error_types_are_descriptive() {
     println!("============================================================");
 
     let errors = [
-        AlignmentError::NoNorthStar,
+        AlignmentError::NoTopLevelGoals,
         AlignmentError::GoalNotFound(Uuid::new_v4()),
         AlignmentError::EmptyFingerprint,
         AlignmentError::DimensionMismatch {
@@ -388,8 +397,8 @@ fn test_error_types_are_descriptive() {
         "FAIL: Timeout should be recoverable"
     );
     assert!(
-        !AlignmentError::NoNorthStar.is_recoverable(),
-        "FAIL: NoNorthStar should not be recoverable"
+        !AlignmentError::NoTopLevelGoals.is_recoverable(),
+        "FAIL: NoTopLevelGoals should not be recoverable"
     );
 
     println!("\n[VERIFIED] Error types are descriptive and categorized correctly");

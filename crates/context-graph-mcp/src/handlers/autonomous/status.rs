@@ -53,7 +53,7 @@ impl Handlers {
         // Check North Star status
         let north_star_status = {
             let hierarchy = self.goal_hierarchy.read();
-            match hierarchy.north_star() {
+            match hierarchy.top_level_goals().first() {
                 Some(ns) => json!({
                     "configured": true,
                     "goal_id": ns.id.to_string(),
@@ -112,7 +112,7 @@ impl Handlers {
         // Calculate overall health
         let north_star_configured = {
             let hierarchy = self.goal_hierarchy.read();
-            hierarchy.has_north_star()
+            hierarchy.has_top_level_goals()
         };
 
         let health_score = if !north_star_configured {

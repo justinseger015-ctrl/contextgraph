@@ -64,7 +64,7 @@ async fn test_edge_case_space_index_13() {
 #[tokio::test]
 async fn test_edge_case_alignment_autonomous_operation() {
     let ctx = TestContext::new_without_north_star();
-    assert!(!ctx.hierarchy.read().has_north_star(), "MUST NOT have North Star");
+    assert!(!ctx.hierarchy.read().has_top_level_goals(), "MUST NOT have North Star");
 
     // Store should succeed without North Star (AUTONOMOUS OPERATION)
     let store_request = make_request("memory/store", 1, json!({

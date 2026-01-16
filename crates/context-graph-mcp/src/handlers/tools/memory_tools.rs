@@ -49,7 +49,7 @@ impl Handlers {
         let goal_vector = {
             let hierarchy = self.goal_hierarchy.read();
             hierarchy
-                .north_star()
+                .top_level_goals().first()
                 .map(|ns| ns.teleological_array.e1_semantic.clone())
         };
 
@@ -97,7 +97,7 @@ impl Handlers {
 
             // If no North Star goal is defined, use default purpose vector
             // This enables AUTONOMOUS operation - no manual configuration required
-            if hierarchy.north_star().is_none() {
+            if hierarchy.top_level_goals().first().is_none() {
                 debug!(
                     "inject_context: No North Star configured. Using default purpose vector. \
                      Memory will be stored with neutral alignment (can be recomputed later)."
@@ -246,7 +246,7 @@ impl Handlers {
 
             // If no North Star goal is defined, use default purpose vector
             // This enables AUTONOMOUS operation per ARCH-03 - no manual configuration required
-            if hierarchy.north_star().is_none() {
+            if hierarchy.top_level_goals().first().is_none() {
                 debug!(
                     "store_memory: No North Star configured. Using default purpose vector. \
                      Memory will be stored with neutral alignment (can be recomputed later \
@@ -409,7 +409,7 @@ impl Handlers {
                             "similarity": r.similarity,
                             "purposeAlignment": r.purpose_alignment,
                             "dominantEmbedder": r.dominant_embedder(),
-                            "thetaToNorthStar": r.fingerprint.theta_to_north_star
+                            "thetaToNorthStar": r.fingerprint.alignment_score
                         });
                         // Only include content field when includeContent=true
                         if include_content {

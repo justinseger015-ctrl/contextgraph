@@ -1,7 +1,9 @@
 //! Goal hierarchy evolution types
 //!
 //! This module defines types for goal evolution including sub-goal discovery,
-//! obsolescence detection, and weight adjustment for the autonomous North Star system.
+//! obsolescence detection, and weight adjustment for the autonomous goal system.
+//!
+//! TASK-P0-001: Removed NorthStar, Strategic is now top-level per ARCH-03.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -10,10 +12,11 @@ use super::bootstrap::GoalId;
 use super::curation::MemoryId;
 
 /// Goal levels in the hierarchy
+///
+/// TASK-P0-001: Removed NorthStar variant. Strategic is now the top level.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GoalLevel {
-    NorthStar,   // Root goal
-    Strategic,   // High-level goals
+    Strategic,   // Top-level goals (was NorthStar)
     Tactical,    // Mid-level goals
     Operational, // Low-level goals
 }
@@ -198,19 +201,21 @@ impl WeightAdjustment {
 mod tests {
     use super::*;
 
-    // GoalLevel tests
+    // GoalLevel tests - TASK-P0-001: Updated for 3-level hierarchy
     #[test]
     fn test_goal_level_equality() {
-        assert_eq!(GoalLevel::NorthStar, GoalLevel::NorthStar);
-        assert_ne!(GoalLevel::NorthStar, GoalLevel::Strategic);
+        assert_eq!(GoalLevel::Strategic, GoalLevel::Strategic);
+        assert_eq!(GoalLevel::Tactical, GoalLevel::Tactical);
+        assert_eq!(GoalLevel::Operational, GoalLevel::Operational);
         assert_ne!(GoalLevel::Strategic, GoalLevel::Tactical);
         assert_ne!(GoalLevel::Tactical, GoalLevel::Operational);
+        assert_ne!(GoalLevel::Strategic, GoalLevel::Operational);
     }
 
     #[test]
     fn test_goal_level_serialization() {
         let levels = [
-            GoalLevel::NorthStar,
+            GoalLevel::Strategic,
             GoalLevel::Strategic,
             GoalLevel::Tactical,
             GoalLevel::Operational,

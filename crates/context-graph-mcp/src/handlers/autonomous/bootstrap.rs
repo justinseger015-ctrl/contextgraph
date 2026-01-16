@@ -58,7 +58,7 @@ impl Handlers {
         // Check if North Star already exists - if so, just report it
         {
             let hierarchy = self.goal_hierarchy.read();
-            if let Some(ns) = hierarchy.north_star() {
+            if let Some(ns) = hierarchy.top_level_goals().first() {
                 info!(
                     goal_id = %ns.id,
                     "auto_bootstrap_north_star: North Star already exists"
@@ -252,7 +252,7 @@ impl Handlers {
             // Create the GoalNode using the proper constructor
             let goal = GoalNode::autonomous_goal(
                 north_star_description.clone(),
-                GoalLevel::NorthStar,
+                GoalLevel::Strategic,
                 north_star_candidate.centroid.clone(),
                 discovery_metadata,
             )

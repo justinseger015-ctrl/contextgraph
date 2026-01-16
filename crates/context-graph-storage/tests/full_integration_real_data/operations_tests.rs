@@ -25,7 +25,7 @@ async fn test_update_and_delete_operations() {
     // Store initial fingerprint
     let fp = create_real_fingerprint();
     let id = fp.id;
-    let original_theta = fp.theta_to_north_star;
+    let original_theta = fp.alignment_score;
 
     store.store(fp).await.expect("Failed to store");
     println!(

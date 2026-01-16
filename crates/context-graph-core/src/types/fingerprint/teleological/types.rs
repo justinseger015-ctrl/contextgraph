@@ -37,8 +37,9 @@ pub struct TeleologicalFingerprint {
     /// Time-series of purpose evolution snapshots
     pub purpose_evolution: Vec<PurposeSnapshot>,
 
-    /// Current alignment angle to North Star goal (aggregate)
-    pub theta_to_north_star: f32,
+    /// TASK-P0-001: Renamed from alignment_score
+    /// Current alignment score to top-level Strategic goals (aggregate from PurposeVector)
+    pub alignment_score: f32,
 
     /// SHA-256 hash of the source content (32 bytes)
     pub content_hash: [u8; 32],

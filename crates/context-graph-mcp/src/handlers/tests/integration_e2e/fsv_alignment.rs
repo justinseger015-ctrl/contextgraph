@@ -7,6 +7,7 @@ use context_graph_core::purpose::GoalLevel;
 use context_graph_core::traits::TeleologicalMemoryStore;
 
 /// FSV: Purpose alignment with goal hierarchy verification.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 #[tokio::test]
 async fn test_fsv_purpose_alignment_with_hierarchy() {
     println!("\n======================================================================");
@@ -21,12 +22,15 @@ async fn test_fsv_purpose_alignment_with_hierarchy() {
     println!("VERIFY GOAL HIERARCHY:");
     {
         let h = ctx.hierarchy.read();
-        println!("   - Total goals: {} (expected: 5)", h.len());
-        assert_eq!(h.len(), 5, "Hierarchy MUST have 5 goals");
+        // TASK-P0-001: Now have 4 goals (2 Strategic, 1 Tactical, 1 Immediate)
+        println!("   - Total goals: {} (expected: 4)", h.len());
+        assert_eq!(h.len(), 4, "Hierarchy MUST have 4 goals");
 
-        let ns = h.north_star().expect("MUST have North Star");
-        println!("   - North Star: {} - {}", ns.id, ns.description);
-        assert!(!ns.id.is_nil(), "North Star must have valid UUID");
+        // TASK-P0-001: Bind to avoid temporary lifetime issue
+        let top_level = h.top_level_goals();
+        let ns = top_level.first().expect("MUST have Strategic goal");
+        println!("   - Strategic goal: {} - {}", ns.id, ns.description);
+        assert!(!ns.id.is_nil(), "Strategic goal must have valid UUID");
 
         println!(
             "   - Strategic goals: {}",
@@ -100,8 +104,8 @@ async fn test_fsv_purpose_alignment_with_hierarchy() {
     println!("VERIFY FINGERPRINT IN SOURCE OF TRUTH:");
     println!("   - Fingerprint exists: {}", stored_fp.id);
     println!(
-        "   - Stored theta_to_north_star: {:.4}",
-        stored_fp.theta_to_north_star
+        "   - Stored alignment_score: {:.4}",
+        stored_fp.alignment_score
     );
     println!(
         "   - Purpose vector coherence: {:.4}",
@@ -154,25 +158,25 @@ async fn test_fsv_purpose_alignment_with_hierarchy() {
     let all_goals_arr = all_result["goals"].as_array().unwrap();
     println!("   - get_all: {} goals", all_goals_arr.len());
 
-    // Extract actual goal IDs from get_all response
-    let north_star_id = all_goals_arr
+    // TASK-P0-001: Extract Strategic goal ID (not NorthStar which no longer exists)
+    let strategic_id = all_goals_arr
         .iter()
-        .find(|g| g["level"].as_str() == Some("NorthStar"))
+        .find(|g| g["level"].as_str() == Some("Strategic"))
         .and_then(|g| g["id"].as_str())
-        .expect("Must have North Star goal with id");
+        .expect("Must have Strategic goal with id");
     let immediate_id = all_goals_arr
         .iter()
         .find(|g| g["level"].as_str() == Some("Immediate"))
         .and_then(|g| g["id"].as_str())
         .expect("Must have Immediate goal with id");
 
-    // Get children of North Star
+    // Get children of Strategic goal (top-level)
     let get_children = make_request(
         "goal/hierarchy_query",
         5,
         json!({
             "operation": "get_children",
-            "goal_id": north_star_id
+            "goal_id": strategic_id
         }),
     );
     let children_response = ctx.handlers.dispatch(get_children).await;
@@ -184,7 +188,7 @@ async fn test_fsv_purpose_alignment_with_hierarchy() {
         .as_array()
         .unwrap()
         .len();
-    println!("   - get_children(NorthStar): {} children", children);
+    println!("   - get_children(Strategic): {} children", children);
 
     // Get ancestors of immediate goal
     let get_ancestors = make_request(
@@ -204,7 +208,7 @@ async fn test_fsv_purpose_alignment_with_hierarchy() {
         .as_array()
         .unwrap()
         .len();
-    println!("   - get_ancestors(i1_vector): {} ancestors", ancestors);
+    println!("   - get_ancestors(Immediate): {} ancestors", ancestors);
     println!("   VERIFIED: Goal hierarchy navigation works\n");
 
     // =========================================================================
@@ -216,7 +220,8 @@ async fn test_fsv_purpose_alignment_with_hierarchy() {
     println!("Source of Truth: GoalHierarchy + InMemoryTeleologicalStore");
     println!();
     println!("Operations Verified:");
-    println!("  1. Goal hierarchy: 5 goals (1 NS + 2 S + 1 T + 1 I)");
+    // TASK-P0-001: Updated counts for 3-level hierarchy
+    println!("  1. Goal hierarchy: 4 goals (2 Strategic + 1 Tactical + 1 Immediate)");
     println!("  2. North Star alignment: Returns METHOD_NOT_FOUND (deprecated per TASK-CORE-001)");
     println!("  3. Fingerprint stored and verified in Source of Truth");
     println!(

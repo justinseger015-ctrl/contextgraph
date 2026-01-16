@@ -61,7 +61,7 @@ use crate::tools::tool_names;
 /// Before the fix: store_memory required North Star, but bootstrap needed stored memories.
 /// After the fix: store_memory uses PurposeVector::default() when no North Star exists.
 ///
-/// Source of Truth: tools.rs call_store_memory() - line 491: hierarchy.north_star().is_none()
+/// Source of Truth: tools.rs call_store_memory() - line 491: hierarchy.top_level_goals().first().is_none()
 /// Expected: Memory stored successfully with fingerprint ID returned.
 #[tokio::test]
 async fn test_store_memory_succeeds_without_north_star() {

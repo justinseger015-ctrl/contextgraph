@@ -77,8 +77,8 @@ async fn verify_store_creates_fingerprint_in_source_of_truth() {
     println!("\n[EVIDENCE] Stored fingerprint fields:");
     println!("  - ID: {}", stored_fp.id);
     println!(
-        "  - theta_to_north_star: {:.4}",
-        stored_fp.theta_to_north_star
+        "  - alignment_score: {:.4}",
+        stored_fp.alignment_score
     );
     println!("  - access_count: {}", stored_fp.access_count);
     println!("  - created_at: {}", stored_fp.created_at);
@@ -166,8 +166,8 @@ async fn verify_retrieve_returns_source_of_truth_data() {
     println!("  - ID: {}", truth_fp.id);
     println!("  - content_hash: {}", hex::encode(truth_fp.content_hash));
     println!(
-        "  - theta_to_north_star: {:.4}",
-        truth_fp.theta_to_north_star
+        "  - alignment_score: {:.4}",
+        truth_fp.alignment_score
     );
 
     // === NOW USE MCP HANDLER TO RETRIEVE ===

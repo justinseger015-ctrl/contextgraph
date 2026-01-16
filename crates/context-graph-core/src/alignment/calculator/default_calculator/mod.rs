@@ -63,18 +63,17 @@ impl DefaultAlignmentCalculator {
 
     /// Get propagation weight for a goal level.
     ///
-    /// From TASK-L003:
-    /// - NorthStar: 1.0 (full weight)
-    /// - Strategic: 0.7
-    /// - Tactical: 0.4
-    /// - Immediate: 0.2
+    /// From constitution.yaml (after TASK-P0-001):
+    /// - Strategic: 1.0 (top-level, emergent)
+    /// - Tactical: 0.6
+    /// - Immediate: 0.3
     #[inline]
     pub(crate) fn get_propagation_weight(level: GoalLevel) -> f32 {
+        // TASK-P0-001: Removed NorthStar, Strategic is now top-level
         match level {
-            GoalLevel::NorthStar => 1.0,
-            GoalLevel::Strategic => 0.7,
-            GoalLevel::Tactical => 0.4,
-            GoalLevel::Immediate => 0.2,
+            GoalLevel::Strategic => 1.0,
+            GoalLevel::Tactical => 0.6,
+            GoalLevel::Immediate => 0.3,
         }
     }
 
@@ -101,13 +100,14 @@ impl GoalAlignmentCalculator for DefaultAlignmentCalculator {
             config.validate().map_err(AlignmentError::InvalidConfig)?;
         }
 
-        // Check North Star exists
+        // TASK-P0-001: Check hierarchy has goals
+        // No longer require North Star specifically - goals emerge autonomously
         if config.hierarchy.is_empty() {
-            return Err(AlignmentError::NoNorthStar);
+            return Err(AlignmentError::NoTopLevelGoals);
         }
 
-        if !config.hierarchy.has_north_star() {
-            return Err(AlignmentError::NoNorthStar);
+        if !config.hierarchy.has_top_level_goals() {
+            return Err(AlignmentError::NoTopLevelGoals);
         }
 
         // Compute alignment for each goal

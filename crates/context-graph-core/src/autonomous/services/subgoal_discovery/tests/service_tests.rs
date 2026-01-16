@@ -304,14 +304,16 @@ fn test_find_parent_goal_empty_goals() {
     println!("[PASS] test_find_parent_goal_empty_goals");
 }
 
+// TASK-P0-001: Renamed from test_find_parent_goal_strategic - now tests Tactical
+// because Strategic goals are top-level and have no parent
 #[test]
-fn test_find_parent_goal_strategic() {
+fn test_find_parent_goal_tactical() {
     let discovery = SubGoalDiscovery::new();
     let goals = vec![GoalId::new(), GoalId::new()];
 
     let candidate = SubGoalCandidate {
         suggested_description: "Test".into(),
-        level: GoalLevel::Strategic,
+        level: GoalLevel::Tactical,
         parent_id: GoalId::new(),
         cluster_size: 50,
         centroid_alignment: 0.9,
@@ -321,10 +323,10 @@ fn test_find_parent_goal_strategic() {
 
     let parent = discovery.find_parent_goal(&candidate, &goals);
 
-    assert!(parent.is_some());
+    assert!(parent.is_some(), "Tactical goals should have a parent");
     assert_eq!(parent.unwrap(), goals[0]);
 
-    println!("[PASS] test_find_parent_goal_strategic");
+    println!("[PASS] test_find_parent_goal_tactical");
 }
 
 #[test]
@@ -351,14 +353,15 @@ fn test_find_parent_goal_operational() {
     println!("[PASS] test_find_parent_goal_operational");
 }
 
+// TASK-P0-001: Renamed from test_find_parent_goal_northstar - Strategic is now top-level
 #[test]
-fn test_find_parent_goal_northstar() {
+fn test_find_parent_goal_strategic_top_level() {
     let discovery = SubGoalDiscovery::new();
     let goals = vec![GoalId::new()];
 
     let candidate = SubGoalCandidate {
         suggested_description: "Test".into(),
-        level: GoalLevel::NorthStar,
+        level: GoalLevel::Strategic,
         parent_id: GoalId::new(),
         cluster_size: 100,
         centroid_alignment: 1.0,
@@ -368,9 +371,9 @@ fn test_find_parent_goal_northstar() {
 
     let parent = discovery.find_parent_goal(&candidate, &goals);
 
-    assert!(parent.is_none(), "NorthStar should have no parent");
+    assert!(parent.is_none(), "Strategic goals are top-level and should have no parent");
 
-    println!("[PASS] test_find_parent_goal_northstar");
+    println!("[PASS] test_find_parent_goal_strategic_top_level");
 }
 
 #[test]

@@ -188,7 +188,8 @@ impl Handlers {
                     }
                 };
 
-                let path = hierarchy.path_to_north_star(&goal_id);
+                // TASK-P0-001: Renamed from path_to_north_star to path_to_root
+                let path = hierarchy.path_to_root(&goal_id);
                 if path.is_empty() {
                     error!(goal_id = %goal_id, "goal/hierarchy_query: Goal not found for ancestors");
                     return JsonRpcResponse::error(

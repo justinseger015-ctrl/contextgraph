@@ -35,12 +35,12 @@ fn test_serialize_teleological_roundtrip() {
     );
     println!(
         "  - Theta to north star: {:.4}",
-        deserialized.theta_to_north_star
+        deserialized.alignment_score
     );
 
     assert_eq!(original.id, deserialized.id);
     assert_eq!(original.content_hash, deserialized.content_hash);
-    assert!((original.theta_to_north_star - deserialized.theta_to_north_star).abs() < 1e-6);
+    assert!((original.alignment_score - deserialized.alignment_score).abs() < 1e-6);
     println!("RESULT: PASS - Round-trip preserved all fields");
 }
 

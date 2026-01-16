@@ -212,9 +212,9 @@ impl Handlers {
                     ))
                 }
             }
-        } else if hierarchy.has_north_star() {
+        } else if hierarchy.has_top_level_goals() {
             Ok(Some(
-                hierarchy.north_star().unwrap().teleological_array.clone(),
+                hierarchy.top_level_goals().first().unwrap().teleological_array.clone(),
             ))
         } else {
             Ok(None) // No North Star configured

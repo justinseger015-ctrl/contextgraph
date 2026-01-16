@@ -160,6 +160,9 @@ impl SubGoalDiscovery {
     ///
     /// Uses the candidate's centroid alignment and level to find
     /// the most appropriate parent in the existing hierarchy.
+    ///
+    /// TASK-P0-001: Strategic goals are now top-level (no parent).
+    /// Only Tactical and Operational goals can have parents.
     pub fn find_parent_goal(
         &self,
         candidate: &SubGoalCandidate,
@@ -169,11 +172,13 @@ impl SubGoalDiscovery {
             return None;
         }
 
-        // For now, return the first goal as a simple heuristic
-        // In production, this would compute similarity between
-        // the candidate's centroid and each goal's embedding
+        // TASK-P0-001: Strategic goals are top-level and have no parent
         match candidate.level {
-            GoalLevel::Strategic | GoalLevel::Tactical => Some(existing_goals[0].clone()),
+            GoalLevel::Strategic => None,
+            GoalLevel::Tactical => {
+                // Tactical goals get the first Strategic goal as parent
+                Some(existing_goals[0].clone())
+            }
             GoalLevel::Operational => {
                 // Prefer non-first goal if available (assuming hierarchy)
                 if existing_goals.len() > 1 {
@@ -182,7 +187,6 @@ impl SubGoalDiscovery {
                     Some(existing_goals[0].clone())
                 }
             }
-            GoalLevel::NorthStar => None, // NorthStar has no parent
         }
     }
 

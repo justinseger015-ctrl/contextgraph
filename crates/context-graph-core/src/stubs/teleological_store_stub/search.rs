@@ -60,7 +60,7 @@ impl InMemoryTeleologicalStore {
             }
 
             if let Some(min_align) = options.min_alignment {
-                if fp.theta_to_north_star < min_align {
+                if fp.alignment_score < min_align {
                     continue;
                 }
             }
@@ -122,7 +122,7 @@ impl InMemoryTeleologicalStore {
             }
 
             if let Some(min_align) = options.min_alignment {
-                if fp.theta_to_north_star < min_align {
+                if fp.alignment_score < min_align {
                     continue;
                 }
             }

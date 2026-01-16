@@ -101,7 +101,7 @@ async fn test_update() {
 
     // Modify and update
     fp.access_count = 999;
-    fp.theta_to_north_star = 0.95;
+    fp.alignment_score = 0.95;
 
     let updated = store.update(fp).await.expect("update should succeed");
     assert!(updated, "update should return true for existing ID");
@@ -109,7 +109,7 @@ async fn test_update() {
     // Verify changes persisted
     let retrieved = store.retrieve(id).await.unwrap().unwrap();
     assert_eq!(retrieved.access_count, 999);
-    assert!((retrieved.theta_to_north_star - 0.95).abs() < 0.01);
+    assert!((retrieved.alignment_score - 0.95).abs() < 0.01);
 
     println!("[VERIFIED] test_update: Update modifies stored data correctly");
 }
@@ -232,28 +232,28 @@ async fn test_search_purpose() {
     fp1.purpose_vector = PurposeVector::new([
         0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3,
     ]);
-    fp1.theta_to_north_star = 0.95; // High alignment
+    fp1.alignment_score = 0.95; // High alignment
 
     // fp2: Moderately similar
     let mut fp2 = create_real_fingerprint();
     fp2.purpose_vector = PurposeVector::new([
         0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2,
     ]);
-    fp2.theta_to_north_star = 0.7;
+    fp2.alignment_score = 0.7;
 
     // fp3: Less similar (reversed pattern)
     let mut fp3 = create_real_fingerprint();
     fp3.purpose_vector = PurposeVector::new([
         0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
     ]);
-    fp3.theta_to_north_star = 0.4;
+    fp3.alignment_score = 0.4;
 
     // fp4: Orthogonal pattern
     let mut fp4 = create_real_fingerprint();
     fp4.purpose_vector = PurposeVector::new([
         0.5, 0.6, 0.7, 0.8, 0.7, 0.6, 0.5, 0.6, 0.7, 0.8, 0.7, 0.6, 0.5,
     ]);
-    fp4.theta_to_north_star = 0.55;
+    fp4.alignment_score = 0.55;
 
     store.store(fp1).await.unwrap();
     store.store(fp2).await.unwrap();
@@ -274,9 +274,9 @@ async fn test_search_purpose() {
         results[0].similarity
     );
     assert!(
-        results[0].fingerprint.theta_to_north_star > 0.9,
+        results[0].fingerprint.alignment_score > 0.9,
         "top result should be fp1 with theta > 0.9 (got {})",
-        results[0].fingerprint.theta_to_north_star
+        results[0].fingerprint.alignment_score
     );
 
     // Verify descending similarity order
@@ -544,7 +544,7 @@ async fn test_search_with_alignment_filter() {
 
     for result in &results {
         assert!(
-            result.fingerprint.theta_to_north_star >= 0.75,
+            result.fingerprint.alignment_score >= 0.75,
             "all results should meet alignment threshold"
         );
     }

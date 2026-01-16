@@ -149,7 +149,7 @@ impl AlignmentConfig {
         }
 
         // Check North Star exists
-        if !self.hierarchy.has_north_star() && !self.hierarchy.is_empty() {
+        if !self.hierarchy.has_top_level_goals() && !self.hierarchy.is_empty() {
             return Err("Hierarchy has goals but no North Star".to_string());
         }
 
@@ -191,28 +191,29 @@ mod tests {
         GoalDiscoveryMetadata::bootstrap()
     }
 
+    // TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
     fn create_test_hierarchy() -> GoalHierarchy {
         let mut hierarchy = GoalHierarchy::new();
 
-        let ns = GoalNode::autonomous_goal(
-            "North Star".into(),
-            GoalLevel::NorthStar,
-            SemanticFingerprint::zeroed(),
-            test_discovery(),
-        )
-        .expect("Failed to create North Star");
-        let ns_id = ns.id;
-        hierarchy.add_goal(ns).unwrap();
-
-        let s1 = GoalNode::child_goal(
+        // Strategic goal 1 (top-level, no parent)
+        let s1 = GoalNode::autonomous_goal(
             "Strategic 1".into(),
             GoalLevel::Strategic,
-            ns_id,
             SemanticFingerprint::zeroed(),
             test_discovery(),
         )
-        .expect("Failed to create Strategic goal");
+        .expect("Failed to create Strategic goal 1");
         hierarchy.add_goal(s1).unwrap();
+
+        // Strategic goal 2 (top-level, no parent)
+        let s2 = GoalNode::autonomous_goal(
+            "Strategic 2".into(),
+            GoalLevel::Strategic,
+            SemanticFingerprint::zeroed(),
+            test_discovery(),
+        )
+        .expect("Failed to create Strategic goal 2");
+        hierarchy.add_goal(s2).unwrap();
 
         hierarchy
     }
@@ -240,7 +241,7 @@ mod tests {
         let hierarchy = create_test_hierarchy();
         let config = AlignmentConfig::with_hierarchy(hierarchy);
 
-        assert!(config.hierarchy.has_north_star());
+        assert!(config.hierarchy.has_top_level_goals());
         assert_eq!(config.hierarchy.len(), 2);
 
         println!("[VERIFIED] AlignmentConfig::with_hierarchy sets hierarchy correctly");
@@ -298,11 +299,11 @@ mod tests {
     fn test_config_validate_invalid_weights() {
         let config = AlignmentConfig::default();
         let mut invalid_config = config.clone();
+        // TASK-P0-001: Now only 3 levels (strategic, tactical, immediate)
         invalid_config.level_weights = LevelWeights {
-            north_star: 0.5,
             strategic: 0.5,
             tactical: 0.5,
-            immediate: 0.5,
+            immediate: 0.5, // Sum = 1.5 != 1.0
         };
 
         let result = invalid_config.validate();

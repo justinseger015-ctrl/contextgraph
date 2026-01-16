@@ -26,7 +26,7 @@
 //! let centroid_fingerprint = SemanticFingerprint::zeroed();
 //! let goal = GoalNode::autonomous_goal(
 //!     "Emergent ML mastery goal".to_string(),
-//!     GoalLevel::NorthStar,
+//!     GoalLevel::Strategic,
 //!     centroid_fingerprint,
 //!     discovery,
 //! ).unwrap();

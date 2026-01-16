@@ -75,7 +75,7 @@ impl Handlers {
                         orphan_count += 1;
                     }
                     // Connectivity approximation: aligned with North Star
-                    if fp.theta_to_north_star >= alignment_threshold {
+                    if fp.alignment_score >= alignment_threshold {
                         aligned_count += 1;
                     }
                 }

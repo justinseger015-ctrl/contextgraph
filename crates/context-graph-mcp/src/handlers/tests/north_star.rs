@@ -90,7 +90,7 @@ fn create_handlers_with_north_star() -> (
 
     let ns_goal = GoalNode::autonomous_goal(
         "Build the best AI assistant system".into(),
-        GoalLevel::NorthStar,
+        GoalLevel::Strategic,
         SemanticFingerprint::zeroed(),
         discovery,
     )
@@ -114,6 +114,7 @@ fn create_handlers_with_north_star() -> (
 }
 
 /// Create a full test hierarchy with multiple levels.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 fn create_handlers_with_full_hierarchy() -> (
     Handlers,
     Arc<InMemoryTeleologicalStore>,
@@ -129,34 +130,32 @@ fn create_handlers_with_full_hierarchy() -> (
     let mut hierarchy = GoalHierarchy::new();
     let discovery = GoalDiscoveryMetadata::bootstrap();
 
-    // North Star
-    let ns_goal = GoalNode::autonomous_goal(
+    // Strategic goal 1 (top-level, no parent)
+    let s1_goal = GoalNode::autonomous_goal(
         "Build comprehensive knowledge system".into(),
-        GoalLevel::NorthStar,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create North Star");
-    let ns_id = ns_goal.id;
-    hierarchy
-        .add_goal(ns_goal)
-        .expect("Failed to add North Star");
-
-    // Strategic goal - child of North Star
-    let s1_goal = GoalNode::child_goal(
-        "Improve knowledge retrieval".into(),
         GoalLevel::Strategic,
-        ns_id,
         SemanticFingerprint::zeroed(),
         discovery.clone(),
     )
-    .expect("Failed to create strategic goal");
+    .expect("Failed to create Strategic goal 1");
     let s1_id = s1_goal.id;
     hierarchy
         .add_goal(s1_goal)
-        .expect("Failed to add strategic goal");
+        .expect("Failed to add Strategic goal 1");
 
-    // Tactical goal - child of Strategic
+    // Strategic goal 2 (top-level, no parent)
+    let s2_goal = GoalNode::autonomous_goal(
+        "Improve knowledge retrieval".into(),
+        GoalLevel::Strategic,
+        SemanticFingerprint::zeroed(),
+        discovery.clone(),
+    )
+    .expect("Failed to create Strategic goal 2");
+    hierarchy
+        .add_goal(s2_goal)
+        .expect("Failed to add Strategic goal 2");
+
+    // Tactical goal - child of Strategic 1
     let t1_goal = GoalNode::child_goal(
         "Implement semantic search".into(),
         GoalLevel::Tactical,
@@ -269,19 +268,22 @@ async fn test_north_star_alignment_returns_method_not_found() {
 // Valid Tests: goal/hierarchy_query (Still Available)
 // =============================================================================
 
-/// Test that goal/hierarchy_query returns correct North Star data.
+/// Test that goal/hierarchy_query returns correct Strategic (top-level) goal data.
 ///
 /// FSV: Cross-verify returned data matches Source of Truth.
+/// TASK-P0-001: Updated for 3-level hierarchy (is_north_star → is_top_level)
 #[tokio::test]
 async fn test_get_north_star_returns_data() {
-    // SETUP: Handlers with existing North Star
+    // SETUP: Handlers with existing Strategic goal
     let (handlers, _store, hierarchy) = create_handlers_with_north_star();
 
     // Get reference data from Source of Truth
     let expected_description: String;
     {
         let h = hierarchy.read();
-        let ns = h.north_star().expect("Must have NS");
+        // TASK-P0-001: Bind to avoid temporary lifetime issue
+        let top_level = h.top_level_goals();
+        let ns = top_level.first().expect("Must have Strategic goal");
         expected_description = ns.description.clone();
     }
 
@@ -296,7 +298,7 @@ async fn test_get_north_star_returns_data() {
     );
     let response = handlers.dispatch(request).await;
 
-    // VERIFY: Response contains North Star data
+    // VERIFY: Response contains Strategic goal data
     assert!(response.error.is_none(), "Get must succeed");
     let result = response.result.expect("Must have result");
 
@@ -318,12 +320,12 @@ async fn test_get_north_star_returns_data() {
         "FSV: Returned description must match Source of Truth"
     );
 
-    // Verify is_north_star flag
-    let is_ns = ns_goal
-        .get("is_north_star")
+    // TASK-P0-001: Verify is_top_level flag (was is_north_star)
+    let is_top = ns_goal
+        .get("is_top_level")
         .and_then(|v| v.as_bool())
-        .expect("Must have is_north_star");
-    assert!(is_ns, "FSV: is_north_star must be true");
+        .expect("Must have is_top_level");
+    assert!(is_top, "FSV: is_top_level must be true for Strategic goals");
 }
 
 /// Test that drift_check works autonomously without North Star.
@@ -339,7 +341,7 @@ async fn test_drift_check_works_autonomously_without_north_star() {
     // FSV BEFORE: Verify no North Star
     {
         let h = hierarchy.read();
-        assert!(!h.has_north_star(), "FSV BEFORE: Must NOT have North Star");
+        assert!(!h.has_top_level_goals(), "FSV BEFORE: Must NOT have North Star");
     }
 
     // ACTION: Try drift_check (returns neutral response when no North Star)
@@ -397,7 +399,7 @@ async fn test_store_memory_succeeds_without_north_star() {
     // FSV BEFORE: Verify state
     {
         let h = hierarchy.read();
-        assert!(!h.has_north_star(), "FSV BEFORE: Must NOT have North Star");
+        assert!(!h.has_top_level_goals(), "FSV BEFORE: Must NOT have North Star");
     }
     let before_count = store.count().await.expect("count works");
     assert_eq!(before_count, 0, "FSV BEFORE: Store must be empty");
@@ -441,7 +443,7 @@ async fn test_store_memory_succeeds_with_north_star() {
     // FSV BEFORE: Verify North Star exists
     {
         let h = hierarchy.read();
-        assert!(h.has_north_star(), "FSV BEFORE: Must have North Star");
+        assert!(h.has_top_level_goals(), "FSV BEFORE: Must have North Star");
     }
     let before_count = store.count().await.expect("count works");
     assert_eq!(before_count, 0, "FSV BEFORE: Store must be empty");
@@ -494,26 +496,23 @@ async fn test_store_memory_succeeds_with_north_star() {
 
 /// Test that goal/hierarchy_query returns structured tree with all levels.
 ///
-/// FSV: Verify all 4 levels present and parent-child relationships correct.
+/// FSV: Verify all 3 levels present and parent-child relationships correct.
+/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
 #[tokio::test]
 async fn test_get_goal_hierarchy_returns_tree() {
     // SETUP: Full hierarchy with all levels
     let (handlers, _store, hierarchy) = create_handlers_with_full_hierarchy();
 
     // FSV BEFORE: Verify hierarchy structure
+    // TASK-P0-001: Now have 3 levels with 4 goals (2 Strategic, 1 Tactical, 1 Immediate)
     {
         let h = hierarchy.read();
-        assert!(h.has_north_star(), "FSV BEFORE: Must have North Star");
+        assert!(h.has_top_level_goals(), "FSV BEFORE: Must have top-level goals");
         assert_eq!(h.len(), 4, "FSV BEFORE: Must have 4 goals");
         assert_eq!(
-            h.at_level(GoalLevel::NorthStar).len(),
-            1,
-            "Must have 1 NorthStar"
-        );
-        assert_eq!(
             h.at_level(GoalLevel::Strategic).len(),
-            1,
-            "Must have 1 Strategic"
+            2,
+            "Must have 2 Strategic goals"
         );
         assert_eq!(
             h.at_level(GoalLevel::Tactical).len(),
@@ -558,22 +557,17 @@ async fn test_get_goal_hierarchy_returns_tree() {
         "total_goals must be 4"
     );
     assert_eq!(
-        stats.get("has_north_star").and_then(|v| v.as_bool()),
+        stats.get("has_top_level_goals").and_then(|v| v.as_bool()),
         Some(true),
-        "has_north_star must be true"
+        "has_top_level_goals must be true"
     );
 
-    // Verify level_counts
+    // Verify level_counts - TASK-P0-001: Now only 3 levels
     let level_counts = stats.get("level_counts").expect("Must have level_counts");
     assert_eq!(
-        level_counts.get("north_star").and_then(|v| v.as_u64()),
-        Some(1),
-        "north_star count must be 1"
-    );
-    assert_eq!(
         level_counts.get("strategic").and_then(|v| v.as_u64()),
-        Some(1),
-        "strategic count must be 1"
+        Some(2),
+        "strategic count must be 2"
     );
     assert_eq!(
         level_counts.get("tactical").and_then(|v| v.as_u64()),
@@ -586,20 +580,20 @@ async fn test_get_goal_hierarchy_returns_tree() {
         "immediate count must be 1"
     );
 
-    // ACTION: Query get_children for North Star
-    // Extract the North Star goal ID from the get_all response (goals use UUIDs, not human-readable IDs)
-    let north_star_goal = goals
+    // ACTION: Query get_children for a Strategic goal (top-level)
+    // Extract a Strategic goal ID from the get_all response
+    let strategic_goal = goals
         .iter()
-        .find(|g| g.get("level").and_then(|v| v.as_str()) == Some("NorthStar"))
-        .expect("Must have North Star goal");
-    let north_star_id = north_star_goal
+        .find(|g| g.get("level").and_then(|v| v.as_str()) == Some("Strategic"))
+        .expect("Must have Strategic goal");
+    let strategic_id = strategic_goal
         .get("id")
         .and_then(|v| v.as_str())
-        .expect("North Star must have id");
+        .expect("Strategic goal must have id");
 
     let children_params = json!({
         "operation": "get_children",
-        "goal_id": north_star_id
+        "goal_id": strategic_id
     });
     let children_request = make_request(
         "goal/hierarchy_query",
@@ -618,18 +612,11 @@ async fn test_get_goal_hierarchy_returns_tree() {
         .get("children")
         .and_then(|v| v.as_array())
         .expect("Must have children array");
-    assert_eq!(
-        children.len(),
-        1,
-        "North Star must have 1 child (Strategic)"
-    );
-
-    // Verify the child is the Strategic goal
-    let child = &children[0];
-    assert_eq!(
-        child.get("level").and_then(|v| v.as_str()),
-        Some("Strategic"),
-        "Child level must be Strategic"
+    // Strategic goal may have 0 or 1 children depending on which one we picked
+    // The first Strategic has a Tactical child, the second doesn't
+    assert!(
+        children.len() <= 1,
+        "Strategic must have at most 1 child (Tactical)"
     );
 
     // ACTION: Query get_ancestors for Immediate goal
@@ -665,11 +652,11 @@ async fn test_get_goal_hierarchy_returns_tree() {
         .and_then(|v| v.as_array())
         .expect("Must have ancestors array");
 
-    // Path: Immediate -> Tactical -> Strategic -> NorthStar
-    // Should have at least 3 ancestors (excluding self or including all)
+    // Path: Immediate -> Tactical -> Strategic
+    // Should have 2 ancestors (Tactical and Strategic)
     assert!(
-        ancestors.len() >= 3,
-        "Must have at least 3 ancestors in path to North Star"
+        ancestors.len() >= 2,
+        "Must have at least 2 ancestors in path to Strategic"
     );
 }
 

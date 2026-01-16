@@ -80,11 +80,13 @@ impl PurposeComputeConfig {
 }
 
 /// Errors during purpose computation.
+///
+/// TASK-P0-001: Renamed NoNorthStar to NoTopLevelGoals per ARCH-03.
 #[derive(Debug, thiserror::Error)]
 pub enum PurposeComputeError {
-    /// No North Star goal defined in the hierarchy.
-    #[error("No North Star goal defined in hierarchy")]
-    NoNorthStar,
+    /// No top-level (Strategic) goals defined in the hierarchy.
+    #[error("No top-level goals defined in hierarchy")]
+    NoTopLevelGoals,
 
     /// The fingerprint has no embeddings to compute alignment.
     #[error("Empty fingerprint - no embeddings to compute alignment")]
@@ -127,7 +129,7 @@ pub enum PurposeComputeError {
 pub trait PurposeVectorComputer: Send + Sync {
     /// Compute purpose vector for a semantic fingerprint.
     ///
-    /// Calculates alignment to the North Star goal for each of the 13
+    /// Calculates alignment to top-level (Strategic) goals for each of the 13
     /// embedding spaces.
     ///
     /// # Arguments
@@ -142,7 +144,7 @@ pub trait PurposeVectorComputer: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns `NoNorthStar` if the config's hierarchy has no North Star goal.
+    /// Returns `NoTopLevelGoals` if the config's hierarchy has no Strategic goals.
     async fn compute_purpose(
         &self,
         fingerprint: &SemanticFingerprint,
@@ -230,8 +232,8 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let e1 = PurposeComputeError::NoNorthStar;
-        assert!(e1.to_string().contains("North Star"));
+        let e1 = PurposeComputeError::NoTopLevelGoals;
+        assert!(e1.to_string().contains("top-level goals"));
 
         let e2 = PurposeComputeError::EmptyFingerprint;
         assert!(e2.to_string().contains("Empty"));

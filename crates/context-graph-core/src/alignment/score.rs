@@ -1,7 +1,10 @@
 //! Goal alignment scoring types.
 //!
 //! Defines the data structures for computing and representing alignment scores
-//! across the goal hierarchy levels (NorthStar, Strategic, Tactical, Immediate).
+//! across the goal hierarchy levels (Strategic, Tactical, Immediate).
+//!
+//! TASK-P0-001: Removed NorthStar level per ARCH-03 (autonomous operation).
+//! Strategic is now the top level.
 //!
 //! From constitution.yaml thresholds:
 //! - Optimal: θ ≥ 0.75
@@ -17,33 +20,29 @@ use crate::types::fingerprint::AlignmentThreshold;
 
 /// Level-based weights for computing composite alignment score.
 ///
-/// From TASK-L003 specification:
-/// - north_star: 0.4 (highest influence)
-/// - strategic: 0.3
-/// - tactical: 0.2
-/// - immediate: 0.1 (lowest influence)
+/// TASK-P0-001: Removed north_star field. Weights redistributed:
+/// - strategic: 0.5 (highest influence, was NorthStar + Strategic)
+/// - tactical: 0.3
+/// - immediate: 0.2
 ///
 /// # Invariant
 /// All weights MUST sum to 1.0. This is enforced by `validate()`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct LevelWeights {
-    /// Weight for North Star goal alignment (default: 0.4)
-    pub north_star: f32,
-    /// Weight for Strategic goals (default: 0.3)
+    /// Weight for Strategic goals (default: 0.5, top-level)
     pub strategic: f32,
-    /// Weight for Tactical goals (default: 0.2)
+    /// Weight for Tactical goals (default: 0.3)
     pub tactical: f32,
-    /// Weight for Immediate goals (default: 0.1)
+    /// Weight for Immediate goals (default: 0.2)
     pub immediate: f32,
 }
 
 impl Default for LevelWeights {
     fn default() -> Self {
         Self {
-            north_star: 0.4,
-            strategic: 0.3,
-            tactical: 0.2,
-            immediate: 0.1,
+            strategic: 0.5,
+            tactical: 0.3,
+            immediate: 0.2,
         }
     }
 }
@@ -54,13 +53,11 @@ impl LevelWeights {
     /// # Errors
     /// Returns error if weights don't sum to 1.0 (within epsilon tolerance).
     pub fn new(
-        north_star: f32,
         strategic: f32,
         tactical: f32,
         immediate: f32,
     ) -> Result<Self, &'static str> {
         let weights = Self {
-            north_star,
             strategic,
             tactical,
             immediate,
@@ -74,15 +71,11 @@ impl LevelWeights {
     /// # Errors
     /// Returns error if sum deviates from 1.0 by more than 0.001.
     pub fn validate(&self) -> Result<(), &'static str> {
-        let sum = self.north_star + self.strategic + self.tactical + self.immediate;
+        let sum = self.strategic + self.tactical + self.immediate;
         if (sum - 1.0).abs() > 0.001 {
             return Err("LevelWeights must sum to 1.0");
         }
-        if self.north_star < 0.0
-            || self.strategic < 0.0
-            || self.tactical < 0.0
-            || self.immediate < 0.0
-        {
+        if self.strategic < 0.0 || self.tactical < 0.0 || self.immediate < 0.0 {
             return Err("LevelWeights cannot be negative");
         }
         Ok(())
@@ -92,7 +85,6 @@ impl LevelWeights {
     #[inline]
     pub fn for_level(&self, level: GoalLevel) -> f32 {
         match level {
-            GoalLevel::NorthStar => self.north_star,
             GoalLevel::Strategic => self.strategic,
             GoalLevel::Tactical => self.tactical,
             GoalLevel::Immediate => self.immediate,
@@ -102,7 +94,7 @@ impl LevelWeights {
     /// Sum of all weights (should be 1.0).
     #[inline]
     pub fn sum(&self) -> f32 {
-        self.north_star + self.strategic + self.tactical + self.immediate
+        self.strategic + self.tactical + self.immediate
     }
 }
 
@@ -158,6 +150,8 @@ impl GoalScore {
 /// - Per-level breakdown
 /// - Individual goal scores
 /// - Misalignment flags
+///
+/// TASK-P0-001: Removed north_star_alignment field per ARCH-03.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoalAlignmentScore {
     /// Weighted composite alignment score [0.0, 1.0]
@@ -168,10 +162,7 @@ pub struct GoalAlignmentScore {
     /// Overall threshold classification for the composite score
     pub threshold: AlignmentThreshold,
 
-    /// North Star alignment (single goal)
-    pub north_star_alignment: f32,
-
-    /// Average alignment for Strategic level goals
+    /// Average alignment for Strategic level goals (top-level)
     pub strategic_alignment: f32,
 
     /// Average alignment for Tactical level goals
@@ -197,9 +188,9 @@ impl GoalAlignmentScore {
     /// Create a new GoalAlignmentScore from individual goal scores.
     ///
     /// Computes composite score and aggregates per-level averages.
+    /// TASK-P0-001: Removed NorthStar level, now only 3 levels.
     pub fn compute(goal_scores: Vec<GoalScore>, weights: LevelWeights) -> Self {
         // Separate scores by level
-        let mut north_star_scores: Vec<f32> = Vec::new();
         let mut strategic_scores: Vec<f32> = Vec::new();
         let mut tactical_scores: Vec<f32> = Vec::new();
         let mut immediate_scores: Vec<f32> = Vec::new();
@@ -216,7 +207,6 @@ impl GoalAlignmentScore {
             }
 
             match score.level {
-                GoalLevel::NorthStar => north_star_scores.push(score.alignment),
                 GoalLevel::Strategic => strategic_scores.push(score.alignment),
                 GoalLevel::Tactical => tactical_scores.push(score.alignment),
                 GoalLevel::Immediate => immediate_scores.push(score.alignment),
@@ -232,7 +222,6 @@ impl GoalAlignmentScore {
             }
         };
 
-        let north_star_alignment = avg(&north_star_scores);
         let strategic_alignment = avg(&strategic_scores);
         let tactical_alignment = avg(&tactical_scores);
         let immediate_alignment = avg(&immediate_scores);
@@ -242,10 +231,6 @@ impl GoalAlignmentScore {
         let mut composite = 0.0;
         let mut weight_sum = 0.0;
 
-        if !north_star_scores.is_empty() {
-            composite += weights.north_star * north_star_alignment;
-            weight_sum += weights.north_star;
-        }
         if !strategic_scores.is_empty() {
             composite += weights.strategic * strategic_alignment;
             weight_sum += weights.strategic;
@@ -269,7 +254,6 @@ impl GoalAlignmentScore {
         Self {
             composite_score,
             threshold: AlignmentThreshold::classify(composite_score),
-            north_star_alignment,
             strategic_alignment,
             tactical_alignment,
             immediate_alignment,
@@ -285,7 +269,6 @@ impl GoalAlignmentScore {
         Self {
             composite_score: 0.0,
             threshold: AlignmentThreshold::Critical,
-            north_star_alignment: 0.0,
             strategic_alignment: 0.0,
             tactical_alignment: 0.0,
             immediate_alignment: 0.0,
@@ -344,15 +327,14 @@ mod tests {
     #[test]
     fn test_level_weights_default() {
         let weights = LevelWeights::default();
-        assert_eq!(weights.north_star, 0.4);
-        assert_eq!(weights.strategic, 0.3);
-        assert_eq!(weights.tactical, 0.2);
-        assert_eq!(weights.immediate, 0.1);
+        // TASK-P0-001: Now 3 levels (Strategic, Tactical, Immediate)
+        assert_eq!(weights.strategic, 0.5);
+        assert_eq!(weights.tactical, 0.3);
+        assert_eq!(weights.immediate, 0.2);
         assert!((weights.sum() - 1.0).abs() < 0.001);
         assert!(weights.validate().is_ok());
 
         println!("[VERIFIED] LevelWeights::default() sums to 1.0");
-        println!("  - north_star: {}", weights.north_star);
         println!("  - strategic: {}", weights.strategic);
         println!("  - tactical: {}", weights.tactical);
         println!("  - immediate: {}", weights.immediate);
@@ -360,14 +342,16 @@ mod tests {
 
     #[test]
     fn test_level_weights_new_valid() {
-        let weights = LevelWeights::new(0.5, 0.25, 0.15, 0.1).unwrap();
+        // TASK-P0-001: Now takes 3 arguments (strategic, tactical, immediate)
+        let weights = LevelWeights::new(0.5, 0.3, 0.2).unwrap();
         assert!((weights.sum() - 1.0).abs() < 0.001);
         println!("[VERIFIED] LevelWeights::new accepts valid weights that sum to 1.0");
     }
 
     #[test]
     fn test_level_weights_new_invalid() {
-        let result = LevelWeights::new(0.5, 0.5, 0.5, 0.5);
+        // TASK-P0-001: Now takes 3 arguments (sum = 1.5, should fail)
+        let result = LevelWeights::new(0.5, 0.5, 0.5);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "LevelWeights must sum to 1.0");
         println!("[VERIFIED] LevelWeights::new rejects weights that don't sum to 1.0");
@@ -375,7 +359,8 @@ mod tests {
 
     #[test]
     fn test_level_weights_negative() {
-        let result = LevelWeights::new(1.5, -0.5, 0.0, 0.0);
+        // TASK-P0-001: Now takes 3 arguments (has negative, should fail)
+        let result = LevelWeights::new(1.5, -0.5, 0.0);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("negative"));
         println!("[VERIFIED] LevelWeights::new rejects negative weights");
@@ -384,10 +369,10 @@ mod tests {
     #[test]
     fn test_level_weights_for_level() {
         let weights = LevelWeights::default();
-        assert_eq!(weights.for_level(GoalLevel::NorthStar), 0.4);
-        assert_eq!(weights.for_level(GoalLevel::Strategic), 0.3);
-        assert_eq!(weights.for_level(GoalLevel::Tactical), 0.2);
-        assert_eq!(weights.for_level(GoalLevel::Immediate), 0.1);
+        // TASK-P0-001: Now 3 levels with weights (0.5, 0.3, 0.2)
+        assert_eq!(weights.for_level(GoalLevel::Strategic), 0.5);
+        assert_eq!(weights.for_level(GoalLevel::Tactical), 0.3);
+        assert_eq!(weights.for_level(GoalLevel::Immediate), 0.2);
         println!("[VERIFIED] for_level returns correct weight for each GoalLevel");
     }
 
@@ -414,10 +399,10 @@ mod tests {
 
     #[test]
     fn test_goal_score_misalignment_detection() {
-        let optimal = GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.80, 1.0);
-        let acceptable = GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.72, 1.0);
-        let warning = GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.60, 1.0);
-        let critical = GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.40, 1.0);
+        let optimal = GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.80, 1.0);
+        let acceptable = GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.72, 1.0);
+        let warning = GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.60, 1.0);
+        let critical = GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.40, 1.0);
 
         assert!(!optimal.is_misaligned());
         assert!(!optimal.is_critical());
@@ -436,40 +421,35 @@ mod tests {
 
     #[test]
     fn test_goal_alignment_score_compute() {
+        // TASK-P0-001: Now only 3 levels (Strategic, Tactical, Immediate)
         let scores = vec![
-            GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.85, 0.4),
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.75, 0.3),
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.65, 0.3),
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Tactical, 0.55, 0.2),
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Immediate, 0.45, 0.1),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.85, 0.5),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.75, 0.5),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.65, 0.5),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Tactical, 0.55, 0.3),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Immediate, 0.45, 0.2),
         ];
 
         let alignment = GoalAlignmentScore::compute(scores, LevelWeights::default());
 
-        // North Star: 0.85
-        // Strategic avg: (0.75 + 0.65) / 2 = 0.70
+        // Strategic avg: (0.85 + 0.75 + 0.65) / 3 = 0.75
         // Tactical avg: 0.55
         // Immediate avg: 0.45
-        // Composite = 0.4*0.85 + 0.3*0.70 + 0.2*0.55 + 0.1*0.45 = 0.34 + 0.21 + 0.11 + 0.045 = 0.705
+        // Composite = 0.5*0.75 + 0.3*0.55 + 0.2*0.45 = 0.375 + 0.165 + 0.09 = 0.63
 
-        assert_eq!(alignment.north_star_alignment, 0.85);
-        assert!((alignment.strategic_alignment - 0.70).abs() < 0.001);
+        assert!((alignment.strategic_alignment - 0.75).abs() < 0.001);
         assert_eq!(alignment.tactical_alignment, 0.55);
         assert_eq!(alignment.immediate_alignment, 0.45);
-        assert!((alignment.composite_score - 0.705).abs() < 0.01);
+        assert!((alignment.composite_score - 0.63).abs() < 0.01);
         assert_eq!(alignment.goal_count(), 5);
 
-        // Misalignment: s2 (0.65, Warning), t1 (0.55, Warning), i1 (0.45, Critical)
+        // Misalignment: s3 (0.65, Warning), t1 (0.55, Warning), i1 (0.45, Critical)
         // AlignmentThreshold::classify: Warning is [0.55, 0.70), Critical is <0.55
         assert_eq!(alignment.misaligned_count, 3);
         assert_eq!(alignment.critical_count, 1);
 
         println!("[VERIFIED] GoalAlignmentScore::compute calculates correct values");
         println!("  - composite_score: {:.3}", alignment.composite_score);
-        println!(
-            "  - north_star_alignment: {:.2}",
-            alignment.north_star_alignment
-        );
         println!(
             "  - strategic_alignment: {:.2}",
             alignment.strategic_alignment
@@ -501,18 +481,19 @@ mod tests {
 
     #[test]
     fn test_goal_alignment_score_partial_hierarchy() {
-        // Only NorthStar and Strategic (no Tactical/Immediate)
+        // TASK-P0-001: Only Strategic goals (no Tactical/Immediate)
         let scores = vec![
-            GoalScore::new(Uuid::new_v4(), GoalLevel::NorthStar, 0.90, 0.4),
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.80, 0.3),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.90, 0.5),
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.80, 0.5),
         ];
 
         let alignment = GoalAlignmentScore::compute(scores, LevelWeights::default());
 
         // Should normalize to available levels only
-        // weight_sum = 0.4 + 0.3 = 0.7
-        // composite = (0.4*0.90 + 0.3*0.80) / 0.7 = (0.36 + 0.24) / 0.7 = 0.857
-        assert!((alignment.composite_score - 0.857).abs() < 0.01);
+        // Strategic avg: (0.90 + 0.80) / 2 = 0.85
+        // weight_sum = 0.5 (only Strategic)
+        // composite = 0.5*0.85 / 0.5 = 0.85
+        assert!((alignment.composite_score - 0.85).abs() < 0.01);
         assert_eq!(alignment.tactical_alignment, 0.0);
         assert_eq!(alignment.immediate_alignment, 0.0);
 
@@ -525,11 +506,12 @@ mod tests {
 
     #[test]
     fn test_goal_alignment_score_misaligned_goals() {
-        let ns_id = Uuid::new_v4();
+        // TASK-P0-001: Updated to use new 3-level weights
+        let critical_id = Uuid::new_v4();
         let scores = vec![
-            GoalScore::new(ns_id, GoalLevel::NorthStar, 0.50, 0.4), // Critical
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.60, 0.3), // Warning
-            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.80, 0.3), // Optimal
+            GoalScore::new(critical_id, GoalLevel::Strategic, 0.50, 0.5), // Critical
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.60, 0.5), // Warning
+            GoalScore::new(Uuid::new_v4(), GoalLevel::Strategic, 0.80, 0.5), // Optimal
         ];
 
         let alignment = GoalAlignmentScore::compute(scores, LevelWeights::default());
@@ -542,7 +524,7 @@ mod tests {
 
         let critical = alignment.critical_goals();
         assert_eq!(critical.len(), 1);
-        assert_eq!(critical[0].goal_id, ns_id);
+        assert_eq!(critical[0].goal_id, critical_id);
 
         println!("[VERIFIED] misaligned_goals and critical_goals filter correctly");
     }

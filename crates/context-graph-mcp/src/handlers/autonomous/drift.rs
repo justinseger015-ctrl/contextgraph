@@ -40,7 +40,7 @@ impl Handlers {
     /// - recommendations: Action recommendations based on drift levels
     /// - trend (optional): Trend analysis if history available
     /// - legacy_state: Legacy DriftSeverity for backwards compatibility
-    /// - reference_type: "north_star" or "centroid" indicating what drift is relative to
+    /// - reference_type: "strategic" or "centroid" indicating what drift is relative to
     pub(crate) async fn call_get_alignment_drift(
         &self,
         id: Option<JsonRpcId>,
@@ -64,10 +64,11 @@ impl Handlers {
             "get_alignment_drift: Parsed parameters"
         );
 
-        // ARCH-03 COMPLIANT: Check if North Star exists, but don't require it
-        let north_star = {
+        // TASK-P0-001/ARCH-03 COMPLIANT: Check if top-level goal exists, but don't require it
+        let top_level_goal = {
             let hierarchy = self.goal_hierarchy.read();
-            hierarchy.north_star().cloned()
+            // Clone the inner GoalNode, not just the reference
+            hierarchy.top_level_goals().first().map(|g| (*g).clone())
         };
 
         // Parse optional memory_ids from cloned arguments
@@ -148,8 +149,9 @@ impl Handlers {
                 let severity = detector.detect_drift();
                 let trend = detector.compute_trend();
 
-                let (goal_id_str, reference_type) = match &north_star {
-                    Some(ns) => (ns.id.to_string(), "north_star"),
+                // TASK-P0-001: Renamed from north_star to strategic
+                let (goal_id_str, reference_type) = match &top_level_goal {
+                    Some(goal) => (goal.id.to_string(), "strategic"),
                     None => ("none".to_string(), "no_reference"),
                 };
 
@@ -168,7 +170,7 @@ impl Handlers {
                         "legacy_state": current_state,
                         "timeframe": params.timeframe,
                         "reference_type": reference_type,
-                        "north_star_id": goal_id_str,
+                        "strategic_goal_id": goal_id_str,
                         "usage_hint": "Provide 'memory_ids' parameter with fingerprint UUIDs for per-embedder drift analysis"
                     }),
                 );
@@ -189,20 +191,20 @@ impl Handlers {
         let detector = TeleologicalDriftDetector::new(comparator);
 
         // ARCH-03 COMPLIANT: Determine reference fingerprint for drift calculation
-        // If North Star exists, use it. Otherwise, compute centroid of stored memories.
+        // TASK-P0-001: If top-level Strategic goal exists, use it. Otherwise, compute centroid.
         let (goal_fingerprint, reference_type, reference_id): (
             context_graph_core::types::SemanticFingerprint,
             &str,
             String,
-        ) = if let Some(ns) = &north_star {
-            // Use North Star as reference
+        ) = if let Some(goal) = &top_level_goal {
+            // Use Strategic goal as reference
             (
-                ns.teleological_array.clone(),
-                "north_star",
-                ns.id.to_string(),
+                goal.teleological_array.clone(),
+                "strategic",
+                goal.id.to_string(),
             )
         } else {
-            // ARCH-03: No North Star - compute centroid of memories as reference
+            // ARCH-03: No Strategic goal - compute centroid of memories as reference
             // This allows drift detection to work autonomously
             let pipeline = GoalDiscoveryPipeline::new(TeleologicalComparator::new());
             let refs: Vec<&context_graph_core::types::SemanticFingerprint> =
@@ -369,7 +371,7 @@ impl Handlers {
     /// - correction_result: Strategy applied and alignment change
     /// - before_state: Drift state before correction
     /// - after_state: Drift state after correction
-    /// - reference_type: "north_star" or "centroid" indicating correction target
+    /// - reference_type: "strategic" or "centroid" indicating correction target
     pub(crate) async fn call_trigger_drift_correction(
         &self,
         id: Option<JsonRpcId>,
@@ -392,11 +394,12 @@ impl Handlers {
             "trigger_drift_correction: Parsed parameters"
         );
 
-        // ARCH-03 COMPLIANT: Check if North Star exists, but don't require it
-        let (has_north_star, reference_type) = {
+        // ARCH-03 COMPLIANT: Check if top-level Strategic goal exists, but don't require it
+        // TASK-P0-001: Renamed from has_north_star to has_strategic_goal
+        let (has_strategic_goal, reference_type) = {
             let hierarchy = self.goal_hierarchy.read();
-            if hierarchy.north_star().is_some() {
-                (true, "north_star")
+            if hierarchy.top_level_goals().first().is_some() {
+                (true, "strategic")
             } else {
                 (false, "computed_centroid")
             }
@@ -470,10 +473,10 @@ impl Handlers {
                 "forced": params.force,
                 "reference_type": reference_type,
                 "arch03_compliant": true,
-                "note": if has_north_star {
-                    "Correction applied towards North Star goal"
+                "note": if has_strategic_goal {
+                    "Correction applied towards Strategic goal"
                 } else {
-                    "ARCH-03 COMPLIANT: Correction applied towards computed centroid (no North Star required)"
+                    "ARCH-03 COMPLIANT: Correction applied towards computed centroid (no Strategic goal required)"
                 }
             }),
         )
@@ -540,12 +543,12 @@ impl Handlers {
                 }
             }
         } else {
-            // Default to North Star
+            // TASK-P0-001: Default to top-level Strategic goal
             let hierarchy = self.goal_hierarchy.read();
-            match hierarchy.north_star() {
-                Some(ns) => (ns.id.to_string(), "north_star"),
+            match hierarchy.top_level_goals().first() {
+                Some(goal) => (goal.id.to_string(), "strategic"),
                 None => {
-                    // ARCH-03: No North Star - use "centroid" as placeholder
+                    // ARCH-03: No Strategic goal - use "centroid" as placeholder
                     ("centroid".to_string(), "computed_centroid")
                 }
             }

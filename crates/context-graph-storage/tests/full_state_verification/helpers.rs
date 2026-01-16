@@ -130,7 +130,7 @@ pub fn generate_real_teleological_fingerprint(id: Uuid) -> TeleologicalFingerpri
         purpose_vector: generate_real_purpose_vector(),
         johari: generate_real_johari_fingerprint(),
         purpose_evolution: Vec::new(),
-        theta_to_north_star: 0.5,
+        alignment_score: 0.5,
         content_hash: [0u8; 32],
         created_at: now,
         last_updated: now,

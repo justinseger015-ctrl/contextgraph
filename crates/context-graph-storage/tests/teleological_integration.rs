@@ -150,7 +150,7 @@ fn test_rocksdb_store_retrieve_fingerprint() {
     println!("BEFORE: Storing fingerprint {}", id);
     println!(
         "  - Theta to north star: {:.4}",
-        original.theta_to_north_star
+        original.alignment_score
     );
     println!(
         "  - Evolution snapshots: {}",
@@ -183,7 +183,7 @@ fn test_rocksdb_store_retrieve_fingerprint() {
     println!("AFTER: Retrieved fingerprint {}", retrieved.id);
     println!(
         "  - Theta to north star: {:.4}",
-        retrieved.theta_to_north_star
+        retrieved.alignment_score
     );
     println!(
         "  - Evolution snapshots: {}",
@@ -193,7 +193,7 @@ fn test_rocksdb_store_retrieve_fingerprint() {
     // Verify
     assert_eq!(original.id, retrieved.id);
     assert_eq!(original.content_hash, retrieved.content_hash);
-    assert!((original.theta_to_north_star - retrieved.theta_to_north_star).abs() < 1e-6);
+    assert!((original.alignment_score - retrieved.alignment_score).abs() < 1e-6);
     assert_eq!(
         original.purpose_evolution.len(),
         retrieved.purpose_evolution.len()

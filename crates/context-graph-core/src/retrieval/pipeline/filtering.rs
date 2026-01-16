@@ -78,7 +78,7 @@ where
             };
 
             // Get purpose alignment from fingerprint's purpose vector
-            let purpose_alignment = fingerprint.theta_to_north_star;
+            let purpose_alignment = fingerprint.alignment_score;
 
             // Get Johari quadrant (use dominant quadrant across all spaces)
             let johari_quadrant = self.compute_dominant_quadrant(fingerprint);

@@ -149,7 +149,7 @@ impl Handlers {
                         let mut result = json!({
                             "id": r.fingerprint.id.to_string(),
                             "purpose_alignment": r.purpose_alignment,
-                            "theta_to_north_star": r.fingerprint.theta_to_north_star,
+                            "alignment_score": r.fingerprint.alignment_score,
                         });
 
                         if include_scores {

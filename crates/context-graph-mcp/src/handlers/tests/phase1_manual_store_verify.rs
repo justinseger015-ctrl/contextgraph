@@ -157,7 +157,7 @@ async fn phase1_manual_store_verify() {
                 "  [{}] {} EXISTS - theta={:.4}, access_count={}, hash={}...",
                 i + 1,
                 fingerprint_id,
-                fp.theta_to_north_star,
+                fp.alignment_score,
                 fp.access_count,
                 hex::encode(&fp.content_hash[..8])
             );
@@ -234,7 +234,7 @@ async fn phase1_verify_mcp_retrieve_matches_store() {
 
     println!("[DIRECT STORE] Retrieved fingerprint:");
     println!("  - ID: {}", direct_fp.id);
-    println!("  - theta_to_north_star: {:.4}", direct_fp.theta_to_north_star);
+    println!("  - alignment_score: {:.4}", direct_fp.alignment_score);
     println!("  - content_hash: {}", hex::encode(direct_fp.content_hash));
 
     // === MCP HANDLER RETRIEVE ===

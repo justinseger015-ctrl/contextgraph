@@ -318,7 +318,7 @@ async fn inject_synthetic_production() {
                     "  [{:2}] {} - theta={:.4}, coherence={:.4}, dominant_embedder={}",
                     i + 1,
                     id,
-                    fp.theta_to_north_star,
+                    fp.alignment_score,
                     fp.purpose_vector.coherence,
                     fp.purpose_vector.dominant_embedder
                 );

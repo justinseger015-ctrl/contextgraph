@@ -77,7 +77,7 @@ mod tests {
         assert_eq!(fp.version, STORAGE_VERSION);
         assert_eq!(fp.embeddings.len(), 13);
         assert_eq!(fp.purpose_vector.len(), 13);
-        assert!((fp.theta_to_north_star - 0.5).abs() < f32::EPSILON);
+        // TASK-P0-001: alignment_score field removed per ARCH-03
     }
 
     #[test]

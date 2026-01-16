@@ -523,7 +523,7 @@ async fn phase5_end_to_end_with_fsv() {
     assert!(stored.is_some(), "Fingerprint must exist in RocksDB");
     let fp = stored.unwrap();
     println!("  - VERIFIED: Fingerprint exists in RocksDB");
-    println!("    - theta_to_north_star: {:.4}", fp.theta_to_north_star);
+    println!("    - alignment_score: {:.4}", fp.alignment_score);
     println!("    - access_count: {}", fp.access_count);
 
     // Step 3: Search for it

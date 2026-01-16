@@ -55,13 +55,13 @@ async fn test_fsv_rocksdb_steering_data_matches_store() {
         println!(
             "  - {} theta={:.4}, access={}, aligned={}, orphan={}",
             id,
-            fp.theta_to_north_star,
+            fp.alignment_score,
             fp.access_count,
-            fp.theta_to_north_star >= 0.5,
+            fp.alignment_score >= 0.5,
             fp.access_count == 0
         );
 
-        if fp.theta_to_north_star >= 0.5 {
+        if fp.alignment_score >= 0.5 {
             aligned_count += 1;
         }
         if fp.access_count == 0 {

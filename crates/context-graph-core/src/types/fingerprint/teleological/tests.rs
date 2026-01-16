@@ -39,7 +39,7 @@ fn test_teleological_new() {
     ));
 
     // Theta is computed
-    assert!((fp.theta_to_north_star - 0.80).abs() < 1e-6);
+    assert!((fp.alignment_score - 0.80).abs() < 1e-6);
 
     // Access count starts at 0
     assert_eq!(fp.access_count, 0);
@@ -50,7 +50,7 @@ fn test_teleological_new() {
     println!("[PASS] TeleologicalFingerprint::new creates valid fingerprint");
     println!("  - ID: {}", fp.id);
     println!("  - Created: {}", fp.created_at);
-    println!("  - Initial theta: {:.4}", fp.theta_to_north_star);
+    println!("  - Initial theta: {:.4}", fp.alignment_score);
     println!("  - Evolution snapshots: {}", fp.purpose_evolution.len());
 }
 
@@ -163,7 +163,7 @@ fn test_teleological_alignment_delta_improvement() {
 
     // Improve alignment
     fp.purpose_vector = make_test_purpose(0.85);
-    fp.theta_to_north_star = fp.purpose_vector.aggregate_alignment();
+    fp.alignment_score = fp.purpose_vector.aggregate_alignment();
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     let delta = fp.compute_alignment_delta();
@@ -186,7 +186,7 @@ fn test_teleological_alignment_delta_degradation() {
 
     // Degrade alignment
     fp.purpose_vector = make_test_purpose(0.60);
-    fp.theta_to_north_star = fp.purpose_vector.aggregate_alignment();
+    fp.alignment_score = fp.purpose_vector.aggregate_alignment();
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     let delta = fp.compute_alignment_delta();
@@ -211,7 +211,7 @@ fn test_teleological_misalignment_warning_not_triggered() {
 
     // Small degradation (within threshold)
     fp.purpose_vector = make_test_purpose(0.75);
-    fp.theta_to_north_star = fp.purpose_vector.aggregate_alignment();
+    fp.alignment_score = fp.purpose_vector.aggregate_alignment();
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     assert!(fp.check_misalignment_warning().is_none());
@@ -230,7 +230,7 @@ fn test_teleological_misalignment_warning_triggered() {
 
     // Large degradation (exceeds threshold of -0.15)
     fp.purpose_vector = make_test_purpose(0.60);
-    fp.theta_to_north_star = fp.purpose_vector.aggregate_alignment();
+    fp.alignment_score = fp.purpose_vector.aggregate_alignment();
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     let warning = fp.check_misalignment_warning();
@@ -257,7 +257,7 @@ fn test_teleological_misalignment_warning_exact_threshold() {
 
     // Slightly above threshold (delta = -0.149) - just inside warning boundary
     fp.purpose_vector = make_test_purpose(0.651);
-    fp.theta_to_north_star = fp.purpose_vector.aggregate_alignment();
+    fp.alignment_score = fp.purpose_vector.aggregate_alignment();
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     // delta ~ -0.149 which is NOT < -0.15, so no warning
@@ -352,11 +352,11 @@ fn test_teleological_alignment_history_stats() {
 
     // Add more snapshots with varying alignments
     fp.purpose_vector = make_test_purpose(0.80);
-    fp.theta_to_north_star = 0.80;
+    fp.alignment_score = 0.80;
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     fp.purpose_vector = make_test_purpose(0.60);
-    fp.theta_to_north_star = 0.60;
+    fp.alignment_score = 0.60;
     fp.record_snapshot(EvolutionTrigger::Recalibration);
 
     let (min, max, avg) = fp.alignment_history_stats();
@@ -403,7 +403,7 @@ fn test_teleological_zero_alignment() {
         make_test_hash(),
     );
 
-    assert_eq!(fp.theta_to_north_star, 0.0);
+    assert_eq!(fp.alignment_score, 0.0);
     assert_eq!(fp.alignment_status(), AlignmentThreshold::Critical);
 
     println!("[PASS] Zero alignment handled correctly");
@@ -418,7 +418,7 @@ fn test_teleological_negative_alignment() {
         make_test_hash(),
     );
 
-    assert_eq!(fp.theta_to_north_star, -0.5);
+    assert_eq!(fp.alignment_score, -0.5);
     assert_eq!(fp.alignment_status(), AlignmentThreshold::Critical);
 
     println!("[PASS] Negative alignment handled correctly");
@@ -441,7 +441,7 @@ fn test_teleological_serialization() {
     let restored: TeleologicalFingerprint =
         serde_json::from_str(&json).expect("Deserialization should succeed");
     assert_eq!(restored.id, fp.id);
-    assert!((restored.theta_to_north_star - fp.theta_to_north_star).abs() < f32::EPSILON);
+    assert!((restored.alignment_score - fp.alignment_score).abs() < f32::EPSILON);
 
     println!("[PASS] TeleologicalFingerprint serializes/deserializes correctly");
 }

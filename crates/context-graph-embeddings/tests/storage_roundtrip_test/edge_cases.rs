@@ -61,10 +61,9 @@ fn test_uniform_purpose_vector() {
         create_content_hash(42),
     );
 
-    assert!(
-        (fp.theta_to_north_star - 0.5).abs() < f32::EPSILON,
-        "Uniform purpose vector mean should be 0.5"
-    );
+    // TASK-P0-001: alignment_score field removed per ARCH-03
+    // Verify purpose_vector is correctly stored instead
+    assert_eq!(fp.purpose_vector, [0.5f32; 13]);
 
     println!("[PASS] Uniform purpose vector handled correctly");
 }

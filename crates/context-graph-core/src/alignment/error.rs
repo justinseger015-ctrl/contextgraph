@@ -2,6 +2,8 @@
 //!
 //! Defines errors that can occur during goal alignment calculations.
 //! All errors are designed for robust debugging with specific context.
+//!
+//! TASK-P0-001: Renamed NoNorthStar to NoTopLevelGoals per ARCH-03.
 
 use uuid::Uuid;
 
@@ -13,13 +15,17 @@ use uuid::Uuid;
 /// - Suggestions for resolution
 #[derive(Debug, thiserror::Error)]
 pub enum AlignmentError {
-    /// No North Star goal defined in the hierarchy.
+    // REMOVED: NoNorthStar per TASK-P0-001 (ARCH-03)
+    // Renamed to NoTopLevelGoals
+
+    /// No top-level (Strategic) goals defined in the hierarchy.
     ///
-    /// Resolution: Add a North Star goal using `GoalNode::autonomous_goal()` with `GoalLevel::NorthStar`.
+    /// Resolution: Goals emerge autonomously from data patterns.
+    /// Use `GoalNode::autonomous_goal()` with `GoalLevel::Strategic`.
     #[error(
-        "No North Star goal defined in hierarchy - cannot compute alignment without a North Star"
+        "No top-level goals defined in hierarchy - cannot compute alignment without Strategic goals"
     )]
-    NoNorthStar,
+    NoTopLevelGoals,
 
     /// Goal not found in hierarchy.
     ///
@@ -86,7 +92,7 @@ impl AlignmentError {
     pub fn requires_config_change(&self) -> bool {
         matches!(
             self,
-            Self::NoNorthStar | Self::InvalidConfig(_) | Self::InvalidHierarchy(_)
+            Self::NoTopLevelGoals | Self::InvalidConfig(_) | Self::InvalidHierarchy(_)
         )
     }
 }
@@ -99,9 +105,9 @@ mod tests {
     fn test_error_display_messages() {
         println!("\n=== AlignmentError Display Messages ===");
 
-        let e1 = AlignmentError::NoNorthStar;
-        println!("NoNorthStar: {}", e1);
-        assert!(e1.to_string().contains("North Star"));
+        let e1 = AlignmentError::NoTopLevelGoals;
+        println!("NoTopLevelGoals: {}", e1);
+        assert!(e1.to_string().contains("top-level goals"));
 
         let test_uuid = Uuid::new_v4();
         let e2 = AlignmentError::GoalNotFound(test_uuid);
@@ -145,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_error_is_recoverable() {
-        assert!(!AlignmentError::NoNorthStar.is_recoverable());
+        assert!(!AlignmentError::NoTopLevelGoals.is_recoverable());
         assert!(!AlignmentError::GoalNotFound(Uuid::new_v4()).is_recoverable());
         assert!(!AlignmentError::EmptyFingerprint.is_recoverable());
         assert!(!AlignmentError::InvalidConfig("test".into()).is_recoverable());
@@ -161,7 +167,7 @@ mod tests {
 
     #[test]
     fn test_error_requires_config_change() {
-        assert!(AlignmentError::NoNorthStar.requires_config_change());
+        assert!(AlignmentError::NoTopLevelGoals.requires_config_change());
         assert!(AlignmentError::InvalidConfig("test".into()).requires_config_change());
         assert!(AlignmentError::InvalidHierarchy("test".into()).requires_config_change());
 
