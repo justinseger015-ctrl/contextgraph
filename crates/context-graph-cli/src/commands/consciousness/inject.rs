@@ -905,12 +905,9 @@ fn output_semantic_results(result: &SemanticSearchResult, format: InjectFormat) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_utils::GLOBAL_IDENTITY_LOCK;
     use context_graph_core::gwt::session_identity::SessionIdentitySnapshot;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    // Static lock to serialize tests that access global IdentityCache
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     // =========================================================================
     // TC-SESSION-15-01: classify_johari Open quadrant
@@ -1091,7 +1088,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_15_07_context_from_storage() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-15-07: Context from Storage ===");
         println!("SOURCE OF TRUTH: RocksDB storage");
 
@@ -1152,7 +1149,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_15_08_empty_storage_error() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-15-08: Empty Storage Error ===");
 
         // Create and immediately close empty storage to initialize the DB
@@ -1256,7 +1253,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_15_11_e2e_inject_context_command() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-15-11: E2E inject-context Command ===");
         println!("SOURCE OF TRUTH: RocksDB → Command → Output");
 
@@ -1310,7 +1307,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_15_12_performance() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-15-12: Performance Test ===");
         println!("TARGET: <1s total latency");
 

@@ -62,13 +62,10 @@ pub async fn handle_consciousness_command(cmd: ConsciousnessCommands) -> i32 {
 // =============================================================================
 #[cfg(test)]
 mod brief_tests {
+    use crate::commands::test_utils::GLOBAL_IDENTITY_LOCK;
     use context_graph_core::gwt::session_identity::{
         update_cache, IdentityCache, SessionIdentitySnapshot, KURAMOTO_N,
     };
-    use std::sync::Mutex;
-
-    // Static lock to serialize tests that access global IdentityCache
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     // =========================================================================
     // TC-SESSION-12: Warm Cache Output
@@ -76,7 +73,7 @@ mod brief_tests {
     // =========================================================================
     #[test]
     fn tc_session_12_brief_warm_cache() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-12: consciousness brief Warm Cache ===");
         println!("SOURCE OF TRUTH: IdentityCache singleton");
 
@@ -154,7 +151,7 @@ mod brief_tests {
     // =========================================================================
     #[test]
     fn tc_session_14_brief_performance() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14: consciousness brief Performance ===");
         println!("SOURCE OF TRUTH: IdentityCache::format_brief() timing");
 
@@ -197,7 +194,7 @@ mod brief_tests {
     // =========================================================================
     #[test]
     fn tc_session_15_all_consciousness_states() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-15: All Consciousness States ===");
         println!("SOURCE OF TRUTH: ConsciousnessState::short_name() codes");
 
@@ -234,7 +231,7 @@ mod brief_tests {
     // =========================================================================
     #[test]
     fn tc_session_16_extreme_ic_values() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-16: Extreme IC Values ===");
 
         let test_cases = [
@@ -268,7 +265,7 @@ mod brief_tests {
     // =========================================================================
     #[test]
     fn tc_session_17_kuramoto_r_values() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-17: Kuramoto r Values ===");
 
         // Test fully synchronized (r ≈ 1.0)

@@ -395,12 +395,9 @@ fn sync_description(r: f32) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_utils::GLOBAL_IDENTITY_LOCK;
     use context_graph_core::gwt::session_identity::{IdentityCache, KURAMOTO_N};
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    // Static lock to serialize tests that access global IdentityCache
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     /// Create real RocksDB storage for testing
     fn create_test_storage() -> (Arc<RocksDbMemex>, TempDir) {
@@ -415,7 +412,7 @@ mod tests {
     // =========================================================================
     #[test]
     fn tc_session_12_01_first_run_empty_db() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-12-01: First Run (Empty DB) ===");
         println!("SOURCE OF TRUTH: Empty RocksDB, IdentityCache singleton");
 
@@ -469,7 +466,7 @@ mod tests {
     // =========================================================================
     #[test]
     fn tc_session_12_02_resume_existing() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-12-02: Resume Existing Session ===");
         println!("SOURCE OF TRUTH: Pre-populated RocksDB snapshot");
 
@@ -534,7 +531,7 @@ mod tests {
     // =========================================================================
     #[test]
     fn tc_session_12_03_source_clear() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-12-03: Source Clear ===");
         println!("SOURCE OF TRUTH: Fresh snapshot with IC=1.0");
 
@@ -577,7 +574,7 @@ mod tests {
     // =========================================================================
     #[test]
     fn tc_session_12_04_session_not_found() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-12-04: Session Not Found ===");
         println!("SOURCE OF TRUTH: Storage returns None");
 

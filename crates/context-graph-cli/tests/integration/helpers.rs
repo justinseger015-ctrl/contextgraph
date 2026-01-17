@@ -63,7 +63,10 @@ pub const EXIT_SESSION_NOT_FOUND: i32 = 5;
 pub const EXIT_CRISIS_TRIGGERED: i32 = 6;
 
 /// Timeout budgets per constitution.yaml
-pub const TIMEOUT_PRE_TOOL_MS: u64 = 100;
+/// Note: These include process spawn overhead for integration tests (~100-200ms).
+/// The constitution's 100ms budget is for CLI internal logic only.
+/// When invoking via `Command::new()`, add ~200ms for process spawn.
+pub const TIMEOUT_PRE_TOOL_MS: u64 = 300; // 100ms CLI + 200ms process overhead
 pub const TIMEOUT_USER_PROMPT_MS: u64 = 2000;
 pub const TIMEOUT_POST_TOOL_MS: u64 = 3000;
 pub const TIMEOUT_SESSION_START_MS: u64 = 5000;

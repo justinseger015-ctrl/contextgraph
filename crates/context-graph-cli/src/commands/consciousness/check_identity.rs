@@ -602,13 +602,9 @@ fn is_corruption_error(msg: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_utils::GLOBAL_IDENTITY_LOCK;
     use context_graph_core::gwt::session_identity::SessionIdentitySnapshot;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    // Static lock to serialize tests that access global IdentityCache
-    // This prevents race conditions when multiple tests modify the global cache
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     /// Create real RocksDB storage for testing
     fn create_test_storage() -> (Arc<RocksDbMemex>, TempDir) {
@@ -623,7 +619,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_14_01_healthy_ic_from_rocksdb() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14-01: Healthy IC from RocksDB ===");
         println!("SOURCE OF TRUTH: RocksDB storage");
 
@@ -663,7 +659,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_14_02_crisis_ic_from_rocksdb() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14-02: Crisis IC from RocksDB ===");
         println!("SOURCE OF TRUTH: RocksDB storage");
 
@@ -700,7 +696,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_14_03_boundary_ic_from_rocksdb() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14-03: IC Boundary (0.5) from RocksDB ===");
         println!("SOURCE OF TRUTH: RocksDB + IDENTITY-002");
 
@@ -733,7 +729,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_14_04_just_below_boundary_from_rocksdb() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14-04: IC Just Below Boundary (0.499) ===");
 
         let (storage, _tmp) = create_test_storage();
@@ -761,7 +757,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_14_05_empty_storage() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14-05: Empty Storage Verification ===");
         println!("SOURCE OF TRUTH: Fresh RocksDB storage");
 
@@ -923,7 +919,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_14_12_e2e_check_identity_command() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-14-12: E2E check_identity_command ===");
         println!("SOURCE OF TRUTH: RocksDB → Command → Response");
 

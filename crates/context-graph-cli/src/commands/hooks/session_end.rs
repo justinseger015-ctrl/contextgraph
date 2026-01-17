@@ -343,12 +343,9 @@ fn state_to_level(state: &CoreConsciousnessState) -> f32 {
 mod tests {
     use super::*;
     use crate::commands::hooks::args::OutputFormat;
+    use crate::commands::test_utils::GLOBAL_IDENTITY_LOCK;
     use context_graph_core::gwt::session_identity::{update_cache, KURAMOTO_N};
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    // Static lock to serialize tests that access global IdentityCache
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     /// Create temporary database for testing
     fn setup_test_db() -> (TempDir, PathBuf) {
@@ -364,7 +361,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_hooks_012_001_warm_cache_flush() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-001: Warm Cache Flush to RocksDB ===");
         println!("SOURCE OF TRUTH: RocksDB after save");
 
@@ -447,7 +444,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_hooks_012_002_cold_cache_behavior() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-002: Cold Cache Behavior ===");
         println!("SOURCE OF TRUTH: RocksDB after save");
 
@@ -568,7 +565,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_hooks_012_005_json_output_schema() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-005: JSON Output Schema ===");
         println!("SOURCE OF TRUTH: TECH-HOOKS.md Section 3.3");
 
@@ -638,7 +635,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_hooks_012_006_execution_time_budget() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-006: Execution Time Under Budget ===");
         println!("SOURCE OF TRUTH: TECH-HOOKS.md timeout=30000ms");
 
@@ -730,7 +727,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_hooks_012_008_rocksdb_physical_verification() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-008: RocksDB Physical Verification ===");
         println!("SOURCE OF TRUTH: Physical files on disk");
 

@@ -235,12 +235,9 @@ fn state_to_level(state: &ConsciousnessState) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::test_utils::GLOBAL_IDENTITY_LOCK;
     use context_graph_core::gwt::session_identity::{update_cache, KURAMOTO_N};
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    // Static lock to serialize tests that access global IdentityCache
-    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     /// Create real RocksDB storage for testing
     fn create_test_storage() -> (Arc<RocksDbMemex>, TempDir) {
@@ -255,7 +252,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_17_persist_success_silent() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-17: Persist Success (Silent) ===");
         println!("SOURCE OF TRUTH: RocksDB after save");
 
@@ -343,7 +340,7 @@ mod tests {
     // =========================================================================
     #[tokio::test]
     async fn tc_session_17c_custom_session_id() {
-        let _guard = TEST_LOCK.lock().expect("Test lock poisoned");
+        let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-SESSION-17c: Custom Session ID from stdin ===");
 
         // SETUP: Warm cache with one ID
