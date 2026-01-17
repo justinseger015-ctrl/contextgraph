@@ -25,6 +25,10 @@ bincode.workspace = true
 # RocksDB for Memory storage (TASK-P1-005: MemoryStore)
 rocksdb = "0.22"
 
+# File system watching for MDFileWatcher (TASK-P1-008)
+notify = "8.2"
+notify-debouncer-mini = "0.7"
+
 # PII detection regex patterns for L1 Sensing Layer (SEC-01, SEC-02)
 regex = "1.10"
 
