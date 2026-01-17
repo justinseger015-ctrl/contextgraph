@@ -79,6 +79,7 @@
 //! ```
 
 mod aggregation;
+pub mod config;
 pub mod divergence;
 mod executor;
 mod pipeline;
@@ -120,4 +121,11 @@ pub use similarity::{PerSpaceScores, SimilarityResult, NUM_SPACES};
 pub use divergence::{
     DivergenceAlert, DivergenceReport, DivergenceSeverity,
     DIVERGENCE_SPACES, MAX_SUMMARY_LEN, truncate_summary,
+};
+
+// Threshold and weight configuration types
+pub use config::{
+    high_thresholds, low_thresholds, default_weights,
+    PerSpaceThresholds, SimilarityThresholds, SpaceWeights,
+    RECENT_LOOKBACK_SECS, MAX_RECENT_MEMORIES, SPACE_WEIGHTS, TOTAL_WEIGHT,
 };
