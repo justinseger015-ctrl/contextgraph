@@ -22,6 +22,9 @@
 //! - [`ClusterSelectionMethod`]: EOM or Leaf cluster selection
 //! - [`BIRCHParams`]: Configuration for BIRCH incremental clustering
 //! - [`ClusteringFeature`]: CF statistical summary for BIRCH
+//! - [`BIRCHTree`]: CF-tree for O(log n) incremental clustering
+//! - [`BIRCHNode`]: Internal/leaf node in the CF-tree
+//! - [`BIRCHEntry`]: Entry containing CF and optional child pointer
 
 pub mod birch;
 pub mod cluster;
@@ -30,7 +33,7 @@ pub mod hdbscan;
 pub mod membership;
 pub mod topic;
 
-pub use birch::{birch_defaults, BIRCHParams, ClusteringFeature};
+pub use birch::{birch_defaults, BIRCHEntry, BIRCHNode, BIRCHParams, BIRCHTree, ClusteringFeature};
 pub use cluster::Cluster;
 pub use error::ClusterError;
 pub use hdbscan::{hdbscan_defaults, ClusterSelectionMethod, HDBSCANClusterer, HDBSCANParams};
