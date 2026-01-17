@@ -19,8 +19,17 @@
 //! - SS: squared sum (scalar sum of squared norms)
 //!
 //! Key property: CFs are additive. CF(A ∪ B) = CF(A) + CF(B)
+//!
+//! # BIRCHTree
+//!
+//! The BIRCH CF-tree for incremental clustering:
+//! - O(log n) insertion via tree traversal
+//! - Automatic node splitting when exceeding max_node_entries
+//! - Memory ID tracking for cluster membership queries
+//! - Threshold adaptation for target cluster count
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::teleological::Embedder;
 
