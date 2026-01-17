@@ -94,5 +94,9 @@ pub use memory::{
     MAX_CONTENT_LENGTH,
 };
 
-// Clustering types (Phase 4) - TASK-P4-001, TASK-P4-002
-pub use clustering::{Cluster, ClusterError, ClusterMembership, Topic, TopicPhase, TopicProfile, TopicStability};
+// Clustering types (Phase 4) - TASK-P4-001, TASK-P4-002, TASK-P4-003, TASK-P4-004, TASK-P4-005
+pub use clustering::{
+    birch_defaults, BIRCHParams, Cluster, ClusterError, ClusteringFeature, ClusterMembership,
+    ClusterSelectionMethod, HDBSCANClusterer, HDBSCANParams, Topic, TopicPhase, TopicProfile,
+    TopicStability, hdbscan_defaults,
+};

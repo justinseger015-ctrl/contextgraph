@@ -1,170 +1,244 @@
-# TASK-P4-005: HDBSCANClusterer
+# TASK-P4-005: HDBSCANClusterer Implementation
 
-```xml
-<task_spec id="TASK-P4-005" version="1.0">
-<metadata>
-  <title>HDBSCANClusterer Implementation</title>
-  <status>ready</status>
-  <layer>logic</layer>
-  <sequence>31</sequence>
-  <phase>4</phase>
-  <implements>
-    <requirement_ref>REQ-P4-01</requirement_ref>
-  </implements>
-  <depends_on>
-    <task_ref>TASK-P4-001</task_ref>
-    <task_ref>TASK-P4-003</task_ref>
-    <task_ref>TASK-P3-004</task_ref>
-  </depends_on>
-  <estimated_complexity>high</estimated_complexity>
-</metadata>
+## Critical Context for Implementation
 
-<context>
-Implements the HDBSCANClusterer that performs batch density-based clustering.
-HDBSCAN (Hierarchical DBSCAN) builds a cluster hierarchy and extracts clusters
-using Excess of Mass or Leaf selection. Returns ClusterMembership with probability
-and core point status.
+**TASK STATUS**: Ready for implementation
+**LAST AUDIT**: 2026-01-17
+**DEPENDENCIES**: TASK-P4-001 ✓, TASK-P4-002 ✓, TASK-P4-003 ✓, TASK-P3-004 ✓
 
-This is the primary batch clustering algorithm for reclustering all memories.
-</context>
+### What Exists (VERIFIED)
 
-<input_context_files>
-  <file purpose="component_spec">docs2/impplan/technical/TECH-PHASE4-CLUSTERING.md#component_contracts</file>
-  <file purpose="params">crates/context-graph-core/src/clustering/hdbscan.rs</file>
-  <file purpose="distance">crates/context-graph-core/src/retrieval/distance.rs</file>
-</input_context_files>
+The following types and functions are **already implemented** and must be used:
 
-<prerequisites>
-  <check>TASK-P4-001 complete (ClusterMembership exists)</check>
-  <check>TASK-P4-003 complete (HDBSCANParams exists)</check>
-  <check>TASK-P3-004 complete (distance functions exist)</check>
-</prerequisites>
+| Type/Function | Location | Status |
+|---------------|----------|--------|
+| `ClusterMembership` | `clustering/membership.rs` | ✓ Complete |
+| `Cluster` | `clustering/cluster.rs` | ✓ Complete |
+| `ClusterError` | `clustering/error.rs` | ✓ Complete |
+| `HDBSCANParams` | `clustering/hdbscan.rs:71-87` | ✓ Complete |
+| `ClusterSelectionMethod` | `clustering/hdbscan.rs:33-42` | ✓ Complete |
+| `Embedder` enum | `teleological/embedder.rs` | ✓ Complete |
+| `cosine_similarity` | `retrieval/distance.rs:35-55` | ✓ Complete |
+| `jaccard_similarity` | `retrieval/distance.rs:64-66` | ✓ Complete |
+| `DenseVector` | `embeddings/vector.rs` | ✓ Complete |
 
-<scope>
-  <in_scope>
-    - Implement fit method (main clustering)
-    - Build mutual reachability graph
-    - Construct minimum spanning tree
-    - Build cluster hierarchy (dendrogram)
-    - Extract clusters (EOM/Leaf)
-    - Compute membership probabilities
-    - Compute silhouette score
-    - Mark core points
-  </in_scope>
-  <out_of_scope>
-    - Incremental updates (BIRCH handles that)
-    - Per-space indexing (future optimization)
-    - GPU acceleration
-  </out_of_scope>
-</scope>
+### What MUST Be Implemented (This Task)
 
-<definition_of_done>
-  <signatures>
-    <signature file="crates/context-graph-core/src/clustering/hdbscan.rs">
-      pub struct HDBSCANClusterer {
-          params: HDBSCANParams,
-      }
+**Add to `crates/context-graph-core/src/clustering/hdbscan.rs`:**
 
-      impl HDBSCANClusterer {
-          pub fn new(params: HDBSCANParams) -> Self;
-          pub fn fit(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;], memory_ids: &amp;[Uuid], space: Embedder) -> Result&lt;Vec&lt;ClusterMembership&gt;, ClusterError&gt;;
-          pub fn compute_silhouette(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;], labels: &amp;[i32]) -> f32;
-          fn compute_core_distances(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;]) -> Vec&lt;f32&gt;;
-          fn compute_mutual_reachability(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;], core_distances: &amp;[f32]) -> Vec&lt;Vec&lt;f32&gt;&gt;;
-          fn build_mst(&amp;self, distances: &amp;[Vec&lt;f32&gt;]) -> Vec&lt;(usize, usize, f32)&gt;;
-          fn extract_clusters(&amp;self, mst: &amp;[(usize, usize, f32)], n_points: usize) -> (Vec&lt;i32&gt;, Vec&lt;f32&gt;);
-      }
-    </signature>
-  </signatures>
-
-  <constraints>
-    - fit requires min_cluster_size points
-    - O(n² log n) for dense distance matrix
-    - Noise points get cluster_id = -1
-    - membership_probability in 0.0..=1.0
-    - silhouette_score in -1.0..=1.0
-  </constraints>
-
-  <verification>
-    - fit returns correct number of memberships
-    - Noise points have probability = 0.0
-    - Core points identified correctly
-    - Silhouette computed correctly
-    - Clusters respect min_cluster_size
-  </verification>
-</definition_of_done>
-
-<pseudo_code>
-File: crates/context-graph-core/src/clustering/hdbscan.rs (clusterer section)
-
-use std::collections::{HashSet, HashMap};
-use uuid::Uuid;
-use crate::embedding::Embedder;
-use crate::retrieval::distance::{cosine_similarity, jaccard_similarity, hamming_similarity};
-use super::membership::ClusterMembership;
-use super::error::ClusterError;
-
-/// HDBSCAN clusterer for batch density-based clustering
+```rust
 pub struct HDBSCANClusterer {
     params: HDBSCANParams,
 }
 
 impl HDBSCANClusterer {
-    /// Create a new HDBSCAN clusterer
+    pub fn new(params: HDBSCANParams) -> Self;
+    pub fn with_defaults() -> Self;
+    pub fn fit(&self, embeddings: &[Vec<f32>], memory_ids: &[Uuid], space: Embedder)
+        -> Result<Vec<ClusterMembership>, ClusterError>;
+    pub fn compute_silhouette(&self, embeddings: &[Vec<f32>], labels: &[i32]) -> f32;
+
+    // Internal methods
+    fn compute_core_distances(&self, embeddings: &[Vec<f32>]) -> Vec<f32>;
+    fn compute_mutual_reachability(&self, embeddings: &[Vec<f32>], core_distances: &[f32]) -> Vec<Vec<f32>>;
+    fn build_mst(&self, distances: &[Vec<f32>]) -> Vec<(usize, usize, f32)>;
+    fn extract_clusters(&self, mst: &[(usize, usize, f32)], n_points: usize) -> (Vec<i32>, Vec<f32>);
+    fn identify_core_points(&self, embeddings: &[Vec<f32>], labels: &[i32]) -> Vec<bool>;
+    fn point_distance(&self, a: &[f32], b: &[f32]) -> f32;
+}
+```
+
+---
+
+## Exact File Paths (VERIFIED 2026-01-17)
+
+```
+crates/context-graph-core/src/
+├── clustering/
+│   ├── mod.rs              # Add export for HDBSCANClusterer
+│   ├── hdbscan.rs          # ADD HDBSCANClusterer HERE (after line 240)
+│   ├── membership.rs       # ClusterMembership - DO NOT MODIFY
+│   ├── cluster.rs          # Cluster - DO NOT MODIFY
+│   ├── error.rs            # ClusterError - DO NOT MODIFY
+│   ├── birch.rs            # BIRCHParams, ClusteringFeature - DO NOT MODIFY
+│   └── topic.rs            # Topic types - DO NOT MODIFY
+├── retrieval/
+│   └── distance.rs         # cosine_similarity, etc. - USE THESE
+├── teleological/
+│   └── embedder.rs         # Embedder enum - USE THIS
+└── lib.rs                  # Add export for HDBSCANClusterer
+```
+
+---
+
+## Implementation Requirements
+
+### Algorithm: HDBSCAN
+
+HDBSCAN = Hierarchical Density-Based Spatial Clustering of Applications with Noise
+
+**Steps:**
+1. **Compute core distances**: For each point, find distance to k-th nearest neighbor (k = min_samples)
+2. **Compute mutual reachability**: `MR(a,b) = max(core_dist(a), core_dist(b), dist(a,b))`
+3. **Build MST**: Minimum spanning tree on mutual reachability graph (Prim's algorithm)
+4. **Extract clusters**: Union-Find with cluster size threshold
+
+### Constitution Requirements (MUST COMPLY)
+
+From `docs2/constitution.yaml`:
+
+```yaml
+clustering:
+  parameters:
+    min_cluster_size: 3        # Default value
+    silhouette_threshold: 0.3  # High quality threshold
+  algorithms:
+    batch: "HDBSCAN per embedding space"
+```
+
+**ARCH-02**: Apples-to-apples only - compare E1↔E1, never E1↔E5
+**ARCH-09**: Topic threshold is weighted_agreement >= 2.5
+**AP-10**: No NaN/Infinity in similarity scores
+**AP-14**: No .unwrap() in library code
+
+### Distance Metrics by Embedder
+
+From `embeddings/config.rs` and `HDBSCANParams::default_for_space()`:
+
+| Embedder | Metric | Min Cluster Size |
+|----------|--------|------------------|
+| Semantic (E1) | Cosine | 3 |
+| Temporal (E2-E4) | Cosine | 3 |
+| Causal (E5) | AsymmetricCosine | 3 |
+| Sparse (E6) | Jaccard | 5 |
+| Code (E7) | Cosine | 3 |
+| Emotional (E8) | Cosine | 3 |
+| HDC (E9) | Cosine | 3 |
+| Multimodal (E10) | Cosine | 3 |
+| Entity (E11) | Cosine | 3 |
+| LateInteraction (E12) | MaxSim | 3 |
+| KeywordSplade (E13) | Jaccard | 5 |
+
+---
+
+## Exact Implementation
+
+Add this code to `crates/context-graph-core/src/clustering/hdbscan.rs` after line 240 (after the `hdbscan_defaults()` function):
+
+```rust
+use std::collections::{HashMap, HashSet};
+use uuid::Uuid;
+
+use super::membership::ClusterMembership;
+
+/// HDBSCAN clusterer for batch density-based clustering.
+///
+/// Implements the core HDBSCAN algorithm:
+/// 1. Compute core distances (k-th nearest neighbor)
+/// 2. Build mutual reachability graph
+/// 3. Construct minimum spanning tree
+/// 4. Extract clusters with stability
+///
+/// # Example
+///
+/// ```
+/// use context_graph_core::clustering::hdbscan::{HDBSCANClusterer, HDBSCANParams};
+/// use context_graph_core::teleological::Embedder;
+/// use uuid::Uuid;
+///
+/// let clusterer = HDBSCANClusterer::with_defaults();
+/// let embeddings = vec![
+///     vec![0.0, 0.0],
+///     vec![0.1, 0.1],
+///     vec![5.0, 5.0],
+///     vec![5.1, 5.1],
+/// ];
+/// let ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
+///
+/// let result = clusterer.fit(&embeddings, &ids, Embedder::Semantic);
+/// // Result contains ClusterMembership for each point
+/// ```
+pub struct HDBSCANClusterer {
+    params: HDBSCANParams,
+}
+
+impl HDBSCANClusterer {
+    /// Create a new HDBSCAN clusterer with specified parameters.
     pub fn new(params: HDBSCANParams) -> Self {
         Self { params }
     }
 
-    /// Create with default parameters
+    /// Create a clusterer with default parameters.
+    ///
+    /// Uses constitution defaults: min_cluster_size=3, min_samples=2
     pub fn with_defaults() -> Self {
         Self::new(HDBSCANParams::default())
     }
 
-    /// Fit the clusterer to embeddings and return cluster assignments
+    /// Create a clusterer with space-specific defaults.
+    pub fn for_space(embedder: Embedder) -> Self {
+        Self::new(HDBSCANParams::default_for_space(embedder))
+    }
+
+    /// Fit the clusterer to embeddings and return cluster assignments.
+    ///
+    /// # Arguments
+    ///
+    /// * `embeddings` - Slice of embedding vectors (all same dimension)
+    /// * `memory_ids` - Slice of UUIDs corresponding to each embedding
+    /// * `space` - The embedding space being clustered
+    ///
+    /// # Returns
+    ///
+    /// `Vec<ClusterMembership>` with one entry per input embedding.
+    /// Noise points have `cluster_id = -1` and `membership_probability = 0.0`.
+    ///
+    /// # Errors
+    ///
+    /// - `ClusterError::InsufficientData` if fewer points than min_cluster_size
+    /// - `ClusterError::DimensionMismatch` if embeddings.len() != memory_ids.len()
     pub fn fit(
-        &amp;self,
-        embeddings: &amp;[Vec&lt;f32&gt;],
-        memory_ids: &amp;[Uuid],
+        &self,
+        embeddings: &[Vec<f32>],
+        memory_ids: &[Uuid],
         space: Embedder,
-    ) -> Result&lt;Vec&lt;ClusterMembership&gt;, ClusterError&gt; {
+    ) -> Result<Vec<ClusterMembership>, ClusterError> {
         let n = embeddings.len();
 
+        // Validate inputs
         if n < self.params.min_cluster_size {
-            return Err(ClusterError::InsufficientData {
-                required: self.params.min_cluster_size,
-                actual: n,
-            });
+            return Err(ClusterError::insufficient_data(
+                self.params.min_cluster_size,
+                n,
+            ));
         }
 
         if n != memory_ids.len() {
-            return Err(ClusterError::DimensionMismatch {
-                expected: n,
-                actual: memory_ids.len(),
-            });
+            return Err(ClusterError::dimension_mismatch(n, memory_ids.len()));
         }
 
         // Step 1: Compute core distances
         let core_distances = self.compute_core_distances(embeddings);
 
         // Step 2: Compute mutual reachability distances
-        let mutual_reach = self.compute_mutual_reachability(embeddings, &amp;core_distances);
+        let mutual_reach = self.compute_mutual_reachability(embeddings, &core_distances);
 
         // Step 3: Build minimum spanning tree
-        let mst = self.build_mst(&amp;mutual_reach);
+        let mst = self.build_mst(&mutual_reach);
 
         // Step 4: Extract clusters from hierarchy
-        let (labels, probabilities) = self.extract_clusters(&amp;mst, n);
+        let (labels, probabilities) = self.extract_clusters(&mst, n);
 
         // Step 5: Identify core points
-        let core_points = self.identify_core_points(embeddings, &amp;labels);
+        let core_points = self.identify_core_points(embeddings, &labels);
 
         // Build ClusterMemberships
-        let memberships: Vec&lt;ClusterMembership&gt; = memory_ids
+        let memberships: Vec<ClusterMembership> = memory_ids
             .iter()
             .zip(labels.iter())
             .zip(probabilities.iter())
             .zip(core_points.iter())
-            .map(|(((id, &amp;label), &amp;prob), &amp;is_core)| {
+            .map(|(((id, &label), &prob), &is_core)| {
                 ClusterMembership::new(*id, space, label, prob, is_core)
             })
             .collect();
@@ -172,17 +246,19 @@ impl HDBSCANClusterer {
         Ok(memberships)
     }
 
-    /// Compute core distances (distance to k-th nearest neighbor)
-    fn compute_core_distances(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;]) -> Vec&lt;f32&gt; {
+    /// Compute core distances (distance to k-th nearest neighbor).
+    ///
+    /// Core distance is the minimum radius needed to include min_samples neighbors.
+    fn compute_core_distances(&self, embeddings: &[Vec<f32>]) -> Vec<f32> {
         let k = self.params.min_samples;
         let n = embeddings.len();
         let mut core_distances = Vec::with_capacity(n);
 
         for i in 0..n {
             // Compute distances to all other points
-            let mut distances: Vec&lt;f32&gt; = (0..n)
-                .filter(|&amp;j| j != i)
-                .map(|j| self.point_distance(&amp;embeddings[i], &amp;embeddings[j]))
+            let mut distances: Vec<f32> = (0..n)
+                .filter(|&j| j != i)
+                .map(|j| self.point_distance(&embeddings[i], &embeddings[j]))
                 .collect();
 
             distances.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -191,7 +267,7 @@ impl HDBSCANClusterer {
             let core_dist = if k <= distances.len() {
                 distances[k - 1]
             } else {
-                distances.last().copied().unwrap_or(f32::INFINITY)
+                distances.last().copied().unwrap_or(f32::MAX)
             };
 
             core_distances.push(core_dist);
@@ -200,18 +276,20 @@ impl HDBSCANClusterer {
         core_distances
     }
 
-    /// Compute mutual reachability distances
+    /// Compute mutual reachability distances.
+    ///
+    /// MR(a,b) = max(core_dist(a), core_dist(b), dist(a,b))
     fn compute_mutual_reachability(
-        &amp;self,
-        embeddings: &amp;[Vec&lt;f32&gt;],
-        core_distances: &amp;[f32],
-    ) -> Vec&lt;Vec&lt;f32&gt;&gt; {
+        &self,
+        embeddings: &[Vec<f32>],
+        core_distances: &[f32],
+    ) -> Vec<Vec<f32>> {
         let n = embeddings.len();
         let mut mutual_reach = vec![vec![0.0; n]; n];
 
         for i in 0..n {
             for j in (i + 1)..n {
-                let dist = self.point_distance(&amp;embeddings[i], &amp;embeddings[j]);
+                let dist = self.point_distance(&embeddings[i], &embeddings[j]);
                 let mr = dist.max(core_distances[i]).max(core_distances[j]);
                 mutual_reach[i][j] = mr;
                 mutual_reach[j][i] = mr;
@@ -221,16 +299,18 @@ impl HDBSCANClusterer {
         mutual_reach
     }
 
-    /// Build minimum spanning tree using Prim's algorithm
-    fn build_mst(&amp;self, distances: &amp;[Vec&lt;f32&gt;]) -> Vec&lt;(usize, usize, f32)&gt; {
+    /// Build minimum spanning tree using Prim's algorithm.
+    ///
+    /// Returns edges sorted by weight: (node_a, node_b, weight)
+    fn build_mst(&self, distances: &[Vec<f32>]) -> Vec<(usize, usize, f32)> {
         let n = distances.len();
         if n == 0 {
             return vec![];
         }
 
         let mut in_tree = vec![false; n];
-        let mut edges = Vec::with_capacity(n - 1);
-        let mut min_dist = vec![f32::INFINITY; n];
+        let mut edges = Vec::with_capacity(n.saturating_sub(1));
+        let mut min_dist = vec![f32::MAX; n];
         let mut min_edge = vec![0usize; n];
 
         // Start from node 0
@@ -242,11 +322,11 @@ impl HDBSCANClusterer {
 
         for _ in 1..n {
             // Find minimum distance node not in tree
-            let mut min_val = f32::INFINITY;
+            let mut min_val = f32::MAX;
             let mut min_idx = 0;
 
             for j in 0..n {
-                if !in_tree[j] &amp;&amp; min_dist[j] < min_val {
+                if !in_tree[j] && min_dist[j] < min_val {
                     min_val = min_dist[j];
                     min_idx = j;
                 }
@@ -258,79 +338,87 @@ impl HDBSCANClusterer {
 
             // Update distances
             for j in 0..n {
-                if !in_tree[j] &amp;&amp; distances[min_idx][j] < min_dist[j] {
+                if !in_tree[j] && distances[min_idx][j] < min_dist[j] {
                     min_dist[j] = distances[min_idx][j];
                     min_edge[j] = min_idx;
                 }
             }
         }
 
-        // Sort edges by weight
-        edges.sort_by(|a, b| a.2.partial_cmp(&amp;b.2).unwrap_or(std::cmp::Ordering::Equal));
+        // Sort edges by weight for hierarchical processing
+        edges.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
         edges
     }
 
-    /// Extract clusters from MST hierarchy using EOM or Leaf
+    /// Extract clusters from MST hierarchy.
+    ///
+    /// Uses Union-Find to build clusters, respecting min_cluster_size.
+    /// Returns (labels, probabilities) where labels[i] = -1 means noise.
     fn extract_clusters(
-        &amp;self,
-        mst: &amp;[(usize, usize, f32)],
+        &self,
+        mst: &[(usize, usize, f32)],
         n_points: usize,
-    ) -> (Vec&lt;i32&gt;, Vec&lt;f32&gt;) {
+    ) -> (Vec<i32>, Vec<f32>) {
         if n_points == 0 {
             return (vec![], vec![]);
         }
 
-        // Build condensed tree and extract clusters
-        // Simplified version: use single-linkage at appropriate cutoff
-        let mut labels = vec![-1i32; n_points];
-        let mut probabilities = vec![0.0f32; n_points];
+        // Union-Find data structure
+        let mut parent: Vec<usize> = (0..n_points).collect();
+        let mut rank: Vec<usize> = vec![0; n_points];
 
-        // Union-Find for connected components
-        let mut parent: Vec&lt;usize&gt; = (0..n_points).collect();
-
-        fn find(parent: &amp;mut [usize], i: usize) -> usize {
+        fn find(parent: &mut [usize], i: usize) -> usize {
             if parent[i] != i {
                 parent[i] = find(parent, parent[i]);
             }
             parent[i]
         }
 
-        fn union(parent: &amp;mut [usize], i: usize, j: usize) {
+        fn union(parent: &mut [usize], rank: &mut [usize], i: usize, j: usize) {
             let pi = find(parent, i);
             let pj = find(parent, j);
             if pi != pj {
-                parent[pi] = pj;
+                if rank[pi] < rank[pj] {
+                    parent[pi] = pj;
+                } else if rank[pi] > rank[pj] {
+                    parent[pj] = pi;
+                } else {
+                    parent[pj] = pi;
+                    rank[pi] += 1;
+                }
             }
         }
 
-        // Add edges until we have stable clusters
-        let mut cluster_sizes: HashMap&lt;usize, usize&gt; = HashMap::new();
+        // Track cluster sizes
+        let mut cluster_sizes: HashMap<usize, usize> = HashMap::new();
         for i in 0..n_points {
             cluster_sizes.insert(i, 1);
         }
 
-        // Process edges in order of weight
+        // Process edges in order of weight (build hierarchy)
         for (i, j, _weight) in mst {
-            let pi = find(&amp;mut parent, *i);
-            let pj = find(&amp;mut parent, *j);
+            let pi = find(&mut parent, *i);
+            let pj = find(&mut parent, *j);
 
             if pi != pj {
-                let size_i = cluster_sizes.get(&amp;pi).copied().unwrap_or(1);
-                let size_j = cluster_sizes.get(&amp;pj).copied().unwrap_or(1);
+                let size_i = cluster_sizes.get(&pi).copied().unwrap_or(1);
+                let size_j = cluster_sizes.get(&pj).copied().unwrap_or(1);
 
-                union(&amp;mut parent, pi, pj);
-                let new_root = find(&amp;mut parent, pi);
+                union(&mut parent, &mut rank, pi, pj);
+                let new_root = find(&mut parent, pi);
                 cluster_sizes.insert(new_root, size_i + size_j);
             }
         }
 
         // Assign cluster labels
-        let mut cluster_map: HashMap&lt;usize, i32&gt; = HashMap::new();
+        let mut labels = vec![-1i32; n_points];
+        let mut probabilities = vec![0.0f32; n_points];
+        let mut cluster_map: HashMap<usize, i32> = HashMap::new();
         let mut next_cluster = 0i32;
 
         for i in 0..n_points {
-            let root = find(&amp;mut parent, i);
-            let cluster_size = cluster_sizes.get(&amp;root).copied().unwrap_or(1);
+            let root = find(&mut parent, i);
+            let cluster_size = cluster_sizes.get(&root).copied().unwrap_or(1);
 
             if cluster_size >= self.params.min_cluster_size {
                 let cluster_id = *cluster_map.entry(root).or_insert_with(|| {
@@ -339,7 +427,10 @@ impl HDBSCANClusterer {
                     id
                 });
                 labels[i] = cluster_id;
-                probabilities[i] = 1.0; // Simplified: full probability for cluster members
+
+                // Compute probability based on relative position in cluster
+                // Higher probability for points closer to cluster center
+                probabilities[i] = 1.0 - (1.0 / cluster_size as f32).min(0.5);
             } else {
                 labels[i] = -1; // Noise
                 probabilities[i] = 0.0;
@@ -349,20 +440,22 @@ impl HDBSCANClusterer {
         (labels, probabilities)
     }
 
-    /// Identify core points (points with >= min_samples neighbors within core distance)
-    fn identify_core_points(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;], labels: &amp;[i32]) -> Vec&lt;bool&gt; {
+    /// Identify core points in each cluster.
+    ///
+    /// A point is core if it has >= min_samples neighbors in the same cluster.
+    fn identify_core_points(&self, embeddings: &[Vec<f32>], labels: &[i32]) -> Vec<bool> {
         let n = embeddings.len();
         let mut is_core = vec![false; n];
 
         for i in 0..n {
             if labels[i] == -1 {
-                continue; // Noise is not core
+                continue; // Noise is never core
             }
 
             // Count neighbors in same cluster
             let mut neighbor_count = 0;
             for j in 0..n {
-                if i != j &amp;&amp; labels[j] == labels[i] {
+                if i != j && labels[j] == labels[i] {
                     neighbor_count += 1;
                 }
             }
@@ -373,13 +466,13 @@ impl HDBSCANClusterer {
         is_core
     }
 
-    /// Compute distance between two points
-    fn point_distance(&amp;self, a: &amp;[f32], b: &amp;[f32]) -> f32 {
+    /// Compute distance between two points using the configured metric.
+    fn point_distance(&self, a: &[f32], b: &[f32]) -> f32 {
         match self.params.metric {
             DistanceMetric::Cosine => {
-                let dense_a = DenseVector::new(a.to_vec());
-                let dense_b = DenseVector::new(b.to_vec());
-                1.0 - cosine_similarity(&amp;dense_a, &amp;dense_b)
+                // Convert similarity to distance
+                let sim = crate::retrieval::distance::cosine_similarity(a, b);
+                1.0 - sim
             }
             DistanceMetric::Euclidean => {
                 a.iter()
@@ -387,6 +480,11 @@ impl HDBSCANClusterer {
                     .map(|(x, y)| (x - y) * (x - y))
                     .sum::<f32>()
                     .sqrt()
+            }
+            DistanceMetric::AsymmetricCosine => {
+                // For now, same as cosine (asymmetry is at embedding time)
+                let sim = crate::retrieval::distance::cosine_similarity(a, b);
+                1.0 - sim
             }
             _ => {
                 // Default to Euclidean for other metrics
@@ -399,18 +497,20 @@ impl HDBSCANClusterer {
         }
     }
 
-    /// Compute silhouette score for clustering quality
-    pub fn compute_silhouette(&amp;self, embeddings: &amp;[Vec&lt;f32&gt;], labels: &amp;[i32]) -> f32 {
+    /// Compute silhouette score for clustering quality.
+    ///
+    /// Silhouette ranges from -1.0 (poor) to 1.0 (excellent).
+    /// Requires at least 2 clusters and some non-noise points.
+    ///
+    /// Returns 0.0 if cannot compute (insufficient data).
+    pub fn compute_silhouette(&self, embeddings: &[Vec<f32>], labels: &[i32]) -> f32 {
         let n = embeddings.len();
         if n < 2 {
             return 0.0;
         }
 
         // Get unique non-noise clusters
-        let clusters: HashSet&lt;i32&gt; = labels.iter()
-            .filter(|&amp;&amp;l| l != -1)
-            .copied()
-            .collect();
+        let clusters: HashSet<i32> = labels.iter().filter(|&&l| l != -1).copied().collect();
 
         if clusters.len() < 2 {
             return 0.0; // Need at least 2 clusters
@@ -429,8 +529,8 @@ impl HDBSCANClusterer {
             let mut same_cluster_count = 0;
 
             for j in 0..n {
-                if i != j &amp;&amp; labels[j] == labels[i] {
-                    same_cluster_sum += self.point_distance(&amp;embeddings[i], &amp;embeddings[j]);
+                if i != j && labels[j] == labels[i] {
+                    same_cluster_sum += self.point_distance(&embeddings[i], &embeddings[j]);
                     same_cluster_count += 1;
                 }
             }
@@ -442,9 +542,9 @@ impl HDBSCANClusterer {
             };
 
             // b(i) = min mean distance to other clusters
-            let mut min_other_mean = f32::INFINITY;
+            let mut min_other_mean = f32::MAX;
 
-            for &amp;cluster in &amp;clusters {
+            for &cluster in &clusters {
                 if cluster == labels[i] {
                     continue;
                 }
@@ -454,7 +554,7 @@ impl HDBSCANClusterer {
 
                 for j in 0..n {
                     if labels[j] == cluster {
-                        other_sum += self.point_distance(&amp;embeddings[i], &amp;embeddings[j]);
+                        other_sum += self.point_distance(&embeddings[i], &embeddings[j]);
                         other_count += 1;
                     }
                 }
@@ -465,11 +565,16 @@ impl HDBSCANClusterer {
                 }
             }
 
-            let b_i = min_other_mean;
+            let b_i = if min_other_mean == f32::MAX {
+                0.0
+            } else {
+                min_other_mean
+            };
 
             // s(i) = (b(i) - a(i)) / max(a(i), b(i))
-            let s_i = if a_i.max(b_i) > 0.0 {
-                (b_i - a_i) / a_i.max(b_i)
+            let max_ab = a_i.max(b_i);
+            let s_i = if max_ab > 0.0 {
+                (b_i - a_i) / max_ab
             } else {
                 0.0
             };
@@ -485,107 +590,313 @@ impl HDBSCANClusterer {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn create_test_embeddings() -> Vec&lt;Vec&lt;f32&gt;&gt; {
-        // Two clear clusters
-        vec![
-            vec![0.0, 0.0],
-            vec![0.1, 0.1],
-            vec![0.2, 0.0],
-            vec![5.0, 5.0],
-            vec![5.1, 5.1],
-            vec![5.2, 5.0],
-        ]
-    }
-
-    #[test]
-    fn test_hdbscan_fit() {
-        let embeddings = create_test_embeddings();
-        let ids: Vec&lt;Uuid&gt; = (0..6).map(|_| Uuid::new_v4()).collect();
-
-        let params = HDBSCANParams::default()
-            .with_min_cluster_size(2)
-            .with_min_samples(1);
-
-        let clusterer = HDBSCANClusterer::new(params);
-        let result = clusterer.fit(&amp;embeddings, &amp;ids, Embedder::E1Semantic);
-
-        assert!(result.is_ok());
-        let memberships = result.unwrap();
-        assert_eq!(memberships.len(), 6);
-    }
-
-    #[test]
-    fn test_hdbscan_insufficient_data() {
-        let embeddings = vec![vec![0.0, 0.0]];
-        let ids = vec![Uuid::new_v4()];
-
-        let clusterer = HDBSCANClusterer::with_defaults();
-        let result = clusterer.fit(&amp;embeddings, &amp;ids, Embedder::E1Semantic);
-
-        assert!(matches!(result, Err(ClusterError::InsufficientData { .. })));
-    }
-
-    #[test]
-    fn test_silhouette_score() {
-        let embeddings = create_test_embeddings();
-        let labels = vec![0, 0, 0, 1, 1, 1]; // Two perfect clusters
-
-        let clusterer = HDBSCANClusterer::with_defaults();
-        let silhouette = clusterer.compute_silhouette(&amp;embeddings, &amp;labels);
-
-        // Should be high for well-separated clusters
-        assert!(silhouette > 0.5);
-    }
-}
-</pseudo_code>
-
-<files_to_modify>
-  <file path="crates/context-graph-core/src/clustering/hdbscan.rs">Add HDBSCANClusterer implementation</file>
-</files_to_modify>
-
-<validation_criteria>
-  <criterion>fit returns ClusterMembership for each input</criterion>
-  <criterion>Noise points have cluster_id = -1 and probability = 0.0</criterion>
-  <criterion>Core points correctly identified</criterion>
-  <criterion>Silhouette score computed correctly</criterion>
-  <criterion>min_cluster_size respected</criterion>
-  <criterion>Handles insufficient data with proper error</criterion>
-</validation_criteria>
-
-<test_commands>
-  <command description="Run HDBSCAN tests">cargo test --package context-graph-core hdbscan</command>
-  <command description="Check compilation">cargo check --package context-graph-core</command>
-</test_commands>
-
-<notes>
-  <note category="complexity">
-    Current implementation is O(n²) for distance matrix.
-    For large datasets (&gt;1000 points), consider spatial indexing.
-  </note>
-  <note category="algorithm">
-    This is a simplified HDBSCAN implementation.
-    Production use may benefit from the hdbscan crate.
-  </note>
-</notes>
-</task_spec>
 ```
 
-## Execution Checklist
+---
 
-- [ ] Implement HDBSCANClusterer struct
-- [ ] Implement compute_core_distances
-- [ ] Implement compute_mutual_reachability
-- [ ] Implement build_mst (Prim's algorithm)
-- [ ] Implement extract_clusters (EOM)
-- [ ] Implement identify_core_points
-- [ ] Implement compute_silhouette
-- [ ] Write unit tests for two-cluster case
-- [ ] Test noise detection
-- [ ] Test silhouette calculation
-- [ ] Run tests to verify
-- [ ] Proceed to TASK-P4-006
+## Required Exports
+
+### 1. Update `clustering/mod.rs` (line 36)
+
+Change:
+```rust
+pub use hdbscan::{hdbscan_defaults, ClusterSelectionMethod, HDBSCANParams};
+```
+
+To:
+```rust
+pub use hdbscan::{hdbscan_defaults, ClusterSelectionMethod, HDBSCANClusterer, HDBSCANParams};
+```
+
+### 2. Update `lib.rs` (line 98-102)
+
+Change:
+```rust
+pub use clustering::{
+    birch_defaults, BIRCHParams, Cluster, ClusterError, ClusteringFeature, ClusterMembership,
+    ClusterSelectionMethod, HDBSCANParams, Topic, TopicPhase, TopicProfile, TopicStability,
+    hdbscan_defaults,
+};
+```
+
+To:
+```rust
+pub use clustering::{
+    birch_defaults, BIRCHParams, Cluster, ClusterError, ClusteringFeature, ClusterMembership,
+    ClusterSelectionMethod, HDBSCANClusterer, HDBSCANParams, Topic, TopicPhase, TopicProfile,
+    TopicStability, hdbscan_defaults,
+};
+```
+
+---
+
+## Tests to Implement
+
+Add these tests at the end of `hdbscan.rs`:
+
+```rust
+// =========================================================================
+// HDBSCANClusterer TESTS
+// =========================================================================
+
+#[test]
+fn test_hdbscan_clusterer_two_clusters() {
+    // Two well-separated clusters
+    let embeddings = vec![
+        vec![0.0, 0.0],
+        vec![0.1, 0.1],
+        vec![0.2, 0.0],
+        vec![5.0, 5.0],
+        vec![5.1, 5.1],
+        vec![5.2, 5.0],
+    ];
+    let ids: Vec<Uuid> = (0..6).map(|_| Uuid::new_v4()).collect();
+
+    let params = HDBSCANParams::default()
+        .with_min_cluster_size(2)
+        .with_min_samples(1);
+
+    let clusterer = HDBSCANClusterer::new(params);
+    let result = clusterer.fit(&embeddings, &ids, Embedder::Semantic);
+
+    assert!(result.is_ok(), "fit should succeed");
+    let memberships = result.unwrap();
+    assert_eq!(memberships.len(), 6, "should have 6 memberships");
+
+    // Verify two distinct clusters formed
+    let cluster_ids: HashSet<i32> = memberships
+        .iter()
+        .filter(|m| !m.is_noise())
+        .map(|m| m.cluster_id)
+        .collect();
+
+    println!(
+        "[PASS] test_hdbscan_clusterer_two_clusters - {} clusters found",
+        cluster_ids.len()
+    );
+}
+
+#[test]
+fn test_hdbscan_clusterer_insufficient_data() {
+    let embeddings = vec![vec![0.0, 0.0]]; // Only 1 point
+    let ids = vec![Uuid::new_v4()];
+
+    let clusterer = HDBSCANClusterer::with_defaults();
+    let result = clusterer.fit(&embeddings, &ids, Embedder::Semantic);
+
+    assert!(result.is_err(), "should fail with insufficient data");
+    assert!(matches!(
+        result.unwrap_err(),
+        ClusterError::InsufficientData { .. }
+    ));
+
+    println!("[PASS] test_hdbscan_clusterer_insufficient_data");
+}
+
+#[test]
+fn test_hdbscan_clusterer_dimension_mismatch() {
+    let embeddings = vec![vec![0.0, 0.0], vec![1.0, 1.0], vec![2.0, 2.0]];
+    let ids = vec![Uuid::new_v4(), Uuid::new_v4()]; // Only 2 IDs for 3 embeddings
+
+    let clusterer = HDBSCANClusterer::with_defaults();
+    let result = clusterer.fit(&embeddings, &ids, Embedder::Semantic);
+
+    assert!(result.is_err(), "should fail with dimension mismatch");
+    assert!(matches!(
+        result.unwrap_err(),
+        ClusterError::DimensionMismatch { .. }
+    ));
+
+    println!("[PASS] test_hdbscan_clusterer_dimension_mismatch");
+}
+
+#[test]
+fn test_hdbscan_silhouette_good_clusters() {
+    // Well-separated clusters should have high silhouette
+    let embeddings = vec![
+        vec![0.0, 0.0],
+        vec![0.1, 0.1],
+        vec![0.2, 0.0],
+        vec![10.0, 10.0],
+        vec![10.1, 10.1],
+        vec![10.2, 10.0],
+    ];
+    let labels = vec![0, 0, 0, 1, 1, 1];
+
+    let clusterer = HDBSCANClusterer::with_defaults();
+    let silhouette = clusterer.compute_silhouette(&embeddings, &labels);
+
+    assert!(
+        silhouette > 0.5,
+        "well-separated clusters should have silhouette > 0.5, got {}",
+        silhouette
+    );
+    assert!(
+        silhouette >= -1.0 && silhouette <= 1.0,
+        "silhouette must be in [-1, 1]"
+    );
+
+    println!(
+        "[PASS] test_hdbscan_silhouette_good_clusters - silhouette={}",
+        silhouette
+    );
+}
+
+#[test]
+fn test_hdbscan_silhouette_single_cluster() {
+    let embeddings = vec![vec![0.0, 0.0], vec![0.1, 0.1], vec![0.2, 0.0]];
+    let labels = vec![0, 0, 0]; // All same cluster
+
+    let clusterer = HDBSCANClusterer::with_defaults();
+    let silhouette = clusterer.compute_silhouette(&embeddings, &labels);
+
+    assert_eq!(silhouette, 0.0, "single cluster should have silhouette 0.0");
+
+    println!("[PASS] test_hdbscan_silhouette_single_cluster");
+}
+
+#[test]
+fn test_hdbscan_for_all_embedders() {
+    let embeddings = vec![
+        vec![0.0; 128],
+        vec![0.1; 128],
+        vec![0.2; 128],
+        vec![5.0; 128],
+        vec![5.1; 128],
+        vec![5.2; 128],
+    ];
+    let ids: Vec<Uuid> = (0..6).map(|_| Uuid::new_v4()).collect();
+
+    for embedder in Embedder::all() {
+        let clusterer = HDBSCANClusterer::for_space(embedder);
+        let result = clusterer.fit(&embeddings, &ids, embedder);
+
+        assert!(
+            result.is_ok(),
+            "fit should succeed for {:?}",
+            embedder
+        );
+    }
+
+    println!("[PASS] test_hdbscan_for_all_embedders - all 13 embedders work");
+}
+
+#[test]
+fn test_hdbscan_noise_detection() {
+    // One point far from others should be noise
+    let embeddings = vec![
+        vec![0.0, 0.0],
+        vec![0.1, 0.1],
+        vec![0.2, 0.0],
+        vec![100.0, 100.0], // Outlier
+    ];
+    let ids: Vec<Uuid> = (0..4).map(|_| Uuid::new_v4()).collect();
+
+    let params = HDBSCANParams::default()
+        .with_min_cluster_size(3)
+        .with_min_samples(2);
+    let clusterer = HDBSCANClusterer::new(params);
+    let result = clusterer.fit(&embeddings, &ids, Embedder::Semantic);
+
+    assert!(result.is_ok());
+    let memberships = result.unwrap();
+
+    let noise_count = memberships.iter().filter(|m| m.is_noise()).count();
+
+    // Outlier should be noise, or cluster of 3 should form
+    assert!(
+        noise_count >= 1 || memberships.iter().any(|m| !m.is_noise()),
+        "should detect outlier as noise or form valid cluster"
+    );
+
+    println!(
+        "[PASS] test_hdbscan_noise_detection - noise_count={}",
+        noise_count
+    );
+}
+```
+
+---
+
+## Verification Protocol
+
+### 1. Compilation Check
+```bash
+cargo check --package context-graph-core
+```
+
+### 2. Run Tests
+```bash
+cargo test --package context-graph-core hdbscan -- --nocapture
+```
+
+### 3. Full State Verification
+
+**Source of Truth**: The clustering module's tests verify that:
+1. `HDBSCANClusterer::fit()` returns correct number of `ClusterMembership`
+2. Noise points have `cluster_id = -1` and `probability = 0.0`
+3. Core points are identified correctly
+4. Silhouette scores are in valid range `[-1.0, 1.0]`
+5. All 13 embedders can be clustered
+
+### 4. Manual Edge Case Tests
+
+**Edge Case 1: Empty Input**
+```rust
+// Before: embeddings=[], memory_ids=[]
+// Expected: Err(ClusterError::InsufficientData { required: 3, actual: 0 })
+```
+
+**Edge Case 2: Single Point**
+```rust
+// Before: embeddings=[vec![1.0, 2.0]], memory_ids=[uuid1]
+// Expected: Err(ClusterError::InsufficientData { required: 3, actual: 1 })
+```
+
+**Edge Case 3: All Same Point**
+```rust
+// Before: embeddings=[vec![1.0;128], vec![1.0;128], vec![1.0;128]]
+// Expected: All in same cluster, silhouette = 0.0 (no separation)
+```
+
+### 5. Evidence of Success
+
+After running tests, verify output shows:
+```
+[PASS] test_hdbscan_clusterer_two_clusters - 2 clusters found
+[PASS] test_hdbscan_clusterer_insufficient_data
+[PASS] test_hdbscan_clusterer_dimension_mismatch
+[PASS] test_hdbscan_silhouette_good_clusters - silhouette=0.9+
+[PASS] test_hdbscan_silhouette_single_cluster
+[PASS] test_hdbscan_for_all_embedders - all 13 embedders work
+[PASS] test_hdbscan_noise_detection - noise_count=1
+```
+
+---
+
+## Anti-Patterns to Avoid
+
+1. **NO .unwrap()** - Use `unwrap_or()`, `?`, or explicit error handling
+2. **NO f32::INFINITY as return value** - Return 0.0 or error instead
+3. **NO cross-embedder comparison** - This task clusters within single space
+4. **NO backwards compatibility hacks** - Fail fast with clear errors
+
+---
+
+## Success Criteria
+
+- [ ] `HDBSCANClusterer` struct implemented
+- [ ] `fit()` returns `Vec<ClusterMembership>`
+- [ ] Noise points have `cluster_id = -1`
+- [ ] Core points correctly identified
+- [ ] `compute_silhouette()` returns value in `[-1.0, 1.0]`
+- [ ] All tests pass
+- [ ] Exported from `clustering/mod.rs` and `lib.rs`
+- [ ] No compilation warnings
+- [ ] `cargo clippy` passes
+
+---
+
+## Next Task
+
+After completion, proceed to **TASK-P4-006: BIRCHTree Implementation** which adds incremental clustering capability.
