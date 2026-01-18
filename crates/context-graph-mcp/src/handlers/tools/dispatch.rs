@@ -73,6 +73,18 @@ impl Handlers {
                 self.call_trigger_consolidation(id, arguments).await
             }
 
+            // ========== TOPIC TOOLS (PRD Section 10.2) ==========
+            tool_names::GET_TOPIC_PORTFOLIO => {
+                self.call_get_topic_portfolio(id, arguments).await
+            }
+            tool_names::GET_TOPIC_STABILITY => {
+                self.call_get_topic_stability(id, arguments).await
+            }
+            tool_names::DETECT_TOPICS => self.call_detect_topics(id, arguments).await,
+            tool_names::GET_DIVERGENCE_ALERTS => {
+                self.call_get_divergence_alerts(id, arguments).await
+            }
+
             // ========== CURATION TOOLS (PRD Section 10.3) ==========
             tool_names::MERGE_CONCEPTS => self.call_merge_concepts(id, arguments).await,
 

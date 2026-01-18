@@ -1,475 +1,464 @@
-# Task 06: Implement Topic Tool Handlers
+# Task 06: Implement Topic and Curation Tool Handlers
 
 ## Metadata
 - **Task ID**: TASK-GAP-006
 - **Phase**: 2 (MCP Infrastructure)
 - **Priority**: High
 - **Complexity**: High
-- **Estimated Time**: 2-3 hours
-- **Dependencies**: task05 (TASK-GAP-005 - DTOs must be defined)
+- **Dependencies**: task05 (TASK-GAP-005 - DTOs COMPLETE)
+- **Last Audit**: 2026-01-18
+
+## Current Codebase State (VERIFIED)
+
+### What EXISTS (Do NOT recreate):
+| File | Status | Contains |
+|------|--------|----------|
+| `crates/context-graph-mcp/src/handlers/tools/topic_dtos.rs` | **EXISTS** (32.6KB) | All 4 request/response DTOs with validation |
+| `crates/context-graph-mcp/src/handlers/tools/curation_dtos.rs` | **EXISTS** (20.6KB) | ForgetConceptRequest/Response, BoostImportanceRequest/Response |
+| `crates/context-graph-mcp/src/handlers/tools/mod.rs` | **EXISTS** | Exports `curation_dtos` and `topic_dtos` |
+| `crates/context-graph-mcp/src/handlers/tools/helpers.rs` | **EXISTS** | `tool_result_with_pulse()`, `tool_error_with_pulse()` |
+| `crates/context-graph-mcp/src/handlers/tools/dispatch.rs` | **EXISTS** | Routes 6 tools (INJECT_CONTEXT, STORE_MEMORY, GET_MEMETIC_STATUS, SEARCH_GRAPH, TRIGGER_CONSOLIDATION, MERGE_CONCEPTS) |
+| `crates/context-graph-mcp/src/tools/names.rs` | **EXISTS** | All tool name constants (GET_TOPIC_PORTFOLIO, GET_TOPIC_STABILITY, DETECT_TOPICS, GET_DIVERGENCE_ALERTS, FORGET_CONCEPT, BOOST_IMPORTANCE marked `#[allow(dead_code)]`) |
+| `crates/context-graph-core/src/clustering/topic.rs` | **EXISTS** | `Topic`, `TopicProfile`, `TopicStability`, `TopicPhase` |
+| `crates/context-graph-core/src/clustering/stability.rs` | **EXISTS** | `TopicStabilityTracker`, `TopicSnapshot` |
+
+### What is MISSING (Must create):
+| File | Status | Must Contain |
+|------|--------|--------------|
+| `crates/context-graph-mcp/src/handlers/tools/topic_tools.rs` | **MISSING** | 4 handler methods |
+| `crates/context-graph-mcp/src/handlers/tools/curation_tools.rs` | **MISSING** | 2 handler methods |
+
+### What Needs MODIFICATION:
+| File | Change Required |
+|------|-----------------|
+| `crates/context-graph-mcp/src/handlers/tools/mod.rs` | Add `mod topic_tools;` and `mod curation_tools;` |
+| `crates/context-graph-mcp/src/handlers/tools/dispatch.rs` | Add 6 new tool routes |
 
 ## Objective
 
-Implement the 4 topic-related MCP tool handlers: `get_topic_portfolio`, `get_topic_stability`, `detect_topics`, and `get_divergence_alerts`. These handlers leverage the existing `context-graph-core::clustering` module and must comply with constitution rules AP-60 (temporal embedders excluded from topics), AP-62 (SEMANTIC only for divergence), and ARCH-09 (threshold >= 2.5).
+Implement 6 MCP tool handlers that use the existing DTOs and core types. NO STUB IMPLEMENTATIONS - all handlers must return real computed data or FAIL FAST with proper error codes.
 
-## Input Context
+## Constitutional Compliance (MANDATORY)
 
-Files to READ before starting:
-- `/home/cabdru/contextgraph/docs/TECH_SPEC_PRD_GAPS.md` - Section 10.1 for handler contracts
-- `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/memory_tools.rs` - Reference for handler patterns
-- `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/topic_dtos.rs` - DTOs to use (created in task05)
-- `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/helpers.rs` - Helper functions
-- `/home/cabdru/contextgraph/crates/context-graph-core/src/clustering/` - Clustering module to call
+| Rule | Requirement | Verification |
+|------|-------------|--------------|
+| **ARCH-09** | Topic threshold = weighted_agreement >= 2.5 | Test: `TopicProfile::is_topic()` returns false for 2.4, true for 2.5 |
+| **AP-60** | Temporal embedders (E2-E4) weight = 0.0 | Test: Profile with only E2,E3,E4 at 1.0 must have weighted_agreement = 0.0 |
+| **AP-62** | Divergence uses SEMANTIC only (E1, E5, E6, E7, E10, E12, E13) | Test: Divergence alert generation excludes E2-E4, E8, E9, E11 |
+| **AP-70** | Dream triggers: entropy > 0.7 AND churn > 0.5 | Test: `check_dream_trigger()` returns false for entropy=0.7, true for entropy=0.71 |
+| **SEC-06** | Soft delete 30-day recovery | Test: `forget_concept` with soft_delete=true sets recovery_expires_at 30 days out |
 
-## Files to Create/Modify
+## Implementation Requirements
 
-**Files to Create:**
-- `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/topic_tools.rs`
+### File 1: `topic_tools.rs`
 
-**Files to Modify:**
-- `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/mod.rs`
+**Path**: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/topic_tools.rs`
 
-## Implementation Steps
+**Required Handlers** (4 methods on `impl Handlers`):
 
-### Step 1: Create topic_tools.rs
-
-Create the handler file implementing all 4 topic tool methods on the Handlers struct.
-
-### Step 2: Update mod.rs
-
-Add `mod topic_tools;` to the module file.
-
-## Code/Content to Implement
-
-### /home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/topic_tools.rs
-
+#### 1. `call_get_topic_portfolio`
 ```rust
-//! Topic tool handlers.
-//!
-//! Per PRD Section 10.2, implements:
-//! - get_topic_portfolio: Get all discovered topics with profiles
-//! - get_topic_stability: Get portfolio-level stability metrics
-//! - detect_topics: Force topic detection recalculation
-//! - get_divergence_alerts: Check for divergence from recent activity
-//!
-//! Constitution Compliance:
-//! - AP-60: Temporal embedders (E2-E4) weight = 0.0 in topic detection
-//! - AP-62: Only SEMANTIC embedders for divergence alerts
-//! - ARCH-09: Topic threshold is weighted_agreement >= 2.5
-
-use serde_json::json;
-use tracing::{debug, warn};
-use uuid::Uuid;
-
-use crate::protocol::{error_codes, JsonRpcId, JsonRpcResponse};
-
-use super::super::Handlers;
-use super::topic_dtos::{
-    DetectTopicsRequest, DetectTopicsResponse, DivergenceAlert, DivergenceAlertsResponse,
-    GetDivergenceAlertsRequest, GetTopicPortfolioRequest, GetTopicStabilityRequest,
-    MergedTopicInfo, PhaseBreakdown, StabilityMetricsSummary, TopicPortfolioResponse,
-    TopicStabilityResponse, TopicSummary,
-};
-
-/// Minimum weighted agreement for topic detection (per ARCH-09).
-const TOPIC_THRESHOLD: f32 = 2.5;
-
-/// Maximum weighted agreement (7 SEMANTIC + 2 RELATIONAL*0.5 + 1 STRUCTURAL*0.5).
-const MAX_WEIGHTED_AGREEMENT: f32 = 8.5;
-
-/// Minimum memories required for clustering (per constitution min_cluster_size).
-const MIN_MEMORIES_FOR_CLUSTERING: usize = 3;
-
-/// SEMANTIC embedders for divergence detection (per AP-62).
-/// E1, E5, E6, E7, E10, E12, E13
-const SEMANTIC_EMBEDDERS: [&str; 7] = [
-    "E1_Semantic",
-    "E5_Causal",
-    "E6_Sparse",
-    "E7_Code",
-    "E10_Multimodal",
-    "E12_LateInteraction",
-    "E13_SPLADE",
-];
-
-impl Handlers {
-    /// Handle get_topic_portfolio tool call.
-    ///
-    /// Returns discovered topics with profiles, stability metrics, and tier info.
-    ///
-    /// # Arguments
-    /// * `id` - JSON-RPC request ID
-    /// * `arguments` - Tool arguments (format: brief|standard|verbose)
-    ///
-    /// # Returns
-    /// JsonRpcResponse with TopicPortfolioResponse
-    ///
-    /// # Implements
-    /// REQ-MCP-002, REQ-MCP-004
-    pub(crate) async fn call_get_topic_portfolio(
-        &self,
-        id: Option<JsonRpcId>,
-        arguments: serde_json::Value,
-    ) -> JsonRpcResponse {
-        debug!("Handling get_topic_portfolio");
-
-        // Parse request
-        let request: GetTopicPortfolioRequest = match serde_json::from_value(arguments) {
-            Ok(r) => r,
-            Err(e) => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INVALID_PARAMS,
-                    format!("Invalid params: {}", e),
-                );
-            }
-        };
-
-        // Validate format
-        let format = request.format.to_lowercase();
-        if !["brief", "standard", "verbose"].contains(&format.as_str()) {
-            return JsonRpcResponse::error(
-                id,
-                error_codes::INVALID_PARAMS,
-                "Invalid params: format must be brief|standard|verbose",
-            );
-        }
-
-        // Get memory count to determine tier
-        let memory_count = match self.teleological_store.count().await {
-            Ok(c) => c,
-            Err(e) => {
-                warn!(error = %e, "Failed to get memory count");
-                0
-            }
-        };
-
-        let tier = determine_tier(memory_count);
-
-        // Tier 0: No memories, return empty response
-        if tier == 0 {
-            let response = TopicPortfolioResponse {
-                topics: vec![],
-                stability: StabilityMetricsSummary {
-                    churn_rate: 0.0,
-                    entropy: 0.0,
-                    is_stable: true,
-                },
-                total_topics: 0,
-                tier: 0,
-            };
-            return self.tool_result_with_pulse(id, serde_json::to_value(response).unwrap());
-        }
-
-        // For now, return stub response
-        // TODO: Integrate with actual clustering module when available
-        let response = TopicPortfolioResponse {
-            topics: vec![],
-            stability: StabilityMetricsSummary {
-                churn_rate: 0.0,
-                entropy: 0.0,
-                is_stable: true,
-            },
-            total_topics: 0,
-            tier,
-        };
-
-        self.tool_result_with_pulse(id, serde_json::to_value(response).unwrap())
-    }
-
-    /// Handle get_topic_stability tool call.
-    ///
-    /// Returns stability metrics including churn, entropy, and dream recommendation.
-    ///
-    /// # Arguments
-    /// * `id` - JSON-RPC request ID
-    /// * `arguments` - Tool arguments (hours: lookback period)
-    ///
-    /// # Returns
-    /// JsonRpcResponse with TopicStabilityResponse
-    ///
-    /// # Implements
-    /// REQ-MCP-002
-    pub(crate) async fn call_get_topic_stability(
-        &self,
-        id: Option<JsonRpcId>,
-        arguments: serde_json::Value,
-    ) -> JsonRpcResponse {
-        debug!("Handling get_topic_stability");
-
-        // Parse request
-        let request: GetTopicStabilityRequest = match serde_json::from_value(arguments) {
-            Ok(r) => r,
-            Err(e) => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INVALID_PARAMS,
-                    format!("Invalid params: {}", e),
-                );
-            }
-        };
-
-        // Validate hours range
-        if request.hours == 0 || request.hours > 168 {
-            return JsonRpcResponse::error(
-                id,
-                error_codes::INVALID_PARAMS,
-                "Invalid params: hours must be between 1 and 168",
-            );
-        }
-
-        // TODO: Get actual stability metrics from clustering module
-        let churn_rate = 0.0;
-        let entropy = 0.0;
-
-        // Per AP-70: Dream recommended when entropy > 0.7 AND churn > 0.5
-        let dream_recommended = entropy > 0.7 && churn_rate > 0.5;
-        let high_churn_warning = churn_rate >= 0.5;
-
-        let response = TopicStabilityResponse {
-            churn_rate,
-            entropy,
-            phases: PhaseBreakdown {
-                emerging: 0,
-                stable: 0,
-                declining: 0,
-                merging: 0,
-            },
-            dream_recommended,
-            high_churn_warning,
-            average_churn: churn_rate,
-        };
-
-        self.tool_result_with_pulse(id, serde_json::to_value(response).unwrap())
-    }
-
-    /// Handle detect_topics tool call.
-    ///
-    /// Triggers topic detection/clustering. Requires minimum 3 memories.
-    ///
-    /// # Arguments
-    /// * `id` - JSON-RPC request ID
-    /// * `arguments` - Tool arguments (force: force detection)
-    ///
-    /// # Returns
-    /// JsonRpcResponse with DetectTopicsResponse
-    ///
-    /// # Implements
-    /// REQ-MCP-002, BR-MCP-003
-    pub(crate) async fn call_detect_topics(
-        &self,
-        id: Option<JsonRpcId>,
-        arguments: serde_json::Value,
-    ) -> JsonRpcResponse {
-        debug!("Handling detect_topics");
-
-        // Parse request
-        let request: DetectTopicsRequest = match serde_json::from_value(arguments) {
-            Ok(r) => r,
-            Err(e) => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INVALID_PARAMS,
-                    format!("Invalid params: {}", e),
-                );
-            }
-        };
-
-        // Check minimum memory count
-        let memory_count = match self.teleological_store.count().await {
-            Ok(c) => c,
-            Err(e) => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INTERNAL_ERROR,
-                    format!("Failed to get memory count: {}", e),
-                );
-            }
-        };
-
-        if memory_count < MIN_MEMORIES_FOR_CLUSTERING {
-            return JsonRpcResponse::error(
-                id,
-                -32021, // INSUFFICIENT_MEMORIES
-                format!(
-                    "Need >= {} memories for topic detection (have {})",
-                    MIN_MEMORIES_FOR_CLUSTERING, memory_count
-                ),
-            );
-        }
-
-        // TODO: Run actual HDBSCAN clustering
-        // For now, return stub response
-        let response = DetectTopicsResponse {
-            new_topics: vec![],
-            merged_topics: vec![],
-            total_after: 0,
-            message: Some(format!(
-                "Topic detection placeholder - {} memories available",
-                memory_count
-            )),
-        };
-
-        self.tool_result_with_pulse(id, serde_json::to_value(response).unwrap())
-    }
-
-    /// Handle get_divergence_alerts tool call.
-    ///
-    /// Checks for divergence from recent activity using SEMANTIC embedders ONLY.
-    ///
-    /// # Arguments
-    /// * `id` - JSON-RPC request ID
-    /// * `arguments` - Tool arguments (lookback_hours)
-    ///
-    /// # Returns
-    /// JsonRpcResponse with DivergenceAlertsResponse
-    ///
-    /// # Implements
-    /// REQ-MCP-002, REQ-MCP-005
-    ///
-    /// # Constitution Compliance
-    /// - AP-62: Only SEMANTIC embedders (E1, E5, E6, E7, E10, E12, E13) trigger alerts
-    /// - Temporal embedders (E2-E4) NEVER trigger divergence alerts
-    pub(crate) async fn call_get_divergence_alerts(
-        &self,
-        id: Option<JsonRpcId>,
-        arguments: serde_json::Value,
-    ) -> JsonRpcResponse {
-        debug!("Handling get_divergence_alerts");
-
-        // Parse request
-        let request: GetDivergenceAlertsRequest = match serde_json::from_value(arguments) {
-            Ok(r) => r,
-            Err(e) => {
-                return JsonRpcResponse::error(
-                    id,
-                    error_codes::INVALID_PARAMS,
-                    format!("Invalid params: {}", e),
-                );
-            }
-        };
-
-        // Validate lookback range
-        if request.lookback_hours == 0 || request.lookback_hours > 48 {
-            return JsonRpcResponse::error(
-                id,
-                error_codes::INVALID_PARAMS,
-                "Invalid params: lookback_hours must be between 1 and 48",
-            );
-        }
-
-        // TODO: Get recent memories and compare using SEMANTIC embedders only
-        // Per AP-62: Only E1, E5, E6, E7, E10, E12, E13 trigger divergence alerts
-        // Temporal embedders (E2-E4) are explicitly excluded
-
-        let alerts: Vec<DivergenceAlert> = vec![];
-
-        // Determine severity based on alert count and scores
-        let severity = if alerts.is_empty() {
-            "none"
-        } else if alerts.len() == 1 {
-            "low"
-        } else if alerts.len() <= 3 {
-            "medium"
-        } else {
-            "high"
-        };
-
-        let response = DivergenceAlertsResponse {
-            alerts,
-            severity: severity.to_string(),
-        };
-
-        self.tool_result_with_pulse(id, serde_json::to_value(response).unwrap())
-    }
-}
-
-/// Determine progressive tier based on memory count.
-///
-/// Per constitution progressive_tiers:
-/// - tier_0: 0 memories
-/// - tier_1: 1-2 memories
-/// - tier_2: 3-9 memories
-/// - tier_3: 10-29 memories
-/// - tier_4: 30-99 memories
-/// - tier_5: 100-499 memories
-/// - tier_6: 500+ memories
-fn determine_tier(memory_count: usize) -> u8 {
-    match memory_count {
-        0 => 0,
-        1..=2 => 1,
-        3..=9 => 2,
-        10..=29 => 3,
-        30..=99 => 4,
-        100..=499 => 5,
-        _ => 6,
-    }
-}
+pub(crate) async fn call_get_topic_portfolio(
+    &self,
+    id: Option<JsonRpcId>,
+    arguments: serde_json::Value,
+) -> JsonRpcResponse
 ```
 
-### Update mod.rs
+**Logic Flow**:
+1. Parse `GetTopicPortfolioRequest` from arguments
+2. Call `request.validate()` - FAIL FAST if invalid
+3. Get memory count: `self.teleological_store.count().await`
+4. Compute tier using `TopicPortfolioResponse::tier_for_memory_count(count)`
+5. If tier < 2 (< 3 memories): Return empty portfolio with tier info
+6. Get UTL status: `self.utl_processor.get_status()`
+7. Build `TopicPortfolioResponse` with:
+   - `topics`: Empty vec (clustering integration later)
+   - `stability`: From UTL status (entropy, coherence mapped)
+   - `total_topics`: 0 (placeholder until clustering)
+   - `tier`: Computed tier
+8. Return via `self.tool_result_with_pulse(id, response)`
 
-Add to `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/mod.rs`:
+**Error Codes**:
+- `INVALID_PARAMS (-32602)`: Invalid format parameter
+- `STORAGE_ERROR (-32004)`: Cannot get memory count
 
+#### 2. `call_get_topic_stability`
+```rust
+pub(crate) async fn call_get_topic_stability(
+    &self,
+    id: Option<JsonRpcId>,
+    arguments: serde_json::Value,
+) -> JsonRpcResponse
+```
+
+**Logic Flow**:
+1. Parse `GetTopicStabilityRequest` from arguments
+2. Call `request.validate()` - FAIL FAST if invalid (hours must be 1-168)
+3. Get UTL status for entropy
+4. Compute `dream_trigger_ready` per AP-70: `entropy > 0.7 AND churn > 0.5`
+5. Build `TopicStabilityResponse` with churn_history (empty initially), drift_history, metrics
+6. Return via `self.tool_result_with_pulse(id, response)`
+
+**Error Codes**:
+- `INVALID_PARAMS (-32602)`: hours out of range
+
+#### 3. `call_detect_topics`
+```rust
+pub(crate) async fn call_detect_topics(
+    &self,
+    id: Option<JsonRpcId>,
+    arguments: serde_json::Value,
+) -> JsonRpcResponse
+```
+
+**Logic Flow**:
+1. Parse `DetectTopicsRequest` from arguments
+2. Get memory count: `self.teleological_store.count().await`
+3. FAIL FAST if count < 3: Return error `-32021` (INSUFFICIENT_DATA)
+4. Get processing start time
+5. Build `DetectTopicsResponse` with processing_time_ms
+6. Return via `self.tool_result_with_pulse(id, response)`
+
+**Error Codes**:
+- `INVALID_PARAMS (-32602)`: Parse error
+- `-32021` (INSUFFICIENT_DATA): Need >= 3 memories
+
+#### 4. `call_get_divergence_alerts`
+```rust
+pub(crate) async fn call_get_divergence_alerts(
+    &self,
+    id: Option<JsonRpcId>,
+    arguments: serde_json::Value,
+) -> JsonRpcResponse
+```
+
+**Logic Flow**:
+1. Parse `GetDivergenceAlertsRequest` from arguments
+2. Call `request.validate()` - FAIL FAST if invalid (lookback_hours must be 1-48)
+3. **CRITICAL (AP-62)**: Only compute divergence for SEMANTIC embedders
+4. Build `DivergenceAlertResponse` with alerts (empty initially), severity_level
+5. Return via `self.tool_result_with_pulse(id, response)`
+
+**SEMANTIC Embedders Array** (use for divergence):
+```rust
+const SEMANTIC_EMBEDDERS: [usize; 7] = [0, 4, 5, 6, 9, 11, 12]; // E1, E5, E6, E7, E10, E12, E13
+```
+
+### File 2: `curation_tools.rs`
+
+**Path**: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/curation_tools.rs`
+
+**Required Handlers** (2 methods on `impl Handlers`):
+
+#### 1. `call_forget_concept`
+```rust
+pub(crate) async fn call_forget_concept(
+    &self,
+    id: Option<JsonRpcId>,
+    arguments: serde_json::Value,
+) -> JsonRpcResponse
+```
+
+**Logic Flow**:
+1. Parse `ForgetConceptRequest` from arguments
+2. Call `request.validate()` and `request.parse_node_id()` - FAIL FAST if invalid UUID
+3. Check if node exists: `self.teleological_store.retrieve(uuid).await`
+4. FAIL FAST if not found: Return `NODE_NOT_FOUND (-32002)`
+5. Delete: `self.teleological_store.delete(uuid, request.soft_delete).await`
+6. Build `ForgetConceptResponse` with:
+   - If soft_delete: `recovery_expires_at = Utc::now() + Duration::days(30)`
+   - If hard delete: `permanently_deleted = true`
+7. Return via `self.tool_result_with_pulse(id, response)`
+
+**Error Codes**:
+- `INVALID_PARAMS (-32602)`: Invalid UUID format
+- `NODE_NOT_FOUND (-32002)`: Node doesn't exist
+
+#### 2. `call_boost_importance`
+```rust
+pub(crate) async fn call_boost_importance(
+    &self,
+    id: Option<JsonRpcId>,
+    arguments: serde_json::Value,
+) -> JsonRpcResponse
+```
+
+**Logic Flow**:
+1. Parse `BoostImportanceRequest` from arguments
+2. Call `request.validate()` and `request.parse_node_id()` - FAIL FAST if invalid
+3. Retrieve fingerprint: `self.teleological_store.retrieve(uuid).await`
+4. FAIL FAST if not found: Return `NODE_NOT_FOUND (-32002)`
+5. Compute new importance: `(old + delta).clamp(0.0, 1.0)`
+6. Update fingerprint with new importance
+7. Store updated: `self.teleological_store.update(fingerprint).await`
+8. Build `BoostImportanceResponse` with old/new/final importance
+9. Return via `self.tool_result_with_pulse(id, response)`
+
+**Error Codes**:
+- `INVALID_PARAMS (-32602)`: Invalid UUID or delta out of range
+- `NODE_NOT_FOUND (-32002)`: Node doesn't exist
+- `STORAGE_ERROR (-32004)`: Update failed
+
+### File 3: Update `mod.rs`
+
+**Path**: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/mod.rs`
+
+**Current Content**:
 ```rust
 //! MCP tool call handlers.
-//!
-//! PRD v6 Section 10 MCP Tools:
-//! - inject_context, store_memory, search_graph (memory_tools.rs)
-//! - get_memetic_status (status_tools.rs)
-//! - trigger_consolidation (consolidation.rs)
-//! - merge_concepts (../merge.rs)
-//! - get_topic_portfolio, get_topic_stability, detect_topics, get_divergence_alerts (topic_tools.rs)
-//! - forget_concept, boost_importance (curation_tools.rs)
-
 mod consolidation;
 mod dispatch;
 mod helpers;
 mod memory_tools;
 mod status_tools;
-mod topic_tools;
 
-// DTOs for new PRD v6 tools
 pub mod curation_dtos;
 pub mod topic_dtos;
 ```
 
-## Definition of Done
+**Change**: Add two module declarations after `status_tools`:
+```rust
+mod topic_tools;
+mod curation_tools;
+```
 
-- [ ] File `topic_tools.rs` exists with all 4 handler methods
-- [ ] `call_get_topic_portfolio` parses request, validates format, returns TopicPortfolioResponse
-- [ ] `call_get_topic_stability` parses request, validates hours, checks dream trigger (AP-70)
-- [ ] `call_detect_topics` validates minimum 3 memories, returns DetectTopicsResponse
-- [ ] `call_get_divergence_alerts` validates lookback_hours, documents SEMANTIC-only rule (AP-62)
-- [ ] All handlers use `self.tool_result_with_pulse()` for consistent response format
-- [ ] Constants defined for TOPIC_THRESHOLD (2.5), MAX_WEIGHTED_AGREEMENT (8.5)
-- [ ] `mod.rs` includes `mod topic_tools;`
-- [ ] `cargo check -p context-graph-mcp` passes
-- [ ] `cargo clippy -p context-graph-mcp -- -D warnings` passes
+### File 4: Update `dispatch.rs`
 
-## Verification
+**Path**: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/dispatch.rs`
 
+**Current match arms** (lines 64-85):
+- tool_names::INJECT_CONTEXT
+- tool_names::STORE_MEMORY
+- tool_names::GET_MEMETIC_STATUS
+- tool_names::SEARCH_GRAPH
+- tool_names::TRIGGER_CONSOLIDATION
+- tool_names::MERGE_CONCEPTS
+
+**Add after line 77** (after MERGE_CONCEPTS):
+```rust
+// ========== TOPIC TOOLS (PRD Section 10.2) ==========
+tool_names::GET_TOPIC_PORTFOLIO => self.call_get_topic_portfolio(id, arguments).await,
+tool_names::GET_TOPIC_STABILITY => self.call_get_topic_stability(id, arguments).await,
+tool_names::DETECT_TOPICS => self.call_detect_topics(id, arguments).await,
+tool_names::GET_DIVERGENCE_ALERTS => self.call_get_divergence_alerts(id, arguments).await,
+
+// ========== CURATION TOOLS (PRD Section 10.3) ==========
+tool_names::FORGET_CONCEPT => self.call_forget_concept(id, arguments).await,
+tool_names::BOOST_IMPORTANCE => self.call_boost_importance(id, arguments).await,
+```
+
+## Required Imports
+
+### topic_tools.rs
+```rust
+use std::time::Instant;
+use serde_json::json;
+use tracing::{debug, warn};
+use crate::protocol::{error_codes, JsonRpcId, JsonRpcResponse};
+use super::super::Handlers;
+use super::topic_dtos::{
+    GetTopicPortfolioRequest, GetTopicStabilityRequest, DetectTopicsRequest,
+    GetDivergenceAlertsRequest, TopicPortfolioResponse, TopicStabilityResponse,
+    DetectTopicsResponse, DivergenceAlertResponse, StabilityMetricsSummary,
+};
+```
+
+### curation_tools.rs
+```rust
+use chrono::{Duration, Utc};
+use serde_json::json;
+use tracing::{debug, warn};
+use crate::protocol::{error_codes, JsonRpcId, JsonRpcResponse};
+use super::super::Handlers;
+use super::curation_dtos::{
+    ForgetConceptRequest, ForgetConceptResponse,
+    BoostImportanceRequest, BoostImportanceResponse,
+};
+```
+
+## Full State Verification Protocol
+
+### Source of Truth
+- **Memory Store**: `TeleologicalMemoryStore` accessed via `self.teleological_store`
+- **RocksDB Location**: `data/rocksdb/` (dev mode)
+- **Verification Method**: After each operation, perform separate READ to confirm state
+
+### Verification Steps After Implementation
+
+#### Step 1: Compilation Check
 ```bash
 cd /home/cabdru/contextgraph
+cargo check -p context-graph-mcp 2>&1 | head -50
+cargo clippy -p context-graph-mcp -- -D warnings 2>&1 | head -50
+```
 
-# Verify file exists
-test -f crates/context-graph-mcp/src/handlers/tools/topic_tools.rs && echo "topic_tools.rs exists"
+**Expected Output**: No errors, no warnings
 
-# Verify compilation
-cargo check -p context-graph-mcp
-
-# Verify no clippy warnings
-cargo clippy -p context-graph-mcp -- -D warnings
-
-# Verify all 4 handlers are defined
-grep "pub(crate) async fn call_" crates/context-graph-mcp/src/handlers/tools/topic_tools.rs | wc -l
+#### Step 2: Handler Method Count
+```bash
+grep -c "pub(crate) async fn call_" crates/context-graph-mcp/src/handlers/tools/topic_tools.rs
 # Expected: 4
 
-# Verify constitution compliance comments
-grep -c "AP-60\|AP-62\|ARCH-09\|AP-70" crates/context-graph-mcp/src/handlers/tools/topic_tools.rs
-# Should show multiple references to constitution rules
-
-# Verify SEMANTIC embedders constant
-grep "SEMANTIC_EMBEDDERS" crates/context-graph-mcp/src/handlers/tools/topic_tools.rs
-# Should show E1, E5, E6, E7, E10, E12, E13
+grep -c "pub(crate) async fn call_" crates/context-graph-mcp/src/handlers/tools/curation_tools.rs
+# Expected: 2
 ```
+
+#### Step 3: Module Exports
+```bash
+grep "mod topic_tools" crates/context-graph-mcp/src/handlers/tools/mod.rs
+grep "mod curation_tools" crates/context-graph-mcp/src/handlers/tools/mod.rs
+# Both should exist
+```
+
+#### Step 4: Dispatch Routes
+```bash
+grep -c "tool_names::GET_TOPIC_PORTFOLIO\|tool_names::GET_TOPIC_STABILITY\|tool_names::DETECT_TOPICS\|tool_names::GET_DIVERGENCE_ALERTS\|tool_names::FORGET_CONCEPT\|tool_names::BOOST_IMPORTANCE" crates/context-graph-mcp/src/handlers/tools/dispatch.rs
+# Expected: 6
+```
+
+#### Step 5: Dead Code Cleanup
+After implementation, update `crates/context-graph-mcp/src/tools/names.rs`:
+Remove `#[allow(dead_code)]` from the 6 newly-used constants.
+
+## Manual Testing Protocol
+
+### Test Environment Setup
+```bash
+# Ensure RocksDB directory exists
+mkdir -p data/rocksdb
+
+# Build in dev mode
+cargo build -p context-graph-mcp
+```
+
+### Test 1: get_topic_portfolio (Happy Path)
+**Input**:
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "get_topic_portfolio", "arguments": {"format": "standard"}}}
+```
+
+**Expected Output Verification**:
+- Response contains `tier` field (0-6 based on memory count)
+- Response contains `_cognitive_pulse` object
+- If tier < 2: `total_topics` = 0, `topics` = []
+- `stability.entropy` is float 0.0-1.0
+
+**State Verification**:
+```bash
+# Check memory count in store
+# The tier in response must match:
+# 0 memories -> tier 0
+# 1-2 memories -> tier 1
+# 3-9 memories -> tier 2
+```
+
+### Test 2: get_topic_portfolio (Edge Case - Invalid Format)
+**Input**:
+```json
+{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_topic_portfolio", "arguments": {"format": "invalid"}}}
+```
+
+**Expected Output**:
+- `isError: true`
+- Error message contains "Invalid format"
+
+### Test 3: get_topic_stability (Happy Path)
+**Input**:
+```json
+{"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_topic_stability", "arguments": {"hours": 6}}}
+```
+
+**Expected Output Verification**:
+- Response contains `average_churn`, `average_drift`, `entropy`
+- `dream_trigger_ready` is boolean
+- `high_entropy_duration_secs` >= 0
+
+### Test 4: get_topic_stability (Edge Case - Hours = 0)
+**Input**:
+```json
+{"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "get_topic_stability", "arguments": {"hours": 0}}}
+```
+
+**Expected Output**:
+- `isError: true`
+- Error message contains "hours must be at least 1"
+
+### Test 5: detect_topics (Edge Case - Insufficient Memories)
+**Input** (when store has < 3 memories):
+```json
+{"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "detect_topics", "arguments": {"force": true}}}
+```
+
+**Expected Output**:
+- `isError: true`
+- Error code: -32021
+- Message contains "Need >= 3 memories"
+
+### Test 6: forget_concept (Invalid UUID)
+**Input**:
+```json
+{"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "forget_concept", "arguments": {"node_id": "not-a-uuid", "soft_delete": true}}}
+```
+
+**Expected Output**:
+- `isError: true`
+- Error code: -32602
+- Message contains "Invalid UUID format"
+
+### Test 7: boost_importance (Node Not Found)
+**Input**:
+```json
+{"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "boost_importance", "arguments": {"node_id": "00000000-0000-0000-0000-000000000000", "delta": 0.1}}}
+```
+
+**Expected Output**:
+- `isError: true`
+- Error code: -32002
+- Message contains "not found"
+
+## Edge Cases to Test
+
+| Scenario | Input | Expected Behavior |
+|----------|-------|-------------------|
+| Empty arguments | `{}` | Use defaults, no error |
+| Max hours | `{"hours": 168}` | Accept (max allowed) |
+| Hours > 168 | `{"hours": 169}` | FAIL FAST with INVALID_PARAMS |
+| Delta = -1.0 | `{"delta": -1.0}` | Accept (min allowed) |
+| Delta < -1.0 | `{"delta": -1.1}` | Clamp to -1.0 |
+| Soft delete | `{"soft_delete": true}` | Set recovery_expires_at |
+| Hard delete | `{"soft_delete": false}` | permanently_deleted = true |
+
+## Definition of Done
+
+- [ ] File `topic_tools.rs` exists at exact path with 4 handler methods
+- [ ] File `curation_tools.rs` exists at exact path with 2 handler methods
+- [ ] `mod.rs` declares both modules
+- [ ] `dispatch.rs` routes all 6 new tools
+- [ ] All handlers use `self.tool_result_with_pulse()` or `self.tool_error_with_pulse()`
+- [ ] All handlers call `.validate()` on request DTOs before processing
+- [ ] `#[allow(dead_code)]` removed from 6 tool name constants
+- [ ] `cargo check -p context-graph-mcp` passes with ZERO errors
+- [ ] `cargo clippy -p context-graph-mcp -- -D warnings` passes with ZERO warnings
+- [ ] Manual tests 1-7 all pass with expected outputs
+- [ ] State verification confirms data persistence after operations
+
+## Anti-Patterns to AVOID
+
+| Anti-Pattern | Why It's Wrong | Correct Approach |
+|--------------|----------------|------------------|
+| Returning stub data | Violates FAIL FAST | Return empty valid response OR error |
+| Using `.unwrap()` | Can panic in production | Use `?` or `.ok_or()` |
+| Silencing errors | Hides bugs | Log with `warn!()` then return error |
+| Skipping validation | Invalid data corrupts state | Always call `.validate()` |
+| Mock data in tests | Tests pass but system broken | Use real store operations |
+| Backwards compatibility shims | Creates tech debt | FAIL FAST, fix caller |
+
+## References
+
+- Constitution: `/home/cabdru/contextgraph/CLAUDE.md` (Topic System section)
+- DTOs: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/topic_dtos.rs`
+- Pattern Reference: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/memory_tools.rs`
+- Helper Functions: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/handlers/tools/helpers.rs`
+- Core Types: `/home/cabdru/contextgraph/crates/context-graph-core/src/clustering/topic.rs`
+- Error Codes: `/home/cabdru/contextgraph/crates/context-graph-mcp/src/protocol.rs` (lines 77-255)

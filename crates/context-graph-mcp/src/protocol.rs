@@ -124,6 +124,9 @@ pub mod error_codes {
     // Goal/alignment specific error codes (-32020 to -32029) - TASK-S003
     /// Goal not found in hierarchy
     pub const GOAL_NOT_FOUND: i32 = -32020;
+    /// Insufficient memories for topic detection (< min_cluster_size)
+    /// Per constitution clustering.parameters.min_cluster_size: 3
+    pub const INSUFFICIENT_MEMORIES: i32 = -32021;
     /// Alignment computation failed
     pub const ALIGNMENT_COMPUTATION_ERROR: i32 = -32022;
     /// Goal hierarchy operation failed

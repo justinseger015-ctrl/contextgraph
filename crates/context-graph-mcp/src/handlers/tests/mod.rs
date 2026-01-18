@@ -56,6 +56,8 @@ mod task_emb_024_verification;
 mod tcp_transport_integration;
 mod tools_call;
 mod tools_list;
+mod topic_tools;
+mod topic_tools_fsv;
 
 use std::sync::Arc;
 

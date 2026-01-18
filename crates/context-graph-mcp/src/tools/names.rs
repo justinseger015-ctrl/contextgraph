@@ -19,13 +19,9 @@ pub const SEARCH_GRAPH: &str = "search_graph";
 pub const TRIGGER_CONSOLIDATION: &str = "trigger_consolidation";
 
 // ========== TOPIC TOOLS (PRD Section 10.2) ==========
-#[allow(dead_code)]
 pub const GET_TOPIC_PORTFOLIO: &str = "get_topic_portfolio";
-#[allow(dead_code)]
 pub const GET_TOPIC_STABILITY: &str = "get_topic_stability";
-#[allow(dead_code)]
 pub const DETECT_TOPICS: &str = "detect_topics";
-#[allow(dead_code)]
 pub const GET_DIVERGENCE_ALERTS: &str = "get_divergence_alerts";
 
 // ========== CURATION TOOLS (PRD Section 10.3) ==========
