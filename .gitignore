@@ -120,3 +120,6 @@ perf.data.old
 
 # Runtime data
 contextgraph_data/
+
+# RocksDB runtime data
+data/
