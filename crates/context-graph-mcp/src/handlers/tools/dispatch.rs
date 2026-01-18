@@ -1,4 +1,9 @@
 //! Tool dispatch logic for MCP tool calls.
+//!
+//! Per PRD v6 Section 10, only these MCP tools are exposed:
+//! - Core: inject_context, search_graph, store_memory, get_memetic_status
+//! - Consolidation: trigger_consolidation
+//! - Curation: merge_concepts
 
 use serde_json::json;
 use tracing::debug;
@@ -9,19 +14,12 @@ use crate::tools::{get_tool_definitions, tool_names};
 use super::super::Handlers;
 
 impl Handlers {
-    /// Handle tools/list request.
-    ///
-    /// Returns all available MCP tools with their schemas.
     pub(crate) async fn handle_tools_list(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
         debug!("Handling tools/list request");
-
         let tools = get_tool_definitions();
         JsonRpcResponse::success(id, json!({ "tools": tools }))
     }
 
-    /// Handle tools/call request.
-    ///
-    /// Dispatches to the appropriate tool handler and returns MCP-compliant result.
     pub(crate) async fn handle_tools_call(
         &self,
         id: Option<JsonRpcId>,
@@ -49,9 +47,7 @@ impl Handlers {
             }
         };
 
-        // TASK-MCP-P1-001: Resolve alias to canonical name
         let tool_name = crate::tools::aliases::resolve_alias(raw_tool_name);
-
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
         debug!(
@@ -66,112 +62,21 @@ impl Handlers {
         );
 
         match tool_name {
+            // ========== CORE TOOLS (PRD Section 10.1) ==========
             tool_names::INJECT_CONTEXT => self.call_inject_context(id, arguments).await,
             tool_names::STORE_MEMORY => self.call_store_memory(id, arguments).await,
             tool_names::GET_MEMETIC_STATUS => self.call_get_memetic_status(id).await,
-            tool_names::GET_GRAPH_MANIFEST => self.call_get_graph_manifest(id).await,
             tool_names::SEARCH_GRAPH => self.call_search_graph(id, arguments).await,
-            tool_names::UTL_STATUS => self.call_utl_status(id).await,
-            tool_names::GET_WORKSPACE_STATUS => self.call_get_workspace_status(id).await,
-            tool_names::GET_EGO_STATE => self.call_get_ego_state(id).await,
-            tool_names::TRIGGER_WORKSPACE_BROADCAST => {
-                self.call_trigger_workspace_broadcast(id, arguments).await
-            }
-            // TASK-UTL-P1-001: UTL delta S/C computation
-            tool_names::COMPUTE_DELTA_SC => {
-                self.handle_gwt_compute_delta_sc(id, Some(arguments)).await
-            }
-            // TASK-ATC-001: Adaptive Threshold Calibration tools
-            tool_names::GET_THRESHOLD_STATUS => {
-                self.handle_get_threshold_status(id, Some(arguments)).await
-            }
-            tool_names::GET_CALIBRATION_METRICS => {
-                self.handle_get_calibration_metrics(id, Some(arguments))
-                    .await
-            }
-            tool_names::TRIGGER_RECALIBRATION => {
-                self.handle_trigger_recalibration(id, Some(arguments)).await
-            }
-            // TASK-DREAM-MCP: Dream consolidation tools
-            tool_names::TRIGGER_DREAM => self.call_trigger_dream(id, arguments).await,
-            tool_names::GET_DREAM_STATUS => self.call_get_dream_status(id).await,
-            tool_names::ABORT_DREAM => self.call_abort_dream(id, arguments).await,
-            tool_names::GET_AMORTIZED_SHORTCUTS => {
-                self.call_get_amortized_shortcuts(id, arguments).await
-            }
-            // TASK-37: GPU status tool
-            tool_names::GET_GPU_STATUS => self.call_get_gpu_status(id).await,
-            // TASK-S01: Trigger mental_check based on entropy
-            tool_names::TRIGGER_MENTAL_CHECK => self.call_trigger_mental_check(id, arguments).await,
-            // TASK-S02: Get trigger configuration
-            tool_names::GET_TRIGGER_CONFIG => self.call_get_trigger_config(id).await,
-            // TASK-S03: Get trigger history
-            tool_names::GET_TRIGGER_HISTORY => self.call_get_trigger_history(id, arguments).await,
-            // TASK-NEUROMOD-MCP: Neuromodulation tools
-            tool_names::GET_NEUROMODULATION_STATE => self.call_get_neuromodulation_state(id).await,
-            tool_names::ADJUST_NEUROMODULATOR => {
-                self.call_adjust_neuromodulator(id, arguments).await
-            }
-            // TASK-STEERING-001: Steering tools
-            tool_names::GET_STEERING_FEEDBACK => self.call_get_steering_feedback(id).await,
-            // TASK-CAUSAL-001: Causal inference tools
-            tool_names::OMNI_INFER => self.call_omni_infer(id, arguments).await,
-            // TELEO-H1 to TELEO-H5: Teleological tools
-            tool_names::SEARCH_TELEOLOGICAL => self.call_search_teleological(id, arguments).await,
-            tool_names::COMPUTE_TELEOLOGICAL_VECTOR => {
-                self.call_compute_teleological_vector(id, arguments).await
-            }
-            tool_names::FUSE_EMBEDDINGS => self.call_fuse_embeddings(id, arguments).await,
-            tool_names::UPDATE_SYNERGY_MATRIX => {
-                self.call_update_synergy_matrix(id, arguments).await
-            }
-            tool_names::MANAGE_TELEOLOGICAL_PROFILE => {
-                self.call_manage_teleological_profile(id, arguments).await
-            }
-            // TASK-AUTONOMOUS-MCP: Autonomous tools
-            // REMOVED: AUTO_BOOTSTRAP per TASK-P0-001 (ARCH-03)
-            tool_names::GET_ALIGNMENT_DRIFT => self.call_get_alignment_drift(id, arguments).await,
-            tool_names::GET_DRIFT_HISTORY => self.call_get_drift_history(id, arguments).await,
-            tool_names::TRIGGER_DRIFT_CORRECTION => {
-                self.call_trigger_drift_correction(id, arguments).await
-            }
-            tool_names::GET_PRUNING_CANDIDATES => {
-                self.call_get_pruning_candidates(id, arguments).await
-            }
+
+            // ========== CONSOLIDATION TOOLS (PRD Section 10.1) ==========
             tool_names::TRIGGER_CONSOLIDATION => {
                 self.call_trigger_consolidation(id, arguments).await
             }
-            tool_names::DISCOVER_SUB_GOALS => self.call_discover_sub_goals(id, arguments).await,
-            tool_names::GET_AUTONOMOUS_STATUS => {
-                self.call_get_autonomous_status(id, arguments).await
-            }
-            // SPEC-AUTONOMOUS-001: 5 new autonomous tools
-            tool_names::GET_LEARNER_STATE => self.call_get_learner_state(id, arguments).await,
-            tool_names::OBSERVE_OUTCOME => self.call_observe_outcome(id, arguments).await,
-            tool_names::EXECUTE_PRUNE => self.call_execute_prune(id, arguments).await,
-            tool_names::GET_HEALTH_STATUS => self.call_get_health_status(id, arguments).await,
-            tool_names::TRIGGER_HEALING => self.call_trigger_healing(id, arguments).await,
-            // TASK-MCP-P0-001: Meta-learning self-correction tools
-            tool_names::GET_META_LEARNING_STATUS => {
-                self.call_get_meta_learning_status(id, arguments).await
-            }
-            tool_names::TRIGGER_LAMBDA_RECALIBRATION => {
-                self.call_trigger_lambda_recalibration(id, arguments).await
-            }
-            tool_names::GET_META_LEARNING_LOG => {
-                self.call_get_meta_learning_log(id, arguments).await
-            }
-            // TASK-MCP-002: Epistemic action for GWT workspace belief management
-            tool_names::EPISTEMIC_ACTION => self.call_epistemic_action(id, arguments).await,
-            // TASK-MCP-004: Merge concepts for node consolidation
+
+            // ========== CURATION TOOLS (PRD Section 10.3) ==========
             tool_names::MERGE_CONCEPTS => self.call_merge_concepts(id, arguments).await,
-            // TASK-34: Coherence state summary
-            tool_names::GET_COHERENCE_STATE => self.call_get_coherence_state(id, arguments).await,
-            // TASK-013/014: Session lifecycle hooks per ARCH-07
-            tool_names::SESSION_START => self.call_session_start(id, arguments).await,
-            tool_names::SESSION_END => self.call_session_end(id, arguments).await,
-            tool_names::PRE_TOOL_USE => self.call_pre_tool_use(id, arguments).await,
-            tool_names::POST_TOOL_USE => self.call_post_tool_use(id, arguments).await,
+
+            // Unknown tool
             _ => JsonRpcResponse::error(
                 id,
                 error_codes::TOOL_NOT_FOUND,

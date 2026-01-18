@@ -20,6 +20,8 @@
 //! }
 //! ```
 
+#![allow(dead_code)]
+
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 use uuid::Uuid;

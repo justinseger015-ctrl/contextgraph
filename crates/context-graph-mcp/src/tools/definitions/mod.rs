@@ -1,73 +1,31 @@
-//! Tool definitions organized by functional category.
+//! Tool definitions per PRD v6 Section 10.
 //!
-//! Each submodule provides tool definitions for a specific category of MCP tools.
-//! TASK-41: Changed private modules to pub(crate) for ToolRegistry access.
+//! Only PRD-required tools are exposed:
+//! - Core: inject_context, store_memory, get_memetic_status, search_graph, trigger_consolidation
+//! - Curation: merge_concepts
 
-pub(crate) mod atc;
-pub(crate) mod autonomous;
-pub(crate) mod causal;
 pub(crate) mod core;
-pub(crate) mod dream;
-pub mod epistemic;
-pub(crate) mod gwt;
 pub mod merge;
-pub(crate) mod meta_utl;
-pub(crate) mod neuromod;
-// TASK-013: Session lifecycle tools per ARCH-07
-pub(crate) mod session;
-pub(crate) mod steering;
-pub(crate) mod teleological;
-pub(crate) mod utl;
 
 use crate::tools::types::ToolDefinition;
 
 /// Get all tool definitions for the `tools/list` response.
 ///
-/// Returns the complete list of MCP tools exposed by the Context Graph server.
+/// Per PRD v6, only 6 tools are exposed:
+/// - inject_context
+/// - store_memory
+/// - get_memetic_status
+/// - search_graph
+/// - trigger_consolidation
+/// - merge_concepts
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(50);
+    let mut tools = Vec::with_capacity(6);
 
-    // Core tools (6)
+    // Core tools (5)
     tools.extend(core::definitions());
 
-    // GWT tools
-    tools.extend(gwt::definitions());
-
-    // UTL tools (1)
-    tools.extend(utl::definitions());
-
-    // ATC tools (3)
-    tools.extend(atc::definitions());
-
-    // Dream tools (5) - TASK-37: Added get_gpu_status
-    tools.extend(dream::definitions());
-
-    // Neuromod tools (2)
-    tools.extend(neuromod::definitions());
-
-    // Steering tools (1)
-    tools.extend(steering::definitions());
-
-    // Causal tools (1)
-    tools.extend(causal::definitions());
-
-    // Teleological tools (5)
-    tools.extend(teleological::definitions());
-
-    // Autonomous tools (12) - includes 7 original + 5 SPEC-AUTONOMOUS-001 tools
-    tools.extend(autonomous::definitions());
-
-    // Meta-UTL tools (3) - TASK-METAUTL-P0-005
-    tools.extend(meta_utl::definitions());
-
-    // Epistemic tools (1) - TASK-MCP-001
-    tools.extend(epistemic::definitions());
-
-    // Merge tools (1) - TASK-MCP-003
+    // Merge tools (1)
     tools.extend(merge::definitions());
-
-    // Session tools (4) - TASK-013: Per ARCH-07 session lifecycle hooks
-    tools.extend(session::definitions());
 
     tools
 }

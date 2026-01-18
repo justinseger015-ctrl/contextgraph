@@ -1,7 +1,7 @@
-//! Status query tool implementations (get_memetic_status, get_graph_manifest, utl_status).
+//! Status query tool implementations (get_memetic_status).
 
 use serde_json::json;
-use tracing::{debug, error};
+use tracing::error;
 
 use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
 
@@ -186,118 +186,5 @@ impl Handlers {
                 }
             }),
         )
-    }
-
-    /// get_graph_manifest tool implementation.
-    ///
-    /// Returns the 5-layer bio-nervous architecture manifest.
-    /// Response includes `_cognitive_pulse` with live system state.
-    ///
-    /// TASK-EMB-024: Layer statuses now come from LayerStatusProvider.
-    pub(crate) async fn call_get_graph_manifest(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
-        // TASK-EMB-024: Get REAL layer statuses from LayerStatusProvider
-        let perception_status = self
-            .layer_status_provider
-            .perception_status()
-            .await
-            .map(|s| s.as_str().to_string())
-            .unwrap_or_else(|e| {
-                error!(error = %e, "get_graph_manifest: perception_status FAILED");
-                "error".to_string()
-            });
-        let memory_status = self
-            .layer_status_provider
-            .memory_status()
-            .await
-            .map(|s| s.as_str().to_string())
-            .unwrap_or_else(|e| {
-                error!(error = %e, "get_graph_manifest: memory_status FAILED");
-                "error".to_string()
-            });
-        let reasoning_status = self
-            .layer_status_provider
-            .reasoning_status()
-            .await
-            .map(|s| s.as_str().to_string())
-            .unwrap_or_else(|e| {
-                error!(error = %e, "get_graph_manifest: reasoning_status FAILED");
-                "error".to_string()
-            });
-        let action_status = self
-            .layer_status_provider
-            .action_status()
-            .await
-            .map(|s| s.as_str().to_string())
-            .unwrap_or_else(|e| {
-                error!(error = %e, "get_graph_manifest: action_status FAILED");
-                "error".to_string()
-            });
-        let meta_status = self
-            .layer_status_provider
-            .meta_status()
-            .await
-            .map(|s| s.as_str().to_string())
-            .unwrap_or_else(|e| {
-                error!(error = %e, "get_graph_manifest: meta_status FAILED");
-                "error".to_string()
-            });
-
-        self.tool_result_with_pulse(
-            id,
-            json!({
-                "architecture": "5-layer-bio-nervous",
-                "fingerprintType": "TeleologicalFingerprint",
-                "embedderCount": NUM_EMBEDDERS,
-                "layers": [
-                    {
-                        "name": "Perception",
-                        "description": "Sensory input processing and feature extraction",
-                        "status": perception_status
-                    },
-                    {
-                        "name": "Memory",
-                        "description": "Teleological memory with 13-embedding semantic fingerprints",
-                        "status": memory_status
-                    },
-                    {
-                        "name": "Reasoning",
-                        "description": "Inference, planning, and decision making",
-                        "status": reasoning_status
-                    },
-                    {
-                        "name": "Action",
-                        "description": "Response generation and motor control",
-                        "status": action_status
-                    },
-                    {
-                        "name": "Meta",
-                        "description": "Self-monitoring, learning rate control, and system optimization",
-                        "status": meta_status
-                    }
-                ],
-                "utl": {
-                    "description": "Universal Transfer Learning - measures learning potential",
-                    "formula": "L(x) = H(P) - H(P|x) + alpha * C(x)"
-                },
-                "teleological": {
-                    "description": "Purpose-aware retrieval with topic alignment",
-                    "purposeVectorDimension": NUM_EMBEDDERS
-                }
-            }),
-        )
-    }
-
-    /// utl_status tool implementation.
-    ///
-    /// Returns current UTL system state including lifecycle phase, entropy,
-    /// coherence, learning score, and consolidation phase.
-    /// Response includes `_cognitive_pulse` with live system state.
-    pub(crate) async fn call_utl_status(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
-        debug!("Handling utl_status tool call");
-
-        // Get status from UTL processor (returns serde_json::Value)
-        let status = self.utl_processor.get_status();
-
-        self.tool_result_with_pulse(id, status)
     }
 }

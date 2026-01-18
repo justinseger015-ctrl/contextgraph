@@ -39,43 +39,23 @@
 //! } // _tempdir dropped here, cleaning up the database
 //! ```
 
-mod causal;
 mod cognitive_pulse;
 mod content_storage_verification;
-mod epistemic;
 mod error_codes;
-mod exhaustive_mcp_tools;
-mod full_state_verification;
-mod full_state_verification_gwt;
-mod full_state_verification_meta_utl;
-mod full_state_verification_purpose;
 mod full_state_verification_search;
 mod initialize;
 mod inject_synthetic_data;
-mod integration_e2e;
-mod manual_delta_sc_verification;
-mod manual_fix_verification;
-mod manual_fsv_purpose;
 mod manual_fsv_verification;
-mod manual_mcp_happy_paths;
-mod manual_teleological_validation;
 mod memory;
-mod meta_cognitive;
 mod phase1_manual_store_verify;
 mod phase2_search_retrieval;
-mod phase4_autonomous_bootstrap;
-mod phase5_teleological_operations;
-mod phase6_cross_agent_coordination;
 mod phase7_final_state_verification;
-mod purpose;
 mod search;
 mod stubfix_fsv_tests;
 mod task_emb_024_verification;
 mod tcp_transport_integration;
-mod teleological;
 mod tools_call;
 mod tools_list;
-mod utl;
 
 use std::sync::Arc;
 

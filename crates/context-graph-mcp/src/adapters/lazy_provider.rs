@@ -5,7 +5,6 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
@@ -39,6 +38,7 @@ pub struct LazyMultiArrayProvider {
     failed: Arc<RwLock<Option<String>>>,
 }
 
+#[allow(dead_code)]
 impl LazyMultiArrayProvider {
     /// Create a new lazy provider.
     ///

@@ -13,6 +13,8 @@
 //! constitution.yaml mcp.transport: [stdio, sse]
 //! Performance budget: MCP Response <100ms
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

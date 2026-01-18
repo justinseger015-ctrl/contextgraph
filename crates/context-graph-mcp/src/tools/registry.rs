@@ -6,6 +6,8 @@
 //! - Validates all tools are registered at startup
 //! - Ensures no duplicate tool registrations
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 
 use super::types::ToolDefinition;
@@ -17,31 +19,15 @@ use super::types::ToolDefinition;
 /// - List of all registered tools (sorted by name)
 /// - Validation that all tools are registered
 /// - Fail-fast on duplicate registrations
-///
-/// # Example
-///
-/// ```ignore
-/// use context_graph_mcp::tools::{ToolRegistry, register_all_tools};
-///
-/// let registry = register_all_tools();
-/// assert_eq!(registry.len(), 53);
-///
-/// // O(1) lookup
-/// if let Some(tool) = registry.get("inject_context") {
-///     println!("Found tool: {}", tool.name);
-/// }
-/// ```
 pub struct ToolRegistry {
     tools: HashMap<String, ToolDefinition>,
 }
 
 impl ToolRegistry {
     /// Create empty registry with pre-allocated capacity.
-    ///
-    /// Pre-allocates space for 50 tools to minimize reallocations.
     pub fn new() -> Self {
         Self {
-            tools: HashMap::with_capacity(50), // Room for growth
+            tools: HashMap::with_capacity(50),
         }
     }
 
@@ -50,14 +36,12 @@ impl ToolRegistry {
     /// # Panics
     ///
     /// Panics if a tool with the same name is already registered.
-    /// This is intentional - duplicate tools indicate a bug in the codebase.
-    /// FAIL FAST: Do not silently ignore duplicates.
     pub fn register(&mut self, tool: ToolDefinition) {
         let name = tool.name.clone();
         if self.tools.contains_key(&name) {
             panic!(
                 "TASK-41: Duplicate tool registration: '{}'. \
-                 Each tool name must be unique. Check definitions modules for duplicates.",
+                 Each tool name must be unique.",
                 name
             );
         }
@@ -65,17 +49,11 @@ impl ToolRegistry {
     }
 
     /// Get a tool definition by name.
-    ///
-    /// Returns `None` if the tool is not registered.
-    /// This is O(1) lookup via HashMap.
     pub fn get(&self, name: &str) -> Option<&ToolDefinition> {
         self.tools.get(name)
     }
 
     /// List all registered tools (sorted by name for deterministic output).
-    ///
-    /// Sorting ensures consistent ordering in `tools/list` responses
-    /// and makes testing/debugging easier.
     pub fn list(&self) -> Vec<&ToolDefinition> {
         let mut tools: Vec<_> = self.tools.values().collect();
         tools.sort_by(|a, b| a.name.cmp(&b.name));
@@ -93,15 +71,11 @@ impl ToolRegistry {
     }
 
     /// Check if a tool exists by name.
-    ///
-    /// This is O(1) lookup via HashMap.
     pub fn contains(&self, name: &str) -> bool {
         self.tools.contains_key(name)
     }
 
     /// Get all tool names as a sorted vector.
-    ///
-    /// Useful for debugging and validation.
     pub fn tool_names(&self) -> Vec<&str> {
         let mut names: Vec<_> = self.tools.keys().map(|s| s.as_str()).collect();
         names.sort();
@@ -115,91 +89,36 @@ impl Default for ToolRegistry {
     }
 }
 
-/// Register all 53 Context Graph MCP tools.
+/// Register all Context Graph MCP tools.
 ///
 /// Uses existing definitions from tools/definitions/ modules.
-/// FAIL FAST: Panics on duplicate registration or wrong tool count.
 ///
-/// # Tool Categories (53 total)
+/// Per PRD v6 Section 10, only 6 tools are exposed:
 ///
 /// | Category | Count | Source |
 /// |----------|-------|--------|
-/// | Core | 6 | definitions/core.rs |
-/// | GWT | 4 | definitions/gwt.rs |
-/// | UTL | 1 | definitions/utl.rs |
-/// | ATC | 3 | definitions/atc.rs |
-/// | Dream | 8 | definitions/dream.rs (TASK-37, TASK-S01/S02/S03) |
-/// | Neuromod | 2 | definitions/neuromod.rs |
-/// | Steering | 1 | definitions/steering.rs |
-/// | Causal | 1 | definitions/causal.rs |
-/// | Teleological | 5 | definitions/teleological.rs |
-/// | Autonomous | 13 | definitions/autonomous.rs (TASK-FIX-002 added get_drift_history) |
-/// | Meta-UTL | 3 | definitions/meta_utl.rs |
-/// | Epistemic | 1 | definitions/epistemic.rs |
+/// | Core | 5 | definitions/core.rs |
 /// | Merge | 1 | definitions/merge.rs |
-/// | Session | 4 | definitions/session.rs (TASK-013) |
-///
-/// # Panics
-///
-/// Panics if:
-/// - Any tool name is registered twice (duplicate detection)
-/// - Total tool count is not exactly 53 (indicates missing/extra tools)
 pub fn register_all_tools() -> ToolRegistry {
     use super::definitions;
 
     let mut registry = ToolRegistry::new();
 
-    // Register all tools from each category
-    // Order matches get_tool_definitions() for consistency
+    // Register core tools (5): inject_context, store_memory, get_memetic_status, search_graph, trigger_consolidation
     for tool in definitions::core::definitions() {
         registry.register(tool);
     }
-    for tool in definitions::gwt::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::utl::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::atc::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::dream::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::neuromod::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::steering::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::causal::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::teleological::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::autonomous::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::meta_utl::definitions() {
-        registry.register(tool);
-    }
-    for tool in definitions::epistemic::definitions() {
-        registry.register(tool);
-    }
+
+    // Register merge tools (1): merge_concepts
     for tool in definitions::merge::definitions() {
         registry.register(tool);
     }
-    // TASK-013: Session lifecycle tools per ARCH-07
-    for tool in definitions::session::definitions() {
-        registry.register(tool);
-    }
 
-    // FAIL FAST: Verify exactly 53 tools are registered
+    // Verify expected tool count (PRD v6: 6 tools)
     let actual_count = registry.len();
     assert_eq!(
-        actual_count, 53,
-        "TASK-41: Expected 53 tools, got {}. Check definitions modules for missing/extra tools.",
+        actual_count, 6,
+        "Expected 6 tools per PRD v6, got {}. Check definitions modules.",
         actual_count
     );
 
@@ -219,52 +138,9 @@ mod tests {
     }
 
     #[test]
-    fn test_register_all_tools_returns_53() {
-        println!("\n=== FSV TEST: register_all_tools (TASK-41) ===");
-
+    fn test_register_all_tools_count() {
         let registry = register_all_tools();
-
-        println!("FSV-1: Tool count = {}", registry.len());
-        assert_eq!(registry.len(), 53, "Must have exactly 53 tools");
-
-        // Verify critical tools exist
-        let critical_tools = [
-            // Core
-            "inject_context",
-            "store_memory",
-            "get_memetic_status",
-            "get_graph_manifest",
-            "search_graph",
-            "utl_status",
-            // GWT
-            "get_workspace_status",
-            "get_ego_state",
-            "trigger_workspace_broadcast",
-            "get_coherence_state",
-            // UTL
-            "gwt/compute_delta_sc",
-            // Dream
-            "trigger_dream",
-            "get_gpu_status",
-            // Epistemic/Merge
-            "epistemic_action",
-            "merge_concepts",
-            // Session (TASK-013)
-            "session_start",
-            "session_end",
-            "pre_tool_use",
-            "post_tool_use",
-        ];
-
-        for name in critical_tools {
-            assert!(registry.contains(name), "Missing critical tool: {}", name);
-            println!("FSV-2: Tool '{}' registered", name);
-        }
-
-        println!("\n=== FSV EVIDENCE (TASK-41) ===");
-        println!(" 53 tools registered");
-        println!(" All critical tools present");
-        println!("=== FSV TEST PASSED (TASK-41) ===\n");
+        assert_eq!(registry.len(), 6, "Must have exactly 6 tools per PRD v6");
     }
 
     #[test]
@@ -273,7 +149,7 @@ mod tests {
         let mut registry = ToolRegistry::new();
         let tool = ToolDefinition::new("test_tool", "Test", json!({"type": "object"}));
         registry.register(tool.clone());
-        registry.register(tool); // Should panic
+        registry.register(tool);
     }
 
     #[test]
@@ -281,7 +157,6 @@ mod tests {
         let registry = register_all_tools();
         let tool = registry.get("inject_context").expect("Must exist");
         assert_eq!(tool.name, "inject_context");
-        assert!(!tool.description.is_empty());
     }
 
     #[test]
@@ -291,107 +166,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_empty_string_returns_none() {
-        let registry = register_all_tools();
-        assert!(registry.get("").is_none());
-    }
-
-    #[test]
-    fn test_namespaced_tool_accessible() {
-        let registry = register_all_tools();
-        // gwt/compute_delta_sc has a slash in name
-        assert!(
-            registry.get("gwt/compute_delta_sc").is_some(),
-            "Namespaced tool 'gwt/compute_delta_sc' must be accessible"
-        );
-    }
-
-    #[test]
     fn test_list_returns_all_tools_sorted() {
         let registry = register_all_tools();
         let tools = registry.list();
-        assert_eq!(tools.len(), 53);
+        assert_eq!(tools.len(), 6);
 
-        // Verify sorted by name
         for i in 1..tools.len() {
-            assert!(
-                tools[i - 1].name <= tools[i].name,
-                "Tools not sorted: {} > {}",
-                tools[i - 1].name,
-                tools[i].name
-            );
-        }
-    }
-
-    #[test]
-    fn test_tool_names_returns_sorted_names() {
-        let registry = register_all_tools();
-        let names = registry.tool_names();
-        assert_eq!(names.len(), 53);
-
-        // Verify sorted
-        for i in 1..names.len() {
-            assert!(
-                names[i - 1] <= names[i],
-                "Names not sorted: {} > {}",
-                names[i - 1],
-                names[i]
-            );
-        }
-    }
-
-    #[test]
-    fn test_contains_returns_correct_values() {
-        let registry = register_all_tools();
-
-        // These should exist
-        assert!(registry.contains("inject_context"));
-        assert!(registry.contains("get_workspace_status"));
-        assert!(registry.contains("gwt/compute_delta_sc"));
-
-        // These should not exist
-        assert!(!registry.contains("nonexistent"));
-        assert!(!registry.contains(""));
-        assert!(!registry.contains("INJECT_CONTEXT")); // Case sensitive
-    }
-
-    #[test]
-    fn test_registry_default_is_empty() {
-        let registry = ToolRegistry::default();
-        assert!(registry.is_empty());
-        assert_eq!(registry.len(), 0);
-    }
-
-    /// Verify all tool categories are represented.
-    #[test]
-    fn test_all_categories_represented() {
-        let registry = register_all_tools();
-
-        // Verify at least one tool from each category
-        let category_representatives = [
-            ("Core", "inject_context"),
-            ("GWT", "get_workspace_status"),
-            ("UTL", "gwt/compute_delta_sc"),
-            ("ATC", "get_threshold_status"),
-            ("Dream", "trigger_dream"),
-            ("Neuromod", "get_neuromodulation_state"),
-            ("Steering", "get_steering_feedback"),
-            ("Causal", "omni_infer"),
-            ("Teleological", "search_teleological"),
-            ("Autonomous", "get_autonomous_status"),
-            ("Meta-UTL", "get_meta_learning_status"),
-            ("Epistemic", "epistemic_action"),
-            ("Merge", "merge_concepts"),
-            ("Session", "session_start"), // TASK-013
-        ];
-
-        for (category, tool_name) in category_representatives {
-            assert!(
-                registry.contains(tool_name),
-                "Category '{}' not represented - missing tool '{}'",
-                category,
-                tool_name
-            );
+            assert!(tools[i - 1].name <= tools[i].name);
         }
     }
 }

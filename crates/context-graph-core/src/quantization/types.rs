@@ -142,7 +142,7 @@ impl QuantizedEmbedding {
     pub fn validate(&self) -> Result<(), QuantizationError> {
         // Check data size matches precision and dimension
         let expected_size = match self.precision {
-            Precision::Int4 => (self.original_dim + 1) / 2,
+            Precision::Int4 => self.original_dim.div_ceil(2),
             Precision::Int8 => self.original_dim,
             Precision::Fp16 => self.original_dim * 2,
             Precision::Fp32 => {

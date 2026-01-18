@@ -45,7 +45,6 @@ pub enum TransportMode {
     Sse,
 }
 
-use context_graph_core::alignment::{DefaultAlignmentCalculator, GoalAlignmentCalculator};
 use context_graph_core::config::Config;
 use context_graph_core::purpose::GoalHierarchy;
 use context_graph_core::traits::{
@@ -210,53 +209,23 @@ impl McpServer {
             Arc::clone(&models_failed),
         ));
 
-        // TASK-S003: Create alignment calculator and goal hierarchy
-        let alignment_calculator: Arc<dyn GoalAlignmentCalculator> =
-            Arc::new(DefaultAlignmentCalculator::new());
+        // ==========================================================================
+        // 4. Create Handlers (PRD v6 Section 10 - 6 tools only)
+        // ==========================================================================
         let goal_hierarchy = Arc::new(parking_lot::RwLock::new(GoalHierarchy::new()));
-        info!("Created DefaultAlignmentCalculator and empty GoalHierarchy");
-
-        // ==========================================================================
-        // 4. Create Meta-UTL tracker and monitoring providers
-        // ==========================================================================
-        use crate::handlers::MetaUtlTracker;
-        use context_graph_core::monitoring::{StubLayerStatusProvider, StubSystemMonitor};
-
-        let meta_utl_tracker = Arc::new(parking_lot::RwLock::new(MetaUtlTracker::new()));
-        info!("Created MetaUtlTracker for per-embedder accuracy tracking");
-
-        // TODO: Replace with real SystemMonitor and LayerStatusProvider when available
-        // For now, using stubs that will FAIL FAST with clear errors on first use
-        let system_monitor: Arc<dyn context_graph_core::monitoring::SystemMonitor> =
-            Arc::new(StubSystemMonitor::new());
         let layer_status_provider: Arc<dyn context_graph_core::monitoring::LayerStatusProvider> =
-            Arc::new(StubLayerStatusProvider::new());
-        warn!("Using StubSystemMonitor and StubLayerStatusProvider - will FAIL FAST on health metric queries");
+            Arc::new(context_graph_core::monitoring::StubLayerStatusProvider::new());
 
-        // ==========================================================================
-        // 5. Create Handlers with REAL GWT providers (P2-01 through P2-06)
-        // ==========================================================================
-        // Using with_default_gwt() to create all GWT providers:
-        // - GwtSystemProviderImpl: Real GWT state management
-        // - WorkspaceProviderImpl: Real global workspace with winner-take-all
-        // - MetaCognitiveProviderImpl: Real meta-cognitive loop
-        // NOTE: Using lazy_provider to allow immediate MCP startup
-        let handlers = Handlers::with_default_gwt(
+        let handlers = Handlers::with_all(
             Arc::clone(&teleological_store),
             Arc::clone(&utl_processor),
             lazy_provider,
-            alignment_calculator,
             goal_hierarchy,
-            meta_utl_tracker,
-            system_monitor,
             layer_status_provider,
         );
-        info!("Created Handlers with REAL GWT providers (GWT, Workspace, MetaCognitive)");
-        info!("Created REAL NeuromodulationManager (Dopamine, Serotonin, Noradrenaline at baseline; ACh read-only via GWT)");
-        info!("Created REAL Dream components (DreamController, DreamScheduler, AmortizedLearner) with constitution defaults");
-        info!("Created REAL AdaptiveThresholdCalibration (4-level: EWMA, Temperature, Bandit, Bayesian)");
+        info!("Created Handlers for PRD v6 tools: inject_context, store_memory, get_memetic_status, search_graph, trigger_consolidation, merge_concepts");
 
-        info!("MCP Server initialization complete - TeleologicalFingerprint mode active with GWT + Neuromod + Dream + ATC");
+        info!("MCP Server initialization complete - TeleologicalFingerprint mode with 13 embeddings");
 
         // TASK-INTEG-018: Create connection semaphore from config
         let max_connections = config.mcp.max_connections;

@@ -31,7 +31,6 @@ pub use self::definitions::get_tool_definitions;
 pub use self::names as tool_names;
 
 // TASK-41: Export ToolRegistry for centralized tool management
-pub use self::registry::{register_all_tools, ToolRegistry};
 
 #[cfg(test)]
 mod tests {

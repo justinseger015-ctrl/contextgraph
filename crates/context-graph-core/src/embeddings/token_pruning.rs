@@ -158,7 +158,7 @@ impl TokenPruningEmbedding {
     ) -> Result<QuantizedEmbedding, QuantizationError> {
         let data = match precision {
             Precision::Int8 => vec![0u8; self.values.len()],
-            Precision::Int4 => vec![0u8; (self.values.len() + 1) / 2],
+            Precision::Int4 => vec![0u8; self.values.len().div_ceil(2)],
             Precision::Fp16 => {
                 let half_val = half::f16::from_f32(value);
                 half_val

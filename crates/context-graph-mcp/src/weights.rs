@@ -24,6 +24,8 @@
 //!
 //! FAIL FAST: Invalid weights return detailed error immediately.
 
+#![allow(dead_code)]
+
 use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
 
 /// Predefined weight profiles per query type.

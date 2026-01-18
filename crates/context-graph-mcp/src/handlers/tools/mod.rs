@@ -1,35 +1,13 @@
 //! MCP tool call handlers.
 //!
-//! TASK-S001: Updated to use TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
-//! NO BACKWARDS COMPATIBILITY with legacy MemoryStore.
-//!
-//! All tool responses include `_cognitive_pulse` with live UTL metrics.
-//! This provides real-time cognitive state in every MCP response.
-//!
-//! # Constitution Reference
-//!
-//! Suggested action mapping based on entropy/coherence:
-//! - Low entropy, high coherence -> DirectRecall
-//! - High entropy, low coherence -> TriggerDream
-//! - Low entropy, low coherence -> GetNeighborhood
-//! - High entropy, high coherence -> EpistemicAction
-//!
-//! # Module Organization
-//!
-//! - `dispatch` - Tool dispatch logic (handle_tools_list, handle_tools_call)
-//! - `helpers` - MCP result helpers with CognitivePulse injection
-//! - `memory_tools` - Memory operations (inject_context, store_memory, search_graph)
-//! - `status_tools` - Status queries (get_memetic_status, get_graph_manifest, utl_status)
-//! - `gwt_workspace` - GWT workspace tools (get_workspace_status, trigger_workspace_broadcast, adjust_coupling)
+//! PRD v6 Section 10 MCP Tools:
+//! - inject_context, store_memory, search_graph (memory_tools.rs)
+//! - get_memetic_status (status_tools.rs)
+//! - trigger_consolidation (consolidation.rs)
+//! - merge_concepts (../merge.rs)
 
+mod consolidation;
 mod dispatch;
-mod gwt_workspace;
 mod helpers;
 mod memory_tools;
-mod meta_learning_tools;
-// TASK-015: Session lifecycle hook tools per ARCH-07
-mod session_tools;
 mod status_tools;
-
-// All implementations are on the Handlers struct, so no re-exports needed.
-// The modules add impl blocks to Handlers which are automatically available.

@@ -1,0 +1,269 @@
+//! Consolidation tool handler.
+//!
+//! PRD v6 Section 10.1: trigger_consolidation is a Core tool.
+
+use serde::Deserialize;
+use serde_json::json;
+use tracing::{debug, error, info};
+
+use context_graph_core::autonomous::{
+    ConsolidationConfig, ConsolidationService, MemoryContent, MemoryId, MemoryPair,
+};
+use context_graph_core::traits::TeleologicalSearchOptions;
+use context_graph_core::types::fingerprint::PurposeVector;
+
+use crate::handlers::Handlers;
+use crate::protocol::{JsonRpcId, JsonRpcResponse};
+
+/// Parameters for trigger_consolidation tool.
+#[derive(Debug, Deserialize)]
+pub struct TriggerConsolidationParams {
+    /// Maximum memories to process in one batch (default: 100)
+    #[serde(default = "default_max_memories")]
+    pub max_memories: usize,
+
+    /// Consolidation strategy: "similarity", "temporal", "semantic" (default: "similarity")
+    #[serde(default = "default_consolidation_strategy")]
+    pub strategy: String,
+
+    /// Minimum similarity for consolidation (default: 0.85)
+    #[serde(default = "default_consolidation_similarity")]
+    pub min_similarity: f32,
+}
+
+fn default_max_memories() -> usize {
+    100
+}
+
+fn default_consolidation_strategy() -> String {
+    "similarity".to_string()
+}
+
+fn default_consolidation_similarity() -> f32 {
+    0.85
+}
+
+impl Handlers {
+    /// trigger_consolidation tool implementation.
+    ///
+    /// PRD v6 Section 10.1: Trigger memory consolidation.
+    /// Uses ConsolidationService to merge similar memories.
+    ///
+    /// Arguments:
+    /// - max_memories (optional): Maximum to process (default: 100)
+    /// - strategy (optional): "similarity", "temporal", "semantic" (default: "similarity")
+    /// - min_similarity (optional): Minimum similarity for merge (default: 0.85)
+    ///
+    /// Returns:
+    /// - consolidation_result: Pairs merged and outcome
+    /// - statistics: Consolidation metrics
+    pub(crate) async fn call_trigger_consolidation(
+        &self,
+        id: Option<JsonRpcId>,
+        arguments: serde_json::Value,
+    ) -> JsonRpcResponse {
+        debug!("Handling trigger_consolidation tool call");
+
+        // Parse parameters
+        let params: TriggerConsolidationParams = match serde_json::from_value(arguments) {
+            Ok(p) => p,
+            Err(e) => {
+                error!(error = %e, "trigger_consolidation: Failed to parse parameters");
+                return self.tool_error_with_pulse(id, &format!("Invalid parameters: {}", e));
+            }
+        };
+
+        // Validate strategy
+        let valid_strategies = ["similarity", "temporal", "semantic"];
+        if !valid_strategies.contains(&params.strategy.as_str()) {
+            error!(
+                strategy = %params.strategy,
+                "trigger_consolidation: Invalid strategy"
+            );
+            return self.tool_error_with_pulse(
+                id,
+                &format!(
+                    "Invalid strategy '{}'. Valid strategies: similarity, temporal, semantic",
+                    params.strategy
+                ),
+            );
+        }
+
+        debug!(
+            max_memories = params.max_memories,
+            strategy = %params.strategy,
+            min_similarity = params.min_similarity,
+            "trigger_consolidation: Parsed parameters"
+        );
+
+        // Get fingerprints from store
+        let search_options = TeleologicalSearchOptions::quick(params.max_memories);
+        let default_query = PurposeVector::default();
+
+        let search_results = match self
+            .teleological_store
+            .search_purpose(&default_query, search_options)
+            .await
+        {
+            Ok(results) => results,
+            Err(e) => {
+                error!(
+                    error = %e,
+                    max_memories = params.max_memories,
+                    "trigger_consolidation: Store access failed"
+                );
+                return self.tool_error_with_pulse(
+                    id,
+                    &format!("Store error: Failed to list fingerprints: {}", e),
+                );
+            }
+        };
+
+        debug!(
+            fingerprint_count = search_results.len(),
+            "trigger_consolidation: Retrieved fingerprints from store"
+        );
+
+        // Convert TeleologicalFingerprint to MemoryContent
+        let mut memory_contents: Vec<MemoryContent> = Vec::with_capacity(search_results.len());
+        let mut fingerprints: Vec<(uuid::Uuid, chrono::DateTime<chrono::Utc>)> = Vec::new();
+
+        for result in search_results.iter() {
+            let fp = &result.fingerprint;
+            // Use E1 (semantic 1024D) embedding for comparison
+            let embedding = fp.semantic.e1_semantic.clone();
+
+            let content = MemoryContent::new(
+                MemoryId(fp.id),
+                embedding,
+                String::new(),
+                fp.alignment_score,
+            )
+            .with_access_count(fp.access_count as u32);
+
+            memory_contents.push(content);
+            fingerprints.push((fp.id, fp.created_at));
+        }
+
+        // Build pairs based on strategy
+        let pairs: Vec<MemoryPair> = match params.strategy.as_str() {
+            "similarity" => {
+                let mut pairs = Vec::new();
+                let threshold = params.min_similarity * 0.9;
+
+                for i in 0..memory_contents.len() {
+                    for j in (i + 1)..memory_contents.len() {
+                        let sim: f32 = memory_contents[i]
+                            .embedding
+                            .iter()
+                            .zip(memory_contents[j].embedding.iter())
+                            .map(|(a, b)| a * b)
+                            .sum();
+
+                        if sim >= threshold {
+                            pairs.push(MemoryPair::new(
+                                memory_contents[i].clone(),
+                                memory_contents[j].clone(),
+                            ));
+                        }
+                    }
+                }
+                pairs
+            }
+            "temporal" => {
+                let window_secs = 24 * 60 * 60;
+                let mut pairs = Vec::new();
+
+                for i in 0..memory_contents.len() {
+                    for j in (i + 1)..memory_contents.len() {
+                        if i < fingerprints.len() && j < fingerprints.len() {
+                            let diff = (fingerprints[i].1 - fingerprints[j].1).num_seconds().abs();
+                            if diff < window_secs {
+                                pairs.push(MemoryPair::new(
+                                    memory_contents[i].clone(),
+                                    memory_contents[j].clone(),
+                                ));
+                            }
+                        }
+                    }
+                }
+                pairs
+            }
+            "semantic" => {
+                let mut pairs = Vec::new();
+                let alignment_threshold = 0.5;
+
+                for i in 0..memory_contents.len() {
+                    for j in (i + 1)..memory_contents.len() {
+                        if memory_contents[i].alignment >= alignment_threshold
+                            && memory_contents[j].alignment >= alignment_threshold
+                        {
+                            pairs.push(MemoryPair::new(
+                                memory_contents[i].clone(),
+                                memory_contents[j].clone(),
+                            ));
+                        }
+                    }
+                }
+                pairs
+            }
+            _ => Vec::new(),
+        };
+
+        // Create consolidation service
+        let config = ConsolidationConfig {
+            enabled: true,
+            similarity_threshold: params.min_similarity,
+            max_daily_merges: 50,
+            theta_diff_threshold: 0.05,
+        };
+        let consolidation_service = ConsolidationService::with_config(config);
+
+        // Find consolidation candidates
+        let candidates = consolidation_service.find_consolidation_candidates(&pairs);
+
+        let statistics = json!({
+            "pairs_evaluated": pairs.len(),
+            "pairs_consolidated": candidates.len(),
+            "strategy": params.strategy,
+            "similarity_threshold": params.min_similarity,
+            "max_memories_limit": params.max_memories,
+            "fingerprints_analyzed": memory_contents.len()
+        });
+
+        let consolidation_result = json!({
+            "status": if candidates.is_empty() { "no_candidates" } else { "candidates_found" },
+            "candidate_count": candidates.len(),
+            "action_required": !candidates.is_empty()
+        });
+
+        let candidates_sample: Vec<serde_json::Value> = candidates
+            .iter()
+            .take(10)
+            .map(|c| {
+                json!({
+                    "source_ids": c.source_ids.iter().map(|id| id.0.to_string()).collect::<Vec<_>>(),
+                    "target_id": c.target_id.0.to_string(),
+                    "similarity": c.similarity,
+                    "combined_alignment": c.combined_alignment
+                })
+            })
+            .collect();
+
+        info!(
+            candidate_count = candidates.len(),
+            pairs_evaluated = pairs.len(),
+            strategy = %params.strategy,
+            "trigger_consolidation: Analysis complete"
+        );
+
+        self.tool_result_with_pulse(
+            id,
+            json!({
+                "consolidation_result": consolidation_result,
+                "statistics": statistics,
+                "candidates_sample": candidates_sample
+            }),
+        )
+    }
+}

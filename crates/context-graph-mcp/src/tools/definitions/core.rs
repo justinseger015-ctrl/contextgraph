@@ -1,10 +1,11 @@
-//! Core tool definitions: inject_context, store_memory, get_memetic_status,
-//! get_graph_manifest, search_graph, utl_status.
+//! Core tool definitions per PRD v6 Section 10.
+//!
+//! Tools: inject_context, store_memory, get_memetic_status, search_graph, trigger_consolidation
 
 use crate::tools::types::ToolDefinition;
 use serde_json::json;
 
-/// Returns core tool definitions (6 tools).
+/// Returns core tool definitions (5 tools per PRD).
 pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         // inject_context - primary context injection tool
@@ -89,17 +90,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
             }),
         ),
 
-        // get_graph_manifest - describe the 5-layer architecture
-        ToolDefinition::new(
-            "get_graph_manifest",
-            "Get the 5-layer bio-nervous system architecture description and current layer statuses.",
-            json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-        ),
-
         // search_graph - semantic search
         ToolDefinition::new(
             "search_graph",
@@ -136,14 +126,36 @@ pub fn definitions() -> Vec<ToolDefinition> {
             }),
         ),
 
-        // utl_status - query UTL system state
+        // trigger_consolidation - trigger memory consolidation (PRD Section 10.1)
         ToolDefinition::new(
-            "utl_status",
-            "Query current UTL (Unified Theory of Learning) system state including lifecycle phase, \
-             entropy, coherence, learning score, and consolidation phase.",
+            "trigger_consolidation",
+            "Trigger memory consolidation to merge similar memories and reduce redundancy. \
+             Uses similarity-based, temporal, or semantic strategies to identify merge candidates. \
+             Helps optimize memory storage and improve retrieval efficiency.",
             json!({
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "strategy": {
+                        "type": "string",
+                        "enum": ["similarity", "temporal", "semantic"],
+                        "default": "similarity",
+                        "description": "Consolidation strategy to use"
+                    },
+                    "min_similarity": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "default": 0.85,
+                        "description": "Minimum similarity threshold for consolidation candidates"
+                    },
+                    "max_memories": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000,
+                        "default": 100,
+                        "description": "Maximum memories to process in one batch"
+                    }
+                },
                 "required": []
             }),
         ),
