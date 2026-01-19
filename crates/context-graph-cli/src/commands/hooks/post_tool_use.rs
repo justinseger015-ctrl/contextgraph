@@ -13,9 +13,10 @@
 use std::io::{self, BufRead};
 use std::time::Instant;
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use context_graph_core::gwt::session_snapshot::{store_in_cache, SessionCache, SessionSnapshot};
+use crate::mcp_client::McpClient;
 
 use super::args::PostToolArgs;
 use super::error::{HookError, HookResult};
@@ -29,6 +30,21 @@ use super::types::{
 
 /// PostToolUse timeout in milliseconds
 pub const POST_TOOL_USE_TIMEOUT_MS: u64 = 3000;
+
+/// Minimum response length to capture as memory (avoid noise from empty/trivial responses)
+const MIN_RESPONSE_LENGTH_FOR_CAPTURE: usize = 50;
+
+/// Maximum response length to store (truncate longer responses)
+const MAX_RESPONSE_LENGTH_FOR_CAPTURE: usize = 2000;
+
+/// Tools that should have their responses captured as memories
+const TOOLS_TO_CAPTURE: &[&str] = &[
+    "Read",     // File content - valuable context
+    "Bash",     // Command output - may contain useful info
+    "WebFetch", // External data - new knowledge
+    "Grep",     // Search results - code understanding
+    "LSP",      // Code intelligence - technical context
+];
 
 // ============================================================================
 // Types
@@ -103,10 +119,14 @@ pub async fn execute(args: PostToolArgs) -> HookResult<HookOutput> {
     // 5. Persist updated snapshot to cache
     store_in_cache(&snapshot);
 
-    // 6. Build output structures
+    // 6. Capture tool response as memory if appropriate
+    //    This stores valuable context from tool execution into the knowledge graph.
+    //    Per CLAUDE.md: PostToolUse captures tool description as HookDescription memory.
+    capture_tool_memory(&tool_name, &tool_response, tool_success).await;
+
+    // 7. Build output structures
     let coherence_state = build_coherence_state(&snapshot);
-    // Use average of integration, reflection, differentiation as stability proxy
-    let stability_value = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
+    let stability_value = compute_coherence(&snapshot);
     let stability_classification = StabilityClassification::from_value(stability_value);
 
     let execution_time_ms = start.elapsed().as_millis() as u64;
@@ -169,10 +189,11 @@ fn extract_tool_info(input: &HookInput) -> HookResult<(String, String, bool)> {
         HookPayload::PostToolUse {
             tool_name,
             tool_response,
+            tool_success,
             ..
         } => {
-            // Determine success from response (no error field in actual type)
-            let success = !tool_response.contains("error") && !tool_response.contains("Error");
+            // Use explicit tool_success if provided, otherwise use smart heuristic
+            let success = tool_success.unwrap_or_else(|| infer_tool_success(tool_response));
             Ok((tool_name.clone(), tool_response.clone(), success))
         }
         other => {
@@ -184,9 +205,59 @@ fn extract_tool_info(input: &HookInput) -> HookResult<(String, String, bool)> {
     }
 }
 
+/// Infer tool success from response content using smart heuristics.
+/// This is a fallback when tool_success is not explicitly provided.
+///
+/// Unlike naive string matching, this checks for actual error PATTERNS:
+/// - Lines starting with "Error:" or "error:"
+/// - Exit codes indicating failure
+/// - Common tool error messages
+///
+/// It does NOT flag code containing Error types (e.g., `sqlx::Error`) as failures.
+fn infer_tool_success(response: &str) -> bool {
+    // Empty response is not necessarily a failure
+    if response.is_empty() {
+        return true;
+    }
+
+    // Check for explicit error patterns at line starts
+    for line in response.lines() {
+        let trimmed = line.trim();
+        // Error message patterns (at start of line)
+        if trimmed.starts_with("Error:") || trimmed.starts_with("error:") {
+            return false;
+        }
+        // Exit code failures
+        if trimmed.starts_with("Exit code:") && !trimmed.contains("Exit code: 0") {
+            return false;
+        }
+        if trimmed.starts_with("error[E") {
+            // Rust compiler errors
+            return false;
+        }
+        // Command not found
+        if trimmed.contains("command not found") || trimmed.contains("No such file or directory") {
+            return false;
+        }
+    }
+
+    // Check for common failure indicators that span lines
+    if response.contains("FAILED") && response.contains("test result:") {
+        return false; // Test failures
+    }
+
+    true
+}
+
 // ============================================================================
 // Cache Operations
 // ============================================================================
+
+/// Compute coherence from snapshot's integration, reflection, and differentiation metrics.
+#[inline]
+fn compute_coherence(snapshot: &SessionSnapshot) -> f32 {
+    (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0
+}
 
 /// Load snapshot from cache or create new one for session.
 ///
@@ -196,8 +267,7 @@ fn load_snapshot_from_cache(session_id: &str) -> HookResult<SessionSnapshot> {
     // Try to load from global cache
     if let Some(snapshot) = SessionCache::get() {
         if snapshot.session_id == session_id {
-            let stability = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
-            info!(session_id = %session_id, stability = stability, "POST_TOOL: loaded snapshot from cache");
+            info!(session_id = %session_id, stability = compute_coherence(&snapshot), "POST_TOOL: loaded snapshot from cache");
             return Ok(snapshot);
         }
     }
@@ -259,18 +329,113 @@ fn update_snapshot_from_impact(snapshot: &mut SessionSnapshot, impact: &ToolImpa
 }
 
 /// Build CoherenceState from snapshot.
-///
-/// # Note
-/// We compute coherence from integration, reflection, and differentiation metrics.
 fn build_coherence_state(snapshot: &SessionSnapshot) -> CoherenceState {
-    let coherence_level = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
+    let coherence = compute_coherence(snapshot);
     CoherenceState::new(
-        coherence_level, // coherence derived from integration metrics
+        coherence,
         snapshot.integration,
         snapshot.reflection,
         snapshot.differentiation,
-        coherence_level, // topic_stability uses same coherence measure
+        coherence, // topic_stability uses same coherence measure
     )
+}
+
+// ============================================================================
+// Memory Capture via MCP
+// ============================================================================
+
+/// Capture tool response as a memory in the knowledge graph.
+///
+/// Per CLAUDE.md: PostToolUse captures tool description as HookDescription memory.
+/// Only captures for specific high-value tools and non-trivial responses.
+///
+/// # Arguments
+/// * `tool_name` - Name of the tool that was executed
+/// * `tool_response` - The response from tool execution
+/// * `tool_success` - Whether the tool executed successfully
+///
+/// # Note
+/// Failure is non-fatal - we log and continue rather than failing the hook.
+async fn capture_tool_memory(tool_name: &str, tool_response: &str, tool_success: bool) {
+    // Only capture successful tool executions from high-value tools
+    if !tool_success {
+        debug!(tool_name, "POST_TOOL: Skipping memory capture for failed tool");
+        return;
+    }
+
+    if !TOOLS_TO_CAPTURE.contains(&tool_name) {
+        debug!(tool_name, "POST_TOOL: Tool not in capture list, skipping");
+        return;
+    }
+
+    // Skip trivial responses
+    if tool_response.len() < MIN_RESPONSE_LENGTH_FOR_CAPTURE {
+        debug!(
+            tool_name,
+            response_len = tool_response.len(),
+            min_length = MIN_RESPONSE_LENGTH_FOR_CAPTURE,
+            "POST_TOOL: Response too short for memory capture"
+        );
+        return;
+    }
+
+    let client = McpClient::new();
+
+    // Check if server is running first (fast fail)
+    let server_running = match client.is_server_running().await {
+        Ok(running) => running,
+        Err(e) => {
+            warn!(error = %e, "POST_TOOL: Failed to check MCP server, skipping memory capture");
+            return;
+        }
+    };
+
+    if !server_running {
+        warn!("POST_TOOL: MCP server not running, skipping memory capture");
+        return;
+    }
+
+    debug!("POST_TOOL: MCP server is running, capturing memory");
+
+    // Truncate response if too long
+    let content = if tool_response.len() > MAX_RESPONSE_LENGTH_FOR_CAPTURE {
+        format!(
+            "[HookDescription: {} output]\n{}...\n[truncated from {} chars]",
+            tool_name,
+            &tool_response[..MAX_RESPONSE_LENGTH_FOR_CAPTURE],
+            tool_response.len()
+        )
+    } else {
+        format!("[HookDescription: {} output]\n{}", tool_name, tool_response)
+    };
+
+    let rationale = format!(
+        "Tool execution context from {} - captured for future reference",
+        tool_name
+    );
+
+    // Store via MCP inject_context (importance 0.4 - moderate, can be boosted later)
+    match client.inject_context(&content, &rationale, 0.4).await {
+        Ok(result) => {
+            let fingerprint_id = result
+                .get("fingerprintId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            info!(
+                tool_name,
+                fingerprint_id,
+                content_len = content.len(),
+                "POST_TOOL: Captured tool memory successfully"
+            );
+        }
+        Err(e) => {
+            warn!(
+                tool_name,
+                error = %e,
+                "POST_TOOL: Failed to capture tool memory, continuing"
+            );
+        }
+    }
 }
 
 // ============================================================================
@@ -557,5 +722,169 @@ mod tests {
         assert_eq!(err.exit_code(), 4, "InvalidInput must be exit code 4");
 
         println!("RESULT: PASS - Missing tool_name returns InvalidInput error");
+    }
+
+    // =========================================================================
+    // TC-POST-009: infer_tool_success - Code with Error types is NOT failure
+    // Validates that code containing Error as a type name passes
+    // =========================================================================
+    #[test]
+    fn tc_post_009_infer_success_code_with_error_types() {
+        println!("\n=== TC-POST-009: Code with Error types is NOT failure ===");
+
+        // Code containing Error as a type name should be considered successful
+        let code_with_error_type = r#"
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use std::io::Error;
+
+pub async fn create_pool(database_url: &str) -> Result<Pool<Postgres>, sqlx::Error> {
+    PgPoolOptions::new()
+        .max_connections(20)
+        .connect(database_url)
+        .await
+}
+
+impl From<std::io::Error> for MyError {
+    fn from(e: std::io::Error) -> Self {
+        MyError::Io(e)
+    }
+}
+"#;
+
+        let result = infer_tool_success(code_with_error_type);
+        assert!(result, "Code with Error types should be considered successful");
+
+        println!("RESULT: PASS - Error type names don't trigger false failures");
+    }
+
+    // =========================================================================
+    // TC-POST-010: infer_tool_success - Actual errors are detected
+    // Validates that real error messages are detected as failures
+    // =========================================================================
+    #[test]
+    fn tc_post_010_infer_success_actual_errors() {
+        println!("\n=== TC-POST-010: Actual errors are detected ===");
+
+        // Error: at start of line
+        assert!(
+            !infer_tool_success("Error: File not found"),
+            "Error: prefix should be failure"
+        );
+
+        // error: at start of line
+        assert!(
+            !infer_tool_success("error: cannot find module"),
+            "error: prefix should be failure"
+        );
+
+        // Rust compiler errors
+        assert!(
+            !infer_tool_success("error[E0425]: cannot find value `x` in this scope"),
+            "Rust compiler errors should be failure"
+        );
+
+        // Exit code failures
+        assert!(
+            !infer_tool_success("Exit code: 1"),
+            "Non-zero exit code should be failure"
+        );
+        assert!(
+            infer_tool_success("Exit code: 0"),
+            "Zero exit code should be success"
+        );
+
+        // Command not found
+        assert!(
+            !infer_tool_success("bash: foo: command not found"),
+            "Command not found should be failure"
+        );
+
+        // No such file
+        assert!(
+            !infer_tool_success("cat: /nonexistent: No such file or directory"),
+            "No such file should be failure"
+        );
+
+        // Test failures
+        assert!(
+            !infer_tool_success("test result: FAILED. 1 passed; 3 failed; 0 ignored"),
+            "Test failures should be failure"
+        );
+
+        println!("RESULT: PASS - Actual errors correctly detected as failures");
+    }
+
+    // =========================================================================
+    // TC-POST-011: infer_tool_success - Successful responses
+    // Validates that normal successful outputs pass
+    // =========================================================================
+    #[test]
+    fn tc_post_011_infer_success_successful_responses() {
+        println!("\n=== TC-POST-011: Successful responses ===");
+
+        // Normal file content
+        assert!(
+            infer_tool_success("fn main() {\n    println!(\"Hello, world!\");\n}"),
+            "Normal code should be success"
+        );
+
+        // Empty response
+        assert!(infer_tool_success(""), "Empty response should be success");
+
+        // Successful test output
+        assert!(
+            infer_tool_success("test result: ok. 10 passed; 0 failed; 0 ignored"),
+            "Successful tests should be success"
+        );
+
+        // Compilation success
+        assert!(
+            infer_tool_success("Compiling context-graph v0.1.0\nFinished release [optimized]"),
+            "Compilation success should be success"
+        );
+
+        // Git output
+        assert!(
+            infer_tool_success("On branch main\nYour branch is up to date"),
+            "Git status should be success"
+        );
+
+        println!("RESULT: PASS - Successful responses correctly identified");
+    }
+
+    // =========================================================================
+    // TC-POST-012: infer_tool_success - Edge cases
+    // Validates edge cases are handled correctly
+    // =========================================================================
+    #[test]
+    fn tc_post_012_infer_success_edge_cases() {
+        println!("\n=== TC-POST-012: Edge cases ===");
+
+        // Error in the middle of a line (not at start) - should be success
+        assert!(
+            infer_tool_success("This function returns an Error type"),
+            "Error in middle of line should be success"
+        );
+
+        // Multiline with error type but no actual error
+        let multiline = r#"
+pub struct AppError {
+    message: String,
+}
+
+impl std::error::Error for AppError {}
+"#;
+        assert!(
+            infer_tool_success(multiline),
+            "Error trait impl should be success"
+        );
+
+        // Error mentioned in comments
+        assert!(
+            infer_tool_success("// This handles the error case\nfn handle() {}"),
+            "Error in comments should be success"
+        );
+
+        println!("RESULT: PASS - Edge cases handled correctly");
     }
 }

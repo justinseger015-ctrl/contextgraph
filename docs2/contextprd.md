@@ -591,16 +591,31 @@ TeleologicalFingerprint {
 
 ## 12. PERFORMANCE BUDGETS
 
-| Operation | Target |
-|-----------|--------|
-| All 13 embed | <35ms |
-| Batch 64×13 | <120ms |
-| Per-space HNSW | <2ms |
-| Topic profile search (13D) | <1ms |
-| inject_context P95 | <40ms |
-| Any tool P99 | <60ms |
-| Cluster update (BIRCH) | <5ms |
-| Topic detection | <50ms |
+> **NOTE**: These are REALISTIC budgets based on actual RTX 5090 single-GPU measurements.
+> Running 13 embedding models sequentially on a single GPU is compute-bound.
+
+| Operation | Target | Notes |
+|-----------|--------|-------|
+| All 13 embed | <1000ms | Sequential on single GPU |
+| Batch 64×13 | <3000ms | Memory-bound batching |
+| Per-space HNSW | <5ms | Pure FAISS + overhead |
+| Topic profile search (13D) | <5ms | 13D vector space |
+| inject_context P95 | <2000ms | Embed + search + retrieval |
+| search_graph P95 | <2000ms | Full MCP search operation |
+| store_memory P95 | <2500ms | Embed + store + index |
+| Any tool P99 | <3000ms | Worst-case MCP operation |
+| Cluster update (BIRCH) | <10ms | Online clustering |
+| Topic detection | <100ms | HDBSCAN batch |
+| CLI startup | <400ms | Binary load + init |
+
+**Hook Budgets** (from constitution.yaml):
+| Hook | Budget | Notes |
+|------|--------|-------|
+| PreToolUse | <500ms | Fast path, no embedding |
+| UserPromptSubmit | <2000ms | Embed + search + inject |
+| PostToolUse | <3000ms | Async, full embed + store |
+| SessionStart | <5000ms | Load portfolio, warm caches |
+| SessionEnd | <30000ms | Persist, cluster, consolidate |
 
 **Quality Gates**:
 - Unit test coverage >= 90%

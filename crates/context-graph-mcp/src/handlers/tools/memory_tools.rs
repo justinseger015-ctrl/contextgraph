@@ -263,13 +263,19 @@ impl Handlers {
 
         let top_k = args.get("topK").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
+        // Parse minSimilarity parameter (default: 0.0 = no filtering)
+        let min_similarity = args
+            .get("minSimilarity")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+
         // TASK-CONTENT-002: Parse includeContent parameter (default: false for backward compatibility)
         let include_content = args
             .get("includeContent")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let options = TeleologicalSearchOptions::quick(top_k);
+        let options = TeleologicalSearchOptions::quick(top_k).with_min_similarity(min_similarity);
 
         // Generate query embedding
         let query_embedding = match self.multi_array_provider.embed_all(query).await {

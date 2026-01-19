@@ -1,7 +1,7 @@
 //! HookEventType enum for Claude Code native hooks
 //!
-//! # Performance Budget (per TECH-HOOKS.md)
-//! - PreToolUse: 100ms (FAST PATH - NO DB ACCESS)
+//! # Performance Budget (per constitution.yaml)
+//! - PreToolUse: 500ms (FAST PATH - NO DB ACCESS)
 //! - UserPromptSubmit: 2000ms
 //! - PostToolUse: 3000ms
 //! - SessionStart: 5000ms
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// | Event | Timeout | Description |
 /// |-------|---------|-------------|
 /// | SessionStart | 5000ms | Session initialization |
-/// | PreToolUse | 100ms | FAST PATH - cache only |
+/// | PreToolUse | 500ms | FAST PATH - cache only |
 /// | PostToolUse | 3000ms | Stability verification |
 /// | UserPromptSubmit | 2000ms | Context injection |
 /// | SessionEnd | 30000ms | Final persistence |
@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 /// use context_graph_cli::commands::hooks::HookEventType;
 ///
 /// let hook = HookEventType::PreToolUse;
-/// assert_eq!(hook.timeout_ms(), 100);
+/// assert_eq!(hook.timeout_ms(), 500);
 /// assert!(hook.is_fast_path());
 ///
 /// let json = serde_json::to_string(&hook).expect("serialization must succeed");
@@ -48,7 +48,7 @@ pub enum HookEventType {
     /// CLI: `session restore-identity`
     SessionStart,
 
-    /// Before tool execution (timeout: 100ms) - FAST PATH
+    /// Before tool execution (timeout: 500ms) - FAST PATH
     /// CRITICAL: Must not access database, uses SessionCache only
     /// CLI: `coherence brief`
     PreToolUse,
@@ -75,12 +75,12 @@ impl HookEventType {
     /// Timeout value in milliseconds as enforced by Claude Code
     ///
     /// # Performance Note
-    /// PreToolUse has the strictest timeout (100ms) and MUST use
+    /// PreToolUse has the strictest timeout (500ms) and MUST use
     /// cached state only - NO database access allowed.
     #[inline]
     pub const fn timeout_ms(&self) -> u64 {
         match self {
-            Self::PreToolUse => 100,        // Fast path - NO DB access
+            Self::PreToolUse => 500,        // Fast path - NO DB access
             Self::UserPromptSubmit => 2000, // Context injection
             Self::PostToolUse => 3000,      // Stability update + trajectory
             Self::SessionStart => 5000,     // Load/create snapshot
@@ -100,7 +100,7 @@ impl HookEventType {
     /// - Block on locks for more than microseconds
     #[inline]
     pub const fn is_fast_path(&self) -> bool {
-        self.timeout_ms() < 500
+        self.timeout_ms() <= 500
     }
 
     /// Get human-readable description of this hook type
@@ -178,7 +178,7 @@ mod tests {
         // DO NOT CHANGE without updating both sources
         let expected_timeouts = [
             (HookEventType::SessionStart, 5000_u64, "session_start"),
-            (HookEventType::PreToolUse, 100_u64, "pre_tool_use"),
+            (HookEventType::PreToolUse, 500_u64, "pre_tool_use"),
             (HookEventType::PostToolUse, 3000_u64, "post_tool_use"),
             (
                 HookEventType::UserPromptSubmit,
@@ -306,8 +306,8 @@ mod tests {
     #[test]
     fn tc_hooks_005_fast_path_detection() {
         println!("\n=== TC-HOOKS-005: Fast Path Detection ===");
-        println!("SOURCE OF TRUTH: TECH-HOOKS.md fast path requirement");
-        println!("THRESHOLD: timeout < 500ms");
+        println!("SOURCE OF TRUTH: constitution.yaml fast path requirement");
+        println!("THRESHOLD: timeout <= 500ms");
 
         let fast_path_expected = [
             (HookEventType::SessionStart, false),
@@ -353,7 +353,7 @@ mod tests {
         assert_eq!(original, cloned, "FAIL: Clone must preserve value");
 
         // Verify we can use original after copy (proves Copy, not Move)
-        assert_eq!(original.timeout_ms(), 100);
+        assert_eq!(original.timeout_ms(), 500);
 
         println!("  Original after copy: {:?}", original);
         println!("  Copied: {:?}", copied);
@@ -380,8 +380,8 @@ mod tests {
         assert_eq!(map.len(), 5, "FAIL: HashMap must contain all 5 variants");
         assert_eq!(
             map.get(&HookEventType::PreToolUse),
-            Some(&100),
-            "FAIL: PreToolUse must map to 100"
+            Some(&500),
+            "FAIL: PreToolUse must map to 500"
         );
 
         println!("  HashMap size: {}", map.len());
@@ -768,7 +768,7 @@ pub struct ConversationMessage {
 /// # Variants
 /// Each variant contains fields specific to its event type:
 /// - `SessionStart`: Session initialization data
-/// - `PreToolUse`: Tool invocation request (100ms timeout)
+/// - `PreToolUse`: Tool invocation request (500ms timeout)
 /// - `PostToolUse`: Tool completion with response (3000ms timeout)
 /// - `UserPromptSubmit`: User input with context (1500ms timeout)
 /// - `SessionEnd`: Session termination data (5000ms timeout)
@@ -797,7 +797,7 @@ pub enum HookPayload {
     },
 
     /// PreToolUse hook payload (fast path)
-    /// Timeout: 100ms per TECH-HOOKS.md - must be extremely fast
+    /// Timeout: 500ms total per constitution.yaml - CLI logic ~100ms
     PreToolUse {
         /// Name of tool being invoked
         tool_name: String,
@@ -818,6 +818,10 @@ pub enum HookPayload {
         tool_response: String,
         /// Unique identifier for this tool use
         tool_use_id: String,
+        /// Whether the tool executed successfully (from Claude Code)
+        /// Defaults to None if not provided - will use smart heuristic
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tool_success: Option<bool>,
     },
 
     /// UserPromptSubmit hook payload
@@ -1668,7 +1672,7 @@ mod hook_io_tests {
     // =========================================================================
     // TC-HOOKS-PAYLOAD-005: HookPayload PreToolUse Variant
     // Implements: REQ-HOOKS-10
-    // Timeout: 100ms (fast path per TECH-HOOKS.md)
+    // Timeout: 500ms total (fast path per constitution.yaml)
     // =========================================================================
     #[test]
     fn tc_hooks_payload_005_pre_tool_use() {
@@ -1720,6 +1724,7 @@ mod hook_io_tests {
     fn tc_hooks_payload_006_post_tool_use() {
         println!("\n=== TC-HOOKS-PAYLOAD-006: HookPayload PostToolUse ===");
 
+        // Test with explicit tool_success
         let payload = HookPayload::PostToolUse {
             tool_name: "Bash".into(),
             tool_input: serde_json::json!({
@@ -1727,6 +1732,7 @@ mod hook_io_tests {
             }),
             tool_response: "Compiling context-graph v0.1.0\nFinished release".into(),
             tool_use_id: "toolu_02DEF456".into(),
+            tool_success: Some(true),
         };
 
         let json = serde_json::to_value(&payload).expect("serialize");
@@ -1735,6 +1741,7 @@ mod hook_io_tests {
         assert_eq!(json["type"], "post_tool_use");
         assert_eq!(json["data"]["tool_name"], "Bash");
         assert_eq!(json["data"]["tool_use_id"], "toolu_02DEF456");
+        assert_eq!(json["data"]["tool_success"], true);
         assert!(json["data"]["tool_response"]
             .as_str()
             .unwrap()
@@ -1745,13 +1752,34 @@ mod hook_io_tests {
         if let HookPayload::PostToolUse {
             tool_name,
             tool_response,
+            tool_success,
             ..
         } = roundtrip
         {
             assert_eq!(tool_name, "Bash");
             assert!(tool_response.contains("Compiling"));
+            assert_eq!(tool_success, Some(true));
         } else {
             panic!("Wrong variant after round-trip");
+        }
+
+        // Test without tool_success (should default to None)
+        let json_without_success = serde_json::json!({
+            "type": "post_tool_use",
+            "data": {
+                "tool_name": "Read",
+                "tool_input": {"file_path": "/tmp/test.rs"},
+                "tool_response": "use sqlx::Error;\nfn main() {}",
+                "tool_use_id": "toolu_03ABC789"
+            }
+        });
+
+        let deserialized: HookPayload =
+            serde_json::from_value(json_without_success).expect("deserialize without tool_success");
+        if let HookPayload::PostToolUse { tool_success, .. } = deserialized {
+            assert_eq!(tool_success, None, "tool_success should default to None");
+        } else {
+            panic!("Wrong variant");
         }
 
         println!("RESULT: PASS - PostToolUse payload serializes correctly");

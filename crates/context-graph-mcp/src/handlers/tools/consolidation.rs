@@ -213,13 +213,32 @@ impl Handlers {
             "trigger_consolidation: Parsed parameters"
         );
 
-        // Get fingerprints from store using text search with a generic query
-        // This retrieves up to max_memories fingerprints for consolidation analysis
+        // Get fingerprints from store using semantic search with a broad query.
+        // This retrieves up to max_memories fingerprints for consolidation analysis.
+        //
+        // NOTE: Using semantic search with a generic query because:
+        // 1. search_text("") returns empty (empty strings produce no embeddings)
+        // 2. The store trait does not expose a list_all() or sample() method
+        //
+        // LIMITATION: The query "context memory patterns" may bias retrieval toward
+        // semantically similar memories. A future improvement would be to add a
+        // store.list_recent(limit) method for unbiased sampling.
         let search_options = TeleologicalSearchOptions::quick(params.max_memories);
+
+        let broad_query = match self.multi_array_provider.embed_all("context memory patterns").await {
+            Ok(output) => output.fingerprint,
+            Err(e) => {
+                error!(error = %e, "trigger_consolidation: Failed to generate broad query embedding");
+                return self.tool_error_with_pulse(
+                    id,
+                    &format!("Embedding error: Failed to generate query: {}", e),
+                );
+            }
+        };
 
         let search_results = match self
             .teleological_store
-            .search_text("", search_options)
+            .search_semantic(&broad_query, search_options)
             .await
         {
             Ok(results) => results,

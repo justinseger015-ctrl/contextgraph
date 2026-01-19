@@ -443,9 +443,9 @@ async fn test_e2e_shell_script_timeout() {
             println!("Execution time: {}ms", res.execution_time_ms);
 
             // If it completed within 50ms test timeout, that's fine.
-            // The 100ms budget in constitution is for CLI logic, not including
-            // shell script overhead (bash startup, jq parsing, process spawn).
-            // A shell script wrapper realistically takes 150-300ms total.
+            // The 500ms total budget in constitution includes CLI startup + logic.
+            // Shell script overhead (bash startup, jq parsing) adds ~100ms.
+            // A shell script wrapper realistically takes 300-500ms total.
             // This test verifies our infrastructure handles timeouts correctly.
             assert!(
                 res.execution_time_ms < 500,
@@ -478,8 +478,8 @@ async fn test_e2e_shell_script_timeout() {
         normal_result.execution_time_ms
     );
 
-    // The shell script has 500ms internal timeout + shell overhead (~50-100ms).
-    // Total budget should be 600ms max for the wrapper to complete.
+    // The shell script has 500ms total budget per constitution.yaml.
+    // With shell overhead (~50-100ms), total should be 600ms max.
     assert!(
         normal_result.execution_time_ms < 600,
         "pre_tool_use.sh should complete within shell wrapper budget (was {}ms)",

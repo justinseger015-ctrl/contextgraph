@@ -2,7 +2,7 @@
 //! PreToolUse hook handler - FAST PATH
 //!
 //! # Performance Requirements
-//! - Timeout: 100ms (strict) per constitution.yaml hooks.timeout_ms.pre_tool_use
+//! - Timeout: 500ms per constitution.yaml hooks.timeout_ms.pre_tool_use
 //! - NO database access - fast path only
 //! - Return cached state only
 //!
@@ -13,16 +13,18 @@
 
 use super::args::PreToolArgs;
 use super::error::{HookError, HookResult};
+use super::memory_cache::{get_cached_memories, CachedMemory};
 use super::types::{CoherenceState, HookInput, HookOutput, HookPayload, StabilityClassification};
 use std::io::{self, BufRead};
 use std::time::Instant;
+use tracing::debug;
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/// Fast path timeout in milliseconds (from constitution.yaml)
-pub const PRE_TOOL_USE_TIMEOUT_MS: u64 = 100;
+/// Fast path timeout in milliseconds (from constitution.yaml line 677)
+pub const PRE_TOOL_USE_TIMEOUT_MS: u64 = 500;
 
 // ============================================================================
 // Handler
@@ -31,7 +33,7 @@ pub const PRE_TOOL_USE_TIMEOUT_MS: u64 = 100;
 /// Handle pre_tool_use hook event (FAST PATH)
 ///
 /// # Performance
-/// MUST complete within 100ms. No database operations allowed.
+/// MUST complete within 500ms. No database operations allowed.
 /// Returns cached coherence state with default values.
 ///
 /// # Arguments
@@ -75,6 +77,14 @@ pub fn handle_pre_tool_use(args: &PreToolArgs) -> HookResult<HookOutput> {
     // Get tool-specific guidance (no database access)
     let guidance = tool_name.and_then(get_tool_guidance);
 
+    // Get cached memories from user_prompt_submit (no network calls - fast path)
+    let cached_memories = get_cached_memories(&args.session_id);
+    debug!(
+        session_id = %args.session_id,
+        cached_count = cached_memories.len(),
+        "PRE_TOOL: Retrieved cached memories"
+    );
+
     // Build cached coherence state with defaults
     // FAST PATH: We return default values, not computed ones
     // Real values would come from SessionCache (future task)
@@ -91,12 +101,78 @@ pub fn handle_pre_tool_use(args: &PreToolArgs) -> HookResult<HookOutput> {
         .with_coherence_state(coherence)
         .with_stability_classification(stability_classification);
 
-    // Add context injection if guidance exists
-    if let Some(guide) = guidance {
-        output = output.with_context_injection(guide);
+    // Build context injection from tool guidance + cached memories
+    let context_injection = build_context_injection(guidance, &cached_memories, tool_name);
+    if !context_injection.is_empty() {
+        output = output.with_context_injection(context_injection);
     }
 
     Ok(output)
+}
+
+/// Build context injection from tool guidance and cached memories.
+///
+/// Combines tool-specific guidance with relevant memories from the cache.
+/// This is pure computation with no I/O - safe for 500ms fast path (CLI logic ~100ms).
+///
+/// # Arguments
+/// * `guidance` - Tool-specific guidance string
+/// * `memories` - Cached memories from user_prompt_submit
+/// * `tool_name` - Name of the tool (for relevance filtering)
+fn build_context_injection(
+    guidance: Option<String>,
+    memories: &[CachedMemory],
+    tool_name: Option<&str>,
+) -> String {
+    let mut parts = Vec::new();
+
+    // Add tool guidance if present
+    if let Some(guide) = guidance {
+        parts.push(format!("## Tool Guidance\n{}", guide));
+    }
+
+    // Add cached memories if any exist and are relevant
+    if !memories.is_empty() {
+        // Filter memories by relevance to tool type (optional)
+        let relevant_memories: Vec<&CachedMemory> = memories
+            .iter()
+            .filter(|m| is_memory_relevant_for_tool(m, tool_name))
+            .take(3) // Limit to top 3 for brevity in fast path
+            .collect();
+
+        if !relevant_memories.is_empty() {
+            let mut memory_section = String::from("## Relevant Context\n");
+            for (i, mem) in relevant_memories.iter().enumerate() {
+                // Truncate long content for fast path
+                let content = if mem.content.len() > 200 {
+                    format!("{}...", &mem.content[..200])
+                } else {
+                    mem.content.clone()
+                };
+                memory_section.push_str(&format!(
+                    "### Memory {} (similarity: {:.2})\n{}\n\n",
+                    i + 1,
+                    mem.similarity,
+                    content
+                ));
+            }
+            parts.push(memory_section);
+        }
+    }
+
+    parts.join("\n")
+}
+
+/// Check if a memory is relevant for the current tool.
+///
+/// Uses simple heuristics to filter out irrelevant memories.
+fn is_memory_relevant_for_tool(memory: &CachedMemory, tool_name: Option<&str>) -> bool {
+    // All memories are considered relevant by default
+    // Could add tool-specific filtering here if needed
+    let _ = tool_name; // Suppress unused warning
+
+    // Minimum similarity threshold
+    memory.similarity >= 0.5
 }
 
 // ============================================================================

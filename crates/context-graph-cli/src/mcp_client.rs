@@ -40,6 +40,12 @@ const CONNECTION_TIMEOUT_MS: u64 = 5000;
 /// Request timeout in milliseconds (30 seconds).
 const REQUEST_TIMEOUT_MS: u64 = 30000;
 
+/// Fast path connection timeout (500ms) - for time-critical hooks.
+const FAST_CONNECTION_TIMEOUT_MS: u64 = 500;
+
+/// Fast path request timeout (800ms) - for time-critical hooks like user_prompt_submit.
+const FAST_REQUEST_TIMEOUT_MS: u64 = 800;
+
 // =============================================================================
 // JSON-RPC Types
 // =============================================================================
@@ -295,17 +301,97 @@ impl McpClient {
         query: &str,
         top_k: Option<u32>,
     ) -> Result<serde_json::Value, McpClientError> {
+        self.search_graph_with_content(query, top_k, false).await
+    }
+
+    /// Call the `search_graph` MCP tool with content inclusion option.
+    ///
+    /// Searches the knowledge graph using semantic similarity with optional
+    /// content hydration for context injection.
+    ///
+    /// # Arguments
+    ///
+    /// - `query`: Search query text
+    /// - `top_k`: Maximum number of results to return (default: 10)
+    /// - `include_content`: If true, includes full content text in results
+    ///
+    /// # Returns
+    ///
+    /// The MCP tool result as JSON value containing matching memories.
+    pub async fn search_graph_with_content(
+        &self,
+        query: &str,
+        top_k: Option<u32>,
+        include_content: bool,
+    ) -> Result<serde_json::Value, McpClientError> {
         let params = json!({
             "name": "search_graph",
             "arguments": {
                 "query": query,
-                "topK": top_k.unwrap_or(10)
+                "topK": top_k.unwrap_or(10),
+                "includeContent": include_content
             }
         });
 
-        info!(query_len = query.len(), top_k, "Calling MCP search_graph");
+        info!(
+            query_len = query.len(),
+            top_k,
+            include_content,
+            "Calling MCP search_graph"
+        );
 
         self.call_tool(params).await
+    }
+
+    /// Fast-path search for time-critical hooks (user_prompt_submit).
+    ///
+    /// Uses shorter timeouts (500ms connection, 800ms request) to ensure
+    /// the hook completes within its 2-second budget.
+    pub async fn search_graph_fast(
+        &self,
+        query: &str,
+        top_k: Option<u32>,
+        include_content: bool,
+    ) -> Result<serde_json::Value, McpClientError> {
+        let params = json!({
+            "name": "search_graph",
+            "arguments": {
+                "query": query,
+                "topK": top_k.unwrap_or(10),
+                "includeContent": include_content
+            }
+        });
+
+        debug!(
+            query_len = query.len(),
+            top_k,
+            include_content,
+            "Calling MCP search_graph (fast path)"
+        );
+
+        self.call_tool_fast(params).await
+    }
+
+    /// Fast-path divergence alerts for time-critical hooks.
+    ///
+    /// Uses shorter timeouts to ensure the hook completes within budget.
+    pub async fn get_divergence_alerts_fast(
+        &self,
+        lookback_hours: Option<u32>,
+    ) -> Result<serde_json::Value, McpClientError> {
+        let params = json!({
+            "name": "get_divergence_alerts",
+            "arguments": {
+                "lookback_hours": lookback_hours.unwrap_or(2)
+            }
+        });
+
+        debug!(
+            lookback_hours = lookback_hours.unwrap_or(2),
+            "Calling MCP get_divergence_alerts (fast path)"
+        );
+
+        self.call_tool_fast(params).await
     }
 
     /// Call the `get_memetic_status` MCP tool.
@@ -326,6 +412,38 @@ impl McpClient {
         self.call_tool(params).await
     }
 
+    /// Call the `get_divergence_alerts` MCP tool.
+    ///
+    /// Checks for divergence from recent activity using SEMANTIC embedders only
+    /// (E1, E5, E6, E7, E10, E12, E13). Temporal embedders (E2-E4) are excluded
+    /// per AP-62, AP-63.
+    ///
+    /// # Arguments
+    ///
+    /// - `lookback_hours`: Hours to look back for recent activity comparison (1-48, default: 2)
+    ///
+    /// # Returns
+    ///
+    /// The MCP tool result as JSON value containing divergence alerts.
+    pub async fn get_divergence_alerts(
+        &self,
+        lookback_hours: Option<u32>,
+    ) -> Result<serde_json::Value, McpClientError> {
+        let params = json!({
+            "name": "get_divergence_alerts",
+            "arguments": {
+                "lookback_hours": lookback_hours.unwrap_or(2)
+            }
+        });
+
+        info!(
+            lookback_hours = lookback_hours.unwrap_or(2),
+            "Calling MCP get_divergence_alerts"
+        );
+
+        self.call_tool(params).await
+    }
+
     /// Internal method to call an MCP tool.
     ///
     /// Establishes TCP connection, sends JSON-RPC request, and reads response.
@@ -333,19 +451,42 @@ impl McpClient {
         &self,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpClientError> {
+        self.call_tool_with_timeout(params, CONNECTION_TIMEOUT_MS, REQUEST_TIMEOUT_MS)
+            .await
+    }
+
+    /// Fast-path call for time-critical hooks (user_prompt_submit).
+    ///
+    /// Uses shorter timeouts (500ms connection, 800ms request) to ensure
+    /// the hook completes within its 2-second budget.
+    pub async fn call_tool_fast(
+        &self,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpClientError> {
+        self.call_tool_with_timeout(params, FAST_CONNECTION_TIMEOUT_MS, FAST_REQUEST_TIMEOUT_MS)
+            .await
+    }
+
+    /// Internal method to call an MCP tool with configurable timeouts.
+    async fn call_tool_with_timeout(
+        &self,
+        params: serde_json::Value,
+        connection_timeout_ms: u64,
+        request_timeout_ms: u64,
+    ) -> Result<serde_json::Value, McpClientError> {
         let addr = format!("{}:{}", self.host, self.port);
         debug!("Connecting to MCP server at {}", addr);
 
         // Connect with timeout
         let stream = tokio::time::timeout(
-            std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS),
+            std::time::Duration::from_millis(connection_timeout_ms),
             TcpStream::connect(&addr),
         )
         .await
         .map_err(|_| McpClientError::ConnectionTimeout {
             host: self.host.clone(),
             port: self.port,
-            timeout_ms: CONNECTION_TIMEOUT_MS,
+            timeout_ms: connection_timeout_ms,
         })?
         .map_err(|e| McpClientError::ServerNotRunning {
             host: self.host.clone(),
@@ -374,12 +515,12 @@ impl McpClient {
         // Read response with timeout
         let mut response_line = String::new();
         let bytes_read = tokio::time::timeout(
-            std::time::Duration::from_millis(REQUEST_TIMEOUT_MS),
+            std::time::Duration::from_millis(request_timeout_ms),
             reader.read_line(&mut response_line),
         )
         .await
         .map_err(|_| McpClientError::RequestTimeout {
-            timeout_ms: REQUEST_TIMEOUT_MS,
+            timeout_ms: request_timeout_ms,
         })??;
 
         if bytes_read == 0 {
@@ -402,7 +543,53 @@ impl McpClient {
             });
         }
 
-        response.result.ok_or(McpClientError::NoResult)
+        let result = response.result.ok_or(McpClientError::NoResult)?;
+
+        // Unwrap MCP content wrapper: result.content[0].text contains the actual JSON
+        Self::unwrap_mcp_response(result)
+    }
+
+    /// Unwrap MCP response content wrapper.
+    ///
+    /// MCP tools return responses in the format:
+    /// ```json
+    /// { "content": [{"text": "{...actual result...}", "type": "text"}], "isError": false }
+    /// ```
+    ///
+    /// This function extracts the actual tool result from the wrapper.
+    fn unwrap_mcp_response(response: serde_json::Value) -> Result<serde_json::Value, McpClientError> {
+        // Check for error response
+        if response.get("isError").and_then(|v| v.as_bool()).unwrap_or(false) {
+            let error_msg = Self::extract_content_text(&response)
+                .map(String::from)
+                .unwrap_or_else(|| "Unknown MCP error".to_string());
+            return Err(McpClientError::McpError {
+                code: -32000,
+                message: error_msg,
+            });
+        }
+
+        // Extract content[0].text and parse as JSON
+        match Self::extract_content_text(&response) {
+            Some(json_str) => serde_json::from_str(json_str).map_err(|e| {
+                error!("Failed to parse MCP content text: {}", e);
+                McpClientError::JsonError(e)
+            }),
+            None => {
+                // No content wrapper - return as-is (might be legacy format)
+                debug!("No content wrapper found, returning raw response");
+                Ok(response)
+            }
+        }
+    }
+
+    /// Extract text from MCP response content[0].text field.
+    fn extract_content_text(resp: &serde_json::Value) -> Option<&str> {
+        resp.get("content")
+            .and_then(|c| c.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|item| item.get("text"))
+            .and_then(|t| t.as_str())
     }
 
     /// Get the server address string.

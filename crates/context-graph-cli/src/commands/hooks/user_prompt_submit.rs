@@ -20,17 +20,27 @@ use context_graph_core::gwt::{store_in_cache, SessionCache, SessionSnapshot};
 
 use super::args::PromptSubmitArgs;
 use super::error::{HookError, HookResult};
+use super::memory_cache::{cache_memories, CachedMemory};
 use super::types::{
     CoherenceState, ConversationMessage, HookInput, HookOutput, HookPayload, StabilityClassification,
 };
+use crate::mcp_client::McpClient;
 
 // ============================================================================
 // Constants (from constitution.yaml)
 // ============================================================================
 
 /// UserPromptSubmit timeout in milliseconds
-#[allow(dead_code)]
 pub const USER_PROMPT_SUBMIT_TIMEOUT_MS: u64 = 2000;
+
+/// Maximum memories to retrieve for context injection (per constitution injection.priorities)
+const MAX_MEMORIES_TO_RETRIEVE: u32 = 5;
+
+/// Token budget for memory context (~500 tokens, ~4 chars/token)
+const MEMORY_CONTEXT_BUDGET_CHARS: usize = 2000;
+
+/// Minimum query length to trigger memory search (avoid noise from very short prompts)
+const MIN_QUERY_LENGTH_FOR_SEARCH: usize = 10;
 
 // ============================================================================
 // Identity Marker Types
@@ -130,8 +140,9 @@ const CONFIRMATION_PATTERNS: &[&str] = &[
 /// 2. Load session snapshot from cache (create if not found)
 /// 3. Analyze prompt for identity markers
 /// 4. Evaluate conversation context
-/// 5. Generate context injection string
-/// 6. Build and return HookOutput
+/// 5. Search knowledge graph for relevant memories via MCP
+/// 6. Generate context injection string with memories
+/// 7. Build and return HookOutput
 ///
 /// # Note on Storage
 /// Per PRD v6 Section 14, session identity uses the in-memory SessionCache singleton.
@@ -182,12 +193,85 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
     // 4. Evaluate conversation context
     let context_summary = evaluate_context(&context);
 
-    // 5. Generate context injection string
-    let context_injection =
-        generate_context_injection(&snapshot, identity_marker, &context_summary);
+    // 5. Create MCP client once for all operations
+    let client = McpClient::new();
 
-    // 6. Build output structures
-    let coherence = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
+    // 6. Check if MCP server is running (fast fail check)
+    // NO WORKAROUNDS - MCP must be available or we skip memory operations with warning
+    let mcp_available = match client.is_server_running().await {
+        Ok(running) => {
+            if running {
+                debug!("PROMPT_SUBMIT: MCP server available at {}", client.server_address());
+            } else {
+                warn!(
+                    "PROMPT_SUBMIT: MCP server not running at {} - memory operations will be skipped",
+                    client.server_address()
+                );
+            }
+            running
+        }
+        Err(e) => {
+            warn!(error = %e, "PROMPT_SUBMIT: Failed to check MCP server, skipping memory operations");
+            false
+        }
+    };
+
+    // 8. Search knowledge graph for relevant memories via MCP
+    //    Also cache them for pre_tool_use to access without network calls
+    let retrieved_memories = if mcp_available {
+        search_memories_for_prompt_with_client(&client, &args.session_id, &prompt).await
+    } else {
+        Vec::new()
+    };
+
+    debug!(
+        memory_count = retrieved_memories.len(),
+        "PROMPT_SUBMIT: memories retrieved from knowledge graph"
+    );
+
+    // 8. Check for divergence alerts (potential contradictions)
+    //    Only if MCP is available and we have enough time budget remaining
+    //    Divergence alerts are lower priority than memory retrieval
+    let elapsed_so_far_ms = start.elapsed().as_millis() as u64;
+    let time_budget_remaining = USER_PROMPT_SUBMIT_TIMEOUT_MS.saturating_sub(elapsed_so_far_ms);
+    const MIN_TIME_FOR_DIVERGENCE_MS: u64 = 500; // Need at least 500ms headroom
+
+    let divergence_alerts = if mcp_available && time_budget_remaining > MIN_TIME_FOR_DIVERGENCE_MS {
+        debug!(
+            elapsed_so_far_ms,
+            time_budget_remaining,
+            "PROMPT_SUBMIT: Fetching divergence alerts"
+        );
+        fetch_divergence_alerts_with_client(&client).await
+    } else {
+        if time_budget_remaining <= MIN_TIME_FOR_DIVERGENCE_MS {
+            debug!(
+                elapsed_so_far_ms,
+                time_budget_remaining,
+                "PROMPT_SUBMIT: Skipping divergence alerts - insufficient time budget"
+            );
+        }
+        Vec::new()
+    };
+
+    if !divergence_alerts.is_empty() {
+        info!(
+            alert_count = divergence_alerts.len(),
+            "PROMPT_SUBMIT: divergence alerts detected"
+        );
+    }
+
+    // 9. Generate context injection string with memories and divergence alerts
+    let context_injection = generate_context_injection(
+        &snapshot,
+        identity_marker,
+        &context_summary,
+        &retrieved_memories,
+        &divergence_alerts,
+    );
+
+    // 10. Build output structures
+    let coherence = compute_coherence(&snapshot);
     let coherence_state = build_coherence_state(&snapshot);
     let stability_classification = StabilityClassification::from_value(coherence);
 
@@ -197,6 +281,7 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
         session_id = %args.session_id,
         coherence = coherence,
         marker = ?identity_marker,
+        memory_count = retrieved_memories.len(),
         execution_time_ms,
         "PROMPT_SUBMIT: execute complete"
     );
@@ -263,6 +348,13 @@ fn extract_prompt_info(input: &HookInput) -> HookResult<(String, Vec<Conversatio
 // Session Cache Operations (per PRD v6 Section 14)
 // ============================================================================
 
+/// Compute coherence from snapshot's integration, reflection, and differentiation metrics.
+/// This is the standard coherence formula used throughout the codebase.
+#[inline]
+fn compute_coherence(snapshot: &SessionSnapshot) -> f32 {
+    (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0
+}
+
 /// Load snapshot from cache, creating a new one if not found.
 ///
 /// # Note on Storage
@@ -272,8 +364,7 @@ fn load_snapshot_from_cache(session_id: &str) -> SessionSnapshot {
     // Try to load from cache
     if let Some(snapshot) = SessionCache::get() {
         if snapshot.session_id == session_id {
-            let coherence = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
-            info!(session_id = %session_id, coherence = coherence, "PROMPT_SUBMIT: loaded snapshot from cache");
+            info!(session_id = %session_id, coherence = compute_coherence(&snapshot), "PROMPT_SUBMIT: loaded snapshot from cache");
             return snapshot;
         }
     }
@@ -362,17 +453,325 @@ fn evaluate_context(context: &[ConversationMessage]) -> ContextSummary {
 }
 
 // ============================================================================
+// Memory Retrieval via MCP
+// ============================================================================
+
+/// A memory retrieved from the knowledge graph.
+#[derive(Debug, Clone)]
+pub struct RetrievedMemory {
+    /// Fingerprint ID of the memory
+    pub id: String,
+    /// Content text (if available)
+    pub content: Option<String>,
+    /// Similarity score to the query [0.0, 1.0]
+    pub similarity: f32,
+    /// Dominant embedder that matched (e.g., "E1_Semantic")
+    pub dominant_embedder: String,
+}
+
+/// A divergence alert from the knowledge graph.
+/// Indicates potential contradictions or significant semantic drift.
+#[derive(Debug, Clone)]
+pub struct DivergenceAlert {
+    /// The embedding space showing divergence (e.g., "E1_Semantic")
+    pub embedder: String,
+    /// Similarity score in this space (low = divergent)
+    pub similarity: f32,
+    /// Description of the divergence
+    pub description: String,
+}
+
+/// Search the knowledge graph for memories relevant to the user's prompt.
+///
+/// Uses the MCP server's search_graph tool with includeContent=true to retrieve
+/// actual memory content for context injection.
+///
+/// Also caches the retrieved memories so pre_tool_use can access them without
+/// network calls (100ms constraint).
+///
+/// # Arguments
+/// * `session_id` - Session identifier for caching
+/// * `prompt` - The user's prompt text to search for relevant memories
+///
+/// # Returns
+/// Vector of retrieved memories, empty if search fails or no matches found.
+/// Failure is non-fatal - we log and return empty rather than failing the hook.
+
+/// Search the knowledge graph using a pre-created MCP client.
+/// This avoids redundant server connectivity checks when called alongside
+/// other MCP operations.
+async fn search_memories_for_prompt_with_client(
+    client: &McpClient,
+    session_id: &str,
+    prompt: &str,
+) -> Vec<RetrievedMemory> {
+    // Skip search for very short prompts (avoid noise)
+    if prompt.len() < MIN_QUERY_LENGTH_FOR_SEARCH {
+        debug!(
+            prompt_len = prompt.len(),
+            min_length = MIN_QUERY_LENGTH_FOR_SEARCH,
+            "PROMPT_SUBMIT: prompt too short for memory search"
+        );
+        return Vec::new();
+    }
+
+    debug!("PROMPT_SUBMIT: Searching for memories via MCP (fast path)");
+
+    // Search with includeContent=true to get memory text
+    // Using fast path (800ms timeout) to stay within 2s hook budget
+    let memories = client
+        .search_graph_fast(prompt, Some(MAX_MEMORIES_TO_RETRIEVE), true)
+        .await
+        .map(|result| parse_search_results(&result))
+        .unwrap_or_else(|e| {
+            warn!(error = %e, "PROMPT_SUBMIT: Memory search failed (timeout or error), continuing without memories");
+            Vec::new()
+        });
+
+    // Cache memories for pre_tool_use to access without MCP calls
+    if !memories.is_empty() {
+        let cached: Vec<CachedMemory> = memories
+            .iter()
+            .map(|m| CachedMemory {
+                content: m.content.clone().unwrap_or_default(),
+                similarity: m.similarity,
+            })
+            .collect();
+
+        cache_memories(session_id, cached);
+        debug!(
+            session_id,
+            memory_count = memories.len(),
+            "PROMPT_SUBMIT: Cached memories for pre_tool_use"
+        );
+    }
+
+    memories
+}
+
+/// Parse MCP search_graph results into RetrievedMemory structs.
+fn parse_search_results(result: &serde_json::Value) -> Vec<RetrievedMemory> {
+    let Some(results) = result.get("results").and_then(|v| v.as_array()) else {
+        debug!("PROMPT_SUBMIT: No results array in MCP response");
+        return Vec::new();
+    };
+
+    let mut memories = Vec::new();
+    let mut total_chars = 0usize;
+
+    for item in results {
+        // Check budget before adding
+        if total_chars >= MEMORY_CONTEXT_BUDGET_CHARS {
+            debug!(
+                total_chars,
+                budget = MEMORY_CONTEXT_BUDGET_CHARS,
+                "PROMPT_SUBMIT: Memory budget exhausted"
+            );
+            break;
+        }
+
+        let content = item.get("content").and_then(|v| v.as_str()).map(String::from);
+
+        // Track content size for budget
+        if let Some(ref c) = content {
+            total_chars += c.len();
+        }
+
+        memories.push(RetrievedMemory {
+            id: item
+                .get("fingerprintId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            content,
+            similarity: item
+                .get("similarity")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0) as f32,
+            dominant_embedder: item
+                .get("dominantEmbedder")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+        });
+    }
+
+    info!(
+        memory_count = memories.len(),
+        total_chars,
+        "PROMPT_SUBMIT: Parsed {} memories from knowledge graph",
+        memories.len()
+    );
+
+    memories
+}
+
+// ============================================================================
+// Divergence Alert Retrieval via MCP
+// ============================================================================
+
+/// Minimum similarity threshold below which we consider it divergent.
+/// Embedders with similarity below this will be flagged as alerts.
+const DIVERGENCE_THRESHOLD: f32 = 0.3;
+
+/// Fetch divergence alerts from the knowledge graph.
+///
+/// Uses the MCP server's get_divergence_alerts tool to detect semantic drift
+/// or potential contradictions. Only SEMANTIC embedders (E1, E5, E6, E7, E10, E12, E13)
+/// are checked per AP-62, AP-63.
+///
+/// # Arguments
+/// * `client` - MCP client to use for the request
+///
+/// # Returns
+/// Vector of divergence alerts, empty if none detected or fetch fails.
+
+/// Fetch divergence alerts using a pre-created MCP client.
+/// This avoids redundant server connectivity checks when called alongside
+/// other MCP operations.
+async fn fetch_divergence_alerts_with_client(client: &McpClient) -> Vec<DivergenceAlert> {
+    debug!("PROMPT_SUBMIT: Fetching divergence alerts via MCP (fast path)");
+
+    // Fetch divergence alerts with 2-hour lookback (default)
+    // Using fast path (800ms timeout) to stay within 2s hook budget
+    match client.get_divergence_alerts_fast(Some(2)).await {
+        Ok(result) => parse_divergence_alerts(&result),
+        Err(e) => {
+            warn!(error = %e, "PROMPT_SUBMIT: Divergence alert fetch failed (timeout or error), continuing without alerts");
+            Vec::new()
+        }
+    }
+}
+
+/// Parse MCP get_divergence_alerts results into DivergenceAlert structs.
+fn parse_divergence_alerts(result: &serde_json::Value) -> Vec<DivergenceAlert> {
+    let mut alerts = Vec::new();
+
+    // Extract alerts array from response
+    let Some(alerts_arr) = result.get("alerts").and_then(|v| v.as_array()) else {
+        // No alerts or different format - check for embedder-level divergence
+        if let Some(embedders) = result.get("embedders").and_then(|v| v.as_object()) {
+            for (name, data) in embedders {
+                if let Some(similarity) = data.get("similarity").and_then(|v| v.as_f64()) {
+                    let similarity = similarity as f32;
+                    if similarity < DIVERGENCE_THRESHOLD {
+                        alerts.push(DivergenceAlert {
+                            embedder: name.clone(),
+                            similarity,
+                            description: format!(
+                                "Low semantic agreement ({:.1}%) in {} - potential contradiction or drift",
+                                similarity * 100.0,
+                                name
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Also check for high-level divergence flag
+        if let Some(is_divergent) = result.get("is_divergent").and_then(|v| v.as_bool()) {
+            if is_divergent && alerts.is_empty() {
+                let overall_similarity = result
+                    .get("overall_similarity")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0) as f32;
+                alerts.push(DivergenceAlert {
+                    embedder: "Overall".to_string(),
+                    similarity: overall_similarity,
+                    description: "Divergence detected from recent activity patterns".to_string(),
+                });
+            }
+        }
+
+        return alerts;
+    };
+
+    // Deduplicate alerts by semantic_space (keep unique embedder types)
+    // Many alerts may come for the same embedder with different memories
+    let mut seen_embedders = std::collections::HashSet::new();
+
+    // Parse structured alerts array - handle both field name formats
+    for item in alerts_arr {
+        // Handle both "embedder" and "semantic_space" field names
+        let embedder = item
+            .get("embedder")
+            .or_else(|| item.get("semantic_space"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
+        // Skip if we've already seen this embedder type
+        if seen_embedders.contains(&embedder) {
+            continue;
+        }
+        seen_embedders.insert(embedder.clone());
+
+        // Handle both "similarity" and "similarity_score" field names
+        let similarity = item
+            .get("similarity")
+            .or_else(|| item.get("similarity_score"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+
+        // Get memory summary if available
+        let memory_hint = item
+            .get("recent_memory_summary")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let description = item
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                if !memory_hint.is_empty() {
+                    format!(
+                        "Low agreement in {} space ({:.1}%) - {}",
+                        embedder,
+                        similarity * 100.0,
+                        memory_hint
+                    )
+                } else {
+                    format!(
+                        "Divergence detected in {} (similarity: {:.1}%)",
+                        embedder,
+                        similarity * 100.0
+                    )
+                }
+            });
+
+        alerts.push(DivergenceAlert {
+            embedder,
+            similarity,
+            description,
+        });
+    }
+
+    if !alerts.is_empty() {
+        info!(
+            alert_count = alerts.len(),
+            "PROMPT_SUBMIT: Parsed {} divergence alerts",
+            alerts.len()
+        );
+    }
+
+    alerts
+}
+
+// ============================================================================
 // Context Injection Generation
 // ============================================================================
 
-/// Generate context injection string based on coherence state and prompt analysis.
+/// Generate context injection string based on coherence state, prompt analysis, memories, and divergence alerts.
 fn generate_context_injection(
     snapshot: &SessionSnapshot,
     identity_marker: IdentityMarkerType,
     context_summary: &ContextSummary,
+    retrieved_memories: &[RetrievedMemory],
+    divergence_alerts: &[DivergenceAlert],
 ) -> String {
-    // Compute coherence from integration/reflection/differentiation (per PRD v6)
-    let coherence = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
+    let coherence = compute_coherence(snapshot);
     let coherence_state = get_coherence_state_name(coherence);
     let integration_desc = get_integration_description(snapshot.integration);
     let stability_status = get_stability_status(coherence);
@@ -412,6 +811,55 @@ fn generate_context_injection(
             context_summary.assistant_message_count,
             context_summary.total_chars,
         ));
+    }
+
+    // Add retrieved memories from knowledge graph
+    if !retrieved_memories.is_empty() {
+        injection.push_str("\n## Relevant Memories from Knowledge Graph\n\n");
+
+        for (i, memory) in retrieved_memories.iter().enumerate() {
+            injection.push_str(&format!(
+                "### Memory {} (similarity: {:.2}, via {})\n",
+                i + 1,
+                memory.similarity,
+                memory.dominant_embedder
+            ));
+
+            // Add content if available
+            if let Some(ref content) = memory.content {
+                // Truncate very long content to avoid context overflow
+                let truncated = if content.len() > 500 {
+                    format!("{}...", &content[..500])
+                } else {
+                    content.clone()
+                };
+                injection.push_str(&truncated);
+                injection.push_str("\n\n");
+            } else {
+                injection.push_str(&format!("ID: {} (content not available)\n\n", memory.id));
+            }
+        }
+
+        injection.push_str("---\n");
+    }
+
+    // Add divergence alerts (contradictions/drift) if any
+    if !divergence_alerts.is_empty() {
+        injection.push_str("\n## ⚠️ DIVERGENCE ALERTS - Potential Contradictions\n\n");
+        injection.push_str("**Be aware of the following divergence from stored knowledge:**\n\n");
+
+        for alert in divergence_alerts {
+            injection.push_str(&format!(
+                "- **{}** (similarity: {:.1}%): {}\n",
+                alert.embedder,
+                alert.similarity * 100.0,
+                alert.description
+            ));
+        }
+
+        injection.push_str("\n*These alerts indicate semantic drift or potential contradictions ");
+        injection.push_str("between current context and stored memories. Review carefully.*\n");
+        injection.push_str("---\n");
     }
 
     injection
@@ -473,7 +921,7 @@ fn get_marker_guidance(marker: IdentityMarkerType) -> &'static str {
 /// Build CoherenceState from snapshot.
 /// Note: Uses coherence computed from integration/reflection/differentiation per PRD v6.
 fn build_coherence_state(snapshot: &SessionSnapshot) -> CoherenceState {
-    let coherence = (snapshot.integration + snapshot.reflection + snapshot.differentiation) / 3.0;
+    let coherence = compute_coherence(snapshot);
     CoherenceState::new(
         coherence,
         snapshot.integration,
@@ -522,7 +970,7 @@ mod tests {
         // Verify BEFORE state
         {
             let before_snapshot = SessionCache::get().expect("Cache must have snapshot");
-            let coherence = (before_snapshot.integration + before_snapshot.reflection + before_snapshot.differentiation) / 3.0;
+            let coherence = compute_coherence(&before_snapshot);
             println!("BEFORE state: coherence={}", coherence);
             assert!((coherence - 0.85).abs() < 0.01);
         }

@@ -9,8 +9,8 @@
 //! - AP-50: NO internal hooks (use Claude Code native)
 //! - AP-53: Hook logic in shell scripts calling CLI
 //!
-//! # Timeout Budget (per TECH-HOOKS.md Section 2.2)
-//! - PreToolUse: 100ms (FAST PATH - NO DB ACCESS)
+//! # Timeout Budget (per constitution.yaml)
+//! - PreToolUse: 500ms total (FAST PATH - NO DB ACCESS, CLI logic ~100ms)
 //! - UserPromptSubmit: 2000ms
 //! - PostToolUse: 3000ms
 //! - SessionStart: 5000ms
@@ -48,7 +48,7 @@ pub enum OutputFormat {
 pub enum HookType {
     /// Session initialization hook (timeout: 5000ms)
     SessionStart,
-    /// Pre-tool execution hook (timeout: 100ms - FAST PATH)
+    /// Pre-tool execution hook (timeout: 500ms total - FAST PATH)
     PreToolUse,
     /// Post-tool execution hook (timeout: 3000ms)
     PostToolUse,
@@ -121,14 +121,14 @@ pub struct SessionStartArgs {
 }
 
 // ============================================================================
-// Pre-Tool Arguments (timeout: 100ms - FAST PATH)
+// Pre-Tool Arguments (timeout: 500ms total - FAST PATH)
 // ============================================================================
 
-/// Pre-tool command arguments (FAST PATH - 100ms timeout)
+/// Pre-tool command arguments (FAST PATH - 500ms total timeout)
 /// Implements REQ-HOOKS-18
 ///
 /// # Performance Critical
-/// This command MUST complete within 100ms.
+/// This command has a 500ms total budget (CLI logic ~100ms + process overhead ~300ms).
 /// When `fast_path` is true (default), NO database access occurs.
 /// Uses SessionCache only for coherence brief.
 #[derive(Args, Debug, Clone)]
@@ -147,7 +147,7 @@ pub struct PreToolArgs {
 
     /// Skip database access for faster response (default: true)
     /// When true, uses SessionCache only - NO disk/DB access
-    /// MUST remain true to meet 100ms timeout requirement
+    /// MUST remain true to meet 500ms timeout requirement
     #[arg(long, action = clap::ArgAction::Set, default_value = "true")]
     pub fast_path: bool,
 
@@ -297,7 +297,7 @@ pub enum HooksCommands {
     SessionStart(SessionStartArgs),
 
     /// Handle pre-tool-use event (FAST PATH)
-    /// Timeout: 100ms - NO DATABASE ACCESS
+    /// Timeout: 500ms total - NO DATABASE ACCESS
     /// CLI: context-graph-cli hooks pre-tool
     #[command(name = "pre-tool")]
     PreTool(PreToolArgs),
@@ -384,12 +384,12 @@ mod tests {
 
     // =========================================================================
     // TC-HOOKS-ARGS-002: Pre-Tool Default fast_path=true
-    // SOURCE OF TRUTH: TECH-HOOKS.md 100ms timeout, NO DB ACCESS
+    // SOURCE OF TRUTH: constitution.yaml 500ms timeout, NO DB ACCESS
     // =========================================================================
     #[test]
     fn tc_hooks_args_002_pre_tool_defaults() {
         println!("\n=== TC-HOOKS-ARGS-002: Pre-Tool Default fast_path=true ===");
-        println!("SOURCE: TECH-HOOKS.md 100ms timeout - MUST use cache only");
+        println!("SOURCE: constitution.yaml 500ms total timeout - MUST use cache only");
 
         let cli = TestCli::parse_from(["test", "pre-tool", "--session-id", "session-abc"]);
 
@@ -397,7 +397,7 @@ mod tests {
             assert_eq!(args.session_id, "session-abc");
             assert!(
                 args.fast_path,
-                "FAIL: fast_path MUST default to true for 100ms timeout"
+                "FAIL: fast_path MUST default to true for 500ms timeout"
             );
             assert!(!args.stdin, "FAIL: stdin MUST default to false");
             assert_eq!(
@@ -407,7 +407,7 @@ mod tests {
             );
             println!("  session_id: {}", args.session_id);
             println!(
-                "  fast_path: {} (default=true for 100ms timeout)",
+                "  fast_path: {} (default=true for 500ms timeout)",
                 args.fast_path
             );
             println!("  stdin: {} (default=false)", args.stdin);

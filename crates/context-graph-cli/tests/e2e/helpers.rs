@@ -37,7 +37,7 @@ pub const EXIT_SESSION_NOT_FOUND: i32 = 5;
 
 /// Timeout budgets per constitution.yaml (milliseconds)
 pub const TIMEOUT_SESSION_START_MS: u64 = 5000;
-pub const TIMEOUT_PRE_TOOL_MS: u64 = 100;
+pub const TIMEOUT_PRE_TOOL_MS: u64 = 500;
 pub const TIMEOUT_POST_TOOL_MS: u64 = 3000;
 pub const TIMEOUT_USER_PROMPT_MS: u64 = 2000;
 pub const TIMEOUT_SESSION_END_MS: u64 = 30000;

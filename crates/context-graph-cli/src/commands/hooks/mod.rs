@@ -19,6 +19,7 @@
 mod args;
 #[allow(dead_code)]
 mod error;
+pub mod memory_cache;
 #[allow(dead_code)]
 pub mod post_tool_use;
 #[allow(dead_code)]

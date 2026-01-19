@@ -230,7 +230,7 @@ const SETTINGS_JSON_TEMPLATE: &str = r#"{
           {
             "type": "command",
             "command": ".claude/hooks/pre_tool_use.sh",
-            "timeout": 100
+            "timeout": 500
           }
         ]
       }
