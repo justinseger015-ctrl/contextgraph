@@ -217,8 +217,8 @@ fn load_or_create_snapshot(
                 );
 
                 // Restore identity state from previous session
-                // Per PRD v6, we copy purpose_vector and metrics
-                snapshot.purpose_vector = cached.purpose_vector;
+                // Per PRD v6, we copy topic_profile and metrics
+                snapshot.topic_profile = cached.topic_profile;
                 snapshot.integration = cached.integration;
                 snapshot.reflection = cached.reflection;
                 snapshot.differentiation = cached.differentiation;
@@ -289,11 +289,11 @@ fn build_coherence_state(snapshot: &SessionSnapshot) -> CoherenceState {
 // Drift Metrics Computation (TASK-HOOKS-013)
 // =============================================================================
 
-/// Compute cosine distance between two purpose vectors.
+/// Compute cosine distance between two topic profiles.
 ///
 /// # Arguments
-/// * `current` - Current session's purpose vector [NUM_EMBEDDERS]
-/// * `previous` - Previous session's purpose vector [NUM_EMBEDDERS]
+/// * `current` - Current session's topic profile [NUM_EMBEDDERS]
+/// * `previous` - Previous session's topic profile [NUM_EMBEDDERS]
 ///
 /// # Returns
 /// Cosine distance in range [0.0, 2.0] where:
@@ -358,7 +358,7 @@ fn cosine_distance(current: &[f32; NUM_EMBEDDERS], previous: &[f32; NUM_EMBEDDER
 /// # Returns
 /// DriftMetrics containing:
 /// - stability_delta: Change in stability (current - previous coherence)
-/// - purpose_drift: Cosine distance between purpose vectors [0.0, 2.0]
+/// - purpose_drift: Cosine distance between topic profiles [0.0, 2.0]
 /// - time_since_snapshot_ms: Time elapsed since previous snapshot
 /// - coherence_phase_drift: Mean absolute change in metrics
 ///
@@ -377,7 +377,7 @@ fn compute_drift_metrics(
     let stability_delta = current_stability - previous_stability;
 
     // Purpose vector drift (cosine distance)
-    let purpose_drift = cosine_distance(&current.purpose_vector, &previous.purpose_vector);
+    let purpose_drift = cosine_distance(&current.topic_profile, &previous.topic_profile);
 
     // Time since previous snapshot
     let time_since_snapshot_ms = (current.timestamp_ms as i64) - (previous.timestamp_ms as i64);
@@ -493,7 +493,7 @@ mod tests {
         let prev_differentiation = 0.55;
         {
             let mut prev_snapshot = SessionSnapshot::new(prev_id);
-            prev_snapshot.purpose_vector = prev_purpose;
+            prev_snapshot.topic_profile = prev_purpose;
             prev_snapshot.integration = prev_integration;
             prev_snapshot.reflection = prev_reflection;
             prev_snapshot.differentiation = prev_differentiation;
@@ -520,8 +520,8 @@ mod tests {
 
         // Verify identity state is restored from previous session
         assert_eq!(
-            cached.purpose_vector, prev_purpose,
-            "purpose_vector MUST be restored from previous session"
+            cached.topic_profile, prev_purpose,
+            "topic_profile MUST be restored from previous session"
         );
         assert!(
             (cached.integration - prev_integration).abs() < 0.001,
@@ -538,8 +538,8 @@ mod tests {
 
         println!("PASS: Session linked to previous with identity state restored");
         println!(
-            "  purpose_vector restored: {:?}",
-            &cached.purpose_vector[0..3]
+            "  topic_profile restored: {:?}",
+            &cached.topic_profile[0..3]
         );
         println!("  integration: {}", cached.integration);
         println!("  reflection: {}", cached.reflection);
@@ -717,7 +717,7 @@ mod tests {
         // Setup: Create previous session snapshot with known values in cache
         {
             let mut prev_snapshot = SessionSnapshot::new(prev_id);
-            prev_snapshot.purpose_vector = [0.5; 13];
+            prev_snapshot.topic_profile = [0.5; 13];
             prev_snapshot.integration = 0.8;
             prev_snapshot.reflection = 0.7;
             prev_snapshot.differentiation = 0.6;
@@ -1035,7 +1035,7 @@ mod tests {
     // =========================================================================
     // TC-HOOKS-017: Session State Restoration Tests
     // Tests verify session state fields are correctly restored from previous session
-    // Fields tested: purpose_vector, integration, reflection, differentiation, trajectory
+    // Fields tested: topic_profile, integration, reflection, differentiation, trajectory
     // All tests use SessionCache per PRD v6 Section 14
     // =========================================================================
 
@@ -1060,7 +1060,7 @@ mod tests {
         let prev_differentiation = 0.59;
         {
             let mut prev_snapshot = SessionSnapshot::new(prev_id);
-            prev_snapshot.purpose_vector = prev_purpose;
+            prev_snapshot.topic_profile = prev_purpose;
             prev_snapshot.integration = prev_integration;
             prev_snapshot.reflection = prev_reflection;
             prev_snapshot.differentiation = prev_differentiation;
@@ -1085,10 +1085,10 @@ mod tests {
         // VERIFY: Identity fields restored from previous session (now in cache)
         let new_snapshot = SessionCache::get().expect("Cache must have snapshot");
 
-        // Verify purpose_vector
+        // Verify topic_profile
         assert_eq!(
-            new_snapshot.purpose_vector, prev_purpose,
-            "purpose_vector MUST be restored"
+            new_snapshot.topic_profile, prev_purpose,
+            "topic_profile MUST be restored"
         );
 
         // Verify integration
@@ -1124,8 +1124,8 @@ mod tests {
 
         println!("PASS: All identity state fields restored from previous session");
         println!(
-            "  purpose_vector: {:?}...",
-            &new_snapshot.purpose_vector[0..3]
+            "  topic_profile: {:?}...",
+            &new_snapshot.topic_profile[0..3]
         );
         println!("  integration: {}", new_snapshot.integration);
         println!("  reflection: {}", new_snapshot.reflection);
@@ -1148,7 +1148,7 @@ mod tests {
         // Setup: Create previous session with healthy metrics in cache
         {
             let mut prev_snapshot = SessionSnapshot::new(prev_id);
-            prev_snapshot.purpose_vector = [0.5; 13]; // Non-zero vector
+            prev_snapshot.topic_profile = [0.5; 13]; // Non-zero vector
             prev_snapshot.integration = 0.85;
             prev_snapshot.reflection = 0.80;
             prev_snapshot.differentiation = 0.75;
@@ -1222,7 +1222,7 @@ mod tests {
         // Setup: Create previous session in cache
         {
             let mut prev_snapshot = SessionSnapshot::new(prev_id);
-            prev_snapshot.purpose_vector = [0.6; 13];
+            prev_snapshot.topic_profile = [0.6; 13];
             prev_snapshot.integration = 0.75;
             prev_snapshot.reflection = 0.70;
             prev_snapshot.differentiation = 0.65;

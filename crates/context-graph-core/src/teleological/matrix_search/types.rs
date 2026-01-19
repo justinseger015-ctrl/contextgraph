@@ -54,16 +54,16 @@ pub enum ComparisonScope {
 pub struct SimilarityBreakdown {
     /// Overall similarity score [0, 1]
     pub overall: f32,
-    /// Purpose vector similarity [0, 1]
-    pub purpose_vector: f32,
+    /// Topic profile (13D) similarity [0, 1]
+    pub topic_profile: f32,
     /// Cross-correlation similarity [0, 1]
     pub cross_correlations: f32,
     /// Group alignments similarity [0, 1]
     pub group_alignments: f32,
     /// Per-group similarity scores
     pub per_group: HashMap<GroupType, f32>,
-    /// Per-embedder purpose alignment similarity
-    pub per_embedder_purpose: [f32; NUM_EMBEDDERS],
+    /// Per-embedder topic alignment similarity
+    pub per_embedder_topic: [f32; NUM_EMBEDDERS],
     /// Top contributing cross-correlation pairs
     pub top_correlation_pairs: Vec<((usize, usize), f32)>,
     /// Strategy used for this comparison
@@ -74,11 +74,11 @@ impl Default for SimilarityBreakdown {
     fn default() -> Self {
         Self {
             overall: 0.0,
-            purpose_vector: 0.0,
+            topic_profile: 0.0,
             cross_correlations: 0.0,
             group_alignments: 0.0,
             per_group: HashMap::new(),
-            per_embedder_purpose: [0.0; NUM_EMBEDDERS],
+            per_embedder_topic: [0.0; NUM_EMBEDDERS],
             top_correlation_pairs: Vec::new(),
             strategy_used: SearchStrategy::default(),
         }
@@ -90,8 +90,8 @@ impl Default for SimilarityBreakdown {
 pub struct ComprehensiveComparison {
     /// Full comparison with breakdown
     pub full: SimilarityBreakdown,
-    /// Purpose vector only similarity
-    pub purpose_only: f32,
+    /// Topic profile only similarity
+    pub topic_profile_only: f32,
     /// Cross-correlations only similarity
     pub correlations_only: f32,
     /// Group alignments only similarity
@@ -108,7 +108,7 @@ impl Default for ComprehensiveComparison {
     fn default() -> Self {
         Self {
             full: SimilarityBreakdown::default(),
-            purpose_only: 0.0,
+            topic_profile_only: 0.0,
             correlations_only: 0.0,
             groups_only: 0.0,
             per_group: HashMap::new(),

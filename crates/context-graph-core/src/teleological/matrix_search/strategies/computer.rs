@@ -50,7 +50,7 @@ impl<'a> SimilarityComputer<'a> {
                 let ga_sim = a.group_alignments.similarity(&b.group_alignments);
                 let conf_sim = a.confidence.min(b.confidence);
 
-                w.purpose_vector * pv_sim
+                w.topic_profile * pv_sim
                     + w.cross_correlations * cc_sim
                     + w.group_alignments * ga_sim
                     + w.confidence * conf_sim
@@ -139,7 +139,7 @@ impl<'a> SimilarityComputer<'a> {
             0.0
         };
 
-        // Combine with purpose vector similarity
+        // Combine with topic profile similarity
         let pv_sim = compute_purpose_similarity(a, b);
 
         0.4 * pv_sim + 0.6 * corr_sim
@@ -259,7 +259,7 @@ impl<'a> SimilarityComputer<'a> {
             // Use Tucker if available
             self.tucker_similarity(a, b)
         } else if avg_density < 0.3 {
-            // Sparse correlations - use purpose vector
+            // Sparse correlations - use topic profile
             compute_purpose_similarity(a, b)
         } else if avg_coherence > 0.8 {
             // High coherence - use group hierarchical

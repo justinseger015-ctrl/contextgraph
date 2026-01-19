@@ -586,8 +586,8 @@ mod tests {
         // Verify all 7 teleological CFs are present (4 original + 3 TASK-TELEO-006)
         assert!(names.contains(&"fingerprints"), "Missing CF: fingerprints");
         assert!(
-            names.contains(&"purpose_vectors"),
-            "Missing CF: purpose_vectors"
+            names.contains(&"topic_profiles"),
+            "Missing CF: topic_profiles"
         );
         assert!(
             names.contains(&"e13_splade_inverted"),

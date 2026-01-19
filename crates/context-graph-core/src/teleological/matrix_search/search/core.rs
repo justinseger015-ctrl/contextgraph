@@ -62,11 +62,11 @@ impl TeleologicalMatrixSearch {
         };
 
         // Topic profile similarity
-        breakdown.purpose_vector = compute_purpose_similarity(a, b);
+        breakdown.topic_profile = compute_purpose_similarity(a, b);
 
         // Per-embedder topic similarity
         for ((out, &av), &bv) in breakdown
-            .per_embedder_purpose
+            .per_embedder_topic
             .iter_mut()
             .zip(a.topic_profile.alignments.iter())
             .zip(b.topic_profile.alignments.iter())
@@ -112,7 +112,7 @@ impl TeleologicalMatrixSearch {
 
         // Overall based on weights
         let w = &self.config.weights;
-        breakdown.overall = w.purpose_vector * breakdown.purpose_vector
+        breakdown.overall = w.topic_profile * breakdown.topic_profile
             + w.cross_correlations * breakdown.cross_correlations
             + w.group_alignments * breakdown.group_alignments
             + w.confidence * (a.confidence.min(b.confidence));

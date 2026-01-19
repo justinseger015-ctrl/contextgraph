@@ -186,7 +186,7 @@ mod tests {
         let fp = create_test_fingerprint(1.0);
 
         let mut config = MatrixSearchConfig::default();
-        config.weights.purpose_vector = 2.0; // Invalid: > 1.0
+        config.weights.topic_profile = 2.0; // Invalid: > 1.0
 
         let comparator = TeleologicalComparator::with_config(config);
         let result = comparator.compare(&fp, &fp);

@@ -61,15 +61,15 @@ mod tests {
     fn test_stored_fingerprint_creation() {
         let id = Uuid::new_v4();
         let embeddings = create_test_embeddings();
-        let purpose_vector = [0.5f32; 13];
+        let topic_profile = [0.5f32; 13];
         let content_hash = [0u8; 32];
 
-        let fp = StoredQuantizedFingerprint::new(id, embeddings, purpose_vector, content_hash);
+        let fp = StoredQuantizedFingerprint::new(id, embeddings, topic_profile, content_hash);
 
         assert_eq!(fp.id, id);
         assert_eq!(fp.version, STORAGE_VERSION);
         assert_eq!(fp.embeddings.len(), 13);
-        assert_eq!(fp.purpose_vector.len(), 13);
+        assert_eq!(fp.topic_profile.len(), 13);
     }
 
     #[test]

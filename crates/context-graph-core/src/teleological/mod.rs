@@ -15,7 +15,7 @@
 //! - **SynergyMatrix**: 13x13 cross-embedding synergy weights
 //! - **TeleologicalVector**: Fused multi-embedding representation
 //! - **GroupAlignments**: 6D hierarchical group aggregation
-//! - **MultiResolutionHierarchy**: 4-level purpose vector hierarchy
+//! - **MultiResolutionHierarchy**: 4-level topic profile hierarchy
 //! - **MeaningExtractionConfig**: Configuration for semantic extraction
 //! - **TeleologicalProfile**: Task-specific fusion configurations
 //!
@@ -32,10 +32,10 @@
 //!
 //! ## Multi-Resolution Hierarchy
 //!
-//! - Level 0: Full 13D Purpose Vector
-//! - Level 1: 6D Group Purpose Vector
-//! - Level 2: 3D Core Purpose Vector (What/How/Why)
-//! - Level 3: 1D Purpose Alignment Score
+//! - Level 0: Full 13D Topic Profile
+//! - Level 1: 6D Group Topic Profile
+//! - Level 2: 3D Core Topic Profile (What/How/Why)
+//! - Level 3: 1D Topic Alignment Score
 //!
 //! ## Example
 //!
@@ -71,7 +71,7 @@ pub mod synergy_matrix;
 // Group alignments and hierarchical aggregation
 pub mod groups;
 
-// Multi-resolution purpose vector hierarchy
+// Multi-resolution topic profile hierarchy
 pub mod resolution;
 
 // TeleologicalVector: fused representation

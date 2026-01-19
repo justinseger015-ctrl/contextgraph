@@ -265,6 +265,7 @@ mod tests {
         #[derive(Deserialize)]
         struct TestConfig {
             #[serde(deserialize_with = "deserialize_embedder")]
+            #[allow(dead_code)]
             embedder: Embedder,
         }
 

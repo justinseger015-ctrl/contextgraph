@@ -62,19 +62,19 @@ fn test_fingerprint_size_in_range() {
 }
 
 #[test]
-fn test_purpose_vector_roundtrip() {
-    println!("=== TEST: Purpose vector (13D) round-trip ===");
+fn test_topic_profile_roundtrip() {
+    println!("=== TEST: Topic profile (13D) round-trip ===");
 
     let original: [f32; 13] = [
         0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3,
     ];
     println!("BEFORE: {:?}", original);
 
-    let serialized = serialize_purpose_vector(&original);
+    let serialized = serialize_topic_profile(&original);
     assert_eq!(serialized.len(), 52);
     println!("SERIALIZED: {} bytes", serialized.len());
 
-    let deserialized = deserialize_purpose_vector(&serialized);
+    let deserialized = deserialize_topic_profile(&serialized);
     println!("AFTER: {:?}", deserialized);
 
     for i in 0..13 {
@@ -201,8 +201,8 @@ fn edge_case_large_memory_id_list() {
 }
 
 #[test]
-fn edge_case_purpose_vector_extreme_values() {
-    println!("=== EDGE CASE 3: Purpose vector with extreme float values ===");
+fn edge_case_topic_profile_extreme_values() {
+    println!("=== EDGE CASE 3: Topic profile with extreme float values ===");
 
     let original: [f32; 13] = [
         f32::MIN,
@@ -224,10 +224,10 @@ fn edge_case_purpose_vector_extreme_values() {
         println!("  [{}]: {:e}", i, v);
     }
 
-    let serialized = serialize_purpose_vector(&original);
+    let serialized = serialize_topic_profile(&original);
     println!("SERIALIZED: {} bytes", serialized.len());
 
-    let deserialized = deserialize_purpose_vector(&serialized);
+    let deserialized = deserialize_topic_profile(&serialized);
     println!("AFTER: Deserialized values");
     for (i, v) in deserialized.iter().enumerate() {
         println!("  [{}]: {:e}", i, v);

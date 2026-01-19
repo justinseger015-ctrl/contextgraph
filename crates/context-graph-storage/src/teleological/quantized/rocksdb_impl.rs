@@ -16,10 +16,10 @@ use super::helpers::{
 };
 use super::trait_def::QuantizedFingerprintStorage;
 use crate::teleological::column_families::{
-    CF_PURPOSE_VECTORS, QUANTIZED_EMBEDDER_CFS, QUANTIZED_EMBEDDER_CF_COUNT,
+    CF_TOPIC_PROFILES, QUANTIZED_EMBEDDER_CFS, QUANTIZED_EMBEDDER_CF_COUNT,
 };
-use crate::teleological::schema::purpose_vector_key;
-use crate::teleological::serialization::deserialize_purpose_vector;
+use crate::teleological::schema::topic_profile_key;
+use crate::teleological::serialization::deserialize_topic_profile;
 use crate::RocksDbMemex;
 
 // =============================================================================
@@ -144,18 +144,18 @@ impl QuantizedFingerprintStorage for RocksDbMemex {
             );
         }
 
-        // Load purpose_vector from CF_PURPOSE_VECTORS (FAIL FAST if unavailable)
-        let purpose_vector = match self.get_cf(CF_PURPOSE_VECTORS) {
+        // Load topic_profile from CF_TOPIC_PROFILES (FAIL FAST if unavailable)
+        let topic_profile = match self.get_cf(CF_TOPIC_PROFILES) {
             Ok(cf_purpose) => {
-                let pv_key = purpose_vector_key(&id);
+                let pv_key = topic_profile_key(&id);
                 match self.db().get_cf(cf_purpose, pv_key) {
-                    Ok(Some(data)) => deserialize_purpose_vector(&data),
+                    Ok(Some(data)) => deserialize_topic_profile(&data),
                     Ok(None) => {
-                        // Purpose vector missing - this is a data integrity issue
+                        // Topic profile missing - this is a data integrity issue
                         // Log warning but return zeros to allow degraded operation
                         // (caller should ideally re-index this fingerprint)
                         warn!(
-                            "STORAGE WARNING: Purpose vector missing for fingerprint {}. \
+                            "STORAGE WARNING: Topic profile missing for fingerprint {}. \
                              This indicates incomplete fingerprint storage. \
                              Memory should be re-indexed with complete TeleologicalFingerprint.",
                             id
@@ -165,7 +165,7 @@ impl QuantizedFingerprintStorage for RocksDbMemex {
                     Err(e) => {
                         // Storage error - fail fast
                         panic!(
-                            "STORAGE ERROR: Failed to read purpose vector for fingerprint {}: {}. \
+                            "STORAGE ERROR: Failed to read topic profile for fingerprint {}: {}. \
                              This indicates a broken storage layer that must be fixed.",
                             id, e
                         );
@@ -175,7 +175,7 @@ impl QuantizedFingerprintStorage for RocksDbMemex {
             Err(_) => {
                 // CF not found - likely DB wasn't opened with teleological CFs
                 warn!(
-                    "STORAGE WARNING: CF_PURPOSE_VECTORS not available for fingerprint {}. \
+                    "STORAGE WARNING: CF_TOPIC_PROFILES not available for fingerprint {}. \
                      Database may need migration to include teleological CFs.",
                     id
                 );
@@ -189,12 +189,12 @@ impl QuantizedFingerprintStorage for RocksDbMemex {
         // TeleologicalMemoryStore::get() method instead.
         //
         // FAIL FAST is maintained: embeddings are required (panic if missing),
-        // purpose_vector is loaded from storage (warn if missing),
+        // topic_profile is loaded from storage (warn if missing),
         // content_hash uses documented default (caller's responsibility).
         Ok(StoredQuantizedFingerprint::new(
             id,
             embeddings,
-            purpose_vector,
+            topic_profile,
             [0u8; 32], // Content hash default - load from CF_FINGERPRINTS if needed
         ))
     }

@@ -19,7 +19,7 @@
 //! # Column Families (32 total per PRD v6)
 //!
 //! Base (8): nodes, edges, embeddings, metadata, temporal, tags, sources, system
-//! Teleological (11): fingerprints, purpose_vectors, e13_splade_inverted, e1_matryoshka_128,
+//! Teleological (11): fingerprints, topic_profiles, e13_splade_inverted, e1_matryoshka_128,
 //!                    synergy_matrix, teleological_profiles, teleological_vectors
 //! Quantized Embedder (13): emb_0..emb_12
 //!
@@ -73,7 +73,7 @@ pub use teleological::{
     all_hnsw_configs,
     deserialize_e1_matryoshka_128,
     deserialize_memory_id_list,
-    deserialize_purpose_vector,
+    deserialize_topic_profile,
     deserialize_teleological_fingerprint,
     e13_splade_inverted_cf_options,
     // Key format functions
@@ -90,16 +90,16 @@ pub use teleological::{
     parse_e13_splade_key,
     parse_e1_matryoshka_key,
     parse_fingerprint_key,
-    parse_purpose_vector_key,
+    parse_topic_profile_key,
     parse_teleological_profile_key,
     parse_teleological_vector_key,
-    purpose_vector_cf_options,
-    purpose_vector_key,
+    topic_profile_cf_options,
+    topic_profile_key,
     // Quantized embedder column families (TASK-EMB-022)
     quantized_embedder_cf_options,
     serialize_e1_matryoshka_128,
     serialize_memory_id_list,
-    serialize_purpose_vector,
+    serialize_topic_profile,
     // Serialization functions
     serialize_teleological_fingerprint,
     synergy_matrix_cf_options,
@@ -137,7 +137,7 @@ pub use teleological::{
     CF_EMB_8,
     CF_EMB_9,
     CF_FINGERPRINTS,
-    CF_PURPOSE_VECTORS,
+    CF_TOPIC_PROFILES,
     // TASK-TELEO-006: New teleological vector column families
     CF_SYNERGY_MATRIX,
     CF_TELEOLOGICAL_PROFILES,
@@ -157,7 +157,7 @@ pub use teleological::{
     E8_DIM,
     E9_DIM,
     NUM_EMBEDDERS,
-    PURPOSE_VECTOR_DIM,
+    TOPIC_PROFILE_DIM,
     QUANTIZED_EMBEDDER_CFS,
     QUANTIZED_EMBEDDER_CF_COUNT,
     // TASK-TELEO-006: New key format functions

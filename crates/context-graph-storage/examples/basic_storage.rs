@@ -127,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Example 5: Delete Node (Soft Delete) ---");
 
     // Create another node to delete
-    let mut to_delete = MemoryNode::new(
+    let to_delete = MemoryNode::new(
         "This node will be deleted".to_string(),
         create_valid_embedding(),
     );

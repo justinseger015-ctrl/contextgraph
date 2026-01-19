@@ -195,7 +195,7 @@ impl FusionEngine {
     ///
     /// # Arguments
     /// * `embeddings` - 13 embedding vectors of dimension 1024
-    /// * `alignments` - 13D purpose vector alignments
+    /// * `alignments` - 13D topic profile alignments
     ///
     /// # Panics
     ///

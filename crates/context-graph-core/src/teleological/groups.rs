@@ -64,7 +64,7 @@ pub mod group_indices {
 }
 
 impl GroupAlignments {
-    /// Create GroupAlignments from a 13D purpose vector.
+    /// Create GroupAlignments from a 13D topic profile.
     ///
     /// Computes weighted average of embeddings within each group.
     ///

@@ -12,8 +12,8 @@ use super::super::comparison_error::{
 /// Weights for different comparison components in Full scope.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ComponentWeights {
-    /// Weight for purpose vector similarity (default 0.4)
-    pub purpose_vector: f32,
+    /// Weight for topic profile similarity (default 0.4)
+    pub topic_profile: f32,
     /// Weight for cross-correlation similarity (default 0.35)
     pub cross_correlations: f32,
     /// Weight for group alignments similarity (default 0.15)
@@ -25,7 +25,7 @@ pub struct ComponentWeights {
 impl Default for ComponentWeights {
     fn default() -> Self {
         Self {
-            purpose_vector: 0.4,
+            topic_profile: 0.4,
             cross_correlations: 0.35,
             group_alignments: 0.15,
             confidence: 0.1,
@@ -37,7 +37,7 @@ impl ComponentWeights {
     /// Weights emphasizing cross-correlations (for teleological search)
     pub fn correlation_focused() -> Self {
         Self {
-            purpose_vector: 0.25,
+            topic_profile: 0.25,
             cross_correlations: 0.55,
             group_alignments: 0.15,
             confidence: 0.05,
@@ -47,7 +47,7 @@ impl ComponentWeights {
     /// Weights emphasizing topic profile (for semantic topic search)
     pub fn topic_focused() -> Self {
         Self {
-            purpose_vector: 0.6,
+            topic_profile: 0.6,
             cross_correlations: 0.2,
             group_alignments: 0.15,
             confidence: 0.05,
@@ -57,7 +57,7 @@ impl ComponentWeights {
     /// Weights emphasizing group structure (for hierarchical search)
     pub fn group_focused() -> Self {
         Self {
-            purpose_vector: 0.25,
+            topic_profile: 0.25,
             cross_correlations: 0.25,
             group_alignments: 0.45,
             confidence: 0.05,
@@ -84,15 +84,15 @@ impl ComponentWeights {
     /// assert!(valid.validate().is_ok());
     ///
     /// let mut invalid = ComponentWeights::default();
-    /// invalid.purpose_vector = 2.0; // Out of range
+    /// invalid.topic_profile = 2.0; // Out of range
     /// assert!(invalid.validate().is_err());
     /// ```
     pub fn validate(&self) -> ComparisonValidationResult<()> {
         // Check individual weight ranges
-        if !(0.0..=1.0).contains(&self.purpose_vector) {
+        if !(0.0..=1.0).contains(&self.topic_profile) {
             return Err(ComparisonValidationError::WeightOutOfRange {
-                field_name: "purpose_vector",
-                value: self.purpose_vector,
+                field_name: "topic_profile",
+                value: self.topic_profile,
                 min: 0.0,
                 max: 1.0,
             });
@@ -127,7 +127,7 @@ impl ComponentWeights {
 
         // Check sum
         let sum =
-            self.purpose_vector + self.cross_correlations + self.group_alignments + self.confidence;
+            self.topic_profile + self.cross_correlations + self.group_alignments + self.confidence;
 
         if (sum - 1.0).abs() > Self::WEIGHT_SUM_TOLERANCE {
             return Err(ComparisonValidationError::WeightsNotNormalized {
@@ -135,7 +135,7 @@ impl ComponentWeights {
                 expected_sum: 1.0,
                 tolerance: Self::WEIGHT_SUM_TOLERANCE,
                 weights: WeightValues {
-                    purpose_vector: self.purpose_vector,
+                    topic_profile: self.topic_profile,
                     cross_correlations: self.cross_correlations,
                     group_alignments: self.group_alignments,
                     confidence: self.confidence,
@@ -157,9 +157,9 @@ impl ComponentWeights {
     /// Normalize weights to sum to 1.0
     pub fn normalize(&mut self) {
         let sum =
-            self.purpose_vector + self.cross_correlations + self.group_alignments + self.confidence;
+            self.topic_profile + self.cross_correlations + self.group_alignments + self.confidence;
         if sum > f32::EPSILON {
-            self.purpose_vector /= sum;
+            self.topic_profile /= sum;
             self.cross_correlations /= sum;
             self.group_alignments /= sum;
             self.confidence /= sum;

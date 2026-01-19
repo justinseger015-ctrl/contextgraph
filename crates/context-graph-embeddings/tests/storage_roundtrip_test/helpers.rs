@@ -101,8 +101,8 @@ pub fn create_test_embeddings_with_deterministic_data(seed: u8) -> HashMap<u8, Q
     map
 }
 
-/// Create deterministic purpose vector based on seed.
-pub fn create_purpose_vector(seed: u8) -> [f32; 13] {
+/// Create deterministic topic profile based on seed.
+pub fn create_topic_profile(seed: u8) -> [f32; 13] {
     let mut pv = [0.0f32; 13];
     for (i, val) in pv.iter_mut().enumerate() {
         // Generate values in [0.3, 0.9] range

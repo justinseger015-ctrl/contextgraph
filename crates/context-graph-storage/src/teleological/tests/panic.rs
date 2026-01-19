@@ -23,8 +23,8 @@ fn test_panic_on_wrong_version() {
 
 #[test]
 #[should_panic(expected = "DESERIALIZATION ERROR")]
-fn test_panic_on_wrong_purpose_vector_size() {
-    let _ = deserialize_purpose_vector(&[0u8; 51]); // Should be 52
+fn test_panic_on_wrong_topic_profile_size() {
+    let _ = deserialize_topic_profile(&[0u8; 51]); // Should be 52
 }
 
 #[test]

@@ -36,7 +36,7 @@ pub trait QuantizedFingerprintRetriever: Send + Sync {
     ) -> Result<Option<StoredQuantizedFingerprint>, EmbeddingError>;
 
     /// Get only purpose vector (fast path for filtering).
-    fn get_purpose_vector(&self, id: Uuid) -> Result<Option<[f32; 13]>, EmbeddingError>;
+    fn get_topic_profile(&self, id: Uuid) -> Result<Option<[f32; 13]>, EmbeddingError>;
 }
 
 /// Trait for HNSW index operations.
@@ -297,15 +297,15 @@ impl<S: QuantizedFingerprintRetriever> MultiSpaceSearchEngine<S> {
     pub fn search_purpose_weighted(
         &self,
         queries: &HashMap<u8, Vec<f32>>,
-        purpose_vector: &[f32; 13],
+        topic_profile: &[f32; 13],
         k_per_space: usize,
         final_k: usize,
     ) -> Result<Vec<MultiSpaceQueryResult>, EmbeddingError> {
         eprintln!(
-            "[PURPOSE-WEIGHTED SEARCH] purpose_vector_sum={:.4}",
-            purpose_vector.iter().sum::<f32>()
+            "[PURPOSE-WEIGHTED SEARCH] topic_profile_sum={:.4}",
+            topic_profile.iter().sum::<f32>()
         );
-        self.search_multi_space(queries, Some(purpose_vector), k_per_space, final_k)
+        self.search_multi_space(queries, Some(topic_profile), k_per_space, final_k)
     }
 
     /// Compute RRF fusion for a single document across multiple embedder results.
@@ -368,19 +368,19 @@ mod tests {
 
     /// Test storage that uses in-memory HashMap (still real data structures)
     struct TestStorage {
-        purpose_vectors: HashMap<Uuid, [f32; 13]>,
+        topic_profiles: HashMap<Uuid, [f32; 13]>,
     }
 
     impl TestStorage {
         fn new() -> Self {
             Self {
-                purpose_vectors: HashMap::new(),
+                topic_profiles: HashMap::new(),
             }
         }
 
         #[allow(dead_code)] // Prepared for future tests
-        fn add_purpose_vector(&mut self, id: Uuid, pv: [f32; 13]) {
-            self.purpose_vectors.insert(id, pv);
+        fn add_topic_profile(&mut self, id: Uuid, pv: [f32; 13]) {
+            self.topic_profiles.insert(id, pv);
         }
     }
 
@@ -393,8 +393,8 @@ mod tests {
             Ok(None)
         }
 
-        fn get_purpose_vector(&self, id: Uuid) -> Result<Option<[f32; 13]>, EmbeddingError> {
-            Ok(self.purpose_vectors.get(&id).copied())
+        fn get_topic_profile(&self, id: Uuid) -> Result<Option<[f32; 13]>, EmbeddingError> {
+            Ok(self.topic_profiles.get(&id).copied())
         }
     }
 

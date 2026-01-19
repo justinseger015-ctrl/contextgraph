@@ -11,7 +11,7 @@ fn test_get_embedding_invalid_index() {
     let fp = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         create_test_embeddings_with_deterministic_data(42),
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 
@@ -51,7 +51,7 @@ fn test_large_vector_values() {
 
 /// Test fingerprint with all equal purpose values.
 #[test]
-fn test_uniform_purpose_vector() {
+fn test_uniform_topic_profile() {
     let fp = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         create_test_embeddings_with_deterministic_data(42),
@@ -59,10 +59,10 @@ fn test_uniform_purpose_vector() {
         create_content_hash(42),
     );
 
-    // Verify purpose_vector is correctly stored
-    assert_eq!(fp.purpose_vector, [0.5f32; 13]);
+    // Verify topic_profile is correctly stored
+    assert_eq!(fp.topic_profile, [0.5f32; 13]);
 
-    println!("[PASS] Uniform purpose vector handled correctly");
+    println!("[PASS] Uniform topic profile handled correctly");
 }
 
 /// Test multiple roundtrips don't accumulate errors.
@@ -71,7 +71,7 @@ fn test_multiple_roundtrips_no_drift() {
     let original = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         create_test_embeddings_with_deterministic_data(42),
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 
@@ -89,7 +89,7 @@ fn test_multiple_roundtrips_no_drift() {
         "Content hash drifted"
     );
     assert_eq!(
-        current.purpose_vector, original.purpose_vector,
+        current.topic_profile, original.topic_profile,
         "Purpose vector drifted"
     );
 

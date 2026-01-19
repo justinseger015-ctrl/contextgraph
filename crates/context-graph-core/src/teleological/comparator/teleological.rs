@@ -234,18 +234,18 @@ pub(crate) fn generate_breakdown(
 ) -> SimilarityBreakdown {
     let mut breakdown = SimilarityBreakdown {
         overall: result.overall,
-        purpose_vector: result.overall, // Simplified: use overall as purpose
+        topic_profile: result.overall, // Simplified: use overall as topic
         cross_correlations: 0.0,
         group_alignments: 0.0,
         per_group: HashMap::new(),
-        per_embedder_purpose: [0.0; NUM_EMBEDDERS],
+        per_embedder_topic: [0.0; NUM_EMBEDDERS],
         top_correlation_pairs: Vec::new(),
         strategy_used: strategy,
     };
 
     // Fill per-embedder scores
     for (idx, score) in result.per_embedder.iter().enumerate() {
-        breakdown.per_embedder_purpose[idx] = score.unwrap_or(0.0);
+        breakdown.per_embedder_topic[idx] = score.unwrap_or(0.0);
     }
 
     // Calculate group scores

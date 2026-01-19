@@ -21,7 +21,7 @@ pub const CF_FINGERPRINTS: &str = "fingerprints";
 ///
 /// Stored separately from full fingerprints for fast profile-only queries.
 /// Key: UUID (16 bytes) → Value: 13 × f32 = 52 bytes
-pub const CF_PURPOSE_VECTORS: &str = "purpose_vectors";
+pub const CF_TOPIC_PROFILES: &str = "topic_profiles";
 
 /// Column family for E13 SPLADE inverted index.
 ///
@@ -126,7 +126,7 @@ pub const CF_EGO_NODE: &str = "ego_node";
 /// All teleological column family names (11 total: 4 original + 3 teleological + 1 content + 1 e12_late_interaction + 2 legacy).
 pub const TELEOLOGICAL_CFS: &[&str] = &[
     CF_FINGERPRINTS,
-    CF_PURPOSE_VECTORS,
+    CF_TOPIC_PROFILES,
     CF_E13_SPLADE_INVERTED,
     CF_E1_MATRYOSHKA_128,
     // TASK-TELEO-006: New teleological vector CFs
@@ -248,14 +248,14 @@ pub fn fingerprint_cf_options(cache: &Cache) -> Options {
     opts
 }
 
-/// Options for 52-byte purpose vectors.
+/// Options for 52-byte topic profiles.
 ///
 /// Configuration:
 /// - Default block size (4KB)
 /// - No compression (too small to benefit)
 /// - Bloom filter for fast lookups
 /// - Optimized for point lookups
-pub fn purpose_vector_cf_options(cache: &Cache) -> Options {
+pub fn topic_profile_cf_options(cache: &Cache) -> Options {
     let mut block_opts = BlockBasedOptions::default();
     block_opts.set_block_cache(cache);
     block_opts.set_bloom_filter(10.0, false);
@@ -530,7 +530,7 @@ pub fn quantized_embedder_cf_options(cache: &Cache) -> Options {
 pub fn get_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
     vec![
         ColumnFamilyDescriptor::new(CF_FINGERPRINTS, fingerprint_cf_options(cache)),
-        ColumnFamilyDescriptor::new(CF_PURPOSE_VECTORS, purpose_vector_cf_options(cache)),
+        ColumnFamilyDescriptor::new(CF_TOPIC_PROFILES, topic_profile_cf_options(cache)),
         ColumnFamilyDescriptor::new(
             CF_E13_SPLADE_INVERTED,
             e13_splade_inverted_cf_options(cache),

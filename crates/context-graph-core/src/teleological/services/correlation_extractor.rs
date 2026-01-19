@@ -292,11 +292,11 @@ impl CorrelationExtractor {
     /// Cross-correlation between embedders i and j is computed as:
     /// corr(i,j) = sqrt(alignment[i] * alignment[j]) * synergy[i][j]
     ///
-    /// This captures: "when both embedders strongly align with the purpose vector,
+    /// This captures: "when both embedders strongly align with the topic profile,
     /// their interaction (weighted by synergy) is meaningful."
     ///
     /// # Arguments
-    /// * `alignments` - 13D purpose vector alignments (one scalar per embedder)
+    /// * `alignments` - 13D topic profile alignments (one scalar per embedder)
     /// * `synergy_matrix` - Optional synergy matrix for weighting
     ///
     /// # Returns

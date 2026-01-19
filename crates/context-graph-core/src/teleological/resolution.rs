@@ -1,12 +1,12 @@
-//! Multi-resolution purpose vector hierarchy.
+//! Multi-resolution topic profile hierarchy.
 //!
 //! From teleoplan.md Section 4.2:
 //!
 //! Multi-Resolution Hierarchy:
-//! - Level 0: Full 13D Purpose Vector
-//! - Level 1: 6D Group Purpose Vector
-//! - Level 2: 3D Core Purpose Vector (What, How, Why)
-//! - Level 3: 1D Purpose Alignment Score
+//! - Level 0: Full 13D Topic Profile
+//! - Level 1: 6D Group Topic Profile
+//! - Level 2: 3D Core Topic Profile (What, How, Why)
+//! - Level 3: 1D Topic Alignment Score
 
 use serde::{Deserialize, Serialize};
 
@@ -200,16 +200,16 @@ impl std::fmt::Display for DomainType {
     }
 }
 
-/// Multi-resolution purpose vector hierarchy.
+/// Multi-resolution topic profile hierarchy.
 ///
-/// Provides 4 levels of abstraction for purpose representation:
+/// Provides 4 levels of abstraction for topic representation:
 /// - Level 0: Raw 13D embedder alignments
 /// - Level 1: 6D group alignments
 /// - Level 2: 3D domain alignments (What/How/Why)
 /// - Level 3: 1D overall alignment score
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MultiResolutionHierarchy {
-    /// Level 0: Raw 13D purpose vector alignments
+    /// Level 0: Raw 13D topic profile alignments
     pub raw: [f32; NUM_EMBEDDERS],
 
     /// Level 1: 6D group alignments

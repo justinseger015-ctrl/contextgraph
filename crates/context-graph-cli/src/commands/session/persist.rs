@@ -109,7 +109,7 @@ pub async fn persist_identity_command(args: PersistIdentityArgs) -> i32 {
     // Create snapshot with current state from cache
     // Per PRD v6 Section 14, we use in-memory SessionCache instead of RocksDB
     let mut persist_snapshot = SessionSnapshot::new(&final_session_id);
-    persist_snapshot.purpose_vector = snapshot.purpose_vector;
+    persist_snapshot.topic_profile = snapshot.topic_profile;
     persist_snapshot.trajectory = snapshot.trajectory.clone();
     persist_snapshot.integration = snapshot.integration;
     persist_snapshot.reflection = snapshot.reflection;

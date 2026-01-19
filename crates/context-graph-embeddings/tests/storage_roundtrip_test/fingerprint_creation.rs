@@ -12,10 +12,10 @@ use uuid::Uuid;
 fn test_create_fingerprint_with_all_13_embeddings() {
     let id = Uuid::new_v4();
     let embeddings = create_test_embeddings_with_deterministic_data(42);
-    let purpose_vector = create_purpose_vector(42);
+    let topic_profile = create_topic_profile(42);
     let content_hash = create_content_hash(42);
 
-    let fp = StoredQuantizedFingerprint::new(id, embeddings, purpose_vector, content_hash);
+    let fp = StoredQuantizedFingerprint::new(id, embeddings, topic_profile, content_hash);
 
     // Verify all fields
     assert_eq!(fp.id, id, "ID must match");
@@ -25,9 +25,9 @@ fn test_create_fingerprint_with_all_13_embeddings() {
     );
     assert_eq!(fp.embeddings.len(), 13, "Must have exactly 13 embeddings");
     assert_eq!(
-        fp.purpose_vector.len(),
+        fp.topic_profile.len(),
         13,
-        "Purpose vector must have 13 dimensions"
+        "Topic profile must have 13 dimensions"
     );
     assert_eq!(fp.content_hash, content_hash, "Content hash must match");
     assert!(!fp.deleted, "New fingerprint should not be deleted");
@@ -49,7 +49,7 @@ fn test_panic_on_missing_embedder_0() {
     let _ = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         embeddings,
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 }
@@ -63,7 +63,7 @@ fn test_panic_on_missing_embedder_6() {
     let _ = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         embeddings,
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 }
@@ -77,7 +77,7 @@ fn test_panic_on_missing_embedder_12() {
     let _ = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         embeddings,
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 }
@@ -90,7 +90,7 @@ fn test_embeddings_have_correct_quantization_methods() {
     let fp = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         embeddings,
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 
@@ -113,9 +113,9 @@ fn test_embeddings_have_correct_quantization_methods() {
     println!("[PASS] All 13 embeddings have correct quantization methods");
 }
 
-/// Test purpose_vector is stored correctly.
+/// Test topic_profile is stored correctly.
 #[test]
-fn test_purpose_vector_storage() {
+fn test_topic_profile_storage() {
     let pv = [0.5f32; 13]; // Uniform purpose vector
 
     let fp = StoredQuantizedFingerprint::new(
@@ -125,9 +125,9 @@ fn test_purpose_vector_storage() {
         create_content_hash(42),
     );
 
-    assert_eq!(fp.purpose_vector, pv, "Purpose vector must be stored correctly");
+    assert_eq!(fp.topic_profile, pv, "Topic profile must be stored correctly");
 
-    println!("[PASS] purpose_vector stored correctly");
+    println!("[PASS] topic_profile stored correctly");
 }
 
 /// Test estimated size is within Constitution bounds.
@@ -136,7 +136,7 @@ fn test_estimated_size_within_bounds() {
     let fp = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         create_test_embeddings_with_deterministic_data(42),
-        create_purpose_vector(42),
+        create_topic_profile(42),
         create_content_hash(42),
     );
 

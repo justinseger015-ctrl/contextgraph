@@ -48,7 +48,7 @@ fn test_teleological_cf_names_are_snake_case() {
 fn test_teleological_cf_names_values() {
     // Original 4 CFs
     assert_eq!(CF_FINGERPRINTS, "fingerprints");
-    assert_eq!(CF_PURPOSE_VECTORS, "purpose_vectors");
+    assert_eq!(CF_TOPIC_PROFILES, "topic_profiles");
     assert_eq!(CF_E13_SPLADE_INVERTED, "e13_splade_inverted");
     assert_eq!(CF_E1_MATRYOSHKA_128, "e1_matryoshka_128");
     // TASK-TELEO-006: New 3 CFs
@@ -60,7 +60,7 @@ fn test_teleological_cf_names_values() {
 #[test]
 fn test_all_cfs_in_array() {
     assert!(TELEOLOGICAL_CFS.contains(&CF_FINGERPRINTS));
-    assert!(TELEOLOGICAL_CFS.contains(&CF_PURPOSE_VECTORS));
+    assert!(TELEOLOGICAL_CFS.contains(&CF_TOPIC_PROFILES));
     assert!(TELEOLOGICAL_CFS.contains(&CF_E13_SPLADE_INVERTED));
     assert!(TELEOLOGICAL_CFS.contains(&CF_E1_MATRYOSHKA_128));
     // TASK-TELEO-006: New CFs
@@ -78,10 +78,10 @@ fn test_fingerprint_cf_options_valid() {
 }
 
 #[test]
-fn test_purpose_vector_cf_options_valid() {
+fn test_topic_profile_cf_options_valid() {
     use rocksdb::Cache;
     let cache = Cache::new_lru_cache(256 * 1024 * 1024);
-    let opts = purpose_vector_cf_options(&cache);
+    let opts = topic_profile_cf_options(&cache);
     drop(opts);
 }
 

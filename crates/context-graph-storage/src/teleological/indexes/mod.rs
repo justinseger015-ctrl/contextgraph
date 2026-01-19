@@ -92,7 +92,7 @@ pub use hnsw_config::{
 // Re-export dimension constants
 pub use hnsw_config::{
     E10_DIM, E11_DIM, E12_TOKEN_DIM, E13_SPLADE_VOCAB, E1_DIM, E1_MATRYOSHKA_DIM, E2_DIM, E3_DIM,
-    E4_DIM, E5_DIM, E6_SPARSE_VOCAB, E7_DIM, E8_DIM, E9_DIM, NUM_EMBEDDERS, PURPOSE_VECTOR_DIM,
+    E4_DIM, E5_DIM, E6_SPARSE_VOCAB, E7_DIM, E8_DIM, E9_DIM, NUM_EMBEDDERS, TOPIC_PROFILE_DIM,
 };
 
 // Re-export from metrics
@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(E13_SPLADE_VOCAB, 30_522);
         assert_eq!(NUM_EMBEDDERS, 13);
         assert_eq!(E1_MATRYOSHKA_DIM, 128);
-        assert_eq!(PURPOSE_VECTOR_DIM, 13);
+        assert_eq!(TOPIC_PROFILE_DIM, 13);
 
         println!("RESULT: PASS");
     }

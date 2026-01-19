@@ -11,10 +11,10 @@ use uuid::Uuid;
 fn test_json_roundtrip_fingerprint() {
     let id = Uuid::new_v4();
     let embeddings = create_test_embeddings_with_deterministic_data(99);
-    let purpose_vector = create_purpose_vector(99);
+    let topic_profile = create_topic_profile(99);
     let content_hash = create_content_hash(99);
 
-    let original = StoredQuantizedFingerprint::new(id, embeddings.clone(), purpose_vector, content_hash);
+    let original = StoredQuantizedFingerprint::new(id, embeddings.clone(), topic_profile, content_hash);
 
     // Serialize to JSON
     let json = serde_json::to_string(&original).expect("JSON serialization failed");
@@ -52,8 +52,8 @@ fn test_json_roundtrip_fingerprint() {
     }
 
     assert_eq!(
-        restored.purpose_vector, original.purpose_vector,
-        "Purpose vector mismatch"
+        restored.topic_profile, original.topic_profile,
+        "Topic profile mismatch"
     );
     assert_eq!(
         restored.content_hash, original.content_hash,
@@ -69,7 +69,7 @@ fn test_bincode_roundtrip_fingerprint() {
     let original = StoredQuantizedFingerprint::new(
         Uuid::new_v4(),
         create_test_embeddings_with_deterministic_data(77),
-        create_purpose_vector(77),
+        create_topic_profile(77),
         create_content_hash(77),
     );
 
@@ -88,8 +88,8 @@ fn test_bincode_roundtrip_fingerprint() {
     assert_eq!(restored.version, original.version, "Version mismatch");
     assert_eq!(restored.embeddings.len(), 13, "Must have 13 embeddings");
     assert_eq!(
-        restored.purpose_vector, original.purpose_vector,
-        "Purpose vector mismatch"
+        restored.topic_profile, original.topic_profile,
+        "Topic profile mismatch"
     );
     assert_eq!(
         restored.content_hash, original.content_hash,

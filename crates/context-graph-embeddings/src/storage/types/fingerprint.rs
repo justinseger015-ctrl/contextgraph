@@ -46,10 +46,10 @@ pub struct StoredQuantizedFingerprint {
     /// All 13 embedders MUST be present. Missing embedder = panic on load.
     pub embeddings: HashMap<u8, QuantizedEmbedding>,
 
-    /// 13D purpose vector (NOT quantized - only 52 bytes).
-    /// Each dimension = alignment of that embedder's output to emergent goals.
-    /// From Constitution: "PV = [A(E1,V), A(E2,V), ..., A(E13,V)]"
-    pub purpose_vector: [f32; 13],
+    /// 13D topic profile (NOT quantized - only 52 bytes).
+    /// Each dimension = alignment of that embedder's output to emergent topics.
+    /// Represents topic alignment signature across all 13 embedding spaces.
+    pub topic_profile: [f32; 13],
 
     /// SHA-256 content hash (32 bytes).
     /// Used for deduplication and integrity verification.
@@ -75,7 +75,7 @@ impl StoredQuantizedFingerprint {
     /// # Arguments
     /// * `id` - UUID for this fingerprint
     /// * `embeddings` - HashMap of quantized embeddings (must have all 13)
-    /// * `purpose_vector` - 13D alignment signature
+    /// * `topic_profile` - 13D topic alignment signature
     /// * `content_hash` - SHA-256 of source content
     ///
     /// # Panics
@@ -84,7 +84,7 @@ impl StoredQuantizedFingerprint {
     pub fn new(
         id: Uuid,
         embeddings: HashMap<u8, QuantizedEmbedding>,
-        purpose_vector: [f32; 13],
+        topic_profile: [f32; 13],
         content_hash: [u8; 32],
     ) -> Self {
         // FAIL FAST: All 13 embedders required
@@ -116,7 +116,7 @@ impl StoredQuantizedFingerprint {
             id,
             version: STORAGE_VERSION,
             embeddings,
-            purpose_vector,
+            topic_profile,
             content_hash,
             created_at_ms: now,
             last_updated_ms: now,
@@ -136,7 +136,7 @@ impl StoredQuantizedFingerprint {
         // Fixed fields
         size += 16; // id (UUID)
         size += 1; // version
-        size += 52; // purpose_vector (13 × 4 bytes)
+        size += 52; // topic_profile (13 × 4 bytes)
         size += 32; // content_hash
         size += 8; // created_at_ms
         size += 8; // last_updated_ms

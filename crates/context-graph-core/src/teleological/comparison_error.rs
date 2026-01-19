@@ -104,7 +104,7 @@ pub enum ComparisonValidationError {
 /// Individual weight values for debugging WeightsNotNormalized errors.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WeightValues {
-    pub purpose_vector: f32,
+    pub topic_profile: f32,
     pub cross_correlations: f32,
     pub group_alignments: f32,
     pub confidence: f32,
@@ -122,13 +122,13 @@ impl fmt::Display for ComparisonValidationError {
                 write!(
                     f,
                     "ComponentWeights not normalized: sum is {} (expected {} ±{}). \
-                    Values: purpose_vector={}, cross_correlations={}, \
+                    Values: topic_profile={}, cross_correlations={}, \
                     group_alignments={}, confidence={}. \
                     Fix: call normalize() or adjust weights to sum to 1.0",
                     actual_sum,
                     expected_sum,
                     tolerance,
-                    weights.purpose_vector,
+                    weights.topic_profile,
                     weights.cross_correlations,
                     weights.group_alignments,
                     weights.confidence
@@ -234,7 +234,7 @@ mod tests {
             expected_sum: 1.0,
             tolerance: 0.001,
             weights: WeightValues {
-                purpose_vector: 0.5,
+                topic_profile: 0.5,
                 cross_correlations: 0.5,
                 group_alignments: 0.3,
                 confidence: 0.2,
@@ -250,14 +250,14 @@ mod tests {
     #[test]
     fn test_weight_out_of_range_error_display() {
         let err = ComparisonValidationError::WeightOutOfRange {
-            field_name: "purpose_vector",
+            field_name: "topic_profile",
             value: -0.5,
             min: 0.0,
             max: 1.0,
         };
 
         let msg = err.to_string();
-        assert!(msg.contains("purpose_vector"));
+        assert!(msg.contains("topic_profile"));
         assert!(msg.contains("-0.5"));
         println!("[PASS] WeightOutOfRange error: {}", msg);
     }
@@ -312,12 +312,12 @@ mod tests {
     #[test]
     fn test_similarity_out_of_range_error_display() {
         let err = ComparisonValidationError::SimilarityOutOfRange {
-            component: "purpose_vector",
+            component: "topic_profile",
             value: 1.2,
         };
 
         let msg = err.to_string();
-        assert!(msg.contains("purpose_vector"));
+        assert!(msg.contains("topic_profile"));
         assert!(msg.contains("1.2"));
         println!("[PASS] SimilarityOutOfRange error: {}", msg);
     }

@@ -47,5 +47,5 @@ pub const NUM_EMBEDDERS: usize = 13;
 /// E1 Matryoshka truncated dimension for Stage 2
 pub const E1_MATRYOSHKA_DIM: usize = 128;
 
-/// Purpose vector dimension (one per embedder)
-pub const PURPOSE_VECTOR_DIM: usize = 13;
+/// Topic profile dimension (one per embedder)
+pub const TOPIC_PROFILE_DIM: usize = 13;

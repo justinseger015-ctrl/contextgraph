@@ -11,11 +11,11 @@ use context_graph_core::types::fingerprint::TeleologicalFingerprint;
 
 use crate::teleological::column_families::{
     CF_E12_LATE_INTERACTION, CF_E13_SPLADE_INVERTED, CF_E1_MATRYOSHKA_128, CF_FINGERPRINTS,
-    CF_PURPOSE_VECTORS,
+    CF_TOPIC_PROFILES,
 };
 use crate::teleological::schema::{
     content_key, e12_late_interaction_key, e1_matryoshka_128_key, fingerprint_key,
-    purpose_vector_key,
+    topic_profile_key,
 };
 use crate::teleological::serialization::deserialize_teleological_fingerprint;
 
@@ -132,9 +132,9 @@ impl RocksDbTeleologicalStore {
             let cf_fp = self.get_cf(CF_FINGERPRINTS)?;
             batch.delete_cf(cf_fp, key);
 
-            // Remove from purpose_vectors
-            let cf_pv = self.get_cf(CF_PURPOSE_VECTORS)?;
-            batch.delete_cf(cf_pv, purpose_vector_key(&id));
+            // Remove from topic profiles
+            let cf_pv = self.get_cf(CF_TOPIC_PROFILES)?;
+            batch.delete_cf(cf_pv, topic_profile_key(&id));
 
             // Remove from e1_matryoshka_128
             let cf_mat = self.get_cf(CF_E1_MATRYOSHKA_128)?;

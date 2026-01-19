@@ -12,7 +12,7 @@
 //!
 //! - `Delta_S_i`: Per-space semantic entropy deltas (13D)
 //! - `Delta_C_j`: Per-space coherence deltas (13D)
-//! - `tau_i`: Per-space teleological weights from purpose vector (13D)
+//! - `tau_i`: Per-space teleological weights from topic profile (13D)
 //! - `lambda_S`: Lambda for semantic term
 //! - `lambda_C`: Lambda for coherence term
 //! - `w_e`: Emotional weight
@@ -92,11 +92,11 @@ pub struct MultiUtlParams {
     /// Range: [0.0, 1.0] per space.
     pub coherence_deltas: [f32; NUM_EMBEDDERS],
 
-    /// Per-space tau weights from purpose vector.
+    /// Per-space tau weights from topic profile.
     ///
     /// These are the teleological alignment values that weight
     /// each embedding space's contribution.
-    /// Range: [-1.0, 1.0] per space (from purpose vector).
+    /// Range: [-1.0, 1.0] per space (from topic profile).
     pub tau_weights: [f32; NUM_EMBEDDERS],
 
     /// Lambda for semantic term.
@@ -147,7 +147,7 @@ impl MultiUtlParams {
         Self::default()
     }
 
-    /// Create params from a purpose vector's alignments.
+    /// Create params from a topic profile's alignments.
     pub fn from_purpose_alignments(alignments: [f32; NUM_EMBEDDERS]) -> Self {
         Self {
             tau_weights: alignments,
@@ -227,7 +227,7 @@ impl MultiUtlParams {
         self
     }
 
-    /// Set tau weights from purpose vector.
+    /// Set tau weights from topic profile.
     pub fn with_tau_weights(mut self, weights: [f32; NUM_EMBEDDERS]) -> Self {
         self.tau_weights = weights;
         self

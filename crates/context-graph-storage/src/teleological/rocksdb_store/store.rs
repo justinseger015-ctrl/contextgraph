@@ -641,7 +641,7 @@ impl RocksDbTeleologicalStore {
     ///
     /// Writes to:
     /// 1. `fingerprints` - Full serialized fingerprint
-    /// 2. `purpose_vectors` - 13D purpose vector for fast queries
+    /// 2. `topic_profiles` - 13D topic profile
     /// 3. `e1_matryoshka_128` - Truncated E1 embedding for Stage 2
     /// 4. `e13_splade_inverted` - Updates inverted index for Stage 1
     /// 5. `e12_late_interaction` - ColBERT token embeddings for Stage 5
@@ -659,8 +659,7 @@ impl RocksDbTeleologicalStore {
         let serialized = serialize_teleological_fingerprint(fp);
         batch.put_cf(cf_fingerprints, key, &serialized);
 
-        // 2. Purpose vector storage was removed when alignment fields were removed
-        // from TeleologicalFingerprint. CF_PURPOSE_VECTORS is no longer used.
+        // 2. Topic profile storage is done via CF_TOPIC_PROFILES when topic_profile is set on fingerprint
 
         // 3. Store E1 Matryoshka 128D truncated vector
         let cf_matryoshka = self.get_cf(CF_E1_MATRYOSHKA_128)?;

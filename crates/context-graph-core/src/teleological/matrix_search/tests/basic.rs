@@ -83,7 +83,7 @@ fn test_matrix_search_with_breakdown() {
     let breakdown = search.similarity_with_breakdown(&tv1, &tv2);
 
     assert!(breakdown.overall > 0.0);
-    assert!(breakdown.purpose_vector > 0.0);
+    assert!(breakdown.topic_profile > 0.0);
     assert!(breakdown.cross_correlations > 0.0);
     assert!(breakdown.group_alignments > 0.0);
     assert!(!breakdown.per_group.is_empty());

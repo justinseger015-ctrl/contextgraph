@@ -22,13 +22,13 @@ impl TeleologicalMatrixSearch {
         // Full comparison
         let full = self.similarity_with_breakdown(a, b);
 
-        // Purpose vector only
-        let pv_config = MatrixSearchConfig {
+        // Topic profile only
+        let tp_config = MatrixSearchConfig {
             scope: ComparisonScope::TopicProfileOnly,
             ..Default::default()
         };
-        let pv_search = TeleologicalMatrixSearch::with_config(pv_config);
-        let purpose_only = pv_search.similarity(a, b);
+        let tp_search = TeleologicalMatrixSearch::with_config(tp_config);
+        let topic_profile_only = tp_search.similarity(a, b);
 
         // Cross-correlations only
         let cc_config = MatrixSearchConfig {
@@ -82,7 +82,7 @@ impl TeleologicalMatrixSearch {
 
         ComprehensiveComparison {
             full,
-            purpose_only,
+            topic_profile_only,
             correlations_only,
             groups_only,
             per_group,

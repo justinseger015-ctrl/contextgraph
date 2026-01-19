@@ -10,7 +10,7 @@
 //! | Name | Purpose | Key Format | Value Size |
 //! |------|---------|------------|------------|
 //! | fingerprints | Primary ~63KB TeleologicalFingerprints | UUID (16 bytes) | ~63KB |
-//! | purpose_vectors | 13D purpose vectors | UUID (16 bytes) | 52 bytes |
+//! | topic_profiles | 13D topic profiles | UUID (16 bytes) | 52 bytes |
 //! | e13_splade_inverted | Inverted index for E13 SPLADE | term_id (2 bytes) | Vec<UUID> |
 //! | e1_matryoshka_128 | E1 Matryoshka 128D truncated vectors | UUID (16 bytes) | 512 bytes |
 //! | synergy_matrix | Singleton 13x13 synergy matrix | "synergy" (7 bytes) | ~700 bytes |
@@ -62,7 +62,7 @@ pub use column_families::{
     get_all_teleological_cf_descriptors,
     get_quantized_embedder_cf_descriptors,
     get_teleological_cf_descriptors,
-    purpose_vector_cf_options,
+    topic_profile_cf_options,
     // Quantized embedder column families (TASK-EMB-022)
     quantized_embedder_cf_options,
     synergy_matrix_cf_options,
@@ -88,7 +88,7 @@ pub use column_families::{
     CF_EMB_8,
     CF_EMB_9,
     CF_FINGERPRINTS,
-    CF_PURPOSE_VECTORS,
+    CF_TOPIC_PROFILES,
     // TASK-TELEO-006: New teleological vector column families
     CF_SYNERGY_MATRIX,
     CF_TELEOLOGICAL_PROFILES,
@@ -110,12 +110,12 @@ pub use schema::{
     parse_e13_splade_key,
     parse_e1_matryoshka_key,
     parse_fingerprint_key,
-    parse_purpose_vector_key,
     parse_teleological_profile_key,
     parse_teleological_vector_key,
-    purpose_vector_key,
+    parse_topic_profile_key,
     teleological_profile_key,
     teleological_vector_key,
+    topic_profile_key,
     // TASK-TELEO-006: New key format functions
     SYNERGY_MATRIX_KEY,
 };
@@ -124,12 +124,12 @@ pub use schema::{
 pub use serialization::{
     deserialize_e1_matryoshka_128,
     deserialize_memory_id_list,
-    deserialize_purpose_vector,
     deserialize_teleological_fingerprint,
+    deserialize_topic_profile,
     serialize_e1_matryoshka_128,
     serialize_memory_id_list,
-    serialize_purpose_vector,
     serialize_teleological_fingerprint,
+    serialize_topic_profile,
     TELEOLOGICAL_VERSION,
 };
 
@@ -166,7 +166,7 @@ pub use indexes::{
     E8_DIM,
     E9_DIM,
     NUM_EMBEDDERS,
-    PURPOSE_VECTOR_DIM,
+    TOPIC_PROFILE_DIM,
 };
 
 // Re-export RocksDB teleological store (TASK: RocksDbTeleologicalStore)

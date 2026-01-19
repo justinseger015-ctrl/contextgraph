@@ -246,8 +246,6 @@ impl MemoryProvider for GraphMemoryProvider {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Note: Full integration tests require RocksDB storage setup
     // These are smoke tests to verify the API
 

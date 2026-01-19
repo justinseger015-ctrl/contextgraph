@@ -22,7 +22,6 @@ pub(crate) const E9_DIM: usize = 1024;
 pub(crate) const E10_DIM: usize = 768;
 pub(crate) const E11_DIM: usize = 384;
 pub(crate) const E12_TOKEN_DIM: usize = 128;
-pub(crate) const NUM_EMBEDDERS: usize = 13;
 
 /// Create a synthetic fingerprint with configurable access count.
 ///

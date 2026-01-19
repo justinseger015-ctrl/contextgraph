@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Number of embedder dimensions for purpose vector.
+/// Number of embedder dimensions for topic profile.
 pub const NUM_EMBEDDERS: usize = 13;
 
 /// Maximum trajectory history size.
@@ -33,8 +33,8 @@ pub type SessionManager = SessionCache;
 ///
 /// # Fields
 /// - `session_id`: Unique session identifier
-/// - `purpose_vector`: 13D teleological alignment
-/// - `trajectory`: History of purpose vectors
+/// - `topic_profile`: 13D teleological alignment
+/// - `trajectory`: History of topic profiles
 /// - `created_at`: Unix timestamp of snapshot creation
 /// - `updated_at`: Unix timestamp of last update
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,12 +55,12 @@ pub struct SessionSnapshot {
     pub differentiation: f32,
 
     /// Purpose vector (13D teleological alignment).
-    pub purpose_vector: [f32; NUM_EMBEDDERS],
+    pub topic_profile: [f32; NUM_EMBEDDERS],
 
     /// Previous session ID for continuity tracking.
     pub previous_session_id: Option<String>,
 
-    /// Trajectory history of purpose vectors.
+    /// Trajectory history of topic profiles.
     pub trajectory: Vec<[f32; NUM_EMBEDDERS]>,
 
     /// Unix timestamp in milliseconds.
@@ -93,7 +93,7 @@ impl SessionSnapshot {
             integration: 0.0,
             reflection: 0.0,
             differentiation: 0.0,
-            purpose_vector: [0.5; NUM_EMBEDDERS],
+            topic_profile: [0.5; NUM_EMBEDDERS],
             previous_session_id: None,
             trajectory: Vec::new(),
             timestamp_ms: now_ms,
@@ -102,7 +102,7 @@ impl SessionSnapshot {
         }
     }
 
-    /// Append a purpose vector to the trajectory history.
+    /// Append a topic profile to the trajectory history.
     pub fn append_to_trajectory(&mut self, pv: [f32; NUM_EMBEDDERS]) {
         if self.trajectory.len() >= MAX_TRAJECTORY_SIZE {
             self.trajectory.remove(0);

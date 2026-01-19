@@ -20,13 +20,13 @@ mod tests {
     // =========================================================================
 
     struct VerificationStorage {
-        purpose_vectors: HashMap<Uuid, [f32; 13]>,
+        topic_profiles: HashMap<Uuid, [f32; 13]>,
     }
 
     impl VerificationStorage {
         fn new() -> Self {
             Self {
-                purpose_vectors: HashMap::new(),
+                topic_profiles: HashMap::new(),
             }
         }
     }
@@ -39,8 +39,8 @@ mod tests {
             Ok(None)
         }
 
-        fn get_purpose_vector(&self, id: Uuid) -> Result<Option<[f32; 13]>, EmbeddingError> {
-            Ok(self.purpose_vectors.get(&id).copied())
+        fn get_topic_profile(&self, id: Uuid) -> Result<Option<[f32; 13]>, EmbeddingError> {
+            Ok(self.topic_profiles.get(&id).copied())
         }
     }
 

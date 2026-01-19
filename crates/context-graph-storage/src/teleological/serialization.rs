@@ -157,21 +157,21 @@ pub fn deserialize_teleological_fingerprint(data: &[u8]) -> TeleologicalFingerpr
     })
 }
 
-/// Serialize purpose vector (13D × f32 = 52 bytes).
+/// Serialize topic profile (13D × f32 = 52 bytes).
 ///
 /// # Arguments
-/// * `vector` - The 13-element purpose alignment vector
+/// * `vector` - The 13-element topic profile vector
 ///
 /// # Returns
 /// Exactly 52 bytes (13 × 4 bytes per f32, little-endian)
 ///
 /// # Example
 /// ```ignore
-/// let purpose = [0.5f32; 13];
-/// let bytes = serialize_purpose_vector(&purpose);
+/// let profile = [0.5f32; 13];
+/// let bytes = serialize_topic_profile(&profile);
 /// assert_eq!(bytes.len(), 52);
 /// ```
-pub fn serialize_purpose_vector(vector: &[f32; 13]) -> [u8; 52] {
+pub fn serialize_topic_profile(vector: &[f32; 13]) -> [u8; 52] {
     let mut result = [0u8; 52];
     for (i, &v) in vector.iter().enumerate() {
         let bytes = v.to_le_bytes();
@@ -180,23 +180,23 @@ pub fn serialize_purpose_vector(vector: &[f32; 13]) -> [u8; 52] {
     result
 }
 
-/// Deserialize purpose vector from 52 bytes.
+/// Deserialize topic profile from 52 bytes.
 ///
 /// # Arguments
 /// * `data` - Exactly 52 bytes
 ///
 /// # Returns
-/// The 13-element purpose alignment vector
+/// The 13-element topic profile vector
 ///
 /// # Panics
 /// Panics if data is not exactly 52 bytes.
-pub fn deserialize_purpose_vector(data: &[u8]) -> [f32; 13] {
+pub fn deserialize_topic_profile(data: &[u8]) -> [f32; 13] {
     if data.len() != 52 {
         panic!(
-            "DESERIALIZATION ERROR: Purpose vector must be 52 bytes, got {}. \
+            "DESERIALIZATION ERROR: Topic profile must be 52 bytes, got {}. \
              Data: {:02x?}. \
              This indicates corrupted storage or wrong CF lookup. \
-             Verify the key points to the purpose_vectors column family.",
+             Verify the key points to the topic profile column family.",
             data.len(),
             if data.len() <= 20 { data } else { &data[..20] }
         );

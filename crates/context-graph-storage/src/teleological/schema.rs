@@ -44,7 +44,7 @@ pub fn fingerprint_key(id: &Uuid) -> [u8; 16] {
     *id.as_bytes()
 }
 
-/// Key for purpose_vectors CF: UUID as 16 bytes.
+/// Key for topic profile storage (CF_TOPIC_PROFILES): UUID as 16 bytes.
 ///
 /// # Arguments
 /// * `id` - The fingerprint's UUID
@@ -52,7 +52,7 @@ pub fn fingerprint_key(id: &Uuid) -> [u8; 16] {
 /// # Returns
 /// Exactly 16 bytes (UUID in big-endian format)
 #[inline]
-pub fn purpose_vector_key(id: &Uuid) -> [u8; 16] {
+pub fn topic_profile_key(id: &Uuid) -> [u8; 16] {
     *id.as_bytes()
 }
 
@@ -136,7 +136,7 @@ pub fn parse_e13_splade_key(key: &[u8]) -> u16 {
     u16::from_be_bytes([key[0], key[1]])
 }
 
-/// Parse purpose vector key back to UUID.
+/// Parse topic profile key back to UUID.
 ///
 /// # Arguments
 /// * `key` - Exactly 16 bytes
@@ -147,10 +147,10 @@ pub fn parse_e13_splade_key(key: &[u8]) -> u16 {
 /// # Panics
 /// Panics if key is not exactly 16 bytes (FAIL FAST).
 #[inline]
-pub fn parse_purpose_vector_key(key: &[u8]) -> Uuid {
+pub fn parse_topic_profile_key(key: &[u8]) -> Uuid {
     if key.len() != 16 {
         panic!(
-            "STORAGE ERROR: purpose_vector key must be 16 bytes, got {} bytes. \
+            "STORAGE ERROR: topic_profile key must be 16 bytes, got {} bytes. \
              Key data: {:02x?}. This indicates corrupted storage or wrong CF access.",
             key.len(),
             key
@@ -158,7 +158,7 @@ pub fn parse_purpose_vector_key(key: &[u8]) -> Uuid {
     }
     Uuid::from_slice(key).unwrap_or_else(|e| {
         panic!(
-            "STORAGE ERROR: Invalid UUID bytes in purpose_vector key. \
+            "STORAGE ERROR: Invalid UUID bytes in topic_profile key. \
              Error: {}. Key data: {:02x?}.",
             e, key
         );

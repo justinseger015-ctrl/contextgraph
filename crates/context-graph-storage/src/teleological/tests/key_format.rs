@@ -22,9 +22,9 @@ fn test_fingerprint_key_format() {
 }
 
 #[test]
-fn test_purpose_vector_key_format() {
+fn test_topic_profile_key_format() {
     let id = Uuid::new_v4();
-    let key = purpose_vector_key(&id);
+    let key = topic_profile_key(&id);
 
     assert_eq!(key.len(), 16);
     assert_eq!(&key, id.as_bytes());

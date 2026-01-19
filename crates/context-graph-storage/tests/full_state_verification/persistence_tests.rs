@@ -10,7 +10,7 @@ use context_graph_storage::teleological::{
 use tempfile::TempDir;
 use uuid::Uuid;
 
-use crate::helpers::{create_test_store, generate_real_teleological_fingerprint, hex_string};
+use crate::helpers::{create_test_store, generate_real_teleological_fingerprint};
 
 /// Test 7: Update and Delete Physical Verification
 ///

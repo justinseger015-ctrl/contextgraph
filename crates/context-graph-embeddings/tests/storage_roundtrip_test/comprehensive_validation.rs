@@ -14,10 +14,10 @@ fn test_comprehensive_storage_roundtrip_validation() {
     // 1. Create fingerprint with all 13 embeddings
     let id = Uuid::new_v4();
     let embeddings = create_test_embeddings_with_deterministic_data(123);
-    let purpose_vector = create_purpose_vector(123);
+    let topic_profile = create_topic_profile(123);
     let content_hash = create_content_hash(123);
 
-    let original = StoredQuantizedFingerprint::new(id, embeddings, purpose_vector, content_hash);
+    let original = StoredQuantizedFingerprint::new(id, embeddings, topic_profile, content_hash);
 
     assert_eq!(original.embeddings.len(), 13, "Must have 13 embeddings");
     println!("[1/7] Created fingerprint with all 13 embeddings");
@@ -73,5 +73,5 @@ fn test_comprehensive_storage_roundtrip_validation() {
     println!("  - IndexEntry norm/cosine similarity verified");
     println!("  - RRF formula 1/(60+rank) verified");
     println!("  - MultiSpaceQueryResult aggregation verified");
-    println!("  - Purpose alignment filter at 0.55 verified");
+    println!("  - Topic alignment filter at 0.55 verified");
 }

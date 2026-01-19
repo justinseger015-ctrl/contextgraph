@@ -6,7 +6,7 @@
 //! # Column Families Used
 //!
 //! - `fingerprints`: Primary storage for ~63KB TeleologicalFingerprints
-//! - `purpose_vectors`: 13D purpose vectors for fast purpose-only queries (52 bytes)
+//! - `topic_profiles`: 13D topic profiles per memory
 //! - `e13_splade_inverted`: Inverted index for Stage 1 (Recall) sparse search
 //! - `e1_matryoshka_128`: E1 truncated 128D vectors for Stage 2 (Semantic ANN)
 //! - `e12_late_interaction`: ColBERT token embeddings for Stage 5 (MaxSim rerank)

@@ -17,7 +17,7 @@ pub struct RetrievalConfig {
     pub top_k: usize,
     /// Minimum similarity threshold
     pub min_similarity: f32,
-    /// Weight for purpose vector similarity
+    /// Weight for topic profile similarity
     pub purpose_weight: f32,
     /// Weight for cross-correlation similarity
     pub correlation_weight: f32,
@@ -56,7 +56,7 @@ pub struct RetrievalResult {
 /// Breakdown of similarity by component.
 #[derive(Clone, Debug, Default)]
 pub struct ComponentSimilarities {
-    /// Purpose vector similarity
+    /// Topic profile similarity
     pub purpose: f32,
     /// Cross-correlation similarity
     pub correlation: f32,

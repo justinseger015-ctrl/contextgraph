@@ -108,7 +108,7 @@ fn test_comprehensive_comparison() {
     let comp = search.comprehensive_comparison(&tv1, &tv2);
 
     assert!(comp.full.overall > 0.0);
-    assert!(comp.purpose_only > 0.0);
+    assert!(comp.topic_profile_only > 0.0);
     assert!(comp.correlations_only > 0.0);
     assert!(comp.groups_only > 0.0);
     assert!(!comp.per_group.is_empty());
@@ -124,7 +124,7 @@ fn test_component_weights_validation() {
     );
     assert!(weights.is_valid(), "Default weights should be valid");
 
-    weights.purpose_vector = 0.5;
+    weights.topic_profile = 0.5;
     let err = weights.validate();
     assert!(err.is_err(), "Modified weights should not sum to 1.0");
 

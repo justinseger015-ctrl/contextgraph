@@ -7,7 +7,7 @@
 //! # Search Levels
 //!
 //! 1. **Full Matrix (13x13)**: Compare all 78 cross-correlations
-//! 2. **Purpose Vector (13D)**: Compare per-embedder purpose alignments
+//! 2. **Topic Profile (13D)**: Compare per-embedder topic alignments
 //! 3. **Group Level (6D)**: Compare 6 hierarchical group alignments
 //! 4. **Single Embedder**: Compare specific embedder correlation patterns
 //! 5. **Synergy-Weighted**: Use learned synergy matrix as similarity weights
