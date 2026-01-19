@@ -5,7 +5,7 @@
 //! This crate provides GPU-accelerated operations for:
 //! - Vector similarity search (cosine, dot product)
 //! - Neural attention mechanisms
-//! - Modern Hopfield network computations
+//! - Poincaré ball hyperbolic operations
 //!
 //! # Constitution AP-007 Compliance
 //!

@@ -1,21 +1,9 @@
 //! Common test utilities and helper functions for GWT tests
 
-use crate::types::fingerprint::{PurposeVector, SemanticFingerprint, TeleologicalFingerprint};
+use crate::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint};
 
-/// Helper to create a test TeleologicalFingerprint with known alignments
-pub fn create_test_fingerprint(alignments: [f32; 13]) -> TeleologicalFingerprint {
-    let purpose_vector = PurposeVector::new(alignments);
+/// Helper to create a test TeleologicalFingerprint with known semantic values
+pub fn create_test_fingerprint(_seed_values: [f32; 13]) -> TeleologicalFingerprint {
     let semantic = SemanticFingerprint::zeroed();
-
-    TeleologicalFingerprint {
-        id: uuid::Uuid::new_v4(),
-        semantic,
-        purpose_vector,
-        purpose_evolution: Vec::new(),
-        alignment_score: alignments.iter().sum::<f32>() / 13.0,
-        content_hash: [0u8; 32],
-        created_at: chrono::Utc::now(),
-        last_updated: chrono::Utc::now(),
-        access_count: 0,
-    }
+    TeleologicalFingerprint::new(semantic, [0u8; 32])
 }

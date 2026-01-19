@@ -100,8 +100,8 @@ impl InMemoryTeleologicalStore {
     pub(crate) fn estimate_fingerprint_size(fp: &TeleologicalFingerprint) -> usize {
         let base = std::mem::size_of::<TeleologicalFingerprint>();
         let semantic = fp.semantic.storage_size();
-        let evolution = fp.purpose_evolution.len() * 200;
-        base + semantic + evolution
+        // Purpose evolution was removed - now just base + semantic
+        base + semantic
     }
 
     /// Returns the backend type.

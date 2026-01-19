@@ -48,23 +48,26 @@ async fn test_fsv_rocksdb_steering_data_matches_store() {
     let mut aligned_count = 0;
     let mut orphan_count = 0;
 
-    for id in stored_ids.iter() {
+    for (idx, id) in stored_ids.iter().enumerate() {
         let fp = store
             .retrieve(*id)
             .await
             .expect("retrieve works")
             .expect("fingerprint exists");
 
+        // Use the original test data theta value since purpose_vector was removed
+        let (_, theta, _) = test_data[idx];
+        let aggregate = theta as f64;
         println!(
-            "  - {} theta={:.4}, access={}, aligned={}, orphan={}",
+            "  - {} aggregate={:.4}, access={}, aligned={}, orphan={}",
             id,
-            fp.alignment_score,
+            aggregate,
             fp.access_count,
-            fp.alignment_score >= 0.5,
+            aggregate >= 0.5,
             fp.access_count == 0
         );
 
-        if fp.alignment_score >= 0.5 {
+        if aggregate >= 0.5 {
             aligned_count += 1;
         }
         if fp.access_count == 0 {
@@ -136,9 +139,9 @@ async fn test_fsv_rocksdb_pruning_candidates_match_store() {
 
     // Store fingerprints - some should be candidates, some not
     let test_data = [
-        ("orphan_1", 0.2_f32, 0_u64),  // Candidate: orphan + low alignment
-        ("orphan_2", 0.15_f32, 0_u64), // Candidate: orphan + low alignment
-        ("good_1", 0.9_f32, 10_u64),   // Not candidate: high alignment + accessed
+        ("orphan_1", 0.2_f32, 0_u64),  // Candidate: orphan + low importance
+        ("orphan_2", 0.15_f32, 0_u64), // Candidate: orphan + low importance
+        ("good_1", 0.9_f32, 10_u64),   // Not candidate: high importance + accessed
     ];
 
     let mut candidate_ids = Vec::new();
@@ -147,7 +150,7 @@ async fn test_fsv_rocksdb_pruning_candidates_match_store() {
         let fp = create_test_fingerprint(content, *theta, *access_count);
         let id = fp.id;
         store.store(fp).await.expect("Store must succeed");
-        // Orphans with low alignment should be candidates
+        // Orphans with low importance should be candidates
         if *access_count == 0 {
             candidate_ids.push(id);
         }

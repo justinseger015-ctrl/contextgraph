@@ -90,14 +90,6 @@ async fn test_basic_search_response_structure() {
             first.get("dominantEmbedder").is_some(),
             "Result must have dominantEmbedder"
         );
-        assert!(
-            first.get("purposeAlignment").is_some(),
-            "Result must have purposeAlignment"
-        );
-        assert!(
-            first.get("alignmentScore").is_some(),
-            "Result must have alignmentScore"
-        );
 
         // dominantEmbedder is returned as a human-readable name like "E1_Semantic"
         let dominant = first

@@ -35,7 +35,7 @@ dirs:
   crates/:
     context-graph-mcp/: "tools/, resources/, handlers/, adapters/"
     context-graph-core/: "graph/, search/, utl/, session/, curation/, teleological/, topic/, clustering/, dream/"
-    context-graph-cuda/: "kernels/, hnsw/, hopfield/, neuromod/"
+    context-graph-cuda/: "kernels/, hnsw/, neuromod/"
     context-graph-embeddings/: "models/, fingerprint/"
     context-graph-storage/: "rocksdb/, scylla/, indexes/, temporal/"
     context-graph-cli/: "commands/, hooks/"
@@ -135,7 +135,7 @@ security:
 # PERFORMANCE BUDGETS
 # ===============================================================================
 perf:
-  latency: { inject_context: "<25ms p95", hopfield: "<1ms", reflex_cache: "<100us", single_embed: "<10ms", batch_embed_64: "<50ms", faiss_1M_k100: "<2ms", dream_wake: "<100ms" }
+  latency: { inject_context: "<25ms p95", single_embed: "<10ms", batch_embed_64: "<50ms", faiss_1M_k100: "<2ms", dream_wake: "<100ms" }
   throughput: { embed_batch: ">1000/sec", search_batch_100: "<5ms" }
   memory: { gpu: "<24GB", graph_cap: ">10M nodes" }
   quality: { topic_stability: ">0.6", attack_detection: ">95%", info_loss: "<15%" }
@@ -357,11 +357,10 @@ teleological:
   # Invalid: Manual topic definition, E1<->E7 comparison
 
 # ===============================================================================
-# 5-LAYER BIO-NERVOUS SYSTEM
+# 4-LAYER BIO-NERVOUS SYSTEM
 # ===============================================================================
 layers:
   L1_Sensing: { lat: "<5ms", components: [13-model embed, PII scrub, adversarial detect] }
-  L2_Reflex:  { lat: "<100us", components: [Hopfield cache], bypass: "confidence>0.95" }
   L3_Memory:  { lat: "<1ms", components: [MHN, FAISS GPU], capacity: "2^768 patterns" }
   L4_Learning: { freq: "100Hz", components: [UTL optimizer, neuromod controller] }
   L5_Coherence: { sync: "10ms", components: [Topic synthesis, context distiller, broadcast] }
@@ -370,7 +369,7 @@ layers:
 # NEUROMODULATION
 # ===============================================================================
 neuromod:
-  Dopamine:     { param: hopfield.beta, range: "[1,5]", effect: "higher=sharp retrieval" }
+  Dopamine:     { param: retrieval_sharpness, range: "[1,5]", effect: "higher=sharp retrieval" }
   Serotonin:    { param: similarity.space_weights, range: "[0,1]", effect: "higher=more spaces" }
   Noradrenaline: { param: attention.temp, range: "[0.5,2]", effect: "higher=flat attention" }
   Acetylcholine: { param: utl.lr, range: "[0.001,0.002]", effect: "higher=faster update" }
@@ -660,7 +659,7 @@ claude_code:
       actions:
         - "Load topic portfolio from persistence"
         - "Initialize topic stability tracker"
-        - "Warm Hopfield cache and FAISS indexes"
+        - "Warm FAISS indexes"
         - "Inject portfolio summary + recent divergences"
 
     UserPromptSubmit:

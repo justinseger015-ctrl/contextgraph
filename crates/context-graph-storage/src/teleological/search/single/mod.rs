@@ -1,6 +1,6 @@
 //! Single embedder HNSW search.
 //!
-//! Searches ONE of the 12 HNSW-capable indexes for k nearest neighbors.
+//! Searches ONE of the 11 HNSW-capable indexes for k nearest neighbors.
 //!
 //! # Supported Embedders (HNSW)
 //!
@@ -17,7 +17,6 @@
 //! | E9HDC | 1024D | Structure |
 //! | E10Multimodal | 768D | Intent |
 //! | E11Entity | 384D | Multi-modal |
-//! | PurposeVector | 13D | Teleological |
 //!
 //! # NOT Supported (different algorithms)
 //!

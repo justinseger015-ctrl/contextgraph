@@ -92,7 +92,7 @@ async fn test_all_listeners_receive_all_events() {
 
     let final_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     assert!(final_da > DA_BASELINE, "Dopamine should be above baseline");
 

@@ -780,12 +780,6 @@ async fn phase2_verify_search_result_structure() {
             println!("  - similarity: {:.4}", similarity.unwrap());
 
             // May have other fields
-            if let Some(purpose) = first.get("purposeAlignment").and_then(|v| v.as_f64()) {
-                println!("  - purposeAlignment: {:.4}", purpose);
-            }
-            if let Some(theta) = first.get("alignmentScore").and_then(|v| v.as_f64()) {
-                println!("  - alignmentScore: {:.4}", theta);
-            }
             if let Some(dominant) = first.get("dominantEmbedder").and_then(|v| v.as_u64()) {
                 println!("  - dominantEmbedder: {}", dominant);
             }

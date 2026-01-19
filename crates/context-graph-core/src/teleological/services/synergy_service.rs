@@ -18,9 +18,9 @@
 use chrono::Utc;
 
 use crate::teleological::{
-    ProfileId, SynergyMatrix, TeleologicalProfile, CROSS_CORRELATION_COUNT, SYNERGY_DIM,
+    ProfileId, SynergyMatrix, TeleologicalProfile, TopicProfile, CROSS_CORRELATION_COUNT,
+    SYNERGY_DIM,
 };
-use crate::types::fingerprint::PurposeVector;
 
 /// Configuration for synergy computation.
 #[derive(Clone, Debug)]
@@ -282,14 +282,14 @@ impl SynergyService {
         }
     }
 
-    /// Get synergies modulated by purpose vector alignment.
+    /// Get synergies modulated by topic profile alignment.
     ///
     /// Higher alignment = stronger synergy contribution.
     pub fn get_aligned_synergies(
         &self,
-        purpose_vector: &PurposeVector,
+        topic_profile: &TopicProfile,
     ) -> [f32; CROSS_CORRELATION_COUNT] {
-        let alignments = purpose_vector.alignments;
+        let alignments = topic_profile.alignments;
         let mut result = [0.0f32; CROSS_CORRELATION_COUNT];
         let mut idx = 0;
 
@@ -508,13 +508,13 @@ mod tests {
     fn test_get_aligned_synergies() {
         let service = SynergyService::new();
 
-        // High alignment purpose vector
-        let high_pv = PurposeVector::new([0.9; 13]);
-        let aligned = service.get_aligned_synergies(&high_pv);
+        // High alignment topic profile
+        let high_tp = TopicProfile::new([0.9; 13]);
+        let aligned = service.get_aligned_synergies(&high_tp);
 
-        // Low alignment purpose vector
-        let low_pv = PurposeVector::new([0.1; 13]);
-        let low_aligned = service.get_aligned_synergies(&low_pv);
+        // Low alignment topic profile
+        let low_tp = TopicProfile::new([0.1; 13]);
+        let low_aligned = service.get_aligned_synergies(&low_tp);
 
         // High alignment should produce higher values
         let high_sum: f32 = aligned.iter().sum();

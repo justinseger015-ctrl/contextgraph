@@ -80,12 +80,12 @@ impl TeleologicalMatrixSearch {
 
         let n = vectors.len() as f32;
 
-        // Average purpose vectors
+        // Average topic profiles
         let mut avg_alignments = [0.0f32; NUM_EMBEDDERS];
         for v in vectors {
             for (avg, &val) in avg_alignments
                 .iter_mut()
-                .zip(v.purpose_vector.alignments.iter())
+                .zip(v.topic_profile.alignments.iter())
             {
                 *avg += val;
             }
@@ -120,9 +120,9 @@ impl TeleologicalMatrixSearch {
         // Average confidence
         let avg_confidence: f32 = vectors.iter().map(|v| v.confidence).sum::<f32>() / n;
 
-        use crate::types::fingerprint::PurposeVector;
+        use crate::teleological::TopicProfile;
         TeleologicalVector::with_all(
-            PurposeVector::new(avg_alignments),
+            TopicProfile::new(avg_alignments),
             avg_correlations,
             GroupAlignments::from_array(avg_groups),
             avg_confidence,

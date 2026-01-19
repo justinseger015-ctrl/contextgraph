@@ -1,6 +1,6 @@
 //! Bio-nervous system layer types.
 //!
-//! Defines the 5-layer architecture: Sensing, Reflex, Memory, Learning, Coherence
+//! Defines the 4-layer architecture: Sensing, Memory, Learning, Coherence
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -9,16 +9,14 @@ use super::CognitivePulse;
 
 /// Bio-nervous system layer identifier.
 ///
-/// The 5-layer architecture models the nervous system with distinct
+/// The 4-layer architecture models the nervous system with distinct
 /// processing layers, each with its own latency budget and function.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum LayerId {
     /// Multi-modal input processing (5ms budget)
     Sensing,
-    /// Pattern-matched fast responses (100μs budget)
-    Reflex,
-    /// Modern Hopfield associative storage (1ms budget)
+    /// Associative memory storage (1ms budget)
     Memory,
     /// UTL-driven weight optimization (10ms budget)
     Learning,
@@ -31,7 +29,6 @@ impl LayerId {
     pub fn latency_budget(&self) -> Duration {
         match self {
             LayerId::Sensing => Duration::from_millis(5),
-            LayerId::Reflex => Duration::from_micros(100),
             LayerId::Memory => Duration::from_millis(1),
             LayerId::Learning => Duration::from_millis(10),
             LayerId::Coherence => Duration::from_millis(10),
@@ -42,7 +39,6 @@ impl LayerId {
     pub fn display_name(&self) -> &'static str {
         match self {
             LayerId::Sensing => "Sensing Layer",
-            LayerId::Reflex => "Reflex Layer",
             LayerId::Memory => "Memory Layer",
             LayerId::Learning => "Learning Layer",
             LayerId::Coherence => "Coherence Layer",
@@ -53,8 +49,7 @@ impl LayerId {
     pub fn function(&self) -> &'static str {
         match self {
             LayerId::Sensing => "Multi-modal input processing",
-            LayerId::Reflex => "Pattern-matched fast responses",
-            LayerId::Memory => "Modern Hopfield associative storage",
+            LayerId::Memory => "Associative memory storage",
             LayerId::Learning => "UTL-driven weight optimization",
             LayerId::Coherence => "Global state synchronization",
         }
@@ -64,7 +59,6 @@ impl LayerId {
     pub fn all() -> &'static [LayerId] {
         &[
             LayerId::Sensing,
-            LayerId::Reflex,
             LayerId::Memory,
             LayerId::Learning,
             LayerId::Coherence,
@@ -186,16 +180,17 @@ mod tests {
     #[test]
     fn test_layer_latency_budgets() {
         assert_eq!(LayerId::Sensing.latency_budget(), Duration::from_millis(5));
-        assert_eq!(LayerId::Reflex.latency_budget(), Duration::from_micros(100));
         assert_eq!(LayerId::Memory.latency_budget(), Duration::from_millis(1));
+        assert_eq!(LayerId::Learning.latency_budget(), Duration::from_millis(10));
+        assert_eq!(LayerId::Coherence.latency_budget(), Duration::from_millis(10));
     }
 
     #[test]
     fn test_all_layers() {
         let layers = LayerId::all();
-        assert_eq!(layers.len(), 5);
+        assert_eq!(layers.len(), 4);
         assert_eq!(layers[0], LayerId::Sensing);
-        assert_eq!(layers[4], LayerId::Coherence);
+        assert_eq!(layers[3], LayerId::Coherence);
     }
 
     #[test]

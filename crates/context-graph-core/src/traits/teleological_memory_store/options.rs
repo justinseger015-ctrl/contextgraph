@@ -23,18 +23,13 @@ pub struct TeleologicalSearchOptions {
     /// Default: false
     pub include_deleted: bool,
 
-    /// Filter by minimum alignment to Strategic goals.
-    /// None = no filtering.
-    pub min_alignment: Option<f32>,
-
     /// Embedder indices to use for search (0-12).
     /// Empty = use all embedders.
     pub embedder_indices: Vec<usize>,
 
     /// Optional semantic fingerprint for computing per-embedder scores.
-    /// When provided in search_purpose(), enables computation of actual
-    /// cosine similarity scores for each embedder instead of returning zeros.
-    /// This is essential for search_teleological to return meaningful embedder_scores.
+    /// When provided, enables computation of actual cosine similarity scores
+    /// for each embedder instead of returning zeros.
     #[serde(skip)]
     pub semantic_query: Option<SemanticFingerprint>,
 
@@ -57,7 +52,6 @@ impl Default for TeleologicalSearchOptions {
             top_k: 10,
             min_similarity: 0.0,
             include_deleted: false,
-            min_alignment: None,
             embedder_indices: Vec::new(),
             semantic_query: None,
             include_content: false, // TASK-CONTENT-005: Opt-in for performance
@@ -82,13 +76,6 @@ impl TeleologicalSearchOptions {
         self
     }
 
-    /// Create options with alignment filter.
-    #[inline]
-    pub fn with_min_alignment(mut self, threshold: f32) -> Self {
-        self.min_alignment = Some(threshold);
-        self
-    }
-
     /// Create options filtering by specific embedders.
     #[inline]
     pub fn with_embedders(mut self, indices: Vec<usize>) -> Self {
@@ -97,8 +84,8 @@ impl TeleologicalSearchOptions {
     }
 
     /// Attach semantic fingerprint for computing per-embedder similarity scores.
-    /// When provided, search_purpose() will compute actual cosine similarities
-    /// between query and stored semantic fingerprints instead of returning zeros.
+    /// When provided, computes actual cosine similarities between query and
+    /// stored semantic fingerprints instead of returning zeros.
     #[inline]
     pub fn with_semantic_query(mut self, semantic: SemanticFingerprint) -> Self {
         self.semantic_query = Some(semantic);
@@ -128,7 +115,6 @@ mod tests {
         assert_eq!(opts.top_k, 10);
         assert_eq!(opts.min_similarity, 0.0);
         assert!(!opts.include_deleted);
-        assert!(opts.min_alignment.is_none());
         assert!(opts.embedder_indices.is_empty());
     }
 
@@ -142,12 +128,10 @@ mod tests {
     fn test_search_options_builder() {
         let opts = TeleologicalSearchOptions::quick(20)
             .with_min_similarity(0.5)
-            .with_min_alignment(0.75)
             .with_embedders(vec![0, 1, 2]);
 
         assert_eq!(opts.top_k, 20);
         assert_eq!(opts.min_similarity, 0.5);
-        assert_eq!(opts.min_alignment, Some(0.75));
         assert_eq!(opts.embedder_indices, vec![0, 1, 2]);
     }
 }

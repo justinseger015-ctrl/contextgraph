@@ -97,13 +97,6 @@ impl HnswConfig {
         Self::new(32, 256, 128, DistanceMetric::Cosine, E1_MATRYOSHKA_DIM)
     }
 
-    /// Purpose vector 13D config: M=16, ef_construction=200, ef_search=100.
-    ///
-    /// Standard config for 13-dimensional teleological alignment vectors.
-    pub fn purpose_vector() -> Self {
-        Self::new(16, 200, 100, DistanceMetric::Cosine, PURPOSE_VECTOR_DIM)
-    }
-
     /// Estimated memory usage per vector in bytes.
     ///
     /// Approximation: dimension * 4 (f32) + M * 2 * 4 (links)

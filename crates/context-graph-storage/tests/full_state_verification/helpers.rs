@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 use context_graph_storage::teleological::RocksDbTeleologicalStore;
 use rand::Rng;
@@ -58,35 +58,8 @@ pub fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
     }
 }
 
-pub fn generate_real_purpose_vector() -> PurposeVector {
-    let mut rng = rand::thread_rng();
-    let mut alignments: [f32; NUM_EMBEDDERS] = [0.0; NUM_EMBEDDERS];
-    for a in &mut alignments {
-        *a = rng.gen_range(-1.0..1.0);
-    }
-
-    // Find dominant embedder
-    let dominant_embedder = alignments
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-        .map(|(i, _)| i as u8)
-        .unwrap_or(0);
-
-    PurposeVector {
-        alignments,
-        dominant_embedder,
-        coherence: rng.gen_range(0.0..1.0),
-        stability: rng.gen_range(0.0..1.0),
-    }
-}
-
 pub fn generate_real_teleological_fingerprint(_id: Uuid) -> TeleologicalFingerprint {
-    TeleologicalFingerprint::new(
-        generate_real_semantic_fingerprint(),
-        generate_real_purpose_vector(),
-        [0u8; 32],
-    )
+    TeleologicalFingerprint::new(generate_real_semantic_fingerprint(), [0u8; 32])
 }
 
 pub fn create_test_store(temp_dir: &TempDir) -> RocksDbTeleologicalStore {

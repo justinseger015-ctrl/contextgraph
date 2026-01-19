@@ -1,8 +1,8 @@
-//! 5-Stage Retrieval Pipeline with Progressive Filtering.
+//! 4-Stage Retrieval Pipeline with Progressive Filtering.
 //!
 //! # Overview
 //!
-//! Implements a 5-stage retrieval pipeline optimizing latency by progressively
+//! Implements a 4-stage retrieval pipeline optimizing latency by progressively
 //! filtering candidates through stages of increasing precision but decreasing speed.
 //! Target: <60ms at 1M memories.
 //!
@@ -26,16 +26,10 @@
 //!    - Input: 1K -> Output: 100 candidates
 //!    - Latency: <20ms
 //!
-//! 4. **Stage 4: Teleological Alignment Filter**
-//!    - Uses PurposeVector (13D) for goal alignment
-//!    - Filters by alignment threshold >=0.55
-//!    - Input: 100 -> Output: 50 candidates
-//!    - Latency: <10ms
-//!
-//! 5. **Stage 5: Late Interaction MaxSim** (E12)
+//! 4. **Stage 4: Late Interaction MaxSim** (E12)
 //!    - Uses ColBERT-style token-level matching, NOT HNSW
 //!    - Final precision reranking
-//!    - Input: 50 -> Output: k results (typically 10)
+//!    - Input: 100 -> Output: k results (typically 10)
 //!    - Latency: <15ms
 //!
 //! # Design Philosophy
@@ -70,7 +64,6 @@
 //!     .matryoshka(vec![0.5f32; 128])
 //!     .semantic(vec![0.5f32; 1024])
 //!     .tokens(vec![vec![0.5f32; 128]; 10])
-//!     .purpose([0.5f32; 13])
 //!     .k(10)
 //!     .execute(&pipeline);
 //! ```

@@ -1,12 +1,12 @@
 //! Dopamine (DA) - Reward/Salience Modulator
 //!
 //! Range: [1, 5]
-//! Parameter: hopfield.beta
+//! Parameter: retrieval_sharpness
 //! Trigger: memory_enters_workspace (GWT event)
 //!
-//! ## Constitution Reference: neuromod.Dopamine (lines 162-170)
+//! ## Constitution Reference: neuromod.Dopamine
 //!
-//! Dopamine modulates Hopfield network retrieval sharpness:
+//! Dopamine modulates memory retrieval sharpness:
 //! - High DA (5): Sharp, focused retrieval
 //! - Low DA (1): Diffuse, exploratory retrieval
 //!
@@ -56,7 +56,7 @@ impl Default for DopamineLevel {
     }
 }
 
-/// Dopamine modulator - controls Hopfield beta parameter
+/// Dopamine modulator - controls retrieval sharpness parameter
 #[derive(Debug, Clone)]
 pub struct DopamineModulator {
     level: DopamineLevel,
@@ -111,9 +111,9 @@ impl DopamineModulator {
         );
     }
 
-    /// Get current hopfield.beta value
+    /// Get current retrieval sharpness value
     /// This is the primary parameter controlled by dopamine
-    pub fn get_hopfield_beta(&self) -> f32 {
+    pub fn get_retrieval_sharpness(&self) -> f32 {
         self.level.value
     }
 
@@ -278,12 +278,12 @@ mod tests {
     }
 
     #[test]
-    fn test_dopamine_hopfield_beta() {
+    fn test_dopamine_retrieval_sharpness() {
         let mut modulator = DopamineModulator::new();
         modulator.set_value(4.5);
 
-        let beta = modulator.get_hopfield_beta();
-        assert!((beta - 4.5).abs() < f32::EPSILON);
+        let sharpness = modulator.get_retrieval_sharpness();
+        assert!((sharpness - 4.5).abs() < f32::EPSILON);
     }
 
     #[test]

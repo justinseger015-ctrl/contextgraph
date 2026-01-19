@@ -23,9 +23,6 @@ pub struct TeleologicalSearchResult {
     /// Sparse embeddings (E6, E13) use sparse dot product.
     pub embedder_scores: [f32; 13],
 
-    /// Purpose alignment score (cosine similarity of purpose vectors).
-    pub purpose_alignment: f32,
-
     /// Stage scores from the 5-stage retrieval pipeline.
     /// [sparse_recall, semantic_ann, precision, rerank, teleological]
     pub stage_scores: [f32; 5],
@@ -48,13 +45,11 @@ impl TeleologicalSearchResult {
         fingerprint: TeleologicalFingerprint,
         similarity: f32,
         embedder_scores: [f32; 13],
-        purpose_alignment: f32,
     ) -> Self {
         Self {
             fingerprint,
             similarity,
             embedder_scores,
-            purpose_alignment,
             stage_scores: [0.0; 5], // Populated by pipeline stages
             content: None,          // Populated by content hydration
         }
@@ -91,7 +86,7 @@ impl TeleologicalSearchResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::fingerprint::{PurposeVector, SemanticFingerprint};
+    use crate::types::fingerprint::SemanticFingerprint;
 
     #[test]
     fn test_search_result_dominant_embedder() {
@@ -101,12 +96,10 @@ mod tests {
         let result = TeleologicalSearchResult {
             fingerprint: TeleologicalFingerprint::new(
                 SemanticFingerprint::zeroed(),
-                PurposeVector::default(),
                 [0u8; 32],
             ),
             similarity: 0.8,
             embedder_scores: scores,
-            purpose_alignment: 0.7,
             stage_scores: [0.0; 5],
             content: None,
         };
@@ -125,12 +118,10 @@ mod tests {
         let result = TeleologicalSearchResult {
             fingerprint: TeleologicalFingerprint::new(
                 SemanticFingerprint::zeroed(),
-                PurposeVector::default(),
                 [0u8; 32],
             ),
             similarity: 0.8,
             embedder_scores: scores,
-            purpose_alignment: 0.7,
             stage_scores: [0.0; 5],
             content: None,
         };

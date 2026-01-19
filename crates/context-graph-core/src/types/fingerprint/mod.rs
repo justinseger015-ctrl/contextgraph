@@ -3,7 +3,6 @@
 //! This module provides the complete teleological fingerprint hierarchy:
 //! - SemanticFingerprint: 13-embedding array (TASK-F001)
 //! - SparseVector: SPLADE sparse vector for E6 and E13 (TASK-F001)
-//! - PurposeVector: 13D alignment (TASK-F002)
 //! - TeleologicalFingerprint: Complete node representation (TASK-F002)
 //!
 //! # Design Philosophy
@@ -30,8 +29,6 @@
 //! assert!(size > 60000); // ~60KB minimum for dense embeddings
 //! ```
 
-mod evolution;
-mod purpose;
 mod semantic;
 mod sparse;
 mod teleological;
@@ -45,12 +42,6 @@ pub use semantic::{
 
 // Re-export SparseVector types (TASK-F001)
 pub use sparse::{SparseVector, SparseVectorError, MAX_SPARSE_ACTIVE, SPARSE_VOCAB_SIZE};
-
-// Re-export Purpose types (TASK-F002)
-pub use purpose::{AlignmentThreshold, PurposeVector};
-
-// Re-export Evolution types (TASK-F002)
-pub use evolution::{EvolutionTrigger, PurposeSnapshot};
 
 // Re-export TeleologicalFingerprint (TASK-F002)
 pub use teleological::TeleologicalFingerprint;

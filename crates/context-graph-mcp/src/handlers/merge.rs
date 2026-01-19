@@ -24,7 +24,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 
 use crate::protocol::{error_codes, JsonRpcId, JsonRpcResponse};
@@ -76,8 +76,6 @@ pub struct MergedNodeInfo {
     pub source_count: usize,
     pub strategy_used: MergeStrategy,
     pub created_at: String,
-    /// Average theta alignment of source nodes
-    pub alignment_score: f32,
     /// Total access count from all sources
     pub total_access_count: u64,
 }
@@ -110,9 +108,6 @@ const REVERSAL_DAYS: i64 = 30;
 
 /// Intersection threshold: dimension is "significant" if >= this value
 const INTERSECTION_THRESHOLD: f32 = 0.01;
-
-/// Theta spread warning threshold (radians) - warn if spread exceeds this
-const THETA_SPREAD_WARNING: f32 = 1.5;
 
 impl Handlers {
     /// Handle merge_concepts tool call.
@@ -297,16 +292,9 @@ impl Handlers {
             }
         };
 
-        let merged_purpose = self.merge_purpose_vectors(&source_fingerprints);
-
         // Step 4: Create merged fingerprint
         let now = Utc::now();
         let total_access_count: u64 = source_fingerprints.iter().map(|f| f.access_count).sum();
-        let avg_theta: f32 = source_fingerprints
-            .iter()
-            .map(|f| f.alignment_score)
-            .sum::<f32>()
-            / source_fingerprints.len() as f32;
 
         // Generate content hash for merged content
         let merged_content = format!(
@@ -327,7 +315,6 @@ impl Handlers {
 
         let merged_fingerprint = TeleologicalFingerprint::new(
             merged_semantic,
-            merged_purpose,
             content_hash,
         );
         let merged_id = merged_fingerprint.id;
@@ -401,7 +388,6 @@ impl Handlers {
                 source_count: source_fingerprints.len(),
                 strategy_used: input.merge_strategy,
                 created_at: now.to_rfc3339(),
-                alignment_score: avg_theta,
                 total_access_count,
             },
             error: None,
@@ -435,6 +421,9 @@ impl Handlers {
     }
 
     /// Check fingerprint compatibility (AP-11: merge_concepts without priors_vibe_check).
+    ///
+    /// Now uses E1 semantic similarity as a compatibility check since PurposeVector
+    /// has been removed from TeleologicalFingerprint.
     fn check_fingerprint_compatibility(
         &self,
         fingerprints: &[TeleologicalFingerprint],
@@ -443,17 +432,35 @@ impl Handlers {
             return Ok(()); // Nothing to compare
         }
 
-        // Check alignment_score spread
-        let thetas: Vec<f32> = fingerprints.iter().map(|f| f.alignment_score).collect();
-        let max_theta = thetas.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-        let min_theta = thetas.iter().cloned().fold(f32::INFINITY, f32::min);
+        // Check semantic similarity spread using E1 embeddings
+        // Calculate pairwise cosine similarities
+        let mut similarities: Vec<f32> = Vec::new();
+        for i in 0..fingerprints.len() {
+            for j in (i + 1)..fingerprints.len() {
+                let e1_i = &fingerprints[i].semantic.e1_semantic;
+                let e1_j = &fingerprints[j].semantic.e1_semantic;
 
-        if max_theta - min_theta > THETA_SPREAD_WARNING {
-            // Large spread in alignment angles (radians)
-            warn!(
-                "Large theta spread in merge: min={:.2}, max={:.2} (consider force_merge)",
-                min_theta, max_theta
-            );
+                // Cosine similarity
+                let dot: f32 = e1_i.iter().zip(e1_j.iter()).map(|(a, b)| a * b).sum();
+                let norm_i: f32 = e1_i.iter().map(|x| x * x).sum::<f32>().sqrt();
+                let norm_j: f32 = e1_j.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+                if norm_i > 0.0 && norm_j > 0.0 {
+                    similarities.push(dot / (norm_i * norm_j));
+                }
+            }
+        }
+
+        if !similarities.is_empty() {
+            let min_sim = similarities.iter().cloned().fold(f32::INFINITY, f32::min);
+
+            // Warn if semantic similarity is low (below 0.3 threshold)
+            if min_sim < 0.3 {
+                warn!(
+                    "Low semantic similarity in merge: min_similarity={:.2} (consider force_merge)",
+                    min_sim
+                );
+            }
         }
 
         Ok(())
@@ -780,24 +787,6 @@ impl Handlers {
         }
     }
 
-    /// Merge purpose vectors by averaging alignments per embedder.
-    fn merge_purpose_vectors(&self, fingerprints: &[TeleologicalFingerprint]) -> PurposeVector {
-        if fingerprints.is_empty() {
-            return PurposeVector::default();
-        }
-
-        let n = fingerprints.len() as f32;
-        let mut alignments = [0.0f32; 13];
-
-        for fp in fingerprints {
-            for (i, &val) in fp.purpose_vector.alignments.iter().enumerate() {
-                alignments[i] += val / n;
-            }
-        }
-
-        PurposeVector::new(alignments)
-    }
-
     /// Average multiple dense vectors element-wise and normalize.
     fn average_dense_vectors(vectors: Vec<&Vec<f32>>) -> Vec<f32> {
         if vectors.is_empty() {
@@ -1091,7 +1080,6 @@ mod tests {
             source_count: 3,
             strategy_used: MergeStrategy::WeightedAverage,
             created_at: "2026-01-13T00:00:00Z".to_string(),
-            alignment_score: 0.75,
             total_access_count: 42,
         };
         let json = serde_json::to_string(&info).expect("serialize");

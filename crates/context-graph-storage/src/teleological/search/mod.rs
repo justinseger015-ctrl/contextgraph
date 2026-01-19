@@ -12,7 +12,7 @@
 //!
 //! # Supported Embedders
 //!
-//! 12 HNSW-capable embedders:
+//! 11 HNSW-capable embedders:
 //! - E1Semantic (1024D) - Primary semantic embeddings
 //! - E1Matryoshka128 (128D) - Truncated Matryoshka for fast filtering
 //! - E2TemporalRecent (512D) - Recent event emphasis
@@ -24,7 +24,6 @@
 //! - E9HDC (1024D) - Hyperdimensional computing
 //! - E10Multimodal (768D) - Cross-modal embeddings
 //! - E11Entity (384D) - Named entity embeddings
-//! - PurposeVector (13D) - Teleological purpose vectors
 //!
 //! # NOT Supported (Different Algorithms)
 //!

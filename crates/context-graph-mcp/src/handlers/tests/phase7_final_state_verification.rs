@@ -127,10 +127,9 @@ async fn phase7_comprehensive_store_retrieve_fsv() {
 
         if let Some(fp) = retrieved {
             println!(
-                "  - {} [{}]: VERIFIED (theta={:.4}, hash={}...)",
+                "  - {} [{}]: VERIFIED (hash={}...)",
                 domain,
                 &fp_id[..8],
-                fp.alignment_score,
                 hex::encode(&fp.content_hash[..4])
             );
         } else {

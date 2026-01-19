@@ -659,11 +659,8 @@ impl RocksDbTeleologicalStore {
         let serialized = serialize_teleological_fingerprint(fp);
         batch.put_cf(cf_fingerprints, key, &serialized);
 
-        // 2. Store purpose vector
-        let cf_purpose = self.get_cf(CF_PURPOSE_VECTORS)?;
-        let purpose_key = purpose_vector_key(&id);
-        let purpose_bytes = serialize_purpose_vector(&fp.purpose_vector.alignments);
-        batch.put_cf(cf_purpose, purpose_key, purpose_bytes);
+        // 2. Purpose vector storage was removed when alignment fields were removed
+        // from TeleologicalFingerprint. CF_PURPOSE_VECTORS is no longer used.
 
         // 3. Store E1 Matryoshka 128D truncated vector
         let cf_matryoshka = self.get_cf(CF_E1_MATRYOSHKA_128)?;

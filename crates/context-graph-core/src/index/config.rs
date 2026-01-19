@@ -59,8 +59,6 @@ pub const NUM_EMBEDDERS: usize = 13;
 /// E1 Matryoshka truncated dimension for Stage 2
 pub const E1_MATRYOSHKA_DIM: usize = 128;
 
-/// Purpose vector dimension (one per embedder)
-pub const PURPOSE_VECTOR_DIM: usize = 13;
 
 // ============================================================================
 // Distance metric (from context-graph-storage/teleological/indexes/hnsw_config/distance.rs)
@@ -136,8 +134,6 @@ pub enum EmbedderIndex {
     E12LateInteraction,
     /// E13: SPLADE sparse (NOT HNSW)
     E13Splade,
-    /// 13D purpose vector
-    PurposeVector,
 }
 
 impl EmbedderIndex {
@@ -156,7 +152,7 @@ impl EmbedderIndex {
         matches!(self, Self::E6Sparse | Self::E13Splade)
     }
 
-    /// Get all HNSW-capable embedder indexes (12 total).
+    /// Get all HNSW-capable embedder indexes (11 total).
     pub fn all_hnsw() -> Vec<Self> {
         vec![
             Self::E1Semantic,
@@ -170,7 +166,6 @@ impl EmbedderIndex {
             Self::E9HDC,
             Self::E10Multimodal,
             Self::E11Entity,
-            Self::PurposeVector,
         ]
     }
 
@@ -191,7 +186,6 @@ impl EmbedderIndex {
             Self::E11Entity => Some(E11_DIM),
             Self::E12LateInteraction => None,
             Self::E13Splade => None,
-            Self::PurposeVector => Some(PURPOSE_VECTOR_DIM),
         }
     }
 
@@ -279,11 +273,6 @@ impl HnswConfig {
         Self::new(32, 256, 128, DistanceMetric::Cosine, E1_MATRYOSHKA_DIM)
     }
 
-    /// Purpose vector 13D config.
-    pub fn purpose_vector() -> Self {
-        Self::new(16, 200, 100, DistanceMetric::Cosine, PURPOSE_VECTOR_DIM)
-    }
-
     /// Estimated memory usage per vector in bytes.
     pub fn estimated_memory_per_vector(&self) -> usize {
         self.dimension * 4 + self.m * 2 * 4
@@ -333,7 +322,6 @@ mod tests {
     fn test_embedder_uses_hnsw() {
         assert!(EmbedderIndex::E1Semantic.uses_hnsw());
         assert!(EmbedderIndex::E1Matryoshka128.uses_hnsw());
-        assert!(EmbedderIndex::PurposeVector.uses_hnsw());
 
         assert!(!EmbedderIndex::E6Sparse.uses_hnsw());
         assert!(!EmbedderIndex::E12LateInteraction.uses_hnsw());
@@ -345,15 +333,14 @@ mod tests {
     #[test]
     fn test_all_hnsw_count() {
         let hnsw = EmbedderIndex::all_hnsw();
-        assert_eq!(hnsw.len(), 12);
-        println!("[VERIFIED] all_hnsw() returns 12 embedders");
+        assert_eq!(hnsw.len(), 11);
+        println!("[VERIFIED] all_hnsw() returns 11 embedders");
     }
 
     #[test]
     fn test_dimension() {
         assert_eq!(EmbedderIndex::E1Semantic.dimension(), Some(1024));
         assert_eq!(EmbedderIndex::E1Matryoshka128.dimension(), Some(128));
-        assert_eq!(EmbedderIndex::PurposeVector.dimension(), Some(13));
         assert_eq!(EmbedderIndex::E6Sparse.dimension(), None);
         println!("[VERIFIED] EmbedderIndex::dimension() works correctly");
     }

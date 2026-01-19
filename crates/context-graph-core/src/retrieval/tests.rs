@@ -17,18 +17,14 @@ use super::*;
 use crate::stubs::{InMemoryTeleologicalStore, StubMultiArrayProvider};
 use crate::traits::TeleologicalMemoryStore;
 use crate::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
 };
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Create a test fingerprint with real data.
 fn create_test_fingerprint() -> TeleologicalFingerprint {
-    TeleologicalFingerprint::new(
-        SemanticFingerprint::zeroed(),
-        PurposeVector::new([0.75; NUM_EMBEDDERS]),
-        [0u8; 32],
-    )
+    TeleologicalFingerprint::new(SemanticFingerprint::zeroed(), [0u8; 32])
 }
 
 /// Create a fingerprint with non-zero semantic embeddings.
@@ -53,11 +49,7 @@ fn create_searchable_fingerprint(seed: u8) -> TeleologicalFingerprint {
     )
     .unwrap_or_else(|_| SparseVector::empty());
 
-    TeleologicalFingerprint::new(
-        semantic,
-        PurposeVector::new([0.75 + (seed as f32 * 0.01); NUM_EMBEDDERS]),
-        [seed; 32],
-    )
+    TeleologicalFingerprint::new(semantic, [seed; 32])
 }
 
 /// Create executor with pre-populated store.

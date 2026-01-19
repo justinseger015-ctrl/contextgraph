@@ -78,7 +78,7 @@ pub mod cf_names {
 /// * `cache` - Shared block cache (recommended: 256MB via `Cache::new_lru_cache`)
 ///
 /// # Performance
-/// Per constitution.yaml: hopfield < 1ms, inject_context P95 < 25ms
+/// Per constitution.yaml: inject_context P95 < 25ms
 pub fn nodes_options(cache: &Cache) -> Options {
     let mut block_opts = BlockBasedOptions::default();
     block_opts.set_block_cache(cache);

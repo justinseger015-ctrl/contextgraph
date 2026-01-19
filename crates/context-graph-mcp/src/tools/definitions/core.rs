@@ -82,7 +82,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "Get current system status with LIVE UTL metrics from the UtlProcessor: \
              entropy (novelty), coherence (understanding), learning score (magnitude), \
              consolidation phase, and suggested action. \
-             Also returns node count and 5-layer bio-nervous system status.",
+             Also returns node count and 4-layer bio-nervous system status.",
             json!({
                 "type": "object",
                 "properties": {},

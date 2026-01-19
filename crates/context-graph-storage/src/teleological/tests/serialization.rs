@@ -32,14 +32,9 @@ fn test_serialize_teleological_roundtrip() {
         "  - Evolution snapshots: {}",
         deserialized.purpose_evolution.len()
     );
-    println!(
-        "  - Alignment score: {:.4}",
-        deserialized.alignment_score
-    );
 
     assert_eq!(original.id, deserialized.id);
     assert_eq!(original.content_hash, deserialized.content_hash);
-    assert!((original.alignment_score - deserialized.alignment_score).abs() < 1e-6);
     println!("RESULT: PASS - Round-trip preserved all fields");
 }
 

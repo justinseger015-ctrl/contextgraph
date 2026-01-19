@@ -141,29 +141,12 @@ mod tests {
             EmbedderQueryResult::from_similarity(id, 2, 0.7, 2),
         ];
 
-        let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.75);
+        let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
         assert_eq!(multi.id, id);
         assert_eq!(multi.embedder_count, 3);
         assert!((multi.embedder_similarities[0] - 0.9).abs() < f32::EPSILON);
         assert!(multi.embedder_similarities[3].is_nan()); // Not searched
-        assert!((multi.purpose_alignment - 0.75).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_alignment_filter() {
-        let multi = MultiSpaceQueryResult {
-            id: Uuid::new_v4(),
-            embedder_similarities: [0.5f32; 13],
-            rrf_score: 0.1,
-            weighted_similarity: 0.5,
-            purpose_alignment: 0.60,
-            embedder_count: 13,
-        };
-
-        // Constitution default: 0.55
-        assert!(multi.passes_alignment_filter(0.55));
-        assert!(!multi.passes_alignment_filter(0.65));
     }
 
     #[test]
@@ -328,7 +311,6 @@ mod tests {
         let _ = MultiSpaceQueryResult::from_embedder_results(
             Uuid::new_v4(),
             &[], // Empty results
-            0.75,
         );
     }
 

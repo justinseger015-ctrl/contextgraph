@@ -16,9 +16,7 @@ use crate::traits::{
     TeleologicalMemoryStore, TeleologicalSearchOptions, TeleologicalSearchResult,
     TeleologicalStorageBackend,
 };
-use crate::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
-};
+use crate::types::fingerprint::{SemanticFingerprint, SparseVector, TeleologicalFingerprint};
 
 #[async_trait]
 impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
@@ -89,14 +87,6 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
         options: TeleologicalSearchOptions,
     ) -> CoreResult<Vec<TeleologicalSearchResult>> {
         self.search_semantic_impl(query, options).await
-    }
-
-    async fn search_purpose(
-        &self,
-        query: &PurposeVector,
-        options: TeleologicalSearchOptions,
-    ) -> CoreResult<Vec<TeleologicalSearchResult>> {
-        self.search_purpose_impl(query, options).await
     }
 
     async fn search_text(

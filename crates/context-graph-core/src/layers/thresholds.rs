@@ -1,57 +1,43 @@
 //! Bio-Nervous Layer Threshold Management
 //!
-//! Provides domain-aware thresholds for Memory (L3), Reflex (L2), and Learning (L4) layers.
+//! Provides domain-aware thresholds for Memory (L3) and Learning (L4) layers.
 //! Replaces hardcoded constants with adaptive threshold calibration (ATC).
 //!
 //! # Constitution Reference
 //!
 //! From `docs2/constitution.yaml`:
-//! - layers.L2_Reflex: confidence>0.95 bypass
 //! - layers.L3_Memory: <1ms latency, MHN
 //! - layers.L4_Learning: 100Hz frequency
 //!
 //! # Legacy Values (MUST preserve for backwards compatibility)
 //!
 //! - MIN_MEMORY_SIMILARITY = 0.50 (memory retrieval)
-//! - MIN_HIT_SIMILARITY = 0.85 (reflex cache hit)
 //! - DEFAULT_CONSOLIDATION_THRESHOLD = 0.10 (learning consolidation)
 //!
 //! # ATC Domain Thresholds
 //!
 //! From `atc/domain.rs`:
 //! - theta_memory_sim: [0.35, 0.75] Memory similarity
-//! - theta_reflex_hit: [0.70, 0.95] Reflex cache hit
 //! - theta_consolidation: [0.05, 0.30] Consolidation trigger
 
 use crate::atc::{AdaptiveThresholdCalibration, Domain};
 use crate::error::{CoreError, CoreResult};
 
-/// Layer thresholds for bio-nervous system (L2, L3, L4).
+/// Layer thresholds for bio-nervous system (L3, L4).
 ///
-/// These thresholds control behavior across three layers:
+/// These thresholds control behavior across two layers:
 /// - `memory_similarity`: Minimum similarity for memory retrieval (L3)
-/// - `reflex_hit`: Minimum similarity for cache hit (L2)
 /// - `consolidation`: Threshold for consolidation trigger (L4)
 ///
 /// # Constitution Reference
 ///
 /// - theta_memory_sim: [0.35, 0.75] Memory similarity
-/// - theta_reflex_hit: [0.70, 0.95] Reflex cache hit
 /// - theta_consolidation: [0.05, 0.30] Consolidation trigger
-///
-/// # Invariants
-///
-/// - memory_similarity <= reflex_hit (reflex requires higher confidence)
-/// - All values within constitution-defined ranges
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LayerThresholds {
     /// Minimum similarity for memory to be considered relevant (L3).
     /// Below this, memory results are filtered out.
     pub memory_similarity: f32,
-
-    /// Minimum similarity for reflex cache hit (L2).
-    /// Below this, reflex layer reports cache miss.
-    pub reflex_hit: f32,
 
     /// Threshold for consolidation trigger (L4).
     /// When UTL score is below this, consolidation is triggered.
@@ -98,7 +84,6 @@ impl LayerThresholds {
 
         let layer = Self {
             memory_similarity: domain_thresholds.theta_memory_sim,
-            reflex_hit: domain_thresholds.theta_reflex_hit,
             consolidation: domain_thresholds.theta_consolidation,
         };
 
@@ -106,9 +91,9 @@ impl LayerThresholds {
             return Err(CoreError::ValidationError {
                 field: "LayerThresholds".to_string(),
                 message: format!(
-                    "Invalid thresholds from ATC domain {:?}: memory_sim={}, reflex_hit={}, consolidation={}. \
+                    "Invalid thresholds from ATC domain {:?}: memory_sim={}, consolidation={}. \
                     Required: values within constitution ranges.",
-                    domain, layer.memory_similarity, layer.reflex_hit, layer.consolidation
+                    domain, layer.memory_similarity, layer.consolidation
                 ),
             });
         }
@@ -120,7 +105,6 @@ impl LayerThresholds {
     ///
     /// These values MUST match the old hardcoded constants for backwards compatibility:
     /// - MIN_MEMORY_SIMILARITY = 0.50
-    /// - MIN_HIT_SIMILARITY = 0.85
     /// - DEFAULT_CONSOLIDATION_THRESHOLD = 0.10
     ///
     /// # Important
@@ -135,7 +119,6 @@ impl LayerThresholds {
     pub fn default_general() -> Self {
         Self {
             memory_similarity: 0.50,
-            reflex_hit: 0.85,
             consolidation: 0.10,
         }
     }
@@ -146,7 +129,6 @@ impl LayerThresholds {
     ///
     /// Per constitution `atc/domain.rs`:
     /// - memory_similarity: [0.35, 0.75]
-    /// - reflex_hit: [0.70, 0.95]
     /// - consolidation: [0.05, 0.30]
     ///
     /// # Returns
@@ -154,9 +136,7 @@ impl LayerThresholds {
     /// `true` if all constraints are satisfied, `false` otherwise.
     pub fn is_valid(&self) -> bool {
         (0.35..=0.75).contains(&self.memory_similarity)
-            && (0.70..=0.95).contains(&self.reflex_hit)
             && (0.05..=0.30).contains(&self.consolidation)
-            && self.memory_similarity <= self.reflex_hit
     }
 
     /// Check if UTL score should trigger consolidation.
@@ -189,20 +169,6 @@ impl LayerThresholds {
     pub fn is_memory_relevant(&self, similarity: f32) -> bool {
         similarity >= self.memory_similarity
     }
-
-    /// Check if similarity is sufficient for reflex cache hit.
-    ///
-    /// # Arguments
-    ///
-    /// * `similarity` - Cosine similarity score [0, 1]
-    ///
-    /// # Returns
-    ///
-    /// `true` if similarity is above threshold, `false` otherwise.
-    #[inline]
-    pub fn is_reflex_hit(&self, similarity: f32) -> bool {
-        similarity >= self.reflex_hit
-    }
 }
 
 impl Default for LayerThresholds {
@@ -233,11 +199,6 @@ mod tests {
             t.memory_similarity
         );
         assert_eq!(
-            t.reflex_hit, 0.85,
-            "reflex_hit must match MIN_HIT_SIMILARITY (0.85), got {}",
-            t.reflex_hit
-        );
-        assert_eq!(
             t.consolidation, 0.10,
             "consolidation must match DEFAULT_CONSOLIDATION_THRESHOLD (0.10), got {}",
             t.consolidation
@@ -247,10 +208,6 @@ mod tests {
         println!(
             "  memory_similarity: {} == 0.50 (MIN_MEMORY_SIMILARITY)",
             t.memory_similarity
-        );
-        println!(
-            "  reflex_hit: {} == 0.85 (MIN_HIT_SIMILARITY)",
-            t.reflex_hit
         );
         println!(
             "  consolidation: {} == 0.10 (DEFAULT_CONSOLIDATION_THRESHOLD)",
@@ -307,10 +264,9 @@ mod tests {
             let t = result.unwrap();
             assert!(
                 t.is_valid(),
-                "Domain {:?} thresholds should be valid: memory_sim={}, reflex_hit={}, consolidation={}",
+                "Domain {:?} thresholds should be valid: memory_sim={}, consolidation={}",
                 domain,
                 t.memory_similarity,
-                t.reflex_hit,
                 t.consolidation
             );
         }
@@ -338,14 +294,6 @@ mod tests {
             "Medical memory_similarity ({}) should be > General memory_similarity ({})",
             medical.memory_similarity,
             general.memory_similarity
-        );
-
-        // Stricter domains have HIGHER reflex hit threshold
-        assert!(
-            code.reflex_hit > creative.reflex_hit,
-            "Code reflex_hit ({}) should be > Creative reflex_hit ({})",
-            code.reflex_hit,
-            creative.reflex_hit
         );
 
         // Medical is strictest (strictness=1.0)
@@ -382,16 +330,15 @@ mod tests {
         ] {
             let t = LayerThresholds::from_atc(&atc, domain).unwrap();
             println!(
-                "{:?} (strictness={:.1}): memory_sim={:.3}, reflex_hit={:.3}, consolidation={:.3}",
+                "{:?} (strictness={:.1}): memory_sim={:.3}, consolidation={:.3}",
                 domain,
                 domain.strictness(),
                 t.memory_similarity,
-                t.reflex_hit,
                 t.consolidation
             );
         }
 
-        println!("\nLegacy defaults: memory_sim=0.50, reflex_hit=0.85, consolidation=0.10");
+        println!("\nLegacy defaults: memory_sim=0.50, consolidation=0.10");
     }
 
     // ========================================================
@@ -450,31 +397,6 @@ mod tests {
         println!("[VERIFIED] is_memory_relevant boundary at threshold=0.50");
     }
 
-    #[test]
-    fn test_is_reflex_hit() {
-        let t = LayerThresholds::default_general();
-
-        // Below threshold = miss
-        assert!(
-            !t.is_reflex_hit(0.84),
-            "Similarity 0.84 should NOT be a hit (threshold=0.85)"
-        );
-
-        // At threshold = hit
-        assert!(
-            t.is_reflex_hit(0.85),
-            "Similarity 0.85 SHOULD be a hit (threshold=0.85)"
-        );
-
-        // Above threshold = hit
-        assert!(
-            t.is_reflex_hit(0.95),
-            "Similarity 0.95 SHOULD be a hit (threshold=0.85)"
-        );
-
-        println!("[VERIFIED] is_reflex_hit boundary at threshold=0.85");
-    }
-
     // ========================================================
     // VALIDATION TESTS
     // ========================================================
@@ -484,7 +406,6 @@ mod tests {
         // Below minimum (0.35)
         let t1 = LayerThresholds {
             memory_similarity: 0.30,
-            reflex_hit: 0.85,
             consolidation: 0.10,
         };
         assert!(
@@ -495,7 +416,6 @@ mod tests {
         // Above maximum (0.75)
         let t2 = LayerThresholds {
             memory_similarity: 0.80,
-            reflex_hit: 0.85,
             consolidation: 0.10,
         };
         assert!(
@@ -505,30 +425,10 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_reflex_hit_out_of_range() {
-        // Below minimum (0.70)
-        let t1 = LayerThresholds {
-            memory_similarity: 0.50,
-            reflex_hit: 0.65,
-            consolidation: 0.10,
-        };
-        assert!(!t1.is_valid(), "reflex_hit=0.65 below min 0.70 should fail");
-
-        // Above maximum (0.95)
-        let t2 = LayerThresholds {
-            memory_similarity: 0.50,
-            reflex_hit: 0.98,
-            consolidation: 0.10,
-        };
-        assert!(!t2.is_valid(), "reflex_hit=0.98 above max 0.95 should fail");
-    }
-
-    #[test]
     fn test_invalid_consolidation_out_of_range() {
         // Below minimum (0.05)
         let t1 = LayerThresholds {
             memory_similarity: 0.50,
-            reflex_hit: 0.85,
             consolidation: 0.03,
         };
         assert!(
@@ -539,26 +439,11 @@ mod tests {
         // Above maximum (0.30)
         let t2 = LayerThresholds {
             memory_similarity: 0.50,
-            reflex_hit: 0.85,
             consolidation: 0.35,
         };
         assert!(
             !t2.is_valid(),
             "consolidation=0.35 above max 0.30 should fail"
-        );
-    }
-
-    #[test]
-    fn test_invalid_memory_higher_than_reflex() {
-        // Edge case: memory_similarity > reflex_hit violates monotonicity invariant
-        let t = LayerThresholds {
-            memory_similarity: 0.75, // max of range
-            reflex_hit: 0.70,        // min of range
-            consolidation: 0.10,
-        };
-        assert!(
-            !t.is_valid(),
-            "memory_similarity (0.75) > reflex_hit (0.70) should fail monotonicity check"
         );
     }
 
@@ -577,13 +462,11 @@ mod tests {
             "  memory_similarity: {} (expected: 0.50)",
             default.memory_similarity
         );
-        println!("  reflex_hit: {} (expected: 0.85)", default.reflex_hit);
         println!(
             "  consolidation: {} (expected: 0.10)",
             default.consolidation
         );
         assert_eq!(default.memory_similarity, 0.50);
-        assert_eq!(default.reflex_hit, 0.85);
         assert_eq!(default.consolidation, 0.10);
         println!("  [VERIFIED] Default matches legacy constants\n");
 
@@ -598,8 +481,8 @@ mod tests {
         ] {
             let t = LayerThresholds::from_atc(&atc, domain).unwrap();
             println!(
-                "  {:?}: memory_sim={:.3}, reflex_hit={:.3}, consolidation={:.3}",
-                domain, t.memory_similarity, t.reflex_hit, t.consolidation
+                "  {:?}: memory_sim={:.3}, consolidation={:.3}",
+                domain, t.memory_similarity, t.consolidation
             );
             assert!(t.is_valid());
         }
@@ -609,7 +492,7 @@ mod tests {
         println!("Helper Method Boundary Tests:");
         let t = LayerThresholds::default_general();
 
-        let test_cases: [(f32, &str, bool, bool); 6] = [
+        let test_cases: [(f32, &str, bool, bool); 4] = [
             (0.09, "should_consolidate", t.should_consolidate(0.09), true),
             (
                 0.10,
@@ -624,8 +507,6 @@ mod tests {
                 false,
             ),
             (0.50, "is_memory_relevant", t.is_memory_relevant(0.50), true),
-            (0.84, "is_reflex_hit", t.is_reflex_hit(0.84), false),
-            (0.85, "is_reflex_hit", t.is_reflex_hit(0.85), true),
         ];
 
         for (value, method, actual, expected) in test_cases {

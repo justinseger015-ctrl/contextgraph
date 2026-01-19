@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{CoreError, CoreResult};
-use crate::types::fingerprint::{PurposeVector, SemanticFingerprint};
+use crate::types::fingerprint::SemanticFingerprint;
 
 use super::PipelineStageConfig;
 
@@ -53,11 +53,6 @@ pub struct TeleologicalQuery {
     /// Use this when embeddings are already available to skip the ~30ms
     /// embedding latency.
     pub embeddings: Option<SemanticFingerprint>,
-
-    /// Query's purpose vector (computed if not provided).
-    ///
-    /// If None, will be computed from embeddings using PurposeVectorComputer.
-    pub purpose: Option<PurposeVector>,
 
     /// Target goal IDs for alignment scoring.
     ///
@@ -99,7 +94,6 @@ impl TeleologicalQuery {
         Self {
             text: text.into(),
             embeddings: None,
-            purpose: None,
             target_goals: Vec::new(),
             pipeline_config: None,
             include_breakdown: false,
@@ -122,17 +116,10 @@ impl TeleologicalQuery {
         Self {
             text: String::new(),
             embeddings: Some(embeddings),
-            purpose: None,
             target_goals: Vec::new(),
             pipeline_config: None,
             include_breakdown: false,
         }
-    }
-
-    /// Set the purpose vector.
-    pub fn with_purpose(mut self, purpose: PurposeVector) -> Self {
-        self.purpose = Some(purpose);
-        self
     }
 
     /// Set target goals for alignment filtering.
@@ -232,12 +219,6 @@ impl TeleologicalQuery {
     #[inline]
     pub fn has_embeddings(&self) -> bool {
         self.embeddings.is_some()
-    }
-
-    /// Check if query has pre-computed purpose.
-    #[inline]
-    pub fn has_purpose(&self) -> bool {
-        self.purpose.is_some()
     }
 
     /// Check if query has goal alignment filtering.

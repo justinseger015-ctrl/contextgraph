@@ -46,7 +46,6 @@ pub enum TransportMode {
 }
 
 use context_graph_core::config::Config;
-use context_graph_core::purpose::GoalHierarchy;
 use context_graph_core::traits::{
     MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor,
 };
@@ -267,9 +266,8 @@ impl McpServer {
         ));
 
         // ==========================================================================
-        // 4. Create Handlers (PRD v6 Section 10 - 6 tools only)
+        // 4. Create Handlers (PRD v6 Section 10 - 14 tools)
         // ==========================================================================
-        let goal_hierarchy = Arc::new(parking_lot::RwLock::new(GoalHierarchy::new()));
         let layer_status_provider: Arc<dyn context_graph_core::monitoring::LayerStatusProvider> =
             Arc::new(context_graph_core::monitoring::StubLayerStatusProvider::new());
 
@@ -278,7 +276,6 @@ impl McpServer {
             Arc::clone(&teleological_store),
             Arc::clone(&utl_processor),
             lazy_provider,
-            goal_hierarchy,
             layer_status_provider,
         );
         info!("Created Handlers with 14 MCP tools including topic detection and clustering");

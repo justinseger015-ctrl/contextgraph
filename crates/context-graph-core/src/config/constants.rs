@@ -12,59 +12,8 @@
 //! # Constitution Reference
 //!
 //! All values here come from `/docs2/constitution.yaml` sections:
-//! - `teleological.thresholds` - Alignment thresholds
 //! - `embeddings.similarity` - RRF and similarity constants
 //! - `forbidden.AP-003` - "Magic numbers -> define constants"
-
-/// Teleological alignment thresholds from constitution.yaml teleological.thresholds.
-///
-/// These define the quality levels for goal alignment (θ = alignment score).
-///
-/// ```yaml
-/// teleological:
-///   thresholds:
-///     optimal: "θ ≥ 0.75"
-///     acceptable: "θ ∈ [0.70, 0.75)"
-///     warning: "θ ∈ [0.55, 0.70)"
-///     critical: "θ < 0.55"
-/// ```
-pub mod alignment {
-    /// Optimal alignment threshold: θ ≥ 0.75
-    ///
-    /// Constitution: `teleological.thresholds.optimal`
-    /// Meaning: Excellent alignment with Strategic goals
-    pub const OPTIMAL: f32 = 0.75;
-
-    /// Acceptable alignment threshold: θ ∈ [0.70, 0.75)
-    ///
-    /// Constitution: `teleological.thresholds.acceptable`
-    /// Meaning: Good alignment, no action needed
-    pub const ACCEPTABLE: f32 = 0.70;
-
-    /// Warning alignment threshold: θ ∈ [0.55, 0.70)
-    ///
-    /// Constitution: `teleological.thresholds.warning`
-    /// Meaning: Needs improvement, monitor closely
-    pub const WARNING: f32 = 0.55;
-
-    /// Critical alignment threshold: θ < 0.55
-    ///
-    /// Constitution: `teleological.thresholds.critical`
-    /// Meaning: Critical misalignment, requires intervention
-    pub const CRITICAL: f32 = 0.55;
-
-    /// Minimum alignment threshold for pipeline stage 4 (teleological filter).
-    ///
-    /// Constitution: `embeddings.retrieval_pipeline.stage_4_teleological_filter.method`
-    /// Memories below this threshold are discarded in the retrieval pipeline.
-    pub const MIN_PIPELINE_THRESHOLD: f32 = CRITICAL;
-
-    /// Failure prediction threshold.
-    ///
-    /// Constitution: `teleological.thresholds.failure_prediction`
-    /// When alignment drops by this amount, failure is predicted 30-60s ahead.
-    pub const FAILURE_PREDICTION_DELTA: f32 = -0.15;
-}
 
 /// Similarity computation constants from constitution.yaml embeddings.similarity.
 ///
@@ -88,27 +37,13 @@ pub mod similarity {
 
 
 /// Pipeline configuration defaults from constitution.yaml embeddings.retrieval_pipeline.
-///
-/// ```yaml
-/// embeddings:
-///   retrieval_pipeline:
-///     stage_4_teleological_filter:
-///       method: "Filter: alignment < 0.55 → discard"
-/// ```
 pub mod pipeline {
-    use super::alignment;
     use super::similarity;
 
     /// Default RRF k constant for aggregation.
     ///
     /// Constitution: `embeddings.similarity.rrf_constant`
     pub const DEFAULT_RRF_K: f32 = similarity::RRF_K;
-
-    /// Default minimum alignment threshold for pipeline filtering.
-    ///
-    /// Constitution: `teleological.thresholds.critical`
-    /// This is the stage 4 filter threshold.
-    pub const DEFAULT_MIN_ALIGNMENT: f32 = alignment::CRITICAL;
 }
 
 /// Goal alignment estimation factors.
@@ -132,44 +67,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_alignment_thresholds_ordered() {
-        // Thresholds must be ordered: OPTIMAL > ACCEPTABLE > WARNING >= CRITICAL
-        assert!(
-            alignment::OPTIMAL > alignment::ACCEPTABLE,
-            "OPTIMAL must be > ACCEPTABLE"
-        );
-        assert!(
-            alignment::ACCEPTABLE > alignment::WARNING,
-            "ACCEPTABLE must be > WARNING"
-        );
-        assert!(
-            alignment::WARNING >= alignment::CRITICAL,
-            "WARNING must be >= CRITICAL"
-        );
-    }
-
-    #[test]
-    fn test_alignment_threshold_values_match_constitution() {
-        // These values MUST match constitution.yaml teleological.thresholds
-        assert!(
-            (alignment::OPTIMAL - 0.75).abs() < f32::EPSILON,
-            "OPTIMAL must be 0.75 per constitution"
-        );
-        assert!(
-            (alignment::ACCEPTABLE - 0.70).abs() < f32::EPSILON,
-            "ACCEPTABLE must be 0.70 per constitution"
-        );
-        assert!(
-            (alignment::WARNING - 0.55).abs() < f32::EPSILON,
-            "WARNING must be 0.55 per constitution"
-        );
-        assert!(
-            (alignment::CRITICAL - 0.55).abs() < f32::EPSILON,
-            "CRITICAL must be 0.55 per constitution"
-        );
-    }
-
-    #[test]
     fn test_rrf_k_matches_constitution() {
         // RRF k=60 per constitution.yaml embeddings.similarity.rrf_constant
         assert!(
@@ -185,11 +82,6 @@ mod tests {
             pipeline::DEFAULT_RRF_K,
             similarity::RRF_K,
             "Pipeline RRF_K should use similarity::RRF_K"
-        );
-        assert_eq!(
-            pipeline::DEFAULT_MIN_ALIGNMENT,
-            alignment::CRITICAL,
-            "Pipeline min alignment should use alignment::CRITICAL"
         );
     }
 

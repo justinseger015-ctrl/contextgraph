@@ -28,7 +28,6 @@ use super::status::IndexStatus;
 /// |------------|-------|---------|-------|
 /// | HNSW | 10 | E1-E5, E7-E11 dense | Stage 3 |
 /// | HNSW | 1 | E1 Matryoshka 128D | Stage 2 |
-/// | HNSW | 1 | PurposeVector 13D | Stage 4 |
 /// | Inverted | 1 | E13 SPLADE | Stage 1 |
 /// | MaxSim | 1 | E12 ColBERT | Stage 5 |
 ///
@@ -108,18 +107,6 @@ pub trait MultiSpaceIndexManager: Send + Sync {
         fingerprint: &SemanticFingerprint,
     ) -> IndexResult<()>;
 
-    /// Add purpose vector to the 13D HNSW index.
-    ///
-    /// # Arguments
-    ///
-    /// - `memory_id`: UUID of the memory
-    /// - `purpose`: 13D teleological alignment vector
-    ///
-    /// # Errors
-    ///
-    /// - `IndexError::DimensionMismatch`: If vector is not 13D
-    async fn add_purpose_vector(&mut self, memory_id: Uuid, purpose: &[f32]) -> IndexResult<()>;
-
     /// Add to SPLADE inverted index (E13).
     ///
     /// # Arguments
@@ -189,23 +176,6 @@ pub trait MultiSpaceIndexManager: Send + Sync {
     async fn search_matryoshka(
         &self,
         query_128d: &[f32],
-        k: usize,
-    ) -> IndexResult<Vec<(Uuid, f32)>>;
-
-    /// Stage 4: Purpose vector teleological filter.
-    ///
-    /// # Arguments
-    ///
-    /// - `purpose_query`: 13D purpose vector query
-    /// - `k`: Number of candidates to retrieve
-    ///
-    /// # Returns
-    ///
-    /// Vec of (memory_id, alignment) pairs, sorted by descending alignment.
-    /// Target: <10ms.
-    async fn search_purpose(
-        &self,
-        purpose_query: &[f32],
         k: usize,
     ) -> IndexResult<Vec<(Uuid, f32)>>;
 

@@ -9,11 +9,11 @@ use crate::teleological::matrix_search::{
 use crate::teleological::synergy_matrix::SynergyMatrix;
 use crate::teleological::types::NUM_EMBEDDERS;
 use crate::teleological::vector::TeleologicalVector;
-use crate::types::fingerprint::PurposeVector;
+use crate::teleological::TopicProfile;
 
 pub(super) fn make_test_vector(purpose_val: f32, corr_val: f32) -> TeleologicalVector {
-    let pv = PurposeVector::new([purpose_val; NUM_EMBEDDERS]);
-    let mut tv = TeleologicalVector::new(pv);
+    let tp = TopicProfile::new([purpose_val; NUM_EMBEDDERS]);
+    let mut tv = TeleologicalVector::new(tp);
     for corr in tv.cross_correlations.iter_mut() {
         *corr = corr_val;
     }
@@ -36,8 +36,8 @@ pub(super) fn make_varied_test_vector(seed: u32) -> TeleologicalVector {
         state = state.wrapping_mul(1103515245).wrapping_add(12345);
         *alignment = (state as f32 / u32::MAX as f32).max(0.05);
     }
-    let pv = PurposeVector::new(alignments);
-    let mut tv = TeleologicalVector::new(pv);
+    let tp = TopicProfile::new(alignments);
+    let mut tv = TeleologicalVector::new(tp);
     for corr in tv.cross_correlations.iter_mut() {
         state = state.wrapping_mul(1103515245).wrapping_add(12345);
         *corr = (state as f32 / u32::MAX as f32).max(0.05);

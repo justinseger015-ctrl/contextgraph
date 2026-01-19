@@ -2,13 +2,10 @@
 
 use async_trait::async_trait;
 
-use crate::config::constants::alignment;
 use crate::error::CoreResult;
-use crate::types::fingerprint::{PurposeVector, TeleologicalFingerprint};
+use crate::types::fingerprint::TeleologicalFingerprint;
 use uuid::Uuid;
 
-use super::options::TeleologicalSearchOptions;
-use super::result::TeleologicalSearchResult;
 use super::store::TeleologicalMemoryStore;
 
 /// Extension trait for convenient TeleologicalMemoryStore operations.
@@ -64,31 +61,6 @@ pub trait TeleologicalMemoryStoreExt: TeleologicalMemoryStore {
             })
     }
 
-    /// Get fingerprints with optimal alignment (theta >= alignment::OPTIMAL).
-    ///
-    /// Constitution: `teleological.thresholds.optimal`
-    async fn get_optimal_aligned(&self, top_k: usize) -> CoreResult<Vec<TeleologicalSearchResult>> {
-        let options =
-            TeleologicalSearchOptions::quick(top_k).with_min_alignment(alignment::OPTIMAL);
-        let query = PurposeVector::default();
-        self.search_purpose(&query, options).await
-    }
-
-    /// Get fingerprints with critical misalignment (theta < alignment::CRITICAL).
-    ///
-    /// Constitution: `teleological.thresholds.critical`
-    async fn get_critical_misaligned(&self) -> CoreResult<Vec<TeleologicalFingerprint>> {
-        // This requires iteration - implementations may override for efficiency
-        let options = TeleologicalSearchOptions::quick(1000);
-        let query = PurposeVector::default();
-        let results = self.search_purpose(&query, options).await?;
-
-        Ok(results
-            .into_iter()
-            .filter(|r| r.fingerprint.alignment_score < alignment::CRITICAL)
-            .map(|r| r.fingerprint)
-            .collect())
-    }
 }
 
 // Blanket implementation for all TeleologicalMemoryStore implementations

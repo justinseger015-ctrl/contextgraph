@@ -1,18 +1,18 @@
 //! Neuromodulation System - Dynamic System Modulation
 //!
 //! Implements 4 neuromodulators that affect system behavior:
-//! - Dopamine (DA): Controls Hopfield beta, triggered by workspace events
+//! - Dopamine (DA): Controls retrieval sharpness, triggered by workspace events
 //! - Serotonin (5HT): Scales embedding space weights E1-E13
 //! - Noradrenaline (NE): Controls attention temperature
 //! - Acetylcholine (ACh): Controls UTL learning rate (integrated with GWT)
 //!
-//! ## Constitution Reference: neuromod (lines 162-206)
+//! ## Constitution Reference: neuromod
 //!
 //! ```yaml
 //! neuromod:
 //!   Dopamine:
 //!     range: "[1, 5]"
-//!     parameter: hopfield.beta
+//!     parameter: retrieval_sharpness
 //!     trigger: memory_enters_workspace  # GWT event
 //!   Serotonin:
 //!     range: "[0, 1]"
@@ -46,8 +46,8 @@
 //! // Trigger dopamine on workspace entry
 //! manager.on_workspace_entry();
 //!
-//! // Get current Hopfield beta
-//! let beta = manager.get_hopfield_beta();
+//! // Get current retrieval sharpness
+//! let sharpness = manager.get_retrieval_sharpness();
 //!
 //! // Apply homeostatic decay
 //! manager.decay_all(delta_time);

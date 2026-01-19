@@ -4,7 +4,7 @@ Core domain types, traits, and business logic for the Context Graph bio-nervous 
 
 ## Overview
 
-This crate provides the foundational types for the Ultimate Context Graph - a 5-layer bio-nervous memory system based on the Unified Theory of Learning (UTL). It implements the Marblestone architecture for neural-inspired knowledge organization.
+This crate provides the foundational types for the Ultimate Context Graph - a 4-layer bio-nervous memory system based on the Unified Theory of Learning (UTL). It implements the Marblestone architecture for neural-inspired knowledge organization.
 
 ## Features
 

@@ -10,9 +10,8 @@
 
 use crate::teleological::{
     types::{EMBEDDING_DIM, NUM_EMBEDDERS},
-    ProfileId, TeleologicalProfile, TeleologicalVector,
+    ProfileId, TeleologicalProfile, TeleologicalVector, TopicProfile,
 };
-use crate::types::fingerprint::PurposeVector;
 
 use super::correlation_extractor::CorrelationExtractor;
 use super::group_aggregator::GroupAggregator;
@@ -58,8 +57,8 @@ pub struct FusionResult {
 /// Scores for each fusion component.
 #[derive(Clone, Debug, Default)]
 pub struct ComponentScores {
-    /// Purpose vector quality
-    pub purpose_vector: f32,
+    /// Topic profile quality
+    pub topic_profile: f32,
     /// Correlation density (non-sparse)
     pub correlations: f32,
     /// Group coherence
@@ -95,8 +94,8 @@ pub struct FusionMetadata {
 ///   alignment scores, not a fused embedding
 #[derive(Clone, Debug)]
 pub struct AlignmentFusionResult {
-    /// 13D purpose vector with alignment scores.
-    pub purpose_vector: [f32; NUM_EMBEDDERS],
+    /// 13D topic profile with alignment scores.
+    pub topic_profile: [f32; NUM_EMBEDDERS],
 
     /// Per-group alignment aggregation (semantic, temporal, structural, experiential).
     pub group_alignments: [f32; 4],
@@ -115,14 +114,14 @@ pub struct AlignmentFusionResult {
 impl AlignmentFusionResult {
     /// Create a new AlignmentFusionResult.
     pub fn new(
-        purpose_vector: [f32; NUM_EMBEDDERS],
+        topic_profile: [f32; NUM_EMBEDDERS],
         group_alignments: [f32; 4],
         confidence: f32,
         active_embedders: usize,
         dominant_group: Option<usize>,
     ) -> Self {
         Self {
-            purpose_vector,
+            topic_profile,
             group_alignments,
             confidence,
             active_embedders,
@@ -225,9 +224,9 @@ impl FusionEngine {
             );
         }
 
-        // Step 1: Create purpose vector
-        let purpose_vector = PurposeVector::new(*alignments);
-        let pv_score = purpose_vector.aggregate_alignment();
+        // Step 1: Create topic profile
+        let topic_profile = TopicProfile::new(*alignments);
+        let tp_score = topic_profile.aggregate_alignment();
 
         // Step 2: Extract cross-correlations
         let synergy_matrix = if self.config.apply_synergy {
@@ -265,7 +264,7 @@ impl FusionEngine {
 
         // Compute overall confidence
         let confidence =
-            (pv_score * 0.3 + corr_score * 0.25 + group_score * 0.25 + synergy_score * 0.2)
+            (tp_score * 0.3 + corr_score * 0.25 + group_score * 0.25 + synergy_score * 0.2)
                 * self.embedding_coverage(alignments);
 
         // Build metadata (before moving group_result.alignments)
@@ -275,7 +274,7 @@ impl FusionEngine {
 
         // Build the TeleologicalVector
         let mut vector = TeleologicalVector::with_all(
-            purpose_vector,
+            topic_profile,
             correlations,
             group_result.alignments,
             confidence,
@@ -289,7 +288,7 @@ impl FusionEngine {
             vector,
             confidence,
             component_scores: ComponentScores {
-                purpose_vector: pv_score,
+                topic_profile: tp_score,
                 correlations: corr_score,
                 groups: group_score,
                 synergy: synergy_score,
@@ -424,7 +423,7 @@ impl FusionEngine {
     /// Perform alignment-based fusion without dimension projection.
     ///
     /// This is the constitution-compliant fusion method that operates on
-    /// purpose vector alignments rather than raw embeddings.
+    /// topic profile alignments rather than raw embeddings.
     ///
     /// # Constitution Compliance
     ///
@@ -434,11 +433,11 @@ impl FusionEngine {
     ///   alignment scores, not a fused embedding
     ///
     /// # Arguments
-    /// * `alignments` - 13D purpose vector alignments (computed per-embedder in native space)
+    /// * `alignments` - 13D topic profile alignments (computed per-embedder in native space)
     ///
     /// # Returns
     /// `AlignmentFusionResult` containing:
-    /// - purpose_vector: The 13D alignment scores
+    /// - topic_profile: The 13D alignment scores
     /// - group_alignments: 4D group aggregation (Semantic, Temporal, Structural, Experiential)
     /// - confidence: Overall fusion confidence
     /// - active_embedders: Count of embedders with alignment > 0.1
@@ -459,8 +458,8 @@ impl FusionEngine {
             );
         }
 
-        // Step 1: Compute purpose vector score
-        let pv_score = alignments.iter().sum::<f32>() / NUM_EMBEDDERS as f32;
+        // Step 1: Compute topic profile score
+        let tp_score = alignments.iter().sum::<f32>() / NUM_EMBEDDERS as f32;
 
         // Step 2: Aggregate to groups
         // Groups: Semantic (E1-E3), Temporal (E4-E6), Structural (E7-E9), Experiential (E10-E13)
@@ -473,10 +472,10 @@ impl FusionEngine {
         let group_score = group_alignments.iter().sum::<f32>() / 4.0;
 
         // Step 3: Compute confidence
-        // Weighted: PV (50%), Groups (50%)
+        // Weighted: TP (50%), Groups (50%)
         let active_embedders = alignments.iter().filter(|&&a| a > 0.1).count();
         let coverage = active_embedders as f32 / NUM_EMBEDDERS as f32;
-        let confidence = (pv_score * 0.5 + group_score * 0.5) * coverage;
+        let confidence = (tp_score * 0.5 + group_score * 0.5) * coverage;
 
         // Step 4: Determine dominant group
         let dominant_group = group_alignments
@@ -547,7 +546,7 @@ mod tests {
         let result = engine.fuse(&embeddings, &alignments);
 
         // All scores should be positive for valid input
-        assert!(result.component_scores.purpose_vector > 0.0);
+        assert!(result.component_scores.topic_profile > 0.0);
         assert!(result.component_scores.groups > 0.0);
         assert!(result.component_scores.synergy >= 0.0);
 
@@ -662,10 +661,10 @@ mod tests {
     #[test]
     fn test_alignment_fusion_result() {
         // Test instantiation with healthy values
-        let purpose_vector = [0.8f32; NUM_EMBEDDERS];
+        let topic_profile = [0.8f32; NUM_EMBEDDERS];
         let group_alignments = [0.9, 0.7, 0.6, 0.8];
         let result = AlignmentFusionResult::new(
-            purpose_vector,
+            topic_profile,
             group_alignments,
             0.85,    // confidence
             10,      // active_embedders (10 out of 13)
@@ -676,7 +675,7 @@ mod tests {
             result.is_healthy(),
             "Should be healthy with confidence=0.85 and 10 active embedders"
         );
-        assert_eq!(result.purpose_vector.len(), NUM_EMBEDDERS);
+        assert_eq!(result.topic_profile.len(), NUM_EMBEDDERS);
         assert_eq!(result.group_alignments.len(), 4);
         assert_eq!(result.confidence, 0.85);
         assert_eq!(result.active_embedders, 10);
@@ -750,8 +749,8 @@ mod tests {
 
         let result = engine.fuse_from_alignments(&alignments);
 
-        // Verify purpose_vector matches input alignments
-        assert_eq!(result.purpose_vector, alignments);
+        // Verify topic_profile matches input alignments
+        assert_eq!(result.topic_profile, alignments);
 
         // Verify group_alignments are computed correctly
         // All alignments are 0.8, so all groups should be 0.8
@@ -912,7 +911,7 @@ mod tests {
         let result: AlignmentFusionResult = engine.fuse_from_alignments(&alignments);
 
         // Verify it has all expected fields
-        let _ = result.purpose_vector;
+        let _ = result.topic_profile;
         let _ = result.group_alignments;
         let _ = result.confidence;
         let _ = result.active_embedders;

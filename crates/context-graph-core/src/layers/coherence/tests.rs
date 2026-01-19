@@ -235,15 +235,6 @@ async fn test_full_pipeline_context() {
         }),
     ));
 
-    // L2 Reflex result (cache miss)
-    input.context.layer_results.push(LayerResult::success(
-        LayerId::Reflex,
-        serde_json::json!({
-            "cache_hit": false,
-            "query_norm": 1.0,
-        }),
-    ));
-
     // L3 Memory result
     input.context.layer_results.push(LayerResult::success(
         LayerId::Memory,

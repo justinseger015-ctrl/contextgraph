@@ -252,9 +252,6 @@ pub struct AggregatedMatch {
 
     /// Per-space scores (space_index, similarity, rank).
     pub space_contributions: Vec<SpaceContribution>,
-
-    /// Purpose alignment score (from Stage 4 if available).
-    pub purpose_alignment: Option<f32>,
 }
 
 impl AggregatedMatch {
@@ -265,19 +262,12 @@ impl AggregatedMatch {
             aggregate_score,
             space_count,
             space_contributions: Vec::new(),
-            purpose_alignment: None,
         }
     }
 
     /// Add a space contribution.
     pub fn add_contribution(&mut self, contribution: SpaceContribution) {
         self.space_contributions.push(contribution);
-    }
-
-    /// Set the purpose alignment score.
-    pub fn with_purpose_alignment(mut self, alignment: f32) -> Self {
-        self.purpose_alignment = Some(alignment);
-        self
     }
 }
 
@@ -430,10 +420,6 @@ mod tests {
         m.add_contribution(SpaceContribution::new(1, 0.85, 1, 60.0));
 
         assert_eq!(m.space_contributions.len(), 2);
-        assert!(m.purpose_alignment.is_none());
-
-        let m_with_alignment = m.with_purpose_alignment(0.75);
-        assert_eq!(m_with_alignment.purpose_alignment, Some(0.75));
 
         println!("[VERIFIED] AggregatedMatch creation and modification");
     }

@@ -6,7 +6,6 @@
 use std::time::Instant;
 
 use context_graph_core::traits::TeleologicalMemoryStore;
-use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
 use context_graph_storage::teleological::{
     deserialize_teleological_fingerprint, serialize_teleological_fingerprint,
 };
@@ -200,9 +199,9 @@ fn test_serialization_size_verification() {
         "E9 dimension mismatch (expected 1024)"
     );
     assert_eq!(
-        restored.purpose_vector.alignments.len(),
-        NUM_EMBEDDERS,
-        "Purpose dimension mismatch"
+        restored.content_hash.len(),
+        32,
+        "Content hash dimension mismatch"
     );
 
     println!("[VERIFIED] Serialization roundtrip preserves all data");

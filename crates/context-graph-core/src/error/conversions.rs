@@ -103,7 +103,6 @@ pub(crate) fn embedder_index_to_embedder(idx: crate::index::config::EmbedderInde
         EmbedderIndex::E11Entity => Embedder::Entity,
         EmbedderIndex::E12LateInteraction => Embedder::LateInteraction,
         EmbedderIndex::E13Splade => Embedder::KeywordSplade,
-        EmbedderIndex::PurposeVector => Embedder::Semantic,
     }
 }
 

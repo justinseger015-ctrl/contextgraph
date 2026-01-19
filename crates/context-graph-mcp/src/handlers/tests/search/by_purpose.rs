@@ -204,14 +204,6 @@ async fn test_search_by_purpose_result_structure() {
                 "Result should have fingerprintId"
             );
             assert!(
-                first.get("purpose_alignment").is_some(),
-                "Result should have purpose_alignment"
-            );
-            assert!(
-                first.get("alignment_score").is_some(),
-                "Result should have alignment_score"
-            );
-            assert!(
                 first.get("purpose_vector").is_some(),
                 "Result should have purpose_vector"
             );

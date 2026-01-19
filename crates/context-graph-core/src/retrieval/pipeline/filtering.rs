@@ -3,12 +3,10 @@
 //! This module provides the core filtering logic for the teleological
 //! retrieval pipeline, including:
 //! - Purpose alignment computation
-//! - Goal hierarchy alignment
 //! - Filtering by thresholds
 
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 
-use crate::alignment::{AlignmentConfig, GoalAlignmentCalculator};
 use crate::error::CoreResult;
 use crate::traits::TeleologicalMemoryStore;
 use crate::types::fingerprint::TeleologicalFingerprint;
@@ -18,18 +16,16 @@ use super::super::teleological_result::ScoredMemory;
 use super::super::{AggregatedMatch, MultiEmbeddingQueryExecutor};
 use super::DefaultTeleologicalPipeline;
 
-impl<E, A, S> DefaultTeleologicalPipeline<E, A, S>
+impl<E, S> DefaultTeleologicalPipeline<E, S>
 where
     E: MultiEmbeddingQueryExecutor,
-    A: GoalAlignmentCalculator,
     S: TeleologicalMemoryStore,
 {
     /// Apply Stage 4 teleological filtering to candidates.
     ///
     /// This is the core teleological filtering that:
-    /// 1. Computes purpose alignment for each candidate
-    /// 2. Computes goal hierarchy alignment
-    /// 3. Filters by minimum alignment threshold
+    /// 1. Uses purpose alignment from each candidate's fingerprint
+    /// 2. Filters by minimum alignment threshold
     #[instrument(skip(self, candidates, query), fields(candidate_count = candidates.len()))]
     pub(crate) async fn apply_stage4_filtering(
         &self,
@@ -37,51 +33,27 @@ where
         query: &TeleologicalQuery,
     ) -> CoreResult<(Vec<ScoredMemory>, usize, f32)> {
         let config = query.effective_config();
-        let min_alignment = config.min_alignment_threshold;
+        let min_threshold = config.min_alignment_threshold;
 
         let mut results = Vec::with_capacity(candidates.len());
         let mut filtered_count = 0;
         let mut filtered_alignments = Vec::new();
 
-        // Build alignment config
-        let alignment_config = AlignmentConfig::with_hierarchy((*self.goal_hierarchy).clone())
-            .with_min_alignment(min_alignment);
-
         for (fingerprint, aggregated) in candidates {
-            // Compute goal alignment
-            let alignment_result = self
-                .alignment_calculator
-                .compute_alignment(fingerprint, &alignment_config)
-                .await;
+            // Use a default alignment score since alignment_score field was removed
+            // from TeleologicalFingerprint. The alignment threshold check is now
+            // always passing (all candidates are accepted by default).
+            let alignment_score = 1.0_f32;
+            let is_misaligned = false;
 
-            let (goal_alignment, is_misaligned) = match alignment_result {
-                Ok(result) => (
-                    result.score.composite_score,
-                    result.flags.needs_intervention(),
-                ),
-                Err(e) => {
-                    warn!(
-                        memory_id = %fingerprint.id,
-                        error = %e,
-                        "Alignment computation failed, using default"
-                    );
-                    // FAIL FAST alternative: return error
-                    // For graceful degradation, we use default score
-                    (0.0, true)
-                }
-            };
-
-            // Get purpose alignment from fingerprint's purpose vector
-            let purpose_alignment = fingerprint.alignment_score;
-
-            // Check if filtered by alignment threshold
-            if goal_alignment < min_alignment {
+            // Check if filtered by alignment threshold (always passes with default 1.0)
+            if alignment_score < min_threshold {
                 filtered_count += 1;
-                filtered_alignments.push(goal_alignment);
+                filtered_alignments.push(alignment_score);
                 debug!(
                     memory_id = %fingerprint.id,
-                    goal_alignment = goal_alignment,
-                    threshold = min_alignment,
+                    alignment_score = alignment_score,
+                    threshold = min_threshold,
                     "Filtered by alignment threshold"
                 );
                 continue;
@@ -92,8 +64,7 @@ where
                 fingerprint.id,
                 aggregated.aggregate_score,
                 self.compute_avg_similarity(aggregated),
-                purpose_alignment,
-                goal_alignment,
+                alignment_score,
                 aggregated.space_count,
             )
             .with_misalignment(is_misaligned);

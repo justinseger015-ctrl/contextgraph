@@ -216,6 +216,131 @@ pub const EMBEDDING_DIM: usize = 1024;
 /// Number of embedders in the system.
 pub const NUM_EMBEDDERS: usize = 13;
 
+/// TopicProfile: 13D profile for topic/embedding weights.
+///
+/// This type represents embedder-level weights or alignment scores for topics.
+/// Each element corresponds to one of the 13 embedders in the system.
+///
+/// # Usage
+///
+/// Used for:
+/// - Topic weight profiles (how much each embedder contributes to a topic)
+/// - Per-embedder alignment scores in teleological vectors
+/// - Similarity comparisons between topic profiles
+///
+/// # Constitution Compliance
+///
+/// This type replaces the former `PurposeVector` which was tied to goal alignment.
+/// TopicProfile focuses on embedder-level weighting for topic detection and
+/// multi-space clustering.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TopicProfile {
+    /// 13D alignment scores, one per embedder [0.0, 1.0]
+    pub alignments: [f32; NUM_EMBEDDERS],
+}
+
+impl TopicProfile {
+    /// Create a new TopicProfile from an array of alignments.
+    ///
+    /// # Arguments
+    /// * `alignments` - Array of 13 alignment values
+    pub fn new(alignments: [f32; NUM_EMBEDDERS]) -> Self {
+        Self { alignments }
+    }
+
+    /// Create a TopicProfile with all alignments set to the same value.
+    pub fn uniform(value: f32) -> Self {
+        Self {
+            alignments: [value; NUM_EMBEDDERS],
+        }
+    }
+
+    /// Get the aggregate alignment score (mean of all alignments).
+    #[inline]
+    pub fn aggregate_alignment(&self) -> f32 {
+        self.alignments.iter().sum::<f32>() / NUM_EMBEDDERS as f32
+    }
+
+    /// Compute cosine similarity between two TopicProfiles.
+    ///
+    /// Returns a value in [-1.0, 1.0], where 1.0 means identical direction.
+    pub fn similarity(&self, other: &Self) -> f32 {
+        let mut dot = 0.0f32;
+        let mut norm_a = 0.0f32;
+        let mut norm_b = 0.0f32;
+
+        for i in 0..NUM_EMBEDDERS {
+            dot += self.alignments[i] * other.alignments[i];
+            norm_a += self.alignments[i] * self.alignments[i];
+            norm_b += other.alignments[i] * other.alignments[i];
+        }
+
+        let denom = (norm_a.sqrt()) * (norm_b.sqrt());
+        if denom < f32::EPSILON {
+            0.0
+        } else {
+            dot / denom
+        }
+    }
+
+    /// Get alignment for a specific embedder index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if index >= NUM_EMBEDDERS (FAIL FAST).
+    #[inline]
+    pub fn get(&self, embedder_idx: usize) -> f32 {
+        assert!(
+            embedder_idx < NUM_EMBEDDERS,
+            "FAIL FAST: embedder index {} out of bounds (max {})",
+            embedder_idx,
+            NUM_EMBEDDERS - 1
+        );
+        self.alignments[embedder_idx]
+    }
+
+    /// Set alignment for a specific embedder index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if index >= NUM_EMBEDDERS (FAIL FAST).
+    #[inline]
+    pub fn set(&mut self, embedder_idx: usize, value: f32) {
+        assert!(
+            embedder_idx < NUM_EMBEDDERS,
+            "FAIL FAST: embedder index {} out of bounds (max {})",
+            embedder_idx,
+            NUM_EMBEDDERS - 1
+        );
+        self.alignments[embedder_idx] = value;
+    }
+
+    /// Count how many embedders have alignment above the given threshold.
+    pub fn active_count(&self, threshold: f32) -> usize {
+        self.alignments.iter().filter(|&&a| a > threshold).count()
+    }
+}
+
+impl Default for TopicProfile {
+    fn default() -> Self {
+        Self {
+            alignments: [0.0; NUM_EMBEDDERS],
+        }
+    }
+}
+
+impl From<[f32; NUM_EMBEDDERS]> for TopicProfile {
+    fn from(alignments: [f32; NUM_EMBEDDERS]) -> Self {
+        Self::new(alignments)
+    }
+}
+
+impl AsRef<[f32; NUM_EMBEDDERS]> for TopicProfile {
+    fn as_ref(&self) -> &[f32; NUM_EMBEDDERS] {
+        &self.alignments
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

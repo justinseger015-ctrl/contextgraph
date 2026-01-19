@@ -1,6 +1,6 @@
 //! Pipeline types, configuration, and result structures.
 //!
-//! This module contains all type definitions for the 5-stage retrieval pipeline.
+//! This module contains all type definitions for the 4-stage retrieval pipeline.
 
 use uuid::Uuid;
 
@@ -33,10 +33,6 @@ pub enum PipelineError {
     /// Empty candidates at stage (when not expected).
     #[error("FAIL FAST: Empty candidates at stage {stage:?}")]
     EmptyCandidates { stage: PipelineStage },
-
-    /// Purpose vector missing when required for Stage 4.
-    #[error("FAIL FAST: Purpose vector required for alignment filtering but not provided")]
-    MissingPurposeVector,
 
     /// Wrapped search error.
     #[error("FAIL FAST: Search error: {0}")]
@@ -75,7 +71,7 @@ impl Default for StageConfig {
 // PIPELINE STAGE ENUM
 // ============================================================================
 
-/// The 5 pipeline stages.
+/// The 4 pipeline stages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PipelineStage {
     /// Stage 1: SPLADE sparse pre-filter (inverted index).
@@ -84,32 +80,28 @@ pub enum PipelineStage {
     MatryoshkaAnn,
     /// Stage 3: Multi-space RRF rerank.
     RrfRerank,
-    /// Stage 4: Teleological alignment filter.
-    AlignmentFilter,
-    /// Stage 5: Late interaction MaxSim.
+    /// Stage 4: Late interaction MaxSim.
     MaxSimRerank,
 }
 
 impl PipelineStage {
-    /// Get the stage index (0-4).
+    /// Get the stage index (0-3).
     #[inline]
     pub fn index(&self) -> usize {
         match self {
             Self::SpladeFilter => 0,
             Self::MatryoshkaAnn => 1,
             Self::RrfRerank => 2,
-            Self::AlignmentFilter => 3,
-            Self::MaxSimRerank => 4,
+            Self::MaxSimRerank => 3,
         }
     }
 
     /// Get all stages in order.
-    pub fn all() -> [Self; 5] {
+    pub fn all() -> [Self; 4] {
         [
             Self::SpladeFilter,
             Self::MatryoshkaAnn,
             Self::RrfRerank,
-            Self::AlignmentFilter,
             Self::MaxSimRerank,
         ]
     }
@@ -137,7 +129,7 @@ impl PipelineCandidate {
         Self {
             id,
             score,
-            stage_scores: Vec::with_capacity(5),
+            stage_scores: Vec::with_capacity(4),
         }
     }
 
@@ -176,11 +168,9 @@ pub struct StageResult {
 #[derive(Debug, Clone)]
 pub struct PipelineConfig {
     /// Per-stage configurations (indexed by PipelineStage as usize).
-    pub stages: [StageConfig; 5],
+    pub stages: [StageConfig; 4],
     /// Final result limit.
     pub k: usize,
-    /// Purpose vector for alignment filtering (Stage 4).
-    pub purpose_vector: Option<[f32; 13]>,
     /// RRF constant (default 60.0).
     pub rrf_k: f32,
     /// RRF embedders to use in Stage 3.
@@ -207,19 +197,12 @@ impl Default for PipelineConfig {
                     ..Default::default()
                 }, // Stage 3: RRF
                 StageConfig {
-                    candidate_multiplier: 2.0,
-                    min_score_threshold: 0.55,
-                    max_latency_ms: 10,
-                    ..Default::default()
-                }, // Stage 4: alignment
-                StageConfig {
                     candidate_multiplier: 1.0,
                     max_latency_ms: 15,
                     ..Default::default()
-                }, // Stage 5: final
+                }, // Stage 4: final
             ],
             k: 10,
-            purpose_vector: None,
             rrf_k: 60.0,
             rrf_embedders: vec![
                 EmbedderIndex::E1Semantic,
@@ -245,8 +228,6 @@ pub struct PipelineResult {
     pub total_latency_us: u64,
     /// Stages that were executed.
     pub stages_executed: Vec<PipelineStage>,
-    /// Whether purpose alignment was verified (Stage 4).
-    pub alignment_verified: bool,
 }
 
 impl PipelineResult {

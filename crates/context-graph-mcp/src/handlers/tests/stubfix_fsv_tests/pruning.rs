@@ -66,7 +66,7 @@ async fn test_pruning_candidates_empty_store_returns_empty() {
 ///
 /// Stores fingerprints that are all:
 /// - Recently created (< 30 days)
-/// - High alignment (> 0.5)
+/// - High importance (> 0.5)
 /// - Non-orphan (access_count > 0)
 #[tokio::test]
 #[ignore = "Uses tools not registered in PRD v6"]
@@ -135,27 +135,27 @@ async fn test_pruning_candidates_fresh_data_no_candidates() {
     println!("================================================================================\n");
 }
 
-/// FSV-PRUNING-003: Stale/low-alignment data produces candidates.
+/// FSV-PRUNING-003: Stale/low-importance data produces candidates.
 ///
 /// Stores mix of:
-/// - Old, low-alignment fingerprints (should be candidates)
-/// - Fresh, high-alignment fingerprints (should NOT be candidates)
+/// - Old, low-importance fingerprints (should be candidates)
+/// - Fresh, high-importance fingerprints (should NOT be candidates)
 #[tokio::test]
 #[ignore = "Uses tools not registered in PRD v6"]
 async fn test_pruning_candidates_stale_data_produces_candidates() {
     println!("\n================================================================================");
-    println!("FSV-PRUNING-003: Stale/Low-Alignment Data Produces Candidates");
+    println!("FSV-PRUNING-003: Stale/Low-Importance Data Produces Candidates");
     println!("================================================================================");
 
     let (handlers, store, _tempdir) = create_test_handlers_with_rocksdb_store_access().await;
 
     // Store mix of fingerprints
     let test_data = [
-        // Should be candidates (stale OR low alignment)
-        ("stale_memory_1", 0.2_f32, 0_u64, 100_i64), // Old + low alignment + orphan
-        ("stale_memory_2", 0.3_f32, 0_u64, 120_i64), // Old + low alignment + orphan
-        ("low_align_memory", 0.1_f32, 1_u64, 50_i64), // Low alignment
-        // Should NOT be candidates (fresh + high alignment)
+        // Should be candidates (stale OR low importance)
+        ("stale_memory_1", 0.2_f32, 0_u64, 100_i64), // Old + low importance + orphan
+        ("stale_memory_2", 0.3_f32, 0_u64, 120_i64), // Old + low importance + orphan
+        ("low_importance_memory", 0.1_f32, 1_u64, 50_i64), // Low importance
+        // Should NOT be candidates (fresh + high importance)
         ("fresh_memory_1", 0.8_f32, 5_u64, 5_i64),
         ("fresh_memory_2", 0.9_f32, 10_u64, 2_i64),
     ];
@@ -223,8 +223,8 @@ async fn test_pruning_candidates_stale_data_produces_candidates() {
             .get("reason")
             .and_then(|v| v.as_str())
             .unwrap_or("?");
-        let alignment = candidate
-            .get("alignment")
+        let importance = candidate
+            .get("importance")
             .and_then(|v| v.as_f64())
             .unwrap_or(-1.0);
         let age_days = candidate
@@ -232,16 +232,16 @@ async fn test_pruning_candidates_stale_data_produces_candidates() {
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
         println!(
-            "    [{}] {} - reason: {}, alignment: {:.2}, age: {}d",
+            "    [{}] {} - reason: {}, importance: {:.2}, age: {}d",
             i + 1,
             memory_id,
             reason,
-            alignment,
+            importance,
             age_days
         );
     }
 
-    // Should have at least some candidates (the stale/low-alignment ones)
+    // Should have at least some candidates (the stale/low-importance ones)
     assert!(
         total >= 1,
         "Should have at least 1 pruning candidate, got {}",
@@ -258,7 +258,7 @@ async fn test_pruning_candidates_stale_data_produces_candidates() {
     }
 
     println!(
-        "\n[FSV-PRUNING-003 PASSED] Stale/low-alignment data produces candidates with reasons"
+        "\n[FSV-PRUNING-003 PASSED] Stale/low-importance data produces candidates with reasons"
     );
     println!("================================================================================\n");
 }

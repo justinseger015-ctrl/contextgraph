@@ -61,15 +61,15 @@ impl TeleologicalMatrixSearch {
             ..Default::default()
         };
 
-        // Purpose vector similarity
+        // Topic profile similarity
         breakdown.purpose_vector = compute_purpose_similarity(a, b);
 
-        // Per-embedder purpose similarity
+        // Per-embedder topic similarity
         for ((out, &av), &bv) in breakdown
             .per_embedder_purpose
             .iter_mut()
-            .zip(a.purpose_vector.alignments.iter())
-            .zip(b.purpose_vector.alignments.iter())
+            .zip(a.topic_profile.alignments.iter())
+            .zip(b.topic_profile.alignments.iter())
         {
             // Product similarity for aligned values
             *out = if av.signum() == bv.signum() {

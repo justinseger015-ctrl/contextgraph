@@ -24,7 +24,6 @@ use uuid::Uuid;
 ///
 /// - 10 dense HNSW indexes (E1-E5, E7-E11)
 /// - 1 Matryoshka 128D HNSW (E1 truncated for Stage 2)
-/// - 1 PurposeVector 13D HNSW (Stage 4)
 /// - 1 SPLADE inverted index (Stage 1)
 ///
 /// # Thread Safety
@@ -63,8 +62,6 @@ impl HnswMultiSpaceIndex {
 
         if embedder == EmbedderIndex::E1Matryoshka128 {
             Some(HnswConfig::matryoshka_128d())
-        } else if embedder == EmbedderIndex::PurposeVector {
-            Some(HnswConfig::purpose_vector())
         } else {
             Some(HnswConfig::default_for_dimension(dim, metric))
         }

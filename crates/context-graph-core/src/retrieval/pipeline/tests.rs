@@ -3,9 +3,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::alignment::DefaultAlignmentCalculator;
-use crate::purpose::{DiscoveryMethod, GoalDiscoveryMetadata, GoalHierarchy, GoalLevel, GoalNode};
-use crate::retrieval::teleological_result::AlignmentLevel;
 use crate::retrieval::InMemoryMultiEmbeddingExecutor;
 use crate::stubs::{InMemoryTeleologicalStore, StubMultiArrayProvider};
 use crate::types::fingerprint::SemanticFingerprint;
@@ -14,7 +11,7 @@ use super::super::teleological_query::TeleologicalQuery;
 use super::{DefaultTeleologicalPipeline, PipelineHealth, TeleologicalRetrievalPipeline};
 use crate::error::CoreError;
 
-/// Create a test fingerprint for goal hierarchy.
+/// Create a test fingerprint for pipeline tests.
 fn create_test_goal_fingerprint(base: f32) -> SemanticFingerprint {
     let mut fp = SemanticFingerprint::zeroed();
     for i in 0..fp.e1_semantic.len() {
@@ -29,53 +26,8 @@ fn create_test_goal_fingerprint(base: f32) -> SemanticFingerprint {
     fp
 }
 
-fn create_test_hierarchy() -> GoalHierarchy {
-    let mut hierarchy = GoalHierarchy::new();
-
-    let ns_fp = create_test_goal_fingerprint(0.8);
-    let discovery = GoalDiscoveryMetadata::new(DiscoveryMethod::Bootstrap, 0.9, 1, 0.85).unwrap();
-
-    // TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
-    // Strategic goal (top-level, no parent)
-    let s1 = GoalNode::autonomous_goal(
-        "Build the best product".to_string(),
-        GoalLevel::Strategic,
-        ns_fp.clone(),
-        discovery,
-    )
-    .expect("Failed to create Strategic goal");
-    let s1_id = s1.id;
-
-    hierarchy
-        .add_goal(s1)
-        .expect("Failed to add Strategic goal");
-
-    let child_fp = create_test_goal_fingerprint(0.7);
-    let child_discovery =
-        GoalDiscoveryMetadata::new(DiscoveryMethod::Decomposition, 0.8, 5, 0.75).unwrap();
-
-    // Tactical goal - child of Strategic
-    let tactical = GoalNode::child_goal(
-        "Improve UX".to_string(),
-        GoalLevel::Tactical,
-        s1_id,
-        child_fp,
-        child_discovery,
-    )
-    .expect("Failed to create Tactical goal");
-
-    hierarchy
-        .add_goal(tactical)
-        .expect("Failed to add Tactical goal");
-
-    hierarchy
-}
-
-async fn create_test_pipeline() -> DefaultTeleologicalPipeline<
-    InMemoryMultiEmbeddingExecutor,
-    DefaultAlignmentCalculator,
-    InMemoryTeleologicalStore,
-> {
+async fn create_test_pipeline(
+) -> DefaultTeleologicalPipeline<InMemoryMultiEmbeddingExecutor, InMemoryTeleologicalStore> {
     let store = InMemoryTeleologicalStore::new();
     let provider = StubMultiArrayProvider::new();
 
@@ -87,10 +39,8 @@ async fn create_test_pipeline() -> DefaultTeleologicalPipeline<
         Arc::new(provider),
     ));
 
-    let alignment_calc = Arc::new(DefaultAlignmentCalculator::new());
-    let hierarchy = create_test_hierarchy();
-
-    DefaultTeleologicalPipeline::new(executor, alignment_calc, store_arc, hierarchy)
+    // Pipeline no longer requires GoalHierarchy - topics emerge from clustering
+    DefaultTeleologicalPipeline::new(executor, store_arc)
 }
 
 #[tokio::test]
@@ -99,7 +49,8 @@ async fn test_pipeline_creation() {
     let health = pipeline.health_check().await.unwrap();
 
     assert_eq!(health.spaces_available, 13);
-    assert!(health.has_goal_hierarchy);
+    // has_goal_hierarchy is always false now - topics emerge from clustering
+    assert!(!health.has_goal_hierarchy);
 
     println!("[VERIFIED] Pipeline created with all components");
 }
@@ -185,53 +136,13 @@ async fn test_timing_breakdown() {
     println!("[VERIFIED] All pipeline stages have timing measurements");
 }
 
-#[tokio::test]
-async fn test_alignment_level_in_results() {
-    let pipeline = create_test_pipeline().await;
-
-    let query = TeleologicalQuery::from_text("alignment test");
-    let result = pipeline.execute(&query).await.unwrap();
-
-    for scored in &result.results {
-        let level = scored.alignment_threshold();
-        match level {
-            AlignmentLevel::Optimal => assert!(scored.goal_alignment >= 0.75),
-            AlignmentLevel::Acceptable => {
-                assert!(scored.goal_alignment >= 0.70 && scored.goal_alignment < 0.75)
-            }
-            AlignmentLevel::Warning => {
-                assert!(scored.goal_alignment >= 0.55 && scored.goal_alignment < 0.70)
-            }
-            AlignmentLevel::Critical => assert!(scored.goal_alignment < 0.55),
-        }
-    }
-
-    println!("[VERIFIED] Alignment levels correctly classified");
-}
-
-#[tokio::test]
-async fn test_misaligned_count() {
-    let pipeline = create_test_pipeline().await;
-
-    let query = TeleologicalQuery::from_text("misalignment test");
-    let result = pipeline.execute(&query).await.unwrap();
-
-    let misaligned = result.misaligned_count();
-    let manual_count = result.results.iter().filter(|r| r.is_misaligned).count();
-
-    assert_eq!(misaligned, manual_count);
-    println!(
-        "[VERIFIED] misaligned_count() = {} matches manual count",
-        misaligned
-    );
-}
 
 #[test]
 fn test_pipeline_health_defaults() {
     let health = PipelineHealth {
         is_healthy: true,
         spaces_available: 13,
-        has_goal_hierarchy: true,
+        has_goal_hierarchy: false, // No longer using goal hierarchy
         index_size: 1_000_000,
         last_query_time: Some(Duration::from_millis(45)),
     };

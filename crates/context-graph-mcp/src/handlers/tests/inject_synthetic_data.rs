@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use context_graph_core::traits::TeleologicalMemoryStore;
 use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 
 use context_graph_storage::teleological::RocksDbTeleologicalStore;
@@ -105,10 +105,11 @@ fn create_synthetic_fingerprint(content: &str, topic: &str) -> TeleologicalFinge
     // Create synthetic semantic fingerprint with varied embedding values
     let semantic = create_synthetic_semantic(content, &content_hash);
 
-    // Create purpose vector with varied alignment scores
-    let purpose_vector = create_synthetic_purpose_vector(topic);
+    // PurposeVector was removed from TeleologicalFingerprint
+    // topic parameter is no longer used for purpose alignment
+    let _ = topic; // Suppress unused variable warning
 
-    TeleologicalFingerprint::new(semantic, purpose_vector, content_hash)
+    TeleologicalFingerprint::new(semantic, content_hash)
 }
 
 /// Create synthetic SemanticFingerprint with realistic embedding patterns.
@@ -212,43 +213,8 @@ fn create_synthetic_semantic(content: &str, hash: &[u8; 32]) -> SemanticFingerpr
     }
 }
 
-/// Create synthetic purpose vector with topic-based alignment.
-fn create_synthetic_purpose_vector(topic: &str) -> PurposeVector {
-    // Different topics have different alignment patterns
-    let alignment_seed = match topic {
-        "machine_learning_fundamentals" => 0.85,
-        "distributed_systems" => 0.75,
-        "transformer_nlp" => 0.90,
-        "database_indexing" => 0.70,
-        "api_design" => 0.65,
-        "rust_memory_safety" => 0.80,
-        "vector_embeddings" => 0.95,
-        "cognitive_models" => 0.88,
-        "knowledge_graphs" => 0.82,
-        "teleological_systems" => 0.92,
-        _ => 0.5,
-    };
-
-    // Create varied alignments per embedder (13 embedders)
-    let alignments: [f32; NUM_EMBEDDERS] = [
-        alignment_seed * 0.9,  // E1 semantic
-        alignment_seed * 0.7,  // E2 temporal recent
-        alignment_seed * 0.65, // E3 temporal periodic
-        alignment_seed * 0.6,  // E4 temporal positional
-        alignment_seed * 0.75, // E5 causal
-        alignment_seed * 0.5,  // E6 sparse
-        alignment_seed * 0.8,  // E7 code
-        alignment_seed * 0.7,  // E8 graph
-        alignment_seed * 0.4,  // E9 hdc
-        alignment_seed * 0.55, // E10 multimodal
-        alignment_seed * 0.6,  // E11 entity
-        alignment_seed * 0.85, // E12 late interaction
-        alignment_seed * 0.5,  // E13 splade
-    ];
-
-    // Use the constructor which computes dominant_embedder and coherence
-    PurposeVector::new(alignments)
-}
+// NOTE: create_synthetic_purpose_vector was removed along with PurposeVector.
+// TeleologicalFingerprint no longer has a purpose_vector field.
 
 /// Inject synthetic data into the PRODUCTION database.
 ///
@@ -325,12 +291,11 @@ async fn inject_synthetic_production() {
             Ok(Some(fp)) => {
                 verified_count += 1;
                 println!(
-                    "  [{:2}] {} - theta={:.4}, coherence={:.4}, dominant_embedder={}",
+                    "  [{:2}] {} - access_count={}, hash={}...",
                     i + 1,
                     id,
-                    fp.alignment_score,
-                    fp.purpose_vector.coherence,
-                    fp.purpose_vector.dominant_embedder
+                    fp.access_count,
+                    hex::encode(&fp.content_hash[..8])
                 );
             }
             Ok(None) => {

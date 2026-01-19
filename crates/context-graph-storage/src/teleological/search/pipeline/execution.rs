@@ -1,7 +1,7 @@
 //! Main pipeline execution logic.
 //!
 //! This module contains the `RetrievalPipeline` struct and the core
-//! execution logic for the 5-stage retrieval pipeline.
+//! execution logic for the 4-stage retrieval pipeline.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -21,9 +21,9 @@ use super::types::{
 // RETRIEVAL PIPELINE
 // ============================================================================
 
-/// The 5-stage retrieval pipeline.
+/// The 4-stage retrieval pipeline.
 pub struct RetrievalPipeline {
-    /// Single embedder search (for Stages 2, 4).
+    /// Single embedder search (for Stage 2).
     single_search: SingleEmbedderSearch,
     /// Multi embedder search (for Stage 3).
     /// Currently unused - reserved for enhanced RRF with multiple embedders.
@@ -31,7 +31,7 @@ pub struct RetrievalPipeline {
     multi_search: MultiEmbedderSearch,
     /// SPLADE inverted index (for Stage 1).
     splade_index: Arc<dyn SpladeIndex>,
-    /// Token storage (for Stage 5 MaxSim).
+    /// Token storage (for Stage 4 MaxSim).
     token_storage: Arc<dyn TokenStorage>,
     /// Pipeline configuration.
     pub(crate) config: PipelineConfig,
@@ -80,19 +80,18 @@ impl RetrievalPipeline {
         &self.config
     }
 
-    /// Execute full 5-stage pipeline.
+    /// Execute full 4-stage pipeline.
     ///
     /// # Arguments
     /// * `query_splade` - Sparse vector for Stage 1 as (term_id, weight) pairs
     /// * `query_matryoshka` - 128D vector for Stage 2
     /// * `query_semantic` - 1024D vector for Stage 3 RRF
-    /// * `query_tokens` - Token embeddings for Stage 5 MaxSim (each 128D)
+    /// * `query_tokens` - Token embeddings for Stage 4 MaxSim (each 128D)
     ///
     /// # FAIL FAST Errors
     /// - `SearchError::InvalidVector` if query embeddings are invalid
     /// - `SearchError::DimensionMismatch` if query dimensions wrong
     /// - `PipelineError::Timeout` if any stage exceeds max_latency_ms
-    /// - `PipelineError::MissingPurposeVector` if Stage 4 enabled but no purpose vector
     pub fn execute(
         &self,
         query_splade: &[(usize, f32)],
@@ -119,10 +118,9 @@ impl RetrievalPipeline {
         stages: &[PipelineStage],
     ) -> Result<PipelineResult, PipelineError> {
         let pipeline_start = Instant::now();
-        let mut stage_results = Vec::with_capacity(5);
-        let mut stages_executed = Vec::with_capacity(5);
+        let mut stage_results = Vec::with_capacity(4);
+        let mut stages_executed = Vec::with_capacity(4);
         let mut candidates: Vec<PipelineCandidate> = Vec::new();
-        let mut alignment_verified = false;
 
         // Validate queries upfront - FAIL FAST
         self.validate_queries(query_matryoshka, query_semantic, query_tokens, stages)?;
@@ -203,31 +201,10 @@ impl RetrievalPipeline {
             stages_executed.push(PipelineStage::RrfRerank);
         }
 
-        // Stage 4: Alignment Filter
-        if stage_set.contains(&PipelineStage::AlignmentFilter) && self.config.stages[3].enabled {
-            let result = executor.stage_alignment_filter(candidates, &self.config.stages[3])?;
-            // Extract Copy fields before moving Vec
-            let latency_us = result.latency_us;
-            let candidates_in = result.candidates_in;
-            let candidates_out = result.candidates_out;
-            let stage = result.stage;
-            candidates = result.candidates;
-            let stage_result = StageResult {
-                candidates: Vec::new(),
-                latency_us,
-                candidates_in,
-                candidates_out,
-                stage,
-            };
-            stage_results.push(stage_result);
-            stages_executed.push(PipelineStage::AlignmentFilter);
-            alignment_verified = true;
-        }
-
-        // Stage 5: MaxSim Rerank
-        if stage_set.contains(&PipelineStage::MaxSimRerank) && self.config.stages[4].enabled {
+        // Stage 4: MaxSim Rerank
+        if stage_set.contains(&PipelineStage::MaxSimRerank) && self.config.stages[3].enabled {
             let result =
-                executor.stage_maxsim_rerank(query_tokens, candidates, &self.config.stages[4])?;
+                executor.stage_maxsim_rerank(query_tokens, candidates, &self.config.stages[3])?;
             // Extract Copy fields before moving Vec
             let latency_us = result.latency_us;
             let candidates_in = result.candidates_in;
@@ -255,7 +232,6 @@ impl RetrievalPipeline {
             stage_results,
             total_latency_us,
             stages_executed,
-            alignment_verified,
         })
     }
 
@@ -295,8 +271,8 @@ impl RetrievalPipeline {
             self.validate_vector(query_semantic, EmbedderIndex::E1Semantic)?;
         }
 
-        // Validate token dimensions (Stage 5)
-        if stage_set.contains(&PipelineStage::MaxSimRerank) && self.config.stages[4].enabled {
+        // Validate token dimensions (Stage 4)
+        if stage_set.contains(&PipelineStage::MaxSimRerank) && self.config.stages[3].enabled {
             for (i, token) in query_tokens.iter().enumerate() {
                 if token.len() != 128 {
                     return Err(SearchError::InvalidVector {
@@ -307,14 +283,6 @@ impl RetrievalPipeline {
                 }
                 self.validate_vector(token, EmbedderIndex::E12LateInteraction)?;
             }
-        }
-
-        // Validate purpose vector for Stage 4
-        if stage_set.contains(&PipelineStage::AlignmentFilter)
-            && self.config.stages[3].enabled
-            && self.config.purpose_vector.is_none()
-        {
-            return Err(PipelineError::MissingPurposeVector);
         }
 
         Ok(())

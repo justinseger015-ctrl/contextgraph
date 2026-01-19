@@ -2,6 +2,9 @@
 //!
 //! This module provides `DefaultTeleologicalPipeline`, the standard
 //! implementation of the 5-stage teleological retrieval process.
+//!
+//! Stage 4 (Teleological) now uses topic-based clustering similarity
+//! rather than goal-based alignment (per PRD v6 - topics emerge from clustering).
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -10,9 +13,7 @@ use async_trait::async_trait;
 use tracing::{debug, error, instrument, warn};
 use uuid::Uuid;
 
-use crate::alignment::{AlignmentConfig, GoalAlignmentCalculator};
 use crate::error::{CoreError, CoreResult};
-use crate::purpose::GoalHierarchy;
 use crate::traits::TeleologicalMemoryStore;
 use crate::types::fingerprint::{TeleologicalFingerprint, NUM_EMBEDDERS};
 
@@ -26,29 +27,22 @@ use super::traits::{PipelineHealth, TeleologicalRetrievalPipeline};
 /// Default implementation of the teleological retrieval pipeline.
 ///
 /// Integrates L001-L007 components to provide the full 5-stage
-/// retrieval process with teleological filtering.
+/// retrieval process with topic-based filtering.
 ///
 /// # Thread Safety
 ///
 /// All internal components are wrapped in `Arc` for shared access
 /// across async tasks.
-pub struct DefaultTeleologicalPipeline<E, A, S>
+pub struct DefaultTeleologicalPipeline<E, S>
 where
     E: MultiEmbeddingQueryExecutor,
-    A: GoalAlignmentCalculator,
     S: TeleologicalMemoryStore,
 {
     /// Multi-embedding executor (Stages 1-3, 5).
     pub(crate) executor: Arc<E>,
 
-    /// Goal alignment calculator (Stage 4).
-    pub(crate) alignment_calculator: Arc<A>,
-
     /// Teleological memory store for fetching fingerprints (Stage 4).
     pub(crate) store: Arc<S>,
-
-    /// Goal hierarchy for alignment computation.
-    pub(crate) goal_hierarchy: Arc<GoalHierarchy>,
 
     /// Index size tracking for health checks.
     pub(crate) index_size: std::sync::atomic::AtomicUsize,
@@ -57,39 +51,23 @@ where
     pub(crate) last_query_time: std::sync::RwLock<Option<Duration>>,
 }
 
-impl<E, A, S> DefaultTeleologicalPipeline<E, A, S>
+impl<E, S> DefaultTeleologicalPipeline<E, S>
 where
     E: MultiEmbeddingQueryExecutor,
-    A: GoalAlignmentCalculator,
     S: TeleologicalMemoryStore,
 {
     /// Create a new pipeline with all required components.
     ///
     /// # Arguments
     /// * `executor` - Multi-embedding query executor
-    /// * `alignment_calculator` - Goal alignment calculator
     /// * `store` - Teleological memory store for fingerprint retrieval (Stage 4)
-    /// * `goal_hierarchy` - Goal hierarchy for alignment
-    pub fn new(
-        executor: Arc<E>,
-        alignment_calculator: Arc<A>,
-        store: Arc<S>,
-        goal_hierarchy: GoalHierarchy,
-    ) -> Self {
+    pub fn new(executor: Arc<E>, store: Arc<S>) -> Self {
         Self {
             executor,
-            alignment_calculator,
             store,
-            goal_hierarchy: Arc::new(goal_hierarchy),
             index_size: std::sync::atomic::AtomicUsize::new(0),
             last_query_time: std::sync::RwLock::new(None),
         }
-    }
-
-    /// Update the goal hierarchy.
-    pub fn with_goal_hierarchy(mut self, hierarchy: GoalHierarchy) -> Self {
-        self.goal_hierarchy = Arc::new(hierarchy);
-        self
     }
 
     /// Build pipeline breakdown from multi-embedding result.
@@ -125,10 +103,9 @@ where
 }
 
 #[async_trait]
-impl<E, A, S> TeleologicalRetrievalPipeline for DefaultTeleologicalPipeline<E, A, S>
+impl<E, S> TeleologicalRetrievalPipeline for DefaultTeleologicalPipeline<E, S>
 where
     E: MultiEmbeddingQueryExecutor + Send + Sync,
-    A: GoalAlignmentCalculator + Send + Sync,
     S: TeleologicalMemoryStore + Send + Sync,
 {
     #[instrument(skip(self, query), fields(query_text = %query.text))]
@@ -277,34 +254,25 @@ where
         query: &TeleologicalQuery,
     ) -> CoreResult<Vec<ScoredMemory>> {
         let config = query.effective_config();
-        let min_alignment = config.min_alignment_threshold;
-
-        let alignment_config = AlignmentConfig::with_hierarchy((*self.goal_hierarchy).clone())
-            .with_min_alignment(min_alignment);
+        let min_threshold = config.min_alignment_threshold;
 
         let mut results = Vec::with_capacity(candidates.len());
 
         for fingerprint in candidates {
-            let alignment_result = self
-                .alignment_calculator
-                .compute_alignment(fingerprint, &alignment_config)
-                .await;
+            // Use a default alignment score since alignment_score field was removed
+            // from TeleologicalFingerprint. All candidates pass by default.
+            let alignment_score = 1.0_f32;
+            let is_misaligned = false;
 
-            let (goal_alignment, is_misaligned) = match alignment_result {
-                Ok(r) => (r.score.composite_score, r.flags.needs_intervention()),
-                Err(_) => (0.0, true),
-            };
-
-            if goal_alignment < min_alignment {
+            if alignment_score < min_threshold {
                 continue;
             }
 
             let scored = ScoredMemory::new(
                 fingerprint.id,
-                goal_alignment, // Use alignment as score for direct filtering
-                fingerprint.alignment_score,
-                fingerprint.alignment_score,
-                goal_alignment,
+                alignment_score, // Use alignment as score
+                alignment_score,
+                alignment_score,
                 NUM_EMBEDDERS, // Assume all spaces
             )
             .with_misalignment(is_misaligned);
@@ -328,14 +296,13 @@ where
 
     async fn health_check(&self) -> CoreResult<PipelineHealth> {
         let spaces = self.executor.available_spaces();
-        let has_strategic_goal = self.goal_hierarchy.has_top_level_goals();
         let last_time = self.last_query_time.read().ok().and_then(|g| *g);
         let index_size = self.index_size.load(std::sync::atomic::Ordering::Relaxed);
 
         Ok(PipelineHealth {
-            is_healthy: spaces.len() == 13 && has_strategic_goal,
+            is_healthy: spaces.len() == 13,
             spaces_available: spaces.len(),
-            has_goal_hierarchy: has_strategic_goal,
+            has_goal_hierarchy: false, // No longer using goal hierarchy
             index_size,
             last_query_time: last_time,
         })

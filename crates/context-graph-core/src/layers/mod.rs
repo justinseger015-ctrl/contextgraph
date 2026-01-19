@@ -3,11 +3,10 @@
 //! These are PRODUCTION implementations that replace the stubs.
 //! Each layer implements the `NervousLayer` trait with real processing logic.
 //!
-//! # Layers
+//! # Layers (4-Layer System)
 //!
 //! - [`SensingLayer`] - L1 Multi-modal input processing with PII scrubbing
-//! - [`ReflexLayer`] - L2 Modern Hopfield Network cache for instant responses
-//! - [`MemoryLayer`] - L3 Modern Hopfield Network associative memory with decay scoring
+//! - [`MemoryLayer`] - L3 Associative Network associative memory with decay scoring
 //! - [`LearningLayer`] - L4 UTL-driven weight optimization with consolidation triggers
 //! - [`CoherenceLayer`] - L5 Per-space clustering coordination and Global Workspace broadcast
 //!
@@ -16,17 +15,13 @@
 //! Per SEC-01/SEC-02: All input is validated and sanitized via PII scrubber.
 //! Per AP-007: No mock data, no fallbacks - errors fail fast.
 //! Per AP-009: NaN/Infinity rejected in UTL computations.
-//! Per Perf: Reflex layer latency <100us, Memory layer <1ms, Learning/Coherence <10ms.
+//! Per Perf: Memory layer <1ms, Learning/Coherence <10ms.
 
 mod coherence;
 mod learning;
 mod memory;
-mod reflex;
 mod sensing;
 mod thresholds;
-
-#[cfg(test)]
-mod tests_full_state_verification;
 
 pub use coherence::{
     CoherenceLayer, CoherenceState, GlobalWorkspace, GwtThresholds, INTEGRATION_STEPS,
@@ -45,12 +40,6 @@ pub use memory::MIN_MEMORY_SIMILARITY;
 pub use memory::{
     AssociativeMemory, MemoryContent, MemoryLayer, ScoredMemory, StoredMemory,
     DECAY_HALF_LIFE_HOURS, DEFAULT_MAX_RETRIEVE, DEFAULT_MHN_BETA, MEMORY_PATTERN_DIM,
-};
-#[allow(deprecated)]
-pub use reflex::MIN_HIT_SIMILARITY;
-pub use reflex::{
-    CacheStats, CachedResponse, ModernHopfieldCache, ReflexLayer, DEFAULT_BETA,
-    DEFAULT_CACHE_CAPACITY, PATTERN_DIM,
 };
 pub use sensing::{PiiPattern, PiiScrubber, ScrubbedContent, SensingLayer, SensingMetrics};
 pub use thresholds::LayerThresholds;

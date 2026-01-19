@@ -210,7 +210,7 @@ impl Default for PipelineStageConfig {
             teleological_limit: 50,
             late_interaction_limit: 20,
             rrf_k: pipeline::DEFAULT_RRF_K,
-            min_alignment_threshold: pipeline::DEFAULT_MIN_ALIGNMENT,
+            min_alignment_threshold: 0.55, // Critical threshold from constitution.yaml
         }
     }
 }

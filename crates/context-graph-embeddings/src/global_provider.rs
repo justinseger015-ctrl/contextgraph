@@ -64,100 +64,38 @@ struct ProviderState {
 }
 
 // =============================================================================
-// CUDA-specific implementation
+// CUDA-specific implementation - Uses ProductionMultiArrayProvider directly
 // =============================================================================
 
 #[cfg(feature = "cuda")]
 mod cuda_impl {
     use super::*;
-    use crate::warm::{WarmConfig, WarmEmbeddingPipeline, WarmError};
+    use std::path::PathBuf;
+    use crate::config::GpuConfig;
+    use crate::provider::ProductionMultiArrayProvider;
 
-    /// Provider adapter that implements MultiArrayEmbeddingProvider by wrapping
-    /// the WarmEmbeddingPipeline's registry to perform actual embeddings.
-    pub(crate) struct WarmPipelineProvider {
-        pipeline: WarmEmbeddingPipeline,
-    }
-
-    impl WarmPipelineProvider {
-        pub fn new(pipeline: WarmEmbeddingPipeline) -> Self {
-            Self { pipeline }
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl MultiArrayEmbeddingProvider for WarmPipelineProvider {
-        async fn embed_all(
-            &self,
-            _content: &str,
-        ) -> context_graph_core::error::CoreResult<context_graph_core::traits::MultiArrayEmbeddingOutput>
-        {
-            // Check if pipeline is ready (includes model warm check)
-            if !self.pipeline.is_ready() {
-                let health = self.pipeline.health();
-                return Err(context_graph_core::error::CoreError::Internal(format!(
-                    "Warm pipeline not ready: {}/{} models warm, {} failed, {} loading",
-                    health.models_warm, health.models_total, health.models_failed, health.models_loading
-                )));
-            }
-
-            // TASK-EMB-016: The warm loading infrastructure stores ModelHandle with VRAM pointers,
-            // but doesn't yet have a full inference path. The WarmEmbeddingPipeline needs to
-            // be enhanced to support the embed_all() operation using the warm-loaded weights.
-            //
-            // This is a placeholder - the actual implementation would use the warm registry's
-            // model handles to perform inference. For now, return a clear error.
-            Err(context_graph_core::error::CoreError::NotImplemented(
-                "WarmPipelineProvider::embed_all requires WarmEmbeddingPipeline to support inference. \
-                 The warm loading infrastructure loads models to VRAM but inference path is not yet connected."
-                    .to_string(),
-            ))
+    /// Resolve models directory path.
+    ///
+    /// Priority:
+    /// 1. CONTEXT_GRAPH_MODELS_PATH environment variable
+    /// 2. ./models relative to current directory
+    fn resolve_models_dir() -> PathBuf {
+        if let Ok(path) = std::env::var("CONTEXT_GRAPH_MODELS_PATH") {
+            let p = PathBuf::from(&path);
+            tracing::info!("Using models path from CONTEXT_GRAPH_MODELS_PATH: {:?}", p);
+            return p;
         }
 
-        async fn embed_batch_all(
-            &self,
-            _contents: &[String],
-        ) -> context_graph_core::error::CoreResult<
-            Vec<context_graph_core::traits::MultiArrayEmbeddingOutput>,
-        > {
-            Err(context_graph_core::error::CoreError::NotImplemented(
-                "WarmPipelineProvider::embed_batch_all requires WarmEmbeddingPipeline to support inference."
-                    .to_string(),
-            ))
-        }
-
-        fn model_ids(&self) -> [&str; context_graph_core::types::fingerprint::NUM_EMBEDDERS] {
-            [
-                "E1_Semantic",
-                "E2_TemporalRecent",
-                "E3_TemporalPeriodic",
-                "E4_TemporalPositional",
-                "E5_Causal",
-                "E6_Sparse",
-                "E7_Code",
-                "E8_Graph",
-                "E9_HDC",
-                "E10_Multimodal",
-                "E11_Entity",
-                "E12_LateInteraction",
-                "E13_Splade",
-            ]
-        }
-
-        fn is_ready(&self) -> bool {
-            self.pipeline.is_ready()
-        }
-
-        fn health_status(&self) -> [bool; context_graph_core::types::fingerprint::NUM_EMBEDDERS] {
-            // All models should be warm if pipeline is ready
-            if self.pipeline.is_ready() {
-                [true; context_graph_core::types::fingerprint::NUM_EMBEDDERS]
-            } else {
-                [false; context_graph_core::types::fingerprint::NUM_EMBEDDERS]
-            }
-        }
+        // Default: ./models relative to current directory
+        let default_path = PathBuf::from("./models");
+        tracing::info!("Using default models path: {:?}", default_path);
+        default_path
     }
 
     /// Initialize the global warm provider (CUDA version).
+    ///
+    /// Uses ProductionMultiArrayProvider which loads all 13 models eagerly.
+    /// NO STUBS - real GPU inference with fail-fast error handling.
     ///
     /// MUST be called ONCE at startup before any embedding operations.
     /// Subsequent calls are no-ops if initialization succeeded.
@@ -179,101 +117,58 @@ mod cuda_impl {
             });
         }
 
-        tracing::info!("Initializing global warm provider (loading 13 models to VRAM)...");
+        tracing::info!("Initializing global warm provider with ProductionMultiArrayProvider...");
+        tracing::info!("Loading all 13 embedding models to GPU VRAM (this takes 20-30 seconds)...");
 
-        let config = WarmConfig::default();
+        let models_dir = resolve_models_dir();
+        let gpu_config = GpuConfig::default();
 
-        // Create and warm the pipeline
-        // Note: WarmEmbeddingPipeline::create_and_warm() calls std::process::exit() on fatal errors.
-        // We use the non-exiting warm() method instead for better error handling.
-        let pipeline = match WarmEmbeddingPipeline::new(config) {
-            Ok(mut p) => {
-                if let Err(e) = p.warm() {
-                    let err_msg = format!("Warm loading failed: {}", e);
-                    tracing::error!("{}", err_msg);
-                    guard.init_error = Some(err_msg.clone());
-                    return Err(convert_warm_error(e));
-                }
-                p
-            }
-            Err(e) => {
-                let err_msg = format!("Failed to create WarmEmbeddingPipeline: {}", e);
-                tracing::error!("{}", err_msg);
-                guard.init_error = Some(err_msg.clone());
-                return Err(convert_warm_error(e));
-            }
-        };
-
-        // Verify health
-        if !pipeline.is_ready() {
-            let health = pipeline.health();
+        // Verify models directory exists
+        if !models_dir.exists() {
             let err_msg = format!(
-                "Pipeline not ready after warm loading: {} warm, {} failed, {} loading",
-                health.models_warm, health.models_failed, health.models_loading
+                "Models directory not found: {:?}. Set CONTEXT_GRAPH_MODELS_PATH or ensure ./models exists.",
+                models_dir
             );
             tracing::error!("{}", err_msg);
             guard.init_error = Some(err_msg.clone());
             return Err(EmbeddingError::InternalError { message: err_msg });
         }
 
-        // Create provider wrapper
-        let provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(WarmPipelineProvider::new(pipeline));
+        // Create ProductionMultiArrayProvider - this loads all 13 models
+        // NO FALLBACKS - if this fails, the system is not functional
+        let provider = match ProductionMultiArrayProvider::new(models_dir.clone(), gpu_config).await {
+            Ok(p) => p,
+            Err(e) => {
+                let err_msg = format!(
+                    "Failed to create ProductionMultiArrayProvider: {}. \
+                     Models dir: {:?}. Ensure all 13 model files exist and CUDA GPU is available.",
+                    e, models_dir
+                );
+                tracing::error!("{}", err_msg);
+                guard.init_error = Some(err_msg.clone());
+                return Err(e);
+            }
+        };
+
+        // Verify provider is ready
+        if !provider.is_ready() {
+            let health = provider.health_status();
+            let ready_count = health.iter().filter(|&&h| h).count();
+            let err_msg = format!(
+                "ProductionMultiArrayProvider not ready after initialization: {}/13 models ready",
+                ready_count
+            );
+            tracing::error!("{}", err_msg);
+            guard.init_error = Some(err_msg.clone());
+            return Err(EmbeddingError::InternalError { message: err_msg });
+        }
+
+        // Store the provider
+        let provider: Arc<dyn MultiArrayEmbeddingProvider> = Arc::new(provider);
         guard.provider = Some(provider);
 
-        tracing::info!("Global warm provider initialized successfully - all 13 models warm");
+        tracing::info!("Global warm provider initialized successfully - all 13 models loaded to VRAM");
         Ok(())
-    }
-
-    /// Convert WarmError to EmbeddingError.
-    pub fn convert_warm_error(err: WarmError) -> EmbeddingError {
-        match err {
-            WarmError::CudaUnavailable { message } => EmbeddingError::CudaUnavailable { message },
-            WarmError::CudaInitFailed {
-                cuda_error,
-                driver_version: _,
-                gpu_name: _,
-            } => EmbeddingError::GpuError {
-                message: format!("CUDA initialization failed: {}", cuda_error),
-            },
-            WarmError::CudaCapabilityInsufficient {
-                actual_cc,
-                required_cc,
-                gpu_name,
-            } => EmbeddingError::GpuError {
-                message: format!(
-                    "GPU {} has compute capability {} but {} is required",
-                    gpu_name, actual_cc, required_cc
-                ),
-            },
-            WarmError::VramInsufficientTotal {
-                required_bytes,
-                available_bytes,
-                required_gb,
-                available_gb,
-                model_breakdown: _,
-            } => EmbeddingError::InsufficientVram {
-                required_bytes,
-                available_bytes,
-                required_gb,
-                available_gb,
-            },
-            WarmError::ModelFileMissing { model_id, path } => EmbeddingError::InternalError {
-                message: format!("Model {} not found at {}", model_id, path),
-            },
-            WarmError::ModelLoadFailed {
-                model_id, reason, ..
-            } => EmbeddingError::InternalError {
-                message: format!("Model {} failed to load: {}", model_id, reason),
-            },
-            WarmError::ModelValidationFailed {
-                model_id, reason, ..
-            } => EmbeddingError::InternalError {
-                message: format!("Model {} validation failed: {}", model_id, reason),
-            },
-            _ => EmbeddingError::InternalError {
-                message: format!("Warm loading error: {}", err),
-            },
-        }
     }
 }
 
@@ -460,25 +355,4 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "cuda")]
-    #[tokio::test]
-    async fn test_convert_warm_error() {
-        use crate::warm::WarmError;
-
-        let cuda_err = WarmError::CudaUnavailable {
-            message: "No GPU".to_string(),
-        };
-        let emb_err = cuda_impl::convert_warm_error(cuda_err);
-        assert!(matches!(emb_err, EmbeddingError::CudaUnavailable { .. }));
-
-        let vram_err = WarmError::VramInsufficientTotal {
-            required_bytes: 1000,
-            available_bytes: 500,
-            required_gb: 1.0,
-            available_gb: 0.5,
-            model_breakdown: vec![],
-        };
-        let emb_err = cuda_impl::convert_warm_error(vram_err);
-        assert!(matches!(emb_err, EmbeddingError::InsufficientVram { .. }));
-    }
 }

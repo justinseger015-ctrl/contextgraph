@@ -10,7 +10,6 @@ use context_graph_core::autonomous::{
     ConsolidationConfig, ConsolidationService, MemoryContent, MemoryId, MemoryPair,
 };
 use context_graph_core::traits::TeleologicalSearchOptions;
-use context_graph_core::types::fingerprint::PurposeVector;
 
 use crate::handlers::Handlers;
 use crate::protocol::{JsonRpcId, JsonRpcResponse};
@@ -96,13 +95,13 @@ impl Handlers {
             "trigger_consolidation: Parsed parameters"
         );
 
-        // Get fingerprints from store
+        // Get fingerprints from store using text search with a generic query
+        // This retrieves up to max_memories fingerprints for consolidation analysis
         let search_options = TeleologicalSearchOptions::quick(params.max_memories);
-        let default_query = PurposeVector::default();
 
         let search_results = match self
             .teleological_store
-            .search_purpose(&default_query, search_options)
+            .search_text("", search_options)
             .await
         {
             Ok(results) => results,
@@ -133,11 +132,14 @@ impl Handlers {
             // Use E1 (semantic 1024D) embedding for comparison
             let embedding = fp.semantic.e1_semantic.clone();
 
+            // Use result similarity as alignment proxy (no PurposeVector available)
+            let alignment = result.similarity;
+
             let content = MemoryContent::new(
                 MemoryId(fp.id),
                 embedding,
                 String::new(),
-                fp.alignment_score,
+                alignment,
             )
             .with_access_count(fp.access_count as u32);
 

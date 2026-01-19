@@ -11,7 +11,7 @@ use crate::traits::NervousLayer;
 use crate::types::LayerInput;
 
 use super::{
-    StubCoherenceLayer, StubLearningLayer, StubMemoryLayer, StubReflexLayer, StubSensingLayer,
+    StubCoherenceLayer, StubLearningLayer, StubMemoryLayer, StubSensingLayer,
 };
 
 // =============================================================================
@@ -50,7 +50,6 @@ async fn test_edge_case_empty_input_all_layers() {
 
     let layers: Vec<(Box<dyn NervousLayer>, &str)> = vec![
         (Box::new(StubSensingLayer::new()), "Sensing"),
-        (Box::new(StubReflexLayer::new()), "Reflex"),
         (Box::new(StubMemoryLayer::new()), "Memory"),
         (Box::new(StubLearningLayer::new()), "Learning"),
         (Box::new(StubCoherenceLayer::new()), "Coherence"),
@@ -110,7 +109,6 @@ async fn test_edge_case_various_inputs() {
 
     let layers: Vec<(Box<dyn NervousLayer>, &str)> = vec![
         (Box::new(StubSensingLayer::new()), "Sensing"),
-        (Box::new(StubReflexLayer::new()), "Reflex"),
         (Box::new(StubMemoryLayer::new()), "Memory"),
         (Box::new(StubLearningLayer::new()), "Learning"),
         (Box::new(StubCoherenceLayer::new()), "Coherence"),
@@ -148,7 +146,6 @@ async fn test_edge_case_health_check() {
 
     let layers: Vec<(Box<dyn NervousLayer>, &str)> = vec![
         (Box::new(StubSensingLayer::new()), "Sensing"),
-        (Box::new(StubReflexLayer::new()), "Reflex"),
         (Box::new(StubMemoryLayer::new()), "Memory"),
         (Box::new(StubLearningLayer::new()), "Learning"),
         (Box::new(StubCoherenceLayer::new()), "Coherence"),
@@ -175,13 +172,11 @@ fn test_source_of_truth_module_structure() {
 
     // Verify all types are accessible from the expected paths
     let _sensing: StubSensingLayer = StubSensingLayer::new();
-    let _reflex: StubReflexLayer = StubReflexLayer::new();
     let _memory: StubMemoryLayer = StubMemoryLayer::new();
     let _learning: StubLearningLayer = StubLearningLayer::new();
     let _coherence: StubCoherenceLayer = StubCoherenceLayer::new();
 
     println!("StubSensingLayer: accessible");
-    println!("StubReflexLayer: accessible");
     println!("StubMemoryLayer: accessible");
     println!("StubLearningLayer: accessible");
     println!("StubCoherenceLayer: accessible");
@@ -199,7 +194,6 @@ fn test_source_of_truth_layer_names() {
 
     let layers: Vec<(Box<dyn NervousLayer>, &str)> = vec![
         (Box::new(StubSensingLayer::new()), "Sensing"),
-        (Box::new(StubReflexLayer::new()), "Reflex"),
         (Box::new(StubMemoryLayer::new()), "Memory"),
         (Box::new(StubLearningLayer::new()), "Learning"),
         (Box::new(StubCoherenceLayer::new()), "Coherence"),

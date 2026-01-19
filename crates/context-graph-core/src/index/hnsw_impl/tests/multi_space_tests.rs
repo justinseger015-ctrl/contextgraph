@@ -40,9 +40,10 @@ async fn test_multi_space_initialize() {
         manager.status().len()
     );
 
-    assert_eq!(manager.status().len(), 13);
+    // 11 HNSW + 1 SPLADE = 12 total
+    assert_eq!(manager.status().len(), 12);
 
-    println!("[VERIFIED] Initialize creates all 12 HNSW indexes + 1 SPLADE");
+    println!("[VERIFIED] Initialize creates all 11 HNSW indexes + 1 SPLADE");
 }
 
 #[tokio::test]
@@ -104,7 +105,7 @@ async fn test_multi_space_add_fingerprint() {
         statuses.iter().map(|s| s.element_count).sum::<usize>()
     );
 
-    assert_eq!(statuses.len(), 13);
+    assert_eq!(statuses.len(), 12);
 
     let e1_status = statuses
         .iter()
@@ -172,31 +173,6 @@ async fn test_multi_space_search_matryoshka() {
 }
 
 #[tokio::test]
-async fn test_multi_space_search_purpose() {
-    let mut manager = HnswMultiSpaceIndex::new();
-    manager.initialize().await.unwrap();
-
-    let id = Uuid::new_v4();
-    let purpose_vec = random_vector(13);
-
-    println!("[BEFORE] Adding and searching purpose vector");
-    manager.add_purpose_vector(id, &purpose_vec).await.unwrap();
-
-    let results = manager.search_purpose(&purpose_vec, 10).await.unwrap();
-    println!(
-        "[AFTER] Found {} results, top similarity = {}",
-        results.len(),
-        results.first().map(|r| r.1).unwrap_or(0.0)
-    );
-
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].0, id);
-    assert!(results[0].1 > 0.99);
-
-    println!("[VERIFIED] search_purpose works with high self-similarity");
-}
-
-#[tokio::test]
 async fn test_multi_space_search_splade() {
     let mut manager = HnswMultiSpaceIndex::new();
     manager.initialize().await.unwrap();
@@ -259,12 +235,12 @@ async fn test_status_returns_all_indexes() {
     let statuses = manager.status();
     println!("[STATUS] {} index statuses returned", statuses.len());
 
-    assert_eq!(statuses.len(), 13);
+    assert_eq!(statuses.len(), 12);
 
     for status in &statuses {
         assert_eq!(status.health, IndexHealth::Healthy);
         println!("  {:?}: {} elements", status.embedder, status.element_count);
     }
 
-    println!("[VERIFIED] status() returns all 13 indexes");
+    println!("[VERIFIED] status() returns all 12 indexes");
 }

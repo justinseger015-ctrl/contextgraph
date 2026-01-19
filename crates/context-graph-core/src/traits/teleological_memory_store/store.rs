@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::error::CoreResult;
 use crate::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 
 use super::backend::TeleologicalStorageBackend;
@@ -23,7 +23,6 @@ use super::result::TeleologicalSearchResult;
 /// and searching TeleologicalFingerprints. Implementations must support:
 /// - Full CRUD operations with soft/hard delete
 /// - Multi-space semantic search
-/// - Purpose vector alignment search
 /// - Sparse (SPLADE) search for efficient recall
 /// - Batch operations for throughput
 /// - Persistence and recovery
@@ -125,26 +124,6 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     async fn search_semantic(
         &self,
         query: &SemanticFingerprint,
-        options: TeleologicalSearchOptions,
-    ) -> CoreResult<Vec<TeleologicalSearchResult>>;
-
-    /// Search by purpose vector alignment.
-    ///
-    /// Finds fingerprints with similar purpose alignment to Strategic goals.
-    /// Used in Stage 5 (Teleological) of the retrieval pipeline.
-    ///
-    /// # Arguments
-    /// * `query` - The purpose vector to match
-    /// * `options` - Search options (top_k, filters, etc.)
-    ///
-    /// # Returns
-    /// Vector of search results sorted by purpose alignment (descending).
-    ///
-    /// # Errors
-    /// - `CoreError::StorageError` - Storage backend failure
-    async fn search_purpose(
-        &self,
-        query: &PurposeVector,
         options: TeleologicalSearchOptions,
     ) -> CoreResult<Vec<TeleologicalSearchResult>>;
 

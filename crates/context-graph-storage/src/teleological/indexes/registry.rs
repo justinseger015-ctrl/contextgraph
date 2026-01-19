@@ -13,7 +13,7 @@
 //! +----------------------------+
 //! | indexes: HashMap<          |
 //! |   EmbedderIndex,           |
-//! |   Arc<HnswEmbedderIndex>   |  (12 indexes)
+//! |   Arc<HnswEmbedderIndex>   |  (11 indexes)
 //! | >                          |
 //! +----------------------------+
 //!         |
@@ -21,7 +21,7 @@
 //! +----------------------------+
 //! | E1 | E2 | E3 | E4 | E5 |   |  (HNSW indexes)
 //! | E7 | E8 | E9 | E10| E11|   |
-//! | Matryoshka | PurposeVector |
+//! | Matryoshka |               |
 //! +----------------------------+
 //!
 //! NOT INCLUDED (use other index types):
@@ -39,7 +39,7 @@ use super::hnsw_impl::HnswEmbedderIndex;
 
 /// Registry for per-embedder HNSW indexes.
 ///
-/// Creates and manages 12 HNSW indexes (excludes E6, E12, E13 which use different index types).
+/// Creates and manages 11 HNSW indexes (excludes E6, E12, E13 which use different index types).
 ///
 /// # Thread Safety
 ///
@@ -73,9 +73,9 @@ pub struct EmbedderIndexRegistry {
 }
 
 impl EmbedderIndexRegistry {
-    /// Create new registry with all 12 HNSW indexes.
+    /// Create new registry with all 11 HNSW indexes.
     ///
-    /// Initializes indexes for E1-E5, E7-E11, Matryoshka, and PurposeVector.
+    /// Initializes indexes for E1-E5, E7-E11, and Matryoshka.
     /// E6, E12, E13 are excluded (they use inverted/MaxSim indexes).
     ///
     /// # Example
@@ -84,12 +84,12 @@ impl EmbedderIndexRegistry {
     /// use context_graph_storage::teleological::indexes::EmbedderIndexRegistry;
     ///
     /// let registry = EmbedderIndexRegistry::new();
-    /// assert_eq!(registry.len(), 12);
+    /// assert_eq!(registry.len(), 11);
     /// ```
     pub fn new() -> Self {
         let mut indexes = HashMap::new();
 
-        // Create all 12 HNSW-capable indexes
+        // Create all 11 HNSW-capable indexes
         for embedder in EmbedderIndex::all_hnsw() {
             let index = HnswEmbedderIndex::new(embedder);
             indexes.insert(embedder, Arc::new(index));
@@ -179,7 +179,7 @@ impl EmbedderIndexRegistry {
             .map(|arc| Arc::clone(arc) as Arc<dyn EmbedderIndexOps>)
     }
 
-    /// Number of indexes in the registry (always 12).
+    /// Number of indexes in the registry (always 11).
     pub fn len(&self) -> usize {
         self.indexes.len()
     }

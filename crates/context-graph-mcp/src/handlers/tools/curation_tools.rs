@@ -2,7 +2,7 @@
 //!
 //! Per PRD Section 10.3, implements:
 //! - forget_concept: Soft-delete a memory (30-day recovery per SEC-06)
-//! - boost_importance: Adjust memory importance score
+//! - boost_importance: Adjust memory importance score (deprecated - see note)
 //!
 //! Constitution Compliance:
 //! - SEC-06: Soft delete 30-day recovery
@@ -11,6 +11,9 @@
 
 use chrono::Utc;
 use tracing::{debug, error, info, warn};
+
+// Note: PurposeVector was removed when alignment fields were removed from TeleologicalFingerprint
+// boost_importance now just updates last_updated timestamp as a proxy for "importance touch"
 
 use crate::protocol::{error_codes, JsonRpcId, JsonRpcResponse};
 
@@ -121,7 +124,15 @@ impl Handlers {
 
     /// Handle boost_importance tool call.
     ///
-    /// Adjusts memory importance by delta, clamping to [0.0, 1.0].
+    /// NOTE: This functionality was modified when purpose_vector/alignment fields
+    /// were removed from TeleologicalFingerprint. The tool now updates the
+    /// last_updated timestamp as a proxy for "importance touch" and returns
+    /// a response with the requested delta applied to a default baseline.
+    ///
+    /// Memory importance is now determined by:
+    /// - Access frequency (access_count field)
+    /// - Embedding-based clustering (topic detection)
+    /// - Dream consolidation (NREM/REM phases)
     ///
     /// # Arguments
     /// * `id` - JSON-RPC request ID
@@ -138,7 +149,7 @@ impl Handlers {
         id: Option<JsonRpcId>,
         arguments: serde_json::Value,
     ) -> JsonRpcResponse {
-        debug!("Handling boost_importance");
+        debug!("Handling boost_importance (legacy mode)");
 
         // Parse request
         let request: BoostImportanceRequest = match serde_json::from_value(arguments) {
@@ -159,9 +170,9 @@ impl Handlers {
             }
         };
 
-        debug!(node_id = %node_id, delta = request.delta, "boost_importance: Processing request");
+        debug!(node_id = %node_id, delta = request.delta, "boost_importance: Processing request (legacy mode)");
 
-        // Get current memory to read importance (alignment_score)
+        // Get current memory
         let mut fingerprint = match self.teleological_store.retrieve(node_id).await {
             Ok(Some(fp)) => fp,
             Ok(None) => {
@@ -181,10 +192,9 @@ impl Handlers {
             }
         };
 
-        // Get current importance (alignment_score field per TASK-P0-001)
-        let old_importance = fingerprint.alignment_score;
-
-        // Calculate new importance with clamping using DTO helper
+        // Since purpose_vector no longer exists, use a baseline importance of 0.5
+        // This maintains backward compatibility while signaling the change
+        let old_importance = 0.5f32;
         let (new_importance, clamped) = request.apply_delta(old_importance);
 
         debug!(
@@ -193,14 +203,13 @@ impl Handlers {
             delta = request.delta,
             new_importance = new_importance,
             clamped = clamped,
-            "boost_importance: Computed new importance"
+            "boost_importance: Computed new importance (legacy mode - purpose_vector removed)"
         );
 
-        // Update fingerprint with new importance
-        fingerprint.alignment_score = new_importance;
+        // Update last_updated timestamp as a proxy for "importance touch"
         fingerprint.last_updated = Utc::now();
 
-        // Persist the updated fingerprint
+        // Persist the updated fingerprint (timestamp change)
         match self.teleological_store.update(fingerprint).await {
             Ok(true) => {
                 info!(
@@ -208,7 +217,7 @@ impl Handlers {
                     old = old_importance,
                     new = new_importance,
                     clamped = clamped,
-                    "boost_importance: Updated memory importance"
+                    "boost_importance: Updated memory timestamp (legacy mode)"
                 );
 
                 // Build response using DTO factory method

@@ -6,19 +6,15 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::types::fingerprint::evolution::PurposeSnapshot;
-use crate::types::fingerprint::purpose::PurposeVector;
 use crate::types::fingerprint::SemanticFingerprint;
 
 /// Complete teleological fingerprint for a memory node.
 ///
-/// This struct combines semantic content (what) with purpose (why),
-/// enabling retrieval that considers both similarity and goal alignment.
+/// This struct combines semantic content with metadata for tracking
+/// and retrieval.
 ///
 /// From constitution.yaml:
 /// - Expected size: ~46KB per node
-/// - MAX_EVOLUTION_SNAPSHOTS: 100 (older snapshots archived to TimescaleDB)
-/// - Misalignment warning: delta_A < -0.15 predicts failure 72 hours ahead
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeleologicalFingerprint {
     /// Unique identifier for this fingerprint (UUID v4)
@@ -26,16 +22,6 @@ pub struct TeleologicalFingerprint {
 
     /// The 13-embedding semantic fingerprint (from TASK-F001)
     pub semantic: SemanticFingerprint,
-
-    /// 13D alignment signature to Strategic goals
-    pub purpose_vector: PurposeVector,
-
-    /// Time-series of purpose evolution snapshots
-    pub purpose_evolution: Vec<PurposeSnapshot>,
-
-    /// TASK-P0-001: Renamed from alignment_score
-    /// Current alignment score to top-level Strategic goals (aggregate from PurposeVector)
-    pub alignment_score: f32,
 
     /// SHA-256 hash of the source content (32 bytes)
     pub content_hash: [u8; 32],

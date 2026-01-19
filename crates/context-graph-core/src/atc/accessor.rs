@@ -17,9 +17,8 @@ pub const THRESHOLD_NAMES: &[&str] = &[
     "theta_gate",
     "theta_hypersync",
     "theta_fragmentation",
-    // Layer thresholds (3)
+    // Layer thresholds (2)
     "theta_memory_sim",
-    "theta_reflex_hit",
     "theta_consolidation",
     // Dream thresholds (3)
     "theta_dream_activity",
@@ -69,7 +68,6 @@ impl ThresholdAccessor for AdaptiveThresholdCalibration {
             "theta_fragmentation" => thresholds.theta_fragmentation,
             // Layer thresholds
             "theta_memory_sim" => thresholds.theta_memory_sim,
-            "theta_reflex_hit" => thresholds.theta_reflex_hit,
             "theta_consolidation" => thresholds.theta_consolidation,
             // Dream thresholds
             "theta_dream_activity" => thresholds.theta_dream_activity,
@@ -163,8 +161,8 @@ mod tests {
         let names = AdaptiveThresholdCalibration::list_threshold_names();
         assert_eq!(
             names.len(),
-            19,
-            "Expected 19 threshold names, got {}",
+            18,
+            "Expected 18 threshold names, got {}",
             names.len()
         );
         assert!(names.contains(&"theta_opt"));

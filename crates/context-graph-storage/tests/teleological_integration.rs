@@ -9,9 +9,7 @@
 //! 3. E13 SPLADE inverted index operations work correctly
 //! 4. E1 Matryoshka 128D index operations work correctly
 
-use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS,
-};
+use context_graph_core::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint};
 use context_graph_storage::column_families::cf_names;
 use context_graph_storage::get_column_family_descriptors;
 use context_graph_storage::teleological::{
@@ -34,11 +32,6 @@ fn create_real_semantic() -> SemanticFingerprint {
     SemanticFingerprint::zeroed()
 }
 
-/// Create a REAL PurposeVector with specified alignment.
-fn create_real_purpose(alignment: f32) -> PurposeVector {
-    PurposeVector::new([alignment; NUM_EMBEDDERS])
-}
-
 /// Create a REAL content hash.
 fn create_real_hash() -> [u8; 32] {
     let mut hash = [0u8; 32];
@@ -51,7 +44,7 @@ fn create_real_hash() -> [u8; 32] {
 
 /// Create a REAL TeleologicalFingerprint.
 fn create_real_fingerprint() -> TeleologicalFingerprint {
-    TeleologicalFingerprint::new(create_real_semantic(), create_real_purpose(0.75), create_real_hash())
+    TeleologicalFingerprint::new(create_real_semantic(), create_real_hash())
 }
 
 // =========================================================================
@@ -134,11 +127,6 @@ fn test_rocksdb_store_retrieve_fingerprint() {
     let id = original.id;
 
     println!("BEFORE: Storing fingerprint {}", id);
-    println!("  - Alignment score: {:.4}", original.alignment_score);
-    println!(
-        "  - Evolution snapshots: {}",
-        original.purpose_evolution.len()
-    );
 
     // Store
     let cf = db
@@ -164,20 +152,10 @@ fn test_rocksdb_store_retrieve_fingerprint() {
 
     let retrieved = deserialize_teleological_fingerprint(&retrieved_bytes);
     println!("AFTER: Retrieved fingerprint {}", retrieved.id);
-    println!("  - Alignment score: {:.4}", retrieved.alignment_score);
-    println!(
-        "  - Evolution snapshots: {}",
-        retrieved.purpose_evolution.len()
-    );
 
     // Verify
     assert_eq!(original.id, retrieved.id);
     assert_eq!(original.content_hash, retrieved.content_hash);
-    assert!((original.alignment_score - retrieved.alignment_score).abs() < 1e-6);
-    assert_eq!(
-        original.purpose_evolution.len(),
-        retrieved.purpose_evolution.len()
-    );
 
     println!("RESULT: PASS - Store/retrieve round-trip successful");
 }

@@ -4,7 +4,7 @@
 //! TEST 10: Edge Cases
 
 use context_graph_core::traits::TeleologicalMemoryStore;
-use context_graph_core::types::fingerprint::{PurposeVector, SparseVector, NUM_EMBEDDERS};
+use context_graph_core::types::fingerprint::SparseVector;
 use context_graph_storage::teleological::{fingerprint_key, CF_FINGERPRINTS};
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -27,23 +27,18 @@ async fn test_update_and_delete_operations() {
     // Store initial fingerprint
     let fp = create_real_fingerprint();
     let id = fp.id;
-    let original_theta = fp.alignment_score;
 
     store.store(fp).await.expect("Failed to store");
-    println!(
-        "[STORED] Fingerprint {} with theta={:.4}",
-        id, original_theta
-    );
+    println!("[STORED] Fingerprint {}", id);
 
-    // Update the fingerprint with new purpose vector
+    // Update the fingerprint with new content hash
     let mut updated_fp = store
         .retrieve(id)
         .await
         .expect("Retrieve failed")
         .expect("Fingerprint not found");
 
-    let new_purpose = PurposeVector::new([0.95; NUM_EMBEDDERS]);
-    updated_fp.purpose_vector = new_purpose;
+    updated_fp.content_hash = [0xAB; 32];
 
     let update_result = store
         .update(updated_fp.clone())
@@ -58,11 +53,12 @@ async fn test_update_and_delete_operations() {
         .expect("Retrieve failed")
         .expect("Fingerprint not found after update");
 
-    assert!(
-        (after_update.purpose_vector.alignments[0] - 0.95).abs() < f32::EPSILON,
-        "Purpose vector should be updated"
+    assert_eq!(
+        after_update.content_hash,
+        [0xAB; 32],
+        "Content hash should be updated"
     );
-    println!("[UPDATED] Fingerprint {} purpose vector updated", id);
+    println!("[UPDATED] Fingerprint {} content hash updated", id);
 
     // Test soft delete
     let soft_deleted = store.delete(id, true).await.expect("Soft delete failed");

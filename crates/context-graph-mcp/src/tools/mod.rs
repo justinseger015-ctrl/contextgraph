@@ -103,7 +103,6 @@ mod tests {
         assert!(tool_names.contains(&"manage_teleological_profile"));
 
         // Autonomous tools (TASK-AUTONOMOUS-MCP)
-        assert!(tool_names.contains(&"get_alignment_drift"));
         assert!(tool_names.contains(&"trigger_drift_correction"));
         assert!(tool_names.contains(&"get_pruning_candidates"));
         assert!(tool_names.contains(&"trigger_consolidation"));

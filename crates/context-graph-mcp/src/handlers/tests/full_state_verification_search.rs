@@ -156,8 +156,8 @@ async fn test_full_state_verification_store_search_delete_cycle() {
 
     println!("   - Fingerprint ID in store: {}", retrieved_fp.id);
     println!(
-        "   - Alignment score: {:.4}",
-        retrieved_fp.alignment_score
+        "   - Aggregate alignment: {:.4}",
+        retrieved_fp.purpose_vector.aggregate_alignment()
     );
     println!("   - Access count: {}", retrieved_fp.access_count);
     println!(
@@ -360,7 +360,10 @@ async fn test_full_state_verification_store_search_delete_cycle() {
         retrieved_fp.content_hash.len()
     );
     println!("  - Embedding spaces: 13 (E1-E13)");
-    println!("  - Theta alignment: {:.4}", retrieved_fp.alignment_score);
+    println!(
+        "  - Aggregate alignment: {:.4}",
+        retrieved_fp.purpose_vector.aggregate_alignment()
+    );
     println!("======================================================================\n");
 }
 

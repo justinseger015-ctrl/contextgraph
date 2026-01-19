@@ -86,7 +86,7 @@ fn test_rrf_aggregation() {
         EmbedderQueryResult::from_similarity(id, 2, 0.7, 2), // rank 2: 1/62
     ];
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.75);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // Expected RRF = 1/60 + 1/61 + 1/62
     let expected_rrf = 1.0 / 60.0 + 1.0 / 61.0 + 1.0 / 62.0;

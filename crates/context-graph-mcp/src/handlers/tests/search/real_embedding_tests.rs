@@ -282,19 +282,6 @@ async fn test_real_embeddings_search_by_purpose() {
         .and_then(|v| v.as_array())
         .expect("Should have results");
     println!("By-purpose search returned {} results", results.len());
-
-    // Verify alignment scores are in expected range
-    for (i, r) in results.iter().enumerate() {
-        if let Some(alignment) = r.get("alignment_score").and_then(|v| v.as_f64()) {
-            println!("Result {} alignment_score: {}", i, alignment);
-            // Alignment scores should be in [-1, 1] per constitution
-            assert!(
-                (-1.0..=1.0).contains(&alignment),
-                "Alignment score should be in [-1, 1]: {}",
-                alignment
-            );
-        }
-    }
 }
 
 /// FSV: Verify REAL embedding search latency meets constitution targets.

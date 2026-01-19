@@ -1,4 +1,4 @@
-//! HNSW index configuration for 5-stage retrieval pipeline.
+//! HNSW index configuration for 4-stage retrieval pipeline.
 //!
 //! # FAIL FAST. NO FALLBACKS.
 //!
@@ -12,7 +12,6 @@
 //! | 2 | Matryoshka 128D | HNSW | E1 (truncated) |
 //! | 3 | Full embeddings | HNSW x 10 | E1-E5, E7-E11 |
 //! | 4 | ColBERT MaxSim | Token-level | E12 |
-//! | 5 | Purpose vector | HNSW 13D | PurposeVector |
 //!
 //! # HNSW Configuration Table
 //!
@@ -29,7 +28,6 @@
 //! | E9HDC | 1024 | 16 | 200 | 100 | Cosine |
 //! | E10Multimodal | 768 | 16 | 200 | 100 | Cosine |
 //! | E11Entity | 384 | 16 | 200 | 100 | Cosine |
-//! | PurposeVector | 13 | 16 | 200 | 100 | Cosine |
 //!
 //! # Module Structure
 //!

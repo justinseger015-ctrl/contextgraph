@@ -11,7 +11,7 @@ use super::embedder::EmbedderIndex;
 ///
 /// # Returns
 ///
-/// - `Some(HnswConfig)` for HNSW-compatible embedders (12 total)
+/// - `Some(HnswConfig)` for HNSW-compatible embedders (11 total)
 /// - `None` for E6Sparse, E12LateInteraction, E13Splade
 ///
 /// # Example
@@ -72,7 +72,6 @@ pub fn get_hnsw_config(index: EmbedderIndex) -> Option<HnswConfig> {
 
         // Special configs
         EmbedderIndex::E1Matryoshka128 => Some(HnswConfig::matryoshka_128d()),
-        EmbedderIndex::PurposeVector => Some(HnswConfig::purpose_vector()),
 
         // NOT HNSW
         EmbedderIndex::E6Sparse => None,
@@ -81,7 +80,7 @@ pub fn get_hnsw_config(index: EmbedderIndex) -> Option<HnswConfig> {
     }
 }
 
-/// Get all HNSW configs as a map. Returns 12 entries.
+/// Get all HNSW configs as a map. Returns 11 entries.
 ///
 /// Excludes E6Sparse, E12LateInteraction, E13Splade (non-HNSW).
 ///
@@ -91,7 +90,7 @@ pub fn get_hnsw_config(index: EmbedderIndex) -> Option<HnswConfig> {
 /// use context_graph_storage::teleological::indexes::{all_hnsw_configs, EmbedderIndex};
 ///
 /// let configs = all_hnsw_configs();
-/// assert_eq!(configs.len(), 12);
+/// assert_eq!(configs.len(), 11);
 /// assert!(configs.contains_key(&EmbedderIndex::E1Semantic));
 /// assert!(!configs.contains_key(&EmbedderIndex::E6Sparse));
 /// ```

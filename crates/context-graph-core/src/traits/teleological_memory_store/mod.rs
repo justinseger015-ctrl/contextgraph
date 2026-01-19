@@ -1,15 +1,14 @@
-//! TeleologicalMemoryStore trait for 5-stage teleological retrieval.
+//! TeleologicalMemoryStore trait for 4-stage retrieval.
 //!
 //! This module defines the core storage trait for the Context Graph system's
 //! teleological memory architecture. It supports:
 //! - CRUD operations for TeleologicalFingerprint
 //! - Multi-space semantic search (13 embedding spaces)
-//! - Purpose vector alignment search
 //! - Sparse (SPLADE) search for Stage 1 recall
 //! - Batch operations for efficiency
 //! - Persistence and checkpointing
 //!
-//! # 5-Stage Retrieval Pipeline Support
+//! # 4-Stage Retrieval Pipeline Support
 //!
 //! | Stage | Name | Method |
 //! |-------|------|--------|
@@ -17,7 +16,6 @@
 //! | 2 | Semantic | `search_semantic()` - E1 Matryoshka 128D ANN |
 //! | 3 | Precision | `search_semantic()` - Full E1-E12 dense embeddings |
 //! | 4 | Rerank | External - E12 ColBERT late interaction |
-//! | 5 | Teleological | `search_purpose()` - 13D purpose vector alignment |
 //!
 //! # Design Philosophy
 //!

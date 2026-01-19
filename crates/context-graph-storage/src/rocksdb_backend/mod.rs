@@ -5,7 +5,6 @@
 //!
 //! # Performance Targets (constitution.yaml)
 //! - inject_context: p95 < 25ms, p99 < 50ms
-//! - hopfield: < 1ms
 //! - store_node: < 1ms p95
 //! - get_node: < 500μs p95
 //!

@@ -210,13 +210,11 @@ async fn test_task_emb_024_layer_status_provider_honest_statuses() {
     let layers = &data["layers"];
     println!("  perception: {}", layers["perception"]);
     println!("  memory: {}", layers["memory"]);
-    println!("  reasoning: {}", layers["reasoning"]);
     println!("  action: {}", layers["action"]);
     println!("  meta: {}", layers["meta"]);
 
     // VERIFY: Expected statuses per StubLayerStatusProvider
-    // Perception and Memory are "active" (have working implementations)
-    // Reasoning, Action, Meta are "stub" (not yet implemented)
+    // All 4 layers are "active" (have working implementations)
     assert_eq!(
         layers["perception"].as_str().unwrap(),
         "active",
@@ -228,28 +226,22 @@ async fn test_task_emb_024_layer_status_provider_honest_statuses() {
         "memory should be active"
     );
     assert_eq!(
-        layers["reasoning"].as_str().unwrap(),
-        "stub",
-        "reasoning should be stub"
-    );
-    assert_eq!(
         layers["action"].as_str().unwrap(),
-        "stub",
-        "action should be stub"
+        "active",
+        "action should be active"
     );
     assert_eq!(
         layers["meta"].as_str().unwrap(),
-        "stub",
-        "meta should be stub"
+        "active",
+        "meta should be active"
     );
 
     println!("\n======================================================================");
     println!("EVIDENCE: StubLayerStatusProvider returns honest layer statuses");
-    println!("  - perception: active (working implementation)");
-    println!("  - memory: active (InMemoryTeleologicalStore works)");
-    println!("  - reasoning: stub (not yet implemented - HONEST)");
-    println!("  - action: stub (not yet implemented - HONEST)");
-    println!("  - meta: stub (not yet implemented - HONEST)");
+    println!("  - perception: active (13-embedder ProductionMultiArrayProvider works)");
+    println!("  - memory: active (RocksDbTeleologicalStore works)");
+    println!("  - action: active (UtlProcessorAdapter works)");
+    println!("  - meta: active (Topic synthesis via HDBSCAN works)");
     println!("======================================================================\n");
 }
 
@@ -553,15 +545,7 @@ async fn test_task_emb_024_layer_statuses_are_honest_not_placeholder() {
         "memory should be active, not placeholder stub"
     );
 
-    // And some ARE stub - which is HONEST reporting
-    let reasoning = layers["reasoning"].as_str().unwrap();
-    assert_eq!(
-        reasoning, "stub",
-        "reasoning IS stub (honest reporting, not placeholder)"
-    );
-
     println!("EVIDENCE: Layer statuses are honest, not placeholders");
     println!("  - perception='active' (has real implementation)");
     println!("  - memory='active' (InMemoryTeleologicalStore works)");
-    println!("  - reasoning='stub' (honest - not implemented yet)");
 }

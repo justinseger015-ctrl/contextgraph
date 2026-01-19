@@ -17,7 +17,7 @@ use context_graph_core::traits::{
     TeleologicalStorageBackend,
 };
 use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 
 use super::store::RocksDbTeleologicalStore;
@@ -56,13 +56,8 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         self.search_semantic_async(query, options).await
     }
 
-    async fn search_purpose(
-        &self,
-        query: &PurposeVector,
-        options: TeleologicalSearchOptions,
-    ) -> CoreResult<Vec<TeleologicalSearchResult>> {
-        self.search_purpose_async(query, options).await
-    }
+    // Note: search_purpose was removed when PurposeVector/alignment fields were
+    // removed from TeleologicalFingerprint. Use search_semantic instead.
 
     async fn search_text(
         &self,

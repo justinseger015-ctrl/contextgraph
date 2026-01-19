@@ -27,7 +27,7 @@
 //! ```
 
 use crate::config::constants::similarity;
-use crate::types::fingerprint::{PurposeVector, NUM_EMBEDDERS};
+use crate::types::fingerprint::NUM_EMBEDDERS;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -54,10 +54,6 @@ pub enum AggregationStrategy {
     /// Maximum similarity across spaces.
     /// Score = max(simᵢ)
     MaxPooling,
-
-    /// Purpose-weighted aggregation using 13D purpose vector.
-    /// Score = Σ(τᵢ × simᵢ) / Στᵢ where τ = purpose_vector.alignments
-    PurposeWeighted { purpose_vector: PurposeVector },
 }
 
 impl Default for AggregationStrategy {
@@ -104,21 +100,6 @@ impl AggregationStrategy {
                 }
             }
             Self::MaxPooling => matches.iter().map(|(_, sim)| *sim).fold(0.0_f32, f32::max),
-            Self::PurposeWeighted { purpose_vector } => {
-                let (sum, weight_sum) = matches
-                    .iter()
-                    .filter(|(idx, _)| *idx < NUM_EMBEDDERS)
-                    .map(|(idx, sim)| {
-                        let weight = purpose_vector.alignments[*idx];
-                        (sim * weight, weight)
-                    })
-                    .fold((0.0, 0.0), |(s, w), (sim, wt)| (s + sim, w + wt));
-                if weight_sum > f32::EPSILON {
-                    sum / weight_sum
-                } else {
-                    0.0
-                }
-            }
         }
     }
 
@@ -357,42 +338,6 @@ mod tests {
         assert_eq!(score, 0.0);
 
         println!("[VERIFIED] MaxPooling empty: score=0.0");
-    }
-
-    #[test]
-    fn test_purpose_weighted() {
-        let purpose = PurposeVector::new([0.5; NUM_EMBEDDERS]);
-        let strategy = AggregationStrategy::PurposeWeighted {
-            purpose_vector: purpose,
-        };
-
-        let matches = vec![(0, 0.8), (1, 0.6)];
-        let score = strategy.aggregate(&matches);
-
-        // With equal weights: (0.8 * 0.5 + 0.6 * 0.5) / (0.5 + 0.5) = 0.7
-        assert!((score - 0.7).abs() < 0.001);
-
-        println!("[VERIFIED] PurposeWeighted: score={:.4}", score);
-    }
-
-    #[test]
-    fn test_purpose_weighted_varied() {
-        let mut alignments = [0.5; NUM_EMBEDDERS];
-        alignments[0] = 0.9; // High alignment for space 0
-        alignments[1] = 0.1; // Low alignment for space 1
-
-        let purpose = PurposeVector::new(alignments);
-        let strategy = AggregationStrategy::PurposeWeighted {
-            purpose_vector: purpose,
-        };
-
-        let matches = vec![(0, 0.8), (1, 0.8)];
-        let score = strategy.aggregate(&matches);
-
-        // (0.8 * 0.9 + 0.8 * 0.1) / (0.9 + 0.1) = (0.72 + 0.08) / 1.0 = 0.8
-        assert!((score - 0.8).abs() < 0.001);
-
-        println!("[VERIFIED] PurposeWeighted varied: score={:.4}", score);
     }
 
     #[test]

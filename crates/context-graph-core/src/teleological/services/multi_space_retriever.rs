@@ -8,8 +8,7 @@
 //! "Retrieval should leverage the FULL teleological signature -
 //! not just semantic similarity, but causal, temporal, and analogical relevance too."
 
-use crate::teleological::{GroupType, TeleologicalVector};
-use crate::types::fingerprint::PurposeVector;
+use crate::teleological::{GroupType, TeleologicalVector, TopicProfile};
 
 /// Configuration for multi-space retrieval.
 #[derive(Clone, Debug)]
@@ -202,8 +201,8 @@ impl MultiSpaceRetriever {
         correlation_weight: f32,
         group_weight: f32,
     ) -> RetrievalResult {
-        // Purpose vector similarity
-        let purpose_sim = query.purpose_vector.similarity(&candidate.purpose_vector);
+        // Topic profile similarity
+        let purpose_sim = query.topic_profile.similarity(&candidate.topic_profile);
 
         // Cross-correlation similarity
         let corr_sim =
@@ -281,11 +280,11 @@ impl MultiSpaceRetriever {
         }
     }
 
-    /// Find k-nearest neighbors using only purpose vectors (fast path).
-    pub fn retrieve_by_purpose(
+    /// Find k-nearest neighbors using only topic profiles (fast path).
+    pub fn retrieve_by_topic_profile(
         &self,
-        query: &PurposeVector,
-        candidates: &[PurposeVector],
+        query: &TopicProfile,
+        candidates: &[TopicProfile],
     ) -> Vec<(usize, f32)> {
         let mut results: Vec<(usize, f32)> = candidates
             .iter()
@@ -323,9 +322,9 @@ mod tests {
     use crate::teleological::{GroupAlignments, CROSS_CORRELATION_COUNT, NUM_EMBEDDERS};
 
     fn make_teleological_vector(alignment: f32) -> TeleologicalVector {
-        let pv = PurposeVector::new([alignment; NUM_EMBEDDERS]);
+        let tp = TopicProfile::new([alignment; NUM_EMBEDDERS]);
         TeleologicalVector::with_all(
-            pv,
+            tp,
             vec![alignment; CROSS_CORRELATION_COUNT],
             GroupAlignments::new(
                 alignment, alignment, alignment, alignment, alignment, alignment,
@@ -482,22 +481,22 @@ mod tests {
     }
 
     #[test]
-    fn test_retrieve_by_purpose() {
+    fn test_retrieve_by_topic_profile() {
         let retriever = MultiSpaceRetriever::new();
-        let query = PurposeVector::new([0.8f32; NUM_EMBEDDERS]);
+        let query = TopicProfile::new([0.8f32; NUM_EMBEDDERS]);
 
         let candidates = vec![
-            PurposeVector::new([0.8f32; NUM_EMBEDDERS]),
-            PurposeVector::new([0.2f32; NUM_EMBEDDERS]),
+            TopicProfile::new([0.8f32; NUM_EMBEDDERS]),
+            TopicProfile::new([0.2f32; NUM_EMBEDDERS]),
         ];
 
-        let results = retriever.retrieve_by_purpose(&query, &candidates);
+        let results = retriever.retrieve_by_topic_profile(&query, &candidates);
 
         assert!(!results.is_empty());
         // Most similar (0.8) should be first
         assert!(results[0].1 > 0.9);
 
-        println!("[PASS] retrieve_by_purpose fast path works");
+        println!("[PASS] retrieve_by_topic_profile fast path works");
     }
 
     #[test]

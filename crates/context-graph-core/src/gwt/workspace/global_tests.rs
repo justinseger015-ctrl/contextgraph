@@ -94,14 +94,14 @@ fn test_inhibit_losers() {
     ];
 
     // BEFORE
-    let before_da = neuromod.get_hopfield_beta();
+    let before_da = neuromod.get_retrieval_sharpness();
     println!("BEFORE: dopamine = {:.3}", before_da);
 
     // EXECUTE
     let inhibited = workspace.inhibit_losers(winner_id, &mut neuromod).unwrap();
 
     // AFTER
-    let after_da = neuromod.get_hopfield_beta();
+    let after_da = neuromod.get_retrieval_sharpness();
     println!("AFTER: dopamine = {:.3}", after_da);
     println!("Inhibited count: {}", inhibited);
 
@@ -169,9 +169,9 @@ fn test_inhibit_losers_magnitude_calculation() {
     let loser_score = workspace.candidates[1].score;
     println!("Loser score: {:.4}", loser_score);
 
-    let before_da = neuromod.get_hopfield_beta();
+    let before_da = neuromod.get_retrieval_sharpness();
     workspace.inhibit_losers(winner_id, &mut neuromod).unwrap();
-    let after_da = neuromod.get_hopfield_beta();
+    let after_da = neuromod.get_retrieval_sharpness();
 
     // Expected inhibition magnitude = (1.0 - score) * DA_INHIBITION_FACTOR
     // adjust() applies the delta directly to dopamine

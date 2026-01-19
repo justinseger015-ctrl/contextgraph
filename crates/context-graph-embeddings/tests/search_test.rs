@@ -192,12 +192,11 @@ fn test_multi_space_result_aggregation() {
         EmbedderQueryResult::from_similarity(id, 8, 0.70, 5), // E9 at rank 5
     ];
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.80);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // Verify basic fields
     assert_eq!(multi.id, id);
     assert_eq!(multi.embedder_count, 3);
-    assert!((multi.purpose_alignment - 0.80).abs() < f32::EPSILON);
 
     // Verify embedder similarities
     assert!((multi.embedder_similarities[0] - 0.90).abs() < f32::EPSILON); // E1
@@ -231,7 +230,7 @@ fn test_multi_space_all_13_embedders() {
         .map(|i| EmbedderQueryResult::from_similarity(id, i as u8, 0.9 - i as f32 * 0.05, i))
         .collect();
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.75);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     assert_eq!(multi.embedder_count, 13);
 
@@ -266,7 +265,7 @@ fn test_weighted_similarity() {
         EmbedderQueryResult::from_similarity(id, 2, 0.70, 2),
     ];
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.75);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // from_embedder_results uses uniform weights (1.0 each)
     let expected_weighted = (0.90 + 0.80 + 0.70) / 3.0;
@@ -288,61 +287,6 @@ fn test_weighted_similarity() {
 // =============================================================================
 
 /// Test: Purpose alignment filter with Constitution threshold 0.55
-#[test]
-fn test_alignment_filter_passes() {
-    let multi = MultiSpaceQueryResult {
-        id: Uuid::new_v4(),
-        embedder_similarities: [0.8f32; 13],
-        rrf_score: 0.15,
-        weighted_similarity: 0.80,
-        purpose_alignment: 0.60, // Above threshold
-        embedder_count: 13,
-    };
-
-    assert!(
-        multi.passes_alignment_filter(0.55),
-        "0.60 >= 0.55 should pass"
-    );
-    eprintln!("[VERIFIED] Alignment 0.60 passes filter 0.55");
-}
-
-/// Test: Purpose alignment filter fails below threshold
-#[test]
-fn test_alignment_filter_fails() {
-    let multi = MultiSpaceQueryResult {
-        id: Uuid::new_v4(),
-        embedder_similarities: [0.8f32; 13],
-        rrf_score: 0.15,
-        weighted_similarity: 0.80,
-        purpose_alignment: 0.50, // Below threshold
-        embedder_count: 13,
-    };
-
-    assert!(
-        !multi.passes_alignment_filter(0.55),
-        "0.50 < 0.55 should fail"
-    );
-    eprintln!("[VERIFIED] Alignment 0.50 fails filter 0.55");
-}
-
-/// Test: Edge case - alignment exactly at threshold
-#[test]
-fn test_alignment_filter_boundary() {
-    let multi = MultiSpaceQueryResult {
-        id: Uuid::new_v4(),
-        embedder_similarities: [0.8f32; 13],
-        rrf_score: 0.15,
-        weighted_similarity: 0.80,
-        purpose_alignment: 0.55, // Exactly at threshold
-        embedder_count: 13,
-    };
-
-    assert!(
-        multi.passes_alignment_filter(0.55),
-        "0.55 >= 0.55 should pass"
-    );
-    eprintln!("[VERIFIED] Alignment 0.55 passes at exact boundary");
-}
 
 // =============================================================================
 // RANKING BEHAVIOR TESTS
@@ -361,7 +305,7 @@ fn test_rrf_ranking_order() {
         EmbedderQueryResult::from_similarity(id1, 1, 0.90, 0),
         EmbedderQueryResult::from_similarity(id1, 2, 0.85, 0),
     ];
-    let multi1 = MultiSpaceQueryResult::from_embedder_results(id1, &results1, 0.80);
+    let multi1 = MultiSpaceQueryResult::from_embedder_results(id1, &results1);
 
     // doc2 appears at rank 10 in 3 embedders: RRF = 3 × 1/70 = 0.0429
     let results2 = vec![
@@ -369,11 +313,11 @@ fn test_rrf_ranking_order() {
         EmbedderQueryResult::from_similarity(id2, 1, 0.65, 10),
         EmbedderQueryResult::from_similarity(id2, 2, 0.60, 10),
     ];
-    let multi2 = MultiSpaceQueryResult::from_embedder_results(id2, &results2, 0.80);
+    let multi2 = MultiSpaceQueryResult::from_embedder_results(id2, &results2);
 
     // doc3 appears at rank 0 in only 1 embedder: RRF = 1 × 1/60 = 0.0167
     let results3 = vec![EmbedderQueryResult::from_similarity(id3, 0, 0.99, 0)];
-    let multi3 = MultiSpaceQueryResult::from_embedder_results(id3, &results3, 0.80);
+    let multi3 = MultiSpaceQueryResult::from_embedder_results(id3, &results3);
 
     // doc1 should have highest RRF: 3/60 = 0.05
     // doc2 should be second: 3/70 = 0.0429
@@ -407,7 +351,7 @@ fn test_rrf_breadth_preference() {
     // Narrow: rank 0 in 1 embedder
     let results_narrow = vec![EmbedderQueryResult::from_similarity(id_narrow, 0, 0.99, 0)];
     let multi_narrow =
-        MultiSpaceQueryResult::from_embedder_results(id_narrow, &results_narrow, 0.80);
+        MultiSpaceQueryResult::from_embedder_results(id_narrow, &results_narrow);
 
     // Broad: rank 0 in 5 embedders
     let results_broad = vec![
@@ -417,7 +361,7 @@ fn test_rrf_breadth_preference() {
         EmbedderQueryResult::from_similarity(id_broad, 3, 0.80, 0),
         EmbedderQueryResult::from_similarity(id_broad, 4, 0.80, 0),
     ];
-    let multi_broad = MultiSpaceQueryResult::from_embedder_results(id_broad, &results_broad, 0.80);
+    let multi_broad = MultiSpaceQueryResult::from_embedder_results(id_broad, &results_broad);
 
     // Broad coverage should win
     assert!(multi_broad.rrf_score > multi_narrow.rrf_score);
@@ -468,7 +412,7 @@ fn test_multi_space_query_result_json_roundtrip() {
     let results: Vec<EmbedderQueryResult> = (0..13)
         .map(|i| EmbedderQueryResult::from_similarity(id, i as u8, 0.90 - i as f32 * 0.05, i))
         .collect();
-    let original = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.72);
+    let original = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     let json = serde_json::to_string(&original).expect("serialize");
     let restored: MultiSpaceQueryResult = serde_json::from_str(&json).expect("deserialize");
@@ -476,7 +420,6 @@ fn test_multi_space_query_result_json_roundtrip() {
     assert_eq!(original.id, restored.id);
     assert_eq!(original.embedder_count, restored.embedder_count);
     assert!((original.rrf_score - restored.rrf_score).abs() < f32::EPSILON);
-    assert!((original.purpose_alignment - restored.purpose_alignment).abs() < f32::EPSILON);
 
     // Check embedder_similarities array (all non-NaN since we populated all 13)
     for i in 0..13 {
@@ -535,7 +478,7 @@ fn test_edge_case_single_result_aggregation() {
     let id = Uuid::new_v4();
     let results = vec![EmbedderQueryResult::from_similarity(id, 7, 0.88, 5)];
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.65);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // Should work with single result
     assert_eq!(multi.embedder_count, 1);
@@ -567,7 +510,7 @@ fn test_edge_case_maximum_rank() {
         usize::MAX - 60,
     )];
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.50);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // RRF should still compute (might be very small)
     assert!(multi.rrf_score > 0.0, "RRF should be positive");
@@ -589,7 +532,7 @@ fn test_edge_case_all_embedders_same_rank() {
         })
         .collect();
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.70);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // All embedders at rank 0: RRF = 13 × 1/60
     let expected_rrf = 13.0 / 60.0;
@@ -627,7 +570,7 @@ fn test_panic_empty_results() {
     let empty: Vec<EmbedderQueryResult> = vec![];
 
     // This must panic with "AGGREGATION ERROR"
-    let _ = MultiSpaceQueryResult::from_embedder_results(id, &empty, 0.75);
+    let _ = MultiSpaceQueryResult::from_embedder_results(id, &empty);
 }
 
 // =============================================================================
@@ -690,7 +633,7 @@ fn test_rrf_sum_bounded() {
     let results: Vec<EmbedderQueryResult> = (0..13)
         .map(|i| EmbedderQueryResult::from_similarity(id, i as u8, 0.99, 0))
         .collect();
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.99);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     assert!(
         multi.rrf_score <= max_rrf + f32::EPSILON,
@@ -757,10 +700,7 @@ fn test_simulated_search_flow() {
     // Compute fused results
     let mut fused: Vec<MultiSpaceQueryResult> = all_results
         .iter()
-        .map(|(id, results)| {
-            let purpose = 0.5 + (results.len() as f32 * 0.1); // More embedders = higher purpose
-            MultiSpaceQueryResult::from_embedder_results(*id, results, purpose)
-        })
+        .map(|(id, results)| MultiSpaceQueryResult::from_embedder_results(*id, results))
         .collect();
 
     // Sort by RRF score

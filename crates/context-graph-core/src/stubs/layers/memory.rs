@@ -1,6 +1,6 @@
 //! Stub implementation of the Memory layer.
 //!
-//! The Memory layer handles Modern Hopfield associative storage.
+//! The Memory layer handles associative memory storage.
 //! This stub returns NotImplemented error - no mock data in production (AP-007).
 //!
 //! # Latency Budget

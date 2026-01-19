@@ -313,7 +313,7 @@ impl NervousLayer for CoherenceLayer {
         // Prepare broadcast content if ignited
         let broadcast = if gw_ignited {
             Some(serde_json::json!({
-                "source_layers": ["sensing", "reflex", "memory", "learning"],
+                "source_layers": ["sensing", "memory", "learning"],
                 "resonance": resonance,
                 "coherence_score": coherence_score,
                 "state": format!("{:?}", state),

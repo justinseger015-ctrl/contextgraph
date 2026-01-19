@@ -8,16 +8,10 @@ use super::InMemoryTeleologicalStore;
 use crate::traits::{
     TeleologicalMemoryStore, TeleologicalSearchOptions, TeleologicalStorageBackend,
 };
-use crate::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
-};
+use crate::types::fingerprint::{SemanticFingerprint, SparseVector, TeleologicalFingerprint};
 
 fn create_test_fingerprint() -> TeleologicalFingerprint {
-    TeleologicalFingerprint::new(
-        SemanticFingerprint::zeroed(),
-        PurposeVector::new([0.75; NUM_EMBEDDERS]),
-        [0u8; 32],
-    )
+    TeleologicalFingerprint::new(SemanticFingerprint::zeroed(), [0u8; 32])
 }
 
 #[tokio::test]
@@ -97,18 +91,6 @@ async fn test_search_semantic() {
     let results = store.search_semantic(&query, options).await.unwrap();
     assert!(!results.is_empty());
     assert!(results.len() <= 5);
-}
-
-#[tokio::test]
-async fn test_search_purpose() {
-    let store = InMemoryTeleologicalStore::new();
-    for _ in 0..5 {
-        store.store(create_test_fingerprint()).await.unwrap();
-    }
-    let query = PurposeVector::new([0.8; NUM_EMBEDDERS]);
-    let options = TeleologicalSearchOptions::quick(10);
-    let results = store.search_purpose(&query, options).await.unwrap();
-    assert!(!results.is_empty());
 }
 
 #[tokio::test]

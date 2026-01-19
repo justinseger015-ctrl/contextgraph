@@ -15,7 +15,7 @@
 //! - Core traits (`TeleologicalMemoryStore`, `MultiArrayEmbeddingProvider`, `NervousLayer`, etc.)
 //! - Error types and result aliases
 //! - Configuration structures
-//! - Goal alignment computation (`GoalAlignmentCalculator`, `GoalAlignmentScore`, etc.)
+//! - Teleological services (retrieval, fusion, comparison)
 //!
 //! # Example
 //!
@@ -28,7 +28,6 @@
 //! assert_eq!(options.top_k, 10);
 //! ```
 
-pub mod alignment;
 pub mod atc;
 pub mod autonomous;
 pub mod causal;
@@ -45,7 +44,6 @@ pub mod marblestone;
 pub mod memory;
 pub mod monitoring;
 pub mod neuromod;
-pub mod purpose;
 pub mod quantization;
 pub mod retrieval;
 pub mod similarity;
@@ -85,7 +83,6 @@ pub use teleological::{
 };
 
 // Purpose module re-exports (goal hierarchy types) - TASK-CORE-010
-pub use purpose::{GoalLevel, GoalNode};
 
 // Memory capture types (Phase 1) - TASK-P1-001, TASK-P1-002, TASK-P1-003
 pub use memory::{

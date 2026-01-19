@@ -9,18 +9,16 @@ use std::path::PathBuf;
 use context_graph_core::traits::TeleologicalMemoryStore;
 use context_graph_core::types::fingerprint::TeleologicalFingerprint;
 use context_graph_storage::teleological::{
-    deserialize_e1_matryoshka_128, deserialize_purpose_vector,
-    deserialize_teleological_fingerprint, e1_matryoshka_128_key, fingerprint_key,
-    purpose_vector_key, RocksDbTeleologicalStore, TeleologicalStoreConfig, CF_E13_SPLADE_INVERTED,
-    CF_E1_MATRYOSHKA_128, CF_FINGERPRINTS, CF_PURPOSE_VECTORS, QUANTIZED_EMBEDDER_CFS,
-    TELEOLOGICAL_CFS,
+    deserialize_e1_matryoshka_128, deserialize_teleological_fingerprint, e1_matryoshka_128_key,
+    fingerprint_key, RocksDbTeleologicalStore, TeleologicalStoreConfig, CF_E13_SPLADE_INVERTED,
+    CF_E1_MATRYOSHKA_128, CF_FINGERPRINTS, QUANTIZED_EMBEDDER_CFS, TELEOLOGICAL_CFS,
 };
 use tempfile::TempDir;
 use uuid::Uuid;
 
 use crate::helpers::{
-    create_initialized_store, create_real_fingerprint, generate_real_purpose_vector,
-    generate_real_semantic_fingerprint, generate_real_sparse_vector,
+    create_initialized_store, create_real_fingerprint, generate_real_semantic_fingerprint,
+    generate_real_sparse_vector,
 };
 
 // =============================================================================
@@ -55,36 +53,20 @@ async fn test_full_storage_pipeline_real_data() {
     }
     println!("[STORED] {} fingerprints", COUNT);
 
-    // Test purpose search
-    let query_purpose = generate_real_purpose_vector();
-    let purpose_options = context_graph_core::traits::TeleologicalSearchOptions {
+    // Test semantic search
+    let search_options = context_graph_core::traits::TeleologicalSearchOptions {
         top_k: 10,
         min_similarity: 0.0,
         min_alignment: None,
         include_deleted: false,
         embedder_indices: vec![],
-        semantic_query: None,   // No semantic query for this test
+        semantic_query: None,
         include_content: false, // TASK-CONTENT-005
     };
 
-    let purpose_results = store
-        .search_purpose(&query_purpose, purpose_options.clone())
-        .await
-        .expect("Purpose search failed");
-
-    println!(
-        "[SEARCH] Purpose search returned {} results",
-        purpose_results.len()
-    );
-    assert!(
-        !purpose_results.is_empty(),
-        "Purpose search should return results"
-    );
-
-    // Test semantic search
     let query_semantic = generate_real_semantic_fingerprint();
     let semantic_results = store
-        .search_semantic(&query_semantic, purpose_options.clone())
+        .search_semantic(&query_semantic, search_options.clone())
         .await
         .expect("Semantic search failed");
 
@@ -305,41 +287,7 @@ async fn test_all_column_families_populated() {
     let retrieved_fp = deserialize_teleological_fingerprint(&fp_data);
     assert_eq!(retrieved_fp.id, id, "ID mismatch in fingerprints CF");
 
-    // 2. Verify purpose_vectors CF has data
-    let cf_pv = db
-        .cf_handle(CF_PURPOSE_VECTORS)
-        .expect("Missing purpose_vectors CF");
-    let pv_key = purpose_vector_key(&id);
-    let pv_data = db
-        .get_cf(&cf_pv, pv_key)
-        .expect("Get failed")
-        .expect("Data not found in purpose_vectors CF");
-
-    println!(
-        "[VERIFIED] purpose_vectors CF: {} bytes (expected 52)",
-        pv_data.len()
-    );
-    assert_eq!(
-        pv_data.len(),
-        52,
-        "Purpose vector should be exactly 52 bytes"
-    );
-
-    // Deserialize and verify
-    let retrieved_pv = deserialize_purpose_vector(&pv_data);
-    for (i, (retrieved, original)) in retrieved_pv
-        .iter()
-        .zip(fp.purpose_vector.alignments.iter())
-        .enumerate()
-    {
-        assert!(
-            (retrieved - original).abs() < f32::EPSILON,
-            "Purpose vector mismatch at index {}",
-            i
-        );
-    }
-
-    // 3. Verify e1_matryoshka_128 CF has data
+    // 2. Verify e1_matryoshka_128 CF has data
     let cf_mat = db
         .cf_handle(CF_E1_MATRYOSHKA_128)
         .expect("Missing e1_matryoshka_128 CF");
@@ -373,7 +321,7 @@ async fn test_all_column_families_populated() {
         );
     }
 
-    // 4. Verify e13_splade_inverted CF has data (if fingerprint has sparse entries)
+    // 3. Verify e13_splade_inverted CF has data (if fingerprint has sparse entries)
     if fp.semantic.e13_splade.nnz() > 0 {
         let cf_inv = db
             .cf_handle(CF_E13_SPLADE_INVERTED)
@@ -398,7 +346,7 @@ async fn test_all_column_families_populated() {
         );
     }
 
-    // 5. Verify all teleological CFs are accessible
+    // 4. Verify all teleological CFs are accessible
     println!(
         "[VERIFYING] All {} teleological CFs accessible...",
         TELEOLOGICAL_CFS.len()
@@ -414,7 +362,7 @@ async fn test_all_column_families_populated() {
         println!("  {} OK", cf_name);
     }
 
-    // 6. Verify all quantized embedder CFs are accessible
+    // 5. Verify all quantized embedder CFs are accessible
     println!(
         "[VERIFYING] All {} quantized embedder CFs accessible...",
         QUANTIZED_EMBEDDER_CFS.len()
@@ -432,7 +380,7 @@ async fn test_all_column_families_populated() {
 
     let total_cfs = TELEOLOGICAL_CFS.len() + QUANTIZED_EMBEDDER_CFS.len();
     println!(
-        "[AFTER] All {} column families verified (4 teleological + 13 embedder)",
+        "[AFTER] All {} column families verified (teleological + embedder)",
         total_cfs
     );
     println!("\n=== PASS: All Column Families Populated ===\n");

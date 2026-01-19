@@ -109,9 +109,8 @@ pub struct DomainThresholds {
     pub theta_hypersync: f32,     // [0.90, 0.99] Hypersync detection
     pub theta_fragmentation: f32, // [0.35, 0.65] Fragmentation warning
 
-    // === NEW: Layer thresholds (3) ===
+    // === NEW: Layer thresholds (2) ===
     pub theta_memory_sim: f32,    // [0.35, 0.75] Memory similarity
-    pub theta_reflex_hit: f32,    // [0.70, 0.95] Reflex cache hit
     pub theta_consolidation: f32, // [0.05, 0.30] Consolidation trigger
 
     // === NEW: Dream thresholds (3) ===
@@ -153,7 +152,6 @@ impl DomainThresholds {
 
         // === NEW: Layer thresholds ===
         let theta_memory_sim = 0.50 + (strictness * 0.15); // [0.50, 0.65]
-        let theta_reflex_hit = 0.80 + (strictness * 0.10); // [0.80, 0.90]
         let theta_consolidation = 0.10 + (strictness * 0.10); // [0.10, 0.20]
 
         // === NEW: Dream thresholds ===
@@ -191,7 +189,6 @@ impl DomainThresholds {
             theta_hypersync,
             theta_fragmentation,
             theta_memory_sim,
-            theta_reflex_hit,
             theta_consolidation,
             theta_dream_activity,
             theta_semantic_leap,
@@ -226,7 +223,6 @@ impl DomainThresholds {
 
         // NEW: Layer thresholds
         self.theta_memory_sim = blend(self.theta_memory_sim, similar.theta_memory_sim);
-        self.theta_reflex_hit = blend(self.theta_reflex_hit, similar.theta_reflex_hit);
         self.theta_consolidation = blend(self.theta_consolidation, similar.theta_consolidation);
 
         // NEW: Dream thresholds
@@ -289,9 +285,6 @@ impl DomainThresholds {
 
         // === NEW: Layer thresholds ===
         if !(0.35..=0.75).contains(&self.theta_memory_sim) {
-            return false;
-        }
-        if !(0.70..=0.95).contains(&self.theta_reflex_hit) {
             return false;
         }
         if !(0.05..=0.30).contains(&self.theta_consolidation) {
@@ -363,7 +356,6 @@ impl DomainThresholds {
 
         // NEW: Layer thresholds
         self.theta_memory_sim = self.theta_memory_sim.clamp(0.35, 0.75);
-        self.theta_reflex_hit = self.theta_reflex_hit.clamp(0.70, 0.95);
         self.theta_consolidation = self.theta_consolidation.clamp(0.05, 0.30);
 
         // NEW: Dream thresholds
@@ -617,11 +609,6 @@ mod tests {
             thresholds.theta_memory_sim
         );
         assert!(
-            (0.70..=0.95).contains(&thresholds.theta_reflex_hit),
-            "theta_reflex_hit {} out of range [0.70, 0.95]",
-            thresholds.theta_reflex_hit
-        );
-        assert!(
             (0.05..=0.30).contains(&thresholds.theta_consolidation),
             "theta_consolidation {} out of range [0.05, 0.30]",
             thresholds.theta_consolidation
@@ -744,7 +731,6 @@ mod tests {
         t.theta_hypersync = 0.5;
         t.theta_fragmentation = 0.0;
         t.theta_memory_sim = 1.0;
-        t.theta_reflex_hit = 0.5;
         t.theta_consolidation = 0.5;
         t.theta_dream_activity = 0.5;
         t.theta_semantic_leap = 0.0;
@@ -760,7 +746,6 @@ mod tests {
         assert_eq!(t.theta_hypersync, 0.90);
         assert_eq!(t.theta_fragmentation, 0.35);
         assert_eq!(t.theta_memory_sim, 0.75);
-        assert_eq!(t.theta_reflex_hit, 0.70);
         assert_eq!(t.theta_consolidation, 0.30);
         assert_eq!(t.theta_dream_activity, 0.30);
         assert_eq!(t.theta_semantic_leap, 0.50);
@@ -823,7 +808,6 @@ mod tests {
         // Medical should have highest gates
         assert!(medical.theta_gate > general.theta_gate);
         assert!(medical.theta_hypersync > general.theta_hypersync);
-        assert!(medical.theta_reflex_hit > general.theta_reflex_hit);
         assert!(medical.theta_obsolescence_high > general.theta_obsolescence_high);
     }
 
@@ -839,12 +823,12 @@ mod tests {
     }
 
     #[test]
-    fn test_field_count_is_20() {
-        // This test ensures we have exactly 20 fields by checking the struct size indirectly
-        // We verify by accessing all 20 fields
+    fn test_field_count_is_19() {
+        // This test ensures we have exactly 19 fields by checking the struct size indirectly
+        // We verify by accessing all 19 f32 fields
         let t = DomainThresholds::new(Domain::General);
         let fields: Vec<f32> = vec![
-            // domain is not f32, so we count 20 f32 fields + 1 Domain
+            // domain is not f32, so we count 19 f32 fields + 1 Domain
             t.theta_opt,
             t.theta_acc,
             t.theta_warn,
@@ -855,7 +839,6 @@ mod tests {
             t.theta_hypersync,
             t.theta_fragmentation,
             t.theta_memory_sim,
-            t.theta_reflex_hit,
             t.theta_consolidation,
             t.theta_dream_activity,
             t.theta_semantic_leap,
@@ -866,8 +849,8 @@ mod tests {
             t.theta_obsolescence_mid,
             t.theta_drift_slope,
         ];
-        // 20 f32 fields + 1 Domain = 21 total fields in struct
-        assert_eq!(fields.len(), 20, "Should have 20 f32 threshold fields");
+        // 19 f32 fields + 1 Domain = 20 total fields in struct
+        assert_eq!(fields.len(), 19, "Should have 19 f32 threshold fields");
         // Verify domain field exists
         assert_eq!(t.domain, Domain::General);
     }
@@ -892,7 +875,6 @@ mod tests {
             println!("  theta_hypersync: {:.3}", t.theta_hypersync);
             println!("  theta_fragmentation: {:.3}", t.theta_fragmentation);
             println!("  theta_memory_sim: {:.3}", t.theta_memory_sim);
-            println!("  theta_reflex_hit: {:.3}", t.theta_reflex_hit);
             println!("  theta_consolidation: {:.3}", t.theta_consolidation);
             println!("  theta_dream_activity: {:.3}", t.theta_dream_activity);
             println!("  theta_semantic_leap: {:.3}", t.theta_semantic_leap);

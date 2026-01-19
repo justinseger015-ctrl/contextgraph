@@ -1,18 +1,18 @@
 //! Search operations for the in-memory teleological store.
 //!
-//! This module implements semantic, purpose, text, and sparse search operations.
+//! This module implements semantic, text, and sparse search operations.
 //! All operations are O(n) full table scans - suitable for testing only.
 
 use std::collections::HashSet;
 
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 use uuid::Uuid;
 
 use super::similarity::compute_semantic_scores;
 use super::InMemoryTeleologicalStore;
 use crate::error::{CoreError, CoreResult};
 use crate::traits::{TeleologicalSearchOptions, TeleologicalSearchResult};
-use crate::types::fingerprint::{PurposeVector, SemanticFingerprint, SparseVector, NUM_EMBEDDERS};
+use crate::types::fingerprint::{SemanticFingerprint, SparseVector};
 
 impl InMemoryTeleologicalStore {
     /// Search by semantic fingerprint similarity.
@@ -59,20 +59,7 @@ impl InMemoryTeleologicalStore {
                 continue;
             }
 
-            if let Some(min_align) = options.min_alignment {
-                if fp.alignment_score < min_align {
-                    continue;
-                }
-            }
-
-            let purpose_alignment = fp.purpose_vector.similarity(&PurposeVector::default());
-
-            results.push(TeleologicalSearchResult::new(
-                fp.clone(),
-                similarity,
-                embedder_scores,
-                purpose_alignment,
-            ));
+            results.push(TeleologicalSearchResult::new(fp.clone(), similarity, embedder_scores));
         }
 
         results.sort_by(|a, b| {
@@ -83,69 +70,6 @@ impl InMemoryTeleologicalStore {
 
         results.truncate(options.top_k);
         debug!("Semantic search returned {} results", results.len());
-        Ok(results)
-    }
-
-    /// Search by purpose vector similarity.
-    pub async fn search_purpose_impl(
-        &self,
-        query: &PurposeVector,
-        options: TeleologicalSearchOptions,
-    ) -> CoreResult<Vec<TeleologicalSearchResult>> {
-        debug!(
-            "Purpose search with top_k={}, min_similarity={}",
-            options.top_k, options.min_similarity
-        );
-
-        let mut results: Vec<TeleologicalSearchResult> = Vec::new();
-        let deleted_ids: HashSet<Uuid> = self.deleted.iter().map(|r| *r.key()).collect();
-
-        for entry in self.data.iter() {
-            let id = *entry.key();
-            let fp = entry.value();
-
-            if !options.include_deleted && deleted_ids.contains(&id) {
-                continue;
-            }
-
-            let purpose_alignment = query.similarity(&fp.purpose_vector);
-
-            if purpose_alignment < options.min_similarity {
-                continue;
-            }
-
-            if let Some(min_align) = options.min_alignment {
-                if fp.alignment_score < min_align {
-                    continue;
-                }
-            }
-
-            let embedder_scores = match &options.semantic_query {
-                Some(query_semantic) => compute_semantic_scores(query_semantic, &fp.semantic),
-                None => {
-                    warn!(
-                        "search_purpose: No semantic_query provided - embedder_scores will be uniform."
-                    );
-                    [purpose_alignment; NUM_EMBEDDERS]
-                }
-            };
-
-            results.push(TeleologicalSearchResult::new(
-                fp.clone(),
-                purpose_alignment,
-                embedder_scores,
-                purpose_alignment,
-            ));
-        }
-
-        results.sort_by(|a, b| {
-            b.similarity
-                .partial_cmp(&a.similarity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        results.truncate(options.top_k);
-        debug!("Purpose search returned {} results", results.len());
         Ok(results)
     }
 

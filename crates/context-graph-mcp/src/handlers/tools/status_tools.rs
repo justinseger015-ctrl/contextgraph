@@ -17,7 +17,7 @@ impl Handlers {
     /// Returns comprehensive system status including:
     /// - Fingerprint count from TeleologicalMemoryStore
     /// - Live UTL metrics from UtlProcessor (NOT hardcoded)
-    /// - 5-layer bio-nervous system status
+    /// - 4-layer bio-nervous system status
     /// - `_cognitive_pulse` with live system state
     ///
     /// # Constitution References
@@ -135,15 +135,6 @@ impl Handlers {
                 error!(error = %e, "get_memetic_status: memory_status FAILED");
                 "error".to_string()
             });
-        let reasoning_status = self
-            .layer_status_provider
-            .reasoning_status()
-            .await
-            .map(|s| s.as_str().to_string())
-            .unwrap_or_else(|e| {
-                error!(error = %e, "get_memetic_status: reasoning_status FAILED");
-                "error".to_string()
-            });
         let action_status = self
             .layer_status_provider
             .action_status()
@@ -180,7 +171,6 @@ impl Handlers {
                 "layers": {
                     "perception": perception_status,
                     "memory": memory_status,
-                    "reasoning": reasoning_status,
                     "action": action_status,
                     "meta": meta_status
                 }

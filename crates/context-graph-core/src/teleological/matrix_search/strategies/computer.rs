@@ -74,12 +74,12 @@ impl<'a> SimilarityComputer<'a> {
     pub fn euclidean_similarity(&self, a: &TeleologicalVector, b: &TeleologicalVector) -> f32 {
         let mut sum_sq = 0.0f32;
 
-        // Purpose vector distance
+        // Topic profile distance
         for (&av, &bv) in a
-            .purpose_vector
+            .topic_profile
             .alignments
             .iter()
-            .zip(b.purpose_vector.alignments.iter())
+            .zip(b.topic_profile.alignments.iter())
         {
             let diff = av - bv;
             sum_sq += diff * diff;

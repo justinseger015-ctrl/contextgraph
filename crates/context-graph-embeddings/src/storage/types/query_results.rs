@@ -67,10 +67,6 @@ pub struct MultiSpaceQueryResult {
     /// Uses Constitution-defined weights per query type.
     pub weighted_similarity: f32,
 
-    /// Purpose alignment score (from StoredQuantizedFingerprint.alignment_score).
-    /// Used in Stage 4 teleological filtering.
-    pub purpose_alignment: f32,
-
     /// Number of embedders that contributed to this result.
     /// Less than 13 if some embedders weren't searched.
     pub embedder_count: usize,
@@ -82,16 +78,11 @@ impl MultiSpaceQueryResult {
     /// # Arguments
     /// * `id` - Fingerprint UUID
     /// * `results` - Per-embedder query results
-    /// * `purpose_alignment` - From stored fingerprint
     ///
     /// # Panics
     /// Panics if results is empty.
     #[must_use]
-    pub fn from_embedder_results(
-        id: Uuid,
-        results: &[EmbedderQueryResult],
-        purpose_alignment: f32,
-    ) -> Self {
+    pub fn from_embedder_results(id: Uuid, results: &[EmbedderQueryResult]) -> Self {
         if results.is_empty() {
             panic!(
                 "AGGREGATION ERROR: Cannot create MultiSpaceQueryResult from empty results. \
@@ -126,17 +117,7 @@ impl MultiSpaceQueryResult {
             embedder_similarities,
             rrf_score,
             weighted_similarity,
-            purpose_alignment,
             embedder_count: results.len(),
         }
-    }
-
-    /// Check if this result passes Stage 4 teleological filter.
-    ///
-    /// # Arguments
-    /// * `min_alignment` - Minimum acceptable alignment (default: 0.55 from Constitution)
-    #[must_use]
-    pub fn passes_alignment_filter(&self, min_alignment: f32) -> bool {
-        self.purpose_alignment >= min_alignment
     }
 }

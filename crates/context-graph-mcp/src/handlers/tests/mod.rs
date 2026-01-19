@@ -68,14 +68,12 @@ use parking_lot::RwLock;
 use tempfile::TempDir;
 
 use context_graph_core::monitoring::{LayerStatusProvider, StubLayerStatusProvider};
-use context_graph_core::purpose::{GoalDiscoveryMetadata, GoalHierarchy, GoalLevel, GoalNode};
 use context_graph_core::stubs::{
     InMemoryTeleologicalStore, StubMultiArrayProvider, StubUtlProcessor,
 };
 use context_graph_core::traits::{
     MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor,
 };
-use context_graph_core::types::fingerprint::SemanticFingerprint;
 use context_graph_storage::teleological::RocksDbTeleologicalStore;
 
 // TASK-EMB-016: Import global warm provider for FSV tests (feature-gated)
@@ -445,74 +443,9 @@ pub(crate) async fn create_test_handlers_with_rocksdb_no_goals() -> (Handlers, T
     (handlers, tempdir)
 }
 
-/// Create a test goal hierarchy with 3 levels.
-/// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
-///
-/// Hierarchy:
-/// - Strategic: "Build the best ML learning system"
-///   - Tactical: "Implement semantic search"
-///     - Immediate: "Add vector similarity"
-/// - Strategic: "Enhance user experience"
-pub(crate) fn create_test_hierarchy() -> GoalHierarchy {
-    let mut hierarchy = GoalHierarchy::new();
-
-    // Create test discovery metadata for autonomous goals
-    let discovery = GoalDiscoveryMetadata::bootstrap();
-
-    // Strategic goal 1 (top-level, no parent)
-    let s1_goal = GoalNode::autonomous_goal(
-        "Build the best ML learning system".into(),
-        GoalLevel::Strategic,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create Strategic goal 1");
-    let s1_id = s1_goal.id;
-    hierarchy
-        .add_goal(s1_goal)
-        .expect("Failed to add Strategic goal 1");
-
-    // Strategic goal 2 (top-level, no parent)
-    let s2_goal = GoalNode::autonomous_goal(
-        "Enhance user experience".into(),
-        GoalLevel::Strategic,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create Strategic goal 2");
-    hierarchy
-        .add_goal(s2_goal)
-        .expect("Failed to add Strategic goal 2");
-
-    // Tactical goal - child of Strategic goal 1
-    let t1_goal = GoalNode::child_goal(
-        "Implement semantic search".into(),
-        GoalLevel::Tactical,
-        s1_id,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create tactical goal");
-    let t1_id = t1_goal.id;
-    hierarchy
-        .add_goal(t1_goal)
-        .expect("Failed to add tactical goal");
-
-    // Immediate goal - child of Tactical goal
-    let i1_goal = GoalNode::child_goal(
-        "Add vector similarity".into(),
-        GoalLevel::Immediate,
-        t1_id,
-        SemanticFingerprint::zeroed(),
-        discovery,
-    )
-    .expect("Failed to create immediate goal");
-    hierarchy
-        .add_goal(i1_goal)
-        .expect("Failed to add immediate goal");
-
-    hierarchy
-}
+// NOTE: create_test_hierarchy was removed along with context_graph_core::purpose module.
+// GoalHierarchy, GoalNode, GoalDiscoveryMetadata are no longer available.
+// Handlers no longer requires goal hierarchy - purpose vector was removed from TeleologicalFingerprint.
 
 /// Create test handlers with REAL RocksDbTeleologicalStore and EXPOSED store reference.
 ///

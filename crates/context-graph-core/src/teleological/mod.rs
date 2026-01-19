@@ -110,7 +110,7 @@ pub use meaning::{
 pub use profile::{FusionStrategy, ProfileMetrics, TaskType, TeleologicalProfile};
 pub use resolution::{DomainAlignments, DomainType, MultiResolutionHierarchy, ResolutionView};
 pub use synergy_matrix::{SynergyMatrix, CROSS_CORRELATION_COUNT, SYNERGY_DIM};
-pub use types::{ProfileId, TuckerCore, EMBEDDING_DIM, NUM_EMBEDDERS};
+pub use types::{ProfileId, TopicProfile, TuckerCore, EMBEDDING_DIM, NUM_EMBEDDERS};
 pub use vector::TeleologicalVector;
 
 // TASK-LOGIC-004: Teleological Comparator exports

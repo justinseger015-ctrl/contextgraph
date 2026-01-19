@@ -95,7 +95,7 @@ fn test_compute_centroid() {
 
     let centroid = search.compute_centroid(&vectors);
 
-    assert!((centroid.purpose_vector.alignments[0] - 0.7).abs() < 0.01);
+    assert!((centroid.topic_profile.alignments[0] - 0.7).abs() < 0.01);
     assert!((centroid.cross_correlations[0] - 0.5).abs() < 0.01);
 }
 

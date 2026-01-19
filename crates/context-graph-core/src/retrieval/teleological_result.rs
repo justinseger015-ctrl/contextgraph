@@ -18,9 +18,19 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::config::constants::alignment;
-
 use super::PipelineStageTiming;
+
+/// Alignment threshold constants (from constitution.yaml teleological.thresholds).
+mod alignment_thresholds {
+    /// Optimal alignment threshold: theta >= 0.75
+    pub const OPTIMAL: f32 = 0.75;
+    /// Acceptable alignment threshold: theta >= 0.70
+    pub const ACCEPTABLE: f32 = 0.70;
+    /// Warning alignment threshold: theta >= 0.55
+    pub const WARNING: f32 = 0.55;
+    /// Critical alignment threshold: theta < 0.55
+    pub const CRITICAL: f32 = 0.55;
+}
 
 /// Result from teleological retrieval pipeline.
 ///
@@ -144,7 +154,6 @@ impl TeleologicalRetrievalResult {
 ///
 /// - `score`: Final aggregate score after RRF fusion (0.0-1.0)
 /// - `content_similarity`: Raw content similarity from Stage 3
-/// - `purpose_alignment`: Purpose vector alignment from Stage 4
 /// - `goal_alignment`: Goal hierarchy alignment from Stage 4
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScoredMemory {
@@ -161,21 +170,15 @@ pub struct ScoredMemory {
     /// Average cosine similarity across the 13 embedding spaces.
     pub content_similarity: f32,
 
-    /// Purpose vector alignment (Stage 4).
-    ///
-    /// How well memory's purpose aligns with query's purpose.
-    /// From PurposeVector cosine similarity.
-    pub purpose_alignment: f32,
-
     /// Goal hierarchy alignment (Stage 4).
     ///
-    /// Composite score from GoalAlignmentCalculator.
+    /// Purpose alignment score from the fingerprint.
     /// Includes Strategic, Tactical, Immediate levels.
     pub goal_alignment: f32,
 
     /// Whether this memory is misaligned.
     ///
-    /// True if any alignment score is below critical threshold (0.55).
+    /// True if alignment score is below critical threshold (0.55).
     pub is_misaligned: bool,
 
     /// Number of embedding spaces where this memory appeared.
@@ -190,19 +193,16 @@ impl ScoredMemory {
         memory_id: Uuid,
         score: f32,
         content_similarity: f32,
-        purpose_alignment: f32,
         goal_alignment: f32,
         space_count: usize,
     ) -> Self {
         // Critical threshold from constitution.yaml teleological.thresholds.critical
-        let is_misaligned =
-            purpose_alignment < alignment::CRITICAL || goal_alignment < alignment::CRITICAL;
+        let is_misaligned = goal_alignment < alignment_thresholds::CRITICAL;
 
         Self {
             memory_id,
             score,
             content_similarity,
-            purpose_alignment,
             goal_alignment,
             is_misaligned,
             space_count,
@@ -215,20 +215,20 @@ impl ScoredMemory {
         self
     }
 
-    /// Check if alignment is optimal (≥ alignment::OPTIMAL).
+    /// Check if alignment is optimal (≥ alignment_thresholds::OPTIMAL).
     ///
     /// Constitution: `teleological.thresholds.optimal`
     #[inline]
     pub fn is_optimal(&self) -> bool {
-        self.goal_alignment >= alignment::OPTIMAL
+        self.goal_alignment >= alignment_thresholds::OPTIMAL
     }
 
-    /// Check if alignment is acceptable (≥ alignment::ACCEPTABLE).
+    /// Check if alignment is acceptable (≥ alignment_thresholds::ACCEPTABLE).
     ///
     /// Constitution: `teleological.thresholds.acceptable`
     #[inline]
     pub fn is_acceptable(&self) -> bool {
-        self.goal_alignment >= alignment::ACCEPTABLE
+        self.goal_alignment >= alignment_thresholds::ACCEPTABLE
     }
 
     /// Check if alignment needs attention (between WARNING and ACCEPTABLE).
@@ -236,18 +236,18 @@ impl ScoredMemory {
     /// Constitution: `teleological.thresholds.warning`
     #[inline]
     pub fn needs_attention(&self) -> bool {
-        self.goal_alignment >= alignment::WARNING && self.goal_alignment < alignment::ACCEPTABLE
+        self.goal_alignment >= alignment_thresholds::WARNING && self.goal_alignment < alignment_thresholds::ACCEPTABLE
     }
 
     /// Get alignment threshold classification.
     ///
     /// Uses thresholds from constitution.yaml teleological.thresholds.
     pub fn alignment_threshold(&self) -> AlignmentLevel {
-        if self.goal_alignment >= alignment::OPTIMAL {
+        if self.goal_alignment >= alignment_thresholds::OPTIMAL {
             AlignmentLevel::Optimal
-        } else if self.goal_alignment >= alignment::ACCEPTABLE {
+        } else if self.goal_alignment >= alignment_thresholds::ACCEPTABLE {
             AlignmentLevel::Acceptable
-        } else if self.goal_alignment >= alignment::WARNING {
+        } else if self.goal_alignment >= alignment_thresholds::WARNING {
             AlignmentLevel::Warning
         } else {
             AlignmentLevel::Critical
@@ -276,9 +276,9 @@ impl AlignmentLevel {
     /// Uses constants from `crate::config::constants::alignment`.
     pub fn min_threshold(self) -> f32 {
         match self {
-            AlignmentLevel::Optimal => alignment::OPTIMAL,
-            AlignmentLevel::Acceptable => alignment::ACCEPTABLE,
-            AlignmentLevel::Warning => alignment::WARNING,
+            AlignmentLevel::Optimal => alignment_thresholds::OPTIMAL,
+            AlignmentLevel::Acceptable => alignment_thresholds::ACCEPTABLE,
+            AlignmentLevel::Warning => alignment_thresholds::WARNING,
             AlignmentLevel::Critical => 0.0,
         }
     }
@@ -384,12 +384,11 @@ mod tests {
     #[test]
     fn test_scored_memory_creation() {
         let id = Uuid::new_v4();
-        let memory = ScoredMemory::new(id, 0.85, 0.90, 0.80, 0.75, 8);
+        let memory = ScoredMemory::new(id, 0.85, 0.90, 0.75, 8);
 
         assert_eq!(memory.memory_id, id);
         assert!((memory.score - 0.85).abs() < f32::EPSILON);
         assert!((memory.content_similarity - 0.90).abs() < f32::EPSILON);
-        assert!((memory.purpose_alignment - 0.80).abs() < f32::EPSILON);
         assert!((memory.goal_alignment - 0.75).abs() < f32::EPSILON);
         assert!(!memory.is_misaligned);
         assert_eq!(memory.space_count, 8);
@@ -406,30 +405,18 @@ mod tests {
             id,
             0.85,
             0.90,
-            0.50, // Below 0.55
-            0.60,
+            0.40, // Below 0.55
             8,
         );
         assert!(misaligned.is_misaligned);
 
-        let misaligned2 = ScoredMemory::new(
-            id,
-            0.85,
-            0.90,
-            0.60,
-            0.40, // Below 0.55
-            8,
-        );
-        assert!(misaligned2.is_misaligned);
-
         // Above threshold
-        let aligned = ScoredMemory::new(id, 0.85, 0.90, 0.60, 0.60, 8);
+        let aligned = ScoredMemory::new(id, 0.85, 0.90, 0.60, 8);
         assert!(!aligned.is_misaligned);
 
-        println!("BEFORE: purpose_alignment=0.50, goal_alignment=0.40");
         println!(
-            "AFTER: is_misaligned={}, is_misaligned2={}",
-            misaligned.is_misaligned, misaligned2.is_misaligned
+            "AFTER: is_misaligned={}",
+            misaligned.is_misaligned
         );
         println!("[VERIFIED] Misalignment detection uses CRITICAL_THRESHOLD=0.55");
     }
@@ -438,20 +425,20 @@ mod tests {
     fn test_alignment_level_classification() {
         let id = Uuid::new_v4();
 
-        let optimal = ScoredMemory::new(id, 0.9, 0.9, 0.9, 0.80, 8);
+        let optimal = ScoredMemory::new(id, 0.9, 0.9, 0.80, 8);
         assert_eq!(optimal.alignment_threshold(), AlignmentLevel::Optimal);
         assert!(optimal.is_optimal());
 
-        let acceptable = ScoredMemory::new(id, 0.9, 0.9, 0.9, 0.72, 8);
+        let acceptable = ScoredMemory::new(id, 0.9, 0.9, 0.72, 8);
         assert_eq!(acceptable.alignment_threshold(), AlignmentLevel::Acceptable);
         assert!(acceptable.is_acceptable());
         assert!(!acceptable.is_optimal());
 
-        let warning = ScoredMemory::new(id, 0.9, 0.9, 0.9, 0.60, 8);
+        let warning = ScoredMemory::new(id, 0.9, 0.9, 0.60, 8);
         assert_eq!(warning.alignment_threshold(), AlignmentLevel::Warning);
         assert!(warning.needs_attention());
 
-        let critical = ScoredMemory::new(id, 0.9, 0.9, 0.9, 0.40, 8);
+        let critical = ScoredMemory::new(id, 0.9, 0.9, 0.40, 8);
         assert_eq!(critical.alignment_threshold(), AlignmentLevel::Critical);
         assert!(critical.is_misaligned);
 
@@ -461,7 +448,7 @@ mod tests {
     #[test]
     fn test_teleological_result_creation() {
         let id = Uuid::new_v4();
-        let memory = ScoredMemory::new(id, 0.85, 0.90, 0.80, 0.75, 8);
+        let memory = ScoredMemory::new(id, 0.85, 0.90, 0.75, 8);
 
         let timing = PipelineStageTiming::new(
             std::time::Duration::from_millis(4),
@@ -493,9 +480,9 @@ mod tests {
     #[test]
     fn test_result_filtering() {
         let results = vec![
-            ScoredMemory::new(Uuid::new_v4(), 0.9, 0.9, 0.9, 0.80, 8),
-            ScoredMemory::new(Uuid::new_v4(), 0.8, 0.8, 0.8, 0.65, 6),
-            ScoredMemory::new(Uuid::new_v4(), 0.7, 0.7, 0.5, 0.40, 4),
+            ScoredMemory::new(Uuid::new_v4(), 0.9, 0.9, 0.80, 8),
+            ScoredMemory::new(Uuid::new_v4(), 0.8, 0.8, 0.65, 6),
+            ScoredMemory::new(Uuid::new_v4(), 0.7, 0.7, 0.40, 4),
         ];
 
         let timing = PipelineStageTiming::default();

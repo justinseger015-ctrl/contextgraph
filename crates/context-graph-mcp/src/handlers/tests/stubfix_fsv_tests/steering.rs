@@ -96,7 +96,7 @@ async fn test_steering_feedback_all_orphans_low_connectivity() {
 
     let (handlers, store, _tempdir) = create_test_handlers_with_rocksdb_store_access().await;
 
-    // Store 5 fingerprints with access_count=0 (orphan proxy) and low alignment
+    // Store 5 fingerprints with access_count=0 (orphan proxy) and low importance
     let test_data = [
         ("orphan_memory_1", 0.2_f32, 0_u64),
         ("orphan_memory_2", 0.3_f32, 0_u64),
@@ -173,11 +173,11 @@ async fn test_steering_feedback_all_orphans_low_connectivity() {
 
 /// FSV-STEERING-003: Mixed data produces accurate metrics.
 ///
-/// Stores fingerprints with varied alignment and access patterns:
-/// - 3 aligned (theta >= 0.5) with access_count > 0
-/// - 2 orphans (access_count = 0) with low alignment
+/// Stores fingerprints with varied importance and access patterns:
+/// - 3 high importance (theta >= 0.5) with access_count > 0
+/// - 2 orphans (access_count = 0) with low importance
 ///
-/// Verifies connectivity reflects aligned ratio.
+/// Verifies connectivity reflects importance ratio.
 #[tokio::test]
 #[ignore = "Uses tools not registered in PRD v6"]
 async fn test_steering_feedback_mixed_data_accurate_metrics() {
@@ -193,7 +193,7 @@ async fn test_steering_feedback_mixed_data_accurate_metrics() {
         ("aligned_memory_1", 0.8_f32, 5_u64),
         ("aligned_memory_2", 0.75_f32, 3_u64),
         ("aligned_memory_3", 0.6_f32, 2_u64),
-        // Orphans (low alignment, never accessed)
+        // Orphans (low importance, never accessed)
         ("orphan_memory_1", 0.2_f32, 0_u64),
         ("orphan_memory_2", 0.3_f32, 0_u64),
     ];

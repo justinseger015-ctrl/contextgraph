@@ -13,7 +13,6 @@
 //! |------------|-------|---------|-------|
 //! | HNSW | 10 | E1-E5, E7-E11 dense | Stage 3 |
 //! | HNSW | 1 | E1 Matryoshka 128D | Stage 2 |
-//! | HNSW | 1 | PurposeVector 13D | Stage 4 |
 //!
 //! # Performance Requirements (constitution.yaml)
 //!

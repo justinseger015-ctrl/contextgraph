@@ -60,16 +60,11 @@ fn test_comprehensive_storage_roundtrip_validation() {
         EmbedderQueryResult::from_similarity(id, 0, 0.9, 0),
         EmbedderQueryResult::from_similarity(id, 1, 0.8, 1),
     ];
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.6);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
     assert_eq!(multi.embedder_count, 2);
     let expected_rrf = 1.0 / 60.0 + 1.0 / 61.0;
     assert!((multi.rrf_score - expected_rrf).abs() < 1e-6);
-    println!("[6/7] MultiSpaceQueryResult RRF aggregation verified");
-
-    // 7. Verify purpose alignment filter
-    assert!(multi.passes_alignment_filter(0.55));
-    assert!(!multi.passes_alignment_filter(0.65));
-    println!("[7/7] Purpose alignment filter at 0.55 threshold verified");
+    println!("[6/6] MultiSpaceQueryResult RRF aggregation verified");
 
     println!("\n=== ALL STORAGE ROUNDTRIP VALIDATIONS PASSED ===");
     println!("  - 13 embeddings with correct quantization methods");

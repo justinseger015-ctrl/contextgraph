@@ -157,10 +157,10 @@ async fn phase1_manual_store_verify() {
 
         if let Some(fp) = &retrieved {
             println!(
-                "  [{}] {} EXISTS - theta={:.4}, access_count={}, hash={}...",
+                "  [{}] {} EXISTS - aggregate={:.4}, access_count={}, hash={}...",
                 i + 1,
                 fingerprint_id,
-                fp.alignment_score,
+                fp.purpose_vector.aggregate_alignment(),
                 fp.access_count,
                 hex::encode(&fp.content_hash[..8])
             );
@@ -245,7 +245,10 @@ async fn phase1_verify_mcp_retrieve_matches_store() {
 
     println!("[DIRECT STORE] Retrieved fingerprint:");
     println!("  - ID: {}", direct_fp.id);
-    println!("  - alignment_score: {:.4}", direct_fp.alignment_score);
+    println!(
+        "  - aggregate: {:.4}",
+        direct_fp.purpose_vector.aggregate_alignment()
+    );
     println!("  - content_hash: {}", hex::encode(direct_fp.content_hash));
 
     // === MCP HANDLER RETRIEVE ===
@@ -268,10 +271,6 @@ async fn phase1_verify_mcp_retrieve_matches_store() {
 
     println!("\n[MCP HANDLER] Retrieved fingerprint:");
     println!("  - ID: {}", mcp_fp.get("id").unwrap());
-    println!(
-        "  - alignmentScore: {}",
-        mcp_fp.get("alignmentScore").unwrap()
-    );
     println!(
         "  - contentHashHex: {}",
         mcp_fp.get("contentHashHex").unwrap()

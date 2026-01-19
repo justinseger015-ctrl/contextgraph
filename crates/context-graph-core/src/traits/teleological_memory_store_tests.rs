@@ -6,7 +6,7 @@
 //! # Test Categories
 //!
 //! 1. CRUD Operations (store, retrieve, update, delete)
-//! 2. Search Operations (semantic, purpose, sparse)
+//! 2. Search Operations (semantic, sparse)
 //! 3. Batch Operations (store_batch, retrieve_batch)
 //! 4. Statistics (count, storage_size)
 //! 5. Persistence (flush, checkpoint, restore, compact)
@@ -20,23 +20,13 @@ use crate::traits::{
     TeleologicalStorageBackend,
 };
 use crate::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 
 /// Create a real test fingerprint with meaningful data.
 fn create_real_fingerprint() -> TeleologicalFingerprint {
     TeleologicalFingerprint::new(
         SemanticFingerprint::zeroed(),
-        PurposeVector::new([0.75; NUM_EMBEDDERS]),
-        [0u8; 32],
-    )
-}
-
-/// Create a fingerprint with custom alignment values.
-fn create_fingerprint_with_alignment(alignment: f32) -> TeleologicalFingerprint {
-    TeleologicalFingerprint::new(
-        SemanticFingerprint::zeroed(),
-        PurposeVector::new([alignment; NUM_EMBEDDERS]),
         [0u8; 32],
     )
 }
@@ -68,7 +58,6 @@ async fn test_store_and_retrieve() {
         .expect("fingerprint should exist");
 
     assert_eq!(retrieved.id, original_id);
-    assert_eq!(retrieved.purpose_vector.alignments, [0.75; NUM_EMBEDDERS]);
 
     println!("[VERIFIED] test_store_and_retrieve: CRUD store/retrieve works with real data");
 }
@@ -98,7 +87,6 @@ async fn test_update() {
 
     // Modify and update
     fp.access_count = 999;
-    fp.alignment_score = 0.95;
 
     let updated = store.update(fp).await.expect("update should succeed");
     assert!(updated, "update should return true for existing ID");
@@ -106,7 +94,6 @@ async fn test_update() {
     // Verify changes persisted
     let retrieved = store.retrieve(id).await.unwrap().unwrap();
     assert_eq!(retrieved.access_count, 999);
-    assert!((retrieved.alignment_score - 0.95).abs() < 0.01);
 
     println!("[VERIFIED] test_update: Update modifies stored data correctly");
 }
@@ -211,80 +198,6 @@ async fn test_search_semantic() {
         "[VERIFIED] test_search_semantic: Semantic search returns sorted results (found {})",
         results.len()
     );
-}
-
-#[tokio::test]
-async fn test_search_purpose() {
-    let store = InMemoryTeleologicalStore::new();
-
-    // Create purpose vectors with varying patterns (not uniform) so cosine similarity differs
-    // Query will be similar to high-alignment pattern
-    let query_pattern: [f32; NUM_EMBEDDERS] = [
-        0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3,
-    ];
-
-    // Create fingerprints with purpose vectors at varying distances from query
-    // fp1: Very similar to query (high cosine similarity)
-    let mut fp1 = create_real_fingerprint();
-    fp1.purpose_vector = PurposeVector::new([
-        0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3,
-    ]);
-    fp1.alignment_score = 0.95; // High alignment
-
-    // fp2: Moderately similar
-    let mut fp2 = create_real_fingerprint();
-    fp2.purpose_vector = PurposeVector::new([
-        0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2,
-    ]);
-    fp2.alignment_score = 0.7;
-
-    // fp3: Less similar (reversed pattern)
-    let mut fp3 = create_real_fingerprint();
-    fp3.purpose_vector = PurposeVector::new([
-        0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
-    ]);
-    fp3.alignment_score = 0.4;
-
-    // fp4: Orthogonal pattern
-    let mut fp4 = create_real_fingerprint();
-    fp4.purpose_vector = PurposeVector::new([
-        0.5, 0.6, 0.7, 0.8, 0.7, 0.6, 0.5, 0.6, 0.7, 0.8, 0.7, 0.6, 0.5,
-    ]);
-    fp4.alignment_score = 0.55;
-
-    store.store(fp1).await.unwrap();
-    store.store(fp2).await.unwrap();
-    store.store(fp3).await.unwrap();
-    store.store(fp4).await.unwrap();
-
-    let query = PurposeVector::new(query_pattern);
-    let options = TeleologicalSearchOptions::quick(10);
-    let results = store.search_purpose(&query, options).await.unwrap();
-
-    assert_eq!(results.len(), 4, "should find all 4 fingerprints");
-
-    // Results should be sorted by cosine similarity to query
-    // The first result should be fp1 (identical pattern, highest cosine sim)
-    assert!(
-        results[0].similarity > 0.99,
-        "top result should have very high similarity (got {})",
-        results[0].similarity
-    );
-    assert!(
-        results[0].fingerprint.alignment_score > 0.9,
-        "top result should be fp1 with theta > 0.9 (got {})",
-        results[0].fingerprint.alignment_score
-    );
-
-    // Verify descending similarity order
-    for i in 1..results.len() {
-        assert!(
-            results[i - 1].similarity >= results[i].similarity,
-            "results should be sorted by similarity descending"
-        );
-    }
-
-    println!("[VERIFIED] test_search_purpose: Purpose search returns correctly ordered results");
 }
 
 #[tokio::test]
@@ -495,37 +408,6 @@ async fn test_storage_size_tracking() {
     );
 }
 
-#[tokio::test]
-async fn test_search_with_alignment_filter() {
-    let store = InMemoryTeleologicalStore::new();
-
-    // Store fingerprints with different alignments
-    for alignment in [0.3, 0.5, 0.6, 0.8, 0.9] {
-        let fp = create_fingerprint_with_alignment(alignment);
-        store.store(fp).await.unwrap();
-    }
-
-    // Search with min_alignment filter
-    let query = SemanticFingerprint::zeroed();
-    let options = TeleologicalSearchOptions::quick(10).with_min_alignment(0.75);
-    let results = store.search_semantic(&query, options).await.unwrap();
-
-    // Should only find fingerprints with alignment >= 0.75 (0.8 and 0.9)
-    assert_eq!(
-        results.len(),
-        2,
-        "should find 2 fingerprints above 0.75 alignment"
-    );
-
-    for result in &results {
-        assert!(
-            result.fingerprint.alignment_score >= 0.75,
-            "all results should meet alignment threshold"
-        );
-    }
-
-    println!("[VERIFIED] test_search_with_alignment_filter: Alignment filter works correctly");
-}
 
 #[tokio::test]
 async fn test_search_with_embedder_filter() {

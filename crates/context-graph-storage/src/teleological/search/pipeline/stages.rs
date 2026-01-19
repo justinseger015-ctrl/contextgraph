@@ -1,11 +1,10 @@
 //! Individual pipeline stage implementations.
 //!
-//! This module contains the implementation of each of the 5 pipeline stages:
+//! This module contains the implementation of each of the 4 pipeline stages:
 //! 1. SPLADE Filter (inverted index, NOT HNSW)
 //! 2. Matryoshka ANN (128D HNSW)
 //! 3. RRF Rerank (multi-space)
-//! 4. Alignment Filter (purpose vector)
-//! 5. MaxSim Rerank (ColBERT, NOT HNSW)
+//! 4. MaxSim Rerank (ColBERT, NOT HNSW)
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -292,101 +291,10 @@ impl<'a> StageExecutor<'a> {
     }
 
     // ========================================================================
-    // STAGE 4: ALIGNMENT FILTER
+    // STAGE 4: MAXSIM RERANK (ColBERT, NOT HNSW)
     // ========================================================================
 
-    /// Stage 4: Teleological alignment filter.
-    /// Uses PurposeVector HNSW and alignment threshold.
-    pub fn stage_alignment_filter(
-        &self,
-        candidates: Vec<PipelineCandidate>,
-        config: &StageConfig,
-    ) -> Result<StageResult, PipelineError> {
-        let stage_start = Instant::now();
-        let candidates_in = candidates.len();
-
-        let purpose_vector = self
-            .config
-            .purpose_vector
-            .ok_or(PipelineError::MissingPurposeVector)?;
-
-        if candidates.is_empty() {
-            return Ok(StageResult {
-                candidates: Vec::new(),
-                latency_us: stage_start.elapsed().as_micros() as u64,
-                candidates_in: 0,
-                candidates_out: 0,
-                stage: PipelineStage::AlignmentFilter,
-            });
-        }
-
-        // Search purpose vector index
-        let purpose_results = self.single_search.search(
-            EmbedderIndex::PurposeVector,
-            &purpose_vector,
-            candidates.len() * 2, // Wide search
-            None,
-        )?;
-
-        // Create alignment score map
-        let alignment_scores: HashMap<Uuid, f32> = purpose_results
-            .hits
-            .into_iter()
-            .map(|hit| (hit.id, hit.similarity))
-            .collect();
-
-        // Filter candidates by alignment threshold
-        let mut new_candidates: Vec<PipelineCandidate> = candidates
-            .into_iter()
-            .filter_map(|mut c| {
-                if let Some(&alignment) = alignment_scores.get(&c.id) {
-                    if alignment >= config.min_score_threshold {
-                        c.add_stage_score(PipelineStage::AlignmentFilter, alignment);
-                        Some(c)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // Sort by alignment score descending
-        new_candidates.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        let latency_us = stage_start.elapsed().as_micros() as u64;
-        let latency_ms = latency_us / 1000;
-
-        // Check timeout - FAIL FAST
-        if latency_ms > config.max_latency_ms {
-            return Err(PipelineError::Timeout {
-                stage: PipelineStage::AlignmentFilter,
-                elapsed_ms: latency_ms,
-                max_ms: config.max_latency_ms,
-            });
-        }
-
-        let candidates_out = new_candidates.len();
-
-        Ok(StageResult {
-            candidates: new_candidates,
-            latency_us,
-            candidates_in,
-            candidates_out,
-            stage: PipelineStage::AlignmentFilter,
-        })
-    }
-
-    // ========================================================================
-    // STAGE 5: MAXSIM RERANK (ColBERT, NOT HNSW)
-    // ========================================================================
-
-    /// Stage 5: Late interaction MaxSim.
+    /// Stage 4: Late interaction MaxSim.
     /// Uses ColBERT-style token matching, NOT HNSW.
     pub fn stage_maxsim_rerank(
         &self,

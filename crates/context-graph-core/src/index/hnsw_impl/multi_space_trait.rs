@@ -186,18 +186,6 @@ impl MultiSpaceIndexManager for HnswMultiSpaceIndex {
         Ok(())
     }
 
-    async fn add_purpose_vector(&mut self, memory_id: Uuid, purpose: &[f32]) -> IndexResult<()> {
-        if purpose.len() != 13 {
-            return Err(IndexError::DimensionMismatch {
-                embedder: EmbedderIndex::PurposeVector,
-                expected: 13,
-                actual: purpose.len(),
-            });
-        }
-
-        self.add_vector(EmbedderIndex::PurposeVector, memory_id, purpose)
-            .await
-    }
 
     async fn add_splade(&mut self, memory_id: Uuid, sparse: &[(usize, f32)]) -> IndexResult<()> {
         self.add_splade_internal(memory_id, sparse)
@@ -277,14 +265,6 @@ impl MultiSpaceIndexManager for HnswMultiSpaceIndex {
             .await
     }
 
-    async fn search_purpose(
-        &self,
-        purpose_query: &[f32],
-        k: usize,
-    ) -> IndexResult<Vec<(Uuid, f32)>> {
-        self.search(EmbedderIndex::PurposeVector, purpose_query, k)
-            .await
-    }
 
     async fn remove(&mut self, memory_id: Uuid) -> IndexResult<()> {
         let mut found = false;

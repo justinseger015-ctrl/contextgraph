@@ -7,9 +7,9 @@ use super::super::super::groups::GroupType;
 use super::super::super::types::NUM_EMBEDDERS;
 use super::super::super::vector::TeleologicalVector;
 
-/// Compute purpose vector cosine similarity.
+/// Compute topic profile cosine similarity.
 pub fn compute_purpose_similarity(a: &TeleologicalVector, b: &TeleologicalVector) -> f32 {
-    a.purpose_vector.similarity(&b.purpose_vector)
+    a.topic_profile.similarity(&b.topic_profile)
 }
 
 /// Compute cross-correlation cosine similarity.

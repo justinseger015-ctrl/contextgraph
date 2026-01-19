@@ -1,17 +1,11 @@
 //! Test helper functions for TeleologicalFingerprint tests.
 
-use crate::types::fingerprint::purpose::PurposeVector;
 use crate::types::fingerprint::SemanticFingerprint;
-use crate::types::fingerprint::NUM_EMBEDDERS;
 
 pub fn make_test_semantic() -> SemanticFingerprint {
     // Explicitly using zeroed() - this is a test helper where we need placeholder data.
     // In production, use real embeddings from the embedding pipeline.
     SemanticFingerprint::zeroed()
-}
-
-pub fn make_test_purpose(alignment: f32) -> PurposeVector {
-    PurposeVector::new([alignment; NUM_EMBEDDERS])
 }
 
 pub fn make_test_hash() -> [u8; 32] {

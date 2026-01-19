@@ -12,7 +12,6 @@ use tracing::info;
 
 use context_graph_core::clustering::{MultiSpaceClusterManager, TopicStabilityTracker};
 use context_graph_core::monitoring::LayerStatusProvider;
-use context_graph_core::purpose::GoalHierarchy;
 use context_graph_core::traits::{
     MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor,
 };
@@ -36,9 +35,6 @@ pub struct Handlers {
     /// Multi-array embedding provider - generates all 13 embeddings per content.
     pub(in crate::handlers) multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
 
-    /// Goal hierarchy - defines strategic goals and sub-goals.
-    pub(in crate::handlers) goal_hierarchy: Arc<RwLock<GoalHierarchy>>,
-
     /// Layer status provider for get_memetic_status.
     pub(in crate::handlers) layer_status_provider: Arc<dyn LayerStatusProvider>,
 
@@ -58,7 +54,6 @@ impl Handlers {
     /// * `teleological_store` - Store for TeleologicalFingerprint
     /// * `utl_processor` - UTL processor for learning metrics
     /// * `multi_array_provider` - 13-embedding generator
-    /// * `goal_hierarchy` - Goal hierarchy (can be empty initially)
     /// * `layer_status_provider` - Provider for layer status information
     /// * `cluster_manager` - Multi-space cluster manager for topic detection
     /// * `stability_tracker` - Topic stability tracker for portfolio metrics
@@ -66,7 +61,6 @@ impl Handlers {
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
-        goal_hierarchy: Arc<RwLock<GoalHierarchy>>,
         layer_status_provider: Arc<dyn LayerStatusProvider>,
         cluster_manager: Arc<RwLock<MultiSpaceClusterManager>>,
         stability_tracker: Arc<RwLock<TopicStabilityTracker>>,
@@ -75,7 +69,6 @@ impl Handlers {
             teleological_store,
             utl_processor,
             multi_array_provider,
-            goal_hierarchy,
             layer_status_provider,
             cluster_manager,
             stability_tracker,
@@ -92,7 +85,6 @@ impl Handlers {
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         utl_processor: Arc<dyn UtlProcessor>,
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
-        goal_hierarchy: Arc<RwLock<GoalHierarchy>>,
         layer_status_provider: Arc<dyn LayerStatusProvider>,
     ) -> Self {
         // Create default cluster manager
@@ -106,7 +98,6 @@ impl Handlers {
             teleological_store,
             utl_processor,
             multi_array_provider,
-            goal_hierarchy,
             layer_status_provider,
             cluster_manager: Arc::new(RwLock::new(cluster_manager)),
             stability_tracker: Arc::new(RwLock::new(stability_tracker)),

@@ -124,8 +124,8 @@ mod instant_serde {
 }
 
 impl NeuromodulationState {
-    /// Get Hopfield beta value (from dopamine)
-    pub fn hopfield_beta(&self) -> f32 {
+    /// Get retrieval sharpness value (from dopamine)
+    pub fn retrieval_sharpness(&self) -> f32 {
         self.dopamine.value
     }
 
@@ -163,7 +163,7 @@ impl NeuromodulationState {
 /// Modulator type enum for identification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModulatorType {
-    /// Dopamine - controls hopfield.beta
+    /// Dopamine - controls retrieval sharpness
     Dopamine,
     /// Serotonin - controls space_weights
     Serotonin,
@@ -453,9 +453,9 @@ impl NeuromodulationManager {
 
     // Parameter accessors
 
-    /// Get Hopfield beta (dopamine)
-    pub fn get_hopfield_beta(&self) -> f32 {
-        self.dopamine.get_hopfield_beta()
+    /// Get retrieval sharpness (dopamine)
+    pub fn get_retrieval_sharpness(&self) -> f32 {
+        self.dopamine.get_retrieval_sharpness()
     }
 
     /// Get attention temperature (noradrenaline)
@@ -528,7 +528,7 @@ mod tests {
     fn test_manager_creation() {
         let manager = NeuromodulationManager::new();
 
-        assert!((manager.get_hopfield_beta() - DA_BASELINE).abs() < f32::EPSILON);
+        assert!((manager.get_retrieval_sharpness() - DA_BASELINE).abs() < f32::EPSILON);
         assert!((manager.get_attention_temp() - NE_BASELINE).abs() < f32::EPSILON);
         assert!((manager.serotonin.value() - SEROTONIN_BASELINE).abs() < f32::EPSILON);
     }
@@ -538,7 +538,7 @@ mod tests {
         let manager = NeuromodulationManager::new();
         let state = manager.get_state(0.001);
 
-        assert!((state.hopfield_beta() - DA_BASELINE).abs() < f32::EPSILON);
+        assert!((state.retrieval_sharpness() - DA_BASELINE).abs() < f32::EPSILON);
         assert!((state.attention_temp() - NE_BASELINE).abs() < f32::EPSILON);
         assert!((state.utl_learning_rate() - 0.001).abs() < f32::EPSILON);
     }
@@ -583,11 +583,11 @@ mod tests {
     #[test]
     fn test_manager_workspace_entry() {
         let mut manager = NeuromodulationManager::new();
-        let initial = manager.get_hopfield_beta();
+        let initial = manager.get_retrieval_sharpness();
 
         manager.on_workspace_entry();
 
-        assert!(manager.get_hopfield_beta() > initial);
+        assert!(manager.get_retrieval_sharpness() > initial);
     }
 
     #[test]
@@ -619,7 +619,7 @@ mod tests {
 
         manager.reset_all();
 
-        assert!((manager.get_hopfield_beta() - DA_BASELINE).abs() < f32::EPSILON);
+        assert!((manager.get_retrieval_sharpness() - DA_BASELINE).abs() < f32::EPSILON);
         assert!((manager.get_attention_temp() - NE_BASELINE).abs() < f32::EPSILON);
         assert!((manager.serotonin.value() - SEROTONIN_BASELINE).abs() < f32::EPSILON);
     }
@@ -694,16 +694,16 @@ mod tests {
         use crate::neuromod::dopamine::DA_GOAL_SENSITIVITY;
 
         let mut manager = NeuromodulationManager::new();
-        let initial = manager.get_hopfield_beta();
+        let initial = manager.get_retrieval_sharpness();
 
         manager.on_goal_progress(0.8);
 
         let expected = initial + 0.8 * DA_GOAL_SENSITIVITY;
         assert!(
-            (manager.get_hopfield_beta() - expected).abs() < f32::EPSILON,
+            (manager.get_retrieval_sharpness() - expected).abs() < f32::EPSILON,
             "Expected {}, got {}",
             expected,
-            manager.get_hopfield_beta()
+            manager.get_retrieval_sharpness()
         );
     }
 
@@ -712,16 +712,16 @@ mod tests {
         use crate::neuromod::dopamine::DA_GOAL_SENSITIVITY;
 
         let mut manager = NeuromodulationManager::new();
-        let initial = manager.get_hopfield_beta();
+        let initial = manager.get_retrieval_sharpness();
 
         manager.on_goal_progress(-0.6);
 
         let expected = initial - 0.6 * DA_GOAL_SENSITIVITY;
         assert!(
-            (manager.get_hopfield_beta() - expected).abs() < f32::EPSILON,
+            (manager.get_retrieval_sharpness() - expected).abs() < f32::EPSILON,
             "Expected {}, got {}",
             expected,
-            manager.get_hopfield_beta()
+            manager.get_retrieval_sharpness()
         );
     }
 

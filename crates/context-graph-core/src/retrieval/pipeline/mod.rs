@@ -18,11 +18,11 @@
 //! # Dependencies (L001-L007)
 //!
 //! - L001: MultiEmbeddingQueryExecutor (Stages 1-3)
-//! - L002: PurposeVectorComputer (Stage 4)
-//! - L003: GoalAlignmentCalculator (Stage 4)
-//! - L004: GoalAlignmentCalculator (Stage 4 filtering)
+//! - L002: (Reserved)
+//! - L003: (Reserved)
+//! - L004: Topic-based filtering (Stage 4 filtering)
 //! - L005: Per-Space HNSW Index (Stage 3)
-//! - L006: Purpose Pattern Index (Stage 4)
+//! - L006: Topic Pattern Index (Stage 4)
 //! - L007: CrossSpaceSimilarityEngine (Stage 3)
 //!
 //! FAIL FAST: All errors are explicit, no silent fallbacks.

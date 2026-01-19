@@ -25,7 +25,7 @@ async fn test_fsv_neuromod_listener_dopamine_boost() {
     // BEFORE - Read via separate lock
     let before_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta() // Returns dopamine value
+        mgr.get_retrieval_sharpness() // Returns dopamine value
     };
     println!("BEFORE: dopamine = {:.3}", before_da);
     assert!(
@@ -45,7 +45,7 @@ async fn test_fsv_neuromod_listener_dopamine_boost() {
     // AFTER - Read via SEPARATE lock
     let after_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("AFTER: dopamine = {:.3}", after_da);
 
@@ -74,7 +74,7 @@ async fn test_neuromod_listener_ignores_other_events() {
 
     let initial_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
 
     // Send MemoryExits - should be ignored
@@ -94,7 +94,7 @@ async fn test_neuromod_listener_ignores_other_events() {
 
     let final_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
 
     assert!(
@@ -120,7 +120,7 @@ async fn test_neuromod_listener_at_max() {
 
     let before_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("BEFORE: dopamine = {:.3} (at max)", before_da);
 
@@ -135,7 +135,7 @@ async fn test_neuromod_listener_at_max() {
 
     let after_da = {
         let mgr = neuromod.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("AFTER: dopamine = {:.3}", after_da);
 

@@ -8,16 +8,15 @@ use crate::types::{LayerId, LayerInput, LayerOutput};
 
 /// Bio-nervous system layer abstraction.
 ///
-/// Each layer in the 5-layer architecture implements this trait.
+/// Each layer in the 4-layer architecture implements this trait.
 /// Layers process input within their latency budget and pass results downstream.
 ///
 /// # Layers
 ///
 /// 1. **Sensing** (5ms): Multi-modal input processing
-/// 2. **Reflex** (100μs): Pattern-matched fast responses
-/// 3. **Memory** (1ms): Modern Hopfield associative storage
-/// 4. **Learning** (10ms): UTL-driven weight optimization
-/// 5. **Coherence** (10ms): Global state synchronization
+/// 2. **Memory** (1ms): Associative memory storage
+/// 3. **Learning** (10ms): UTL-driven weight optimization
+/// 4. **Coherence** (10ms): Global state synchronization
 ///
 /// # Example
 ///
@@ -26,12 +25,12 @@ use crate::types::{LayerId, LayerInput, LayerOutput};
 /// use std::time::Duration;
 ///
 /// // Nervous layer latency budgets from constitution
-/// let reflex_budget = Duration::from_micros(100);  // Reflex: 100μs
+/// let sensing_budget = Duration::from_millis(5);   // Sensing: 5ms
 /// let memory_budget = Duration::from_millis(1);    // Memory: 1ms
 /// let learning_budget = Duration::from_millis(10); // Learning: 10ms
 ///
-/// assert!(reflex_budget < memory_budget);
-/// assert!(memory_budget < learning_budget);
+/// assert!(memory_budget < sensing_budget);
+/// assert!(sensing_budget < learning_budget);
 /// ```
 #[async_trait]
 pub trait NervousLayer: Send + Sync {

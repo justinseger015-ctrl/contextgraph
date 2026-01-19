@@ -251,33 +251,9 @@ impl<S: QuantizedFingerprintRetriever> MultiSpaceSearchEngine<S> {
         let mut fused_results: Vec<MultiSpaceQueryResult> = all_results
             .into_iter()
             .map(|(id, embedder_results)| {
-                // Get purpose alignment from storage
-                // FAIL FAST: Log warning if purpose vector missing (AP-007 compliance)
-                let purpose_alignment = match self.storage.get_purpose_vector(id) {
-                    Ok(Some(pv)) => pv.iter().sum::<f32>() / 13.0,
-                    Ok(None) => {
-                        // Memory exists but has no purpose vector - this is a data integrity issue
-                        eprintln!(
-                            "[MULTI-SPACE SEARCH] WARNING: Memory {} has no purpose vector. \
-                             This indicates incomplete fingerprint storage. Using alignment=0.0 \
-                             but this memory should be re-indexed with complete fingerprint.",
-                            id
-                        );
-                        0.0
-                    }
-                    Err(e) => {
-                        // Storage error - fail fast with full context
-                        panic!(
-                            "MULTI-SPACE SEARCH ERROR: Failed to retrieve purpose vector for memory {}. \
-                             Storage error: {}. This indicates a broken storage layer that must be fixed.",
-                            id, e
-                        );
-                    }
-                };
-
                 // Use existing MultiSpaceQueryResult::from_embedder_results if available,
                 // or compute manually
-                self.compute_rrf_fusion(&embedder_results, weights, id, purpose_alignment)
+                self.compute_rrf_fusion(&embedder_results, weights, id)
             })
             .collect();
 
@@ -340,7 +316,6 @@ impl<S: QuantizedFingerprintRetriever> MultiSpaceSearchEngine<S> {
         results: &[EmbedderQueryResult],
         weights: Option<&[f32; 13]>,
         id: Uuid,
-        purpose_alignment: f32,
     ) -> MultiSpaceQueryResult {
         let mut embedder_similarities = [f32::NAN; 13];
         let mut rrf_score = 0.0f32;
@@ -373,7 +348,6 @@ impl<S: QuantizedFingerprintRetriever> MultiSpaceSearchEngine<S> {
             embedder_similarities,
             rrf_score,
             weighted_similarity,
-            purpose_alignment,
             embedder_count: results.len(),
         }
     }

@@ -11,7 +11,7 @@ use crate::traits::NervousLayer;
 use crate::types::LayerInput;
 
 use super::{
-    StubCoherenceLayer, StubLearningLayer, StubMemoryLayer, StubReflexLayer, StubSensingLayer,
+    StubCoherenceLayer, StubLearningLayer, StubMemoryLayer, StubSensingLayer,
 };
 
 /// Helper to create test input.
@@ -37,29 +37,6 @@ async fn test_layer_fails_fast_sensing() {
     assert!(
         elapsed <= budget,
         "Sensing layer took {:?} but budget is {:?}",
-        elapsed,
-        budget
-    );
-}
-
-#[tokio::test]
-async fn test_layer_fails_fast_reflex() {
-    let layer = StubReflexLayer::new();
-    let input = test_input("test content for reflex layer");
-
-    let budget = layer.latency_budget();
-    let start = Instant::now();
-    let result = layer.process(input).await;
-    let elapsed = start.elapsed();
-
-    // Must fail with NotImplemented (AP-007)
-    assert!(result.is_err(), "Reflex layer stub must fail fast");
-    assert!(matches!(result, Err(CoreError::NotImplemented(_))));
-
-    // Failure must be fast (well under budget)
-    assert!(
-        elapsed <= budget,
-        "Reflex layer took {:?} but budget is {:?}",
         elapsed,
         budget
     );
@@ -138,7 +115,6 @@ async fn test_layer_fails_fast_coherence() {
 async fn test_all_layers_fail_fast() {
     let layers: Vec<(Box<dyn NervousLayer>, &str)> = vec![
         (Box::new(StubSensingLayer::new()), "Sensing"),
-        (Box::new(StubReflexLayer::new()), "Reflex"),
         (Box::new(StubMemoryLayer::new()), "Memory"),
         (Box::new(StubLearningLayer::new()), "Learning"),
         (Box::new(StubCoherenceLayer::new()), "Coherence"),
@@ -173,7 +149,6 @@ async fn test_all_layers_fail_fast() {
 async fn test_stub_layers_report_unhealthy() {
     let layers: Vec<Box<dyn NervousLayer>> = vec![
         Box::new(StubSensingLayer::new()),
-        Box::new(StubReflexLayer::new()),
         Box::new(StubMemoryLayer::new()),
         Box::new(StubLearningLayer::new()),
         Box::new(StubCoherenceLayer::new()),
@@ -192,7 +167,6 @@ async fn test_stub_layers_report_unhealthy() {
 #[tokio::test]
 async fn test_full_pipeline_all_layers_fail() {
     let sensing = StubSensingLayer::new();
-    let reflex = StubReflexLayer::new();
     let memory = StubMemoryLayer::new();
     let learning = StubLearningLayer::new();
     let coherence = StubCoherenceLayer::new();
@@ -205,7 +179,6 @@ async fn test_full_pipeline_all_layers_fail() {
 
     // All should fail with NotImplemented
     assert!(sensing.process(input.clone()).await.is_err());
-    assert!(reflex.process(input.clone()).await.is_err());
     assert!(memory.process(input.clone()).await.is_err());
     assert!(learning.process(input.clone()).await.is_err());
     assert!(coherence.process(input).await.is_err());

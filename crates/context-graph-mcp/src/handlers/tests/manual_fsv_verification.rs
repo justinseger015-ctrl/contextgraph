@@ -29,10 +29,12 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use context_graph_core::monitoring::{LayerStatusProvider, StubLayerStatusProvider};
-use context_graph_core::purpose::{GoalDiscoveryMetadata, GoalHierarchy, GoalLevel, GoalNode};
 use context_graph_core::stubs::{
     InMemoryTeleologicalStore, StubMultiArrayProvider, StubUtlProcessor,
 };
+
+// NOTE: create_test_hierarchy was removed along with context_graph_core::purpose module.
+// GoalHierarchy is no longer used - Handlers::with_defaults now takes 4 args.
 use context_graph_core::traits::{
     MultiArrayEmbeddingProvider, TeleologicalMemoryStore, UtlProcessor,
 };
@@ -58,35 +60,8 @@ fn make_tools_call_request(tool_name: &str, id: i64, arguments: serde_json::Valu
     }
 }
 
-// TASK-P0-001: Updated for 3-level hierarchy (Strategic → Tactical → Immediate)
-fn create_test_hierarchy() -> GoalHierarchy {
-    let mut hierarchy = GoalHierarchy::new();
-    let discovery = GoalDiscoveryMetadata::bootstrap();
-
-    // Strategic goal (top-level, no parent)
-    let s1_goal = GoalNode::autonomous_goal(
-        "Test Strategic Goal".into(),
-        GoalLevel::Strategic,
-        SemanticFingerprint::zeroed(),
-        discovery.clone(),
-    )
-    .expect("Failed to create Strategic goal");
-    let s1_id = s1_goal.id;
-    hierarchy.add_goal(s1_goal).unwrap();
-
-    // Tactical goal - child of Strategic
-    let t1_goal = GoalNode::child_goal(
-        "Test Tactical Goal".into(),
-        GoalLevel::Tactical,
-        s1_id,
-        SemanticFingerprint::zeroed(),
-        discovery,
-    )
-    .expect("Failed to create Tactical goal");
-    hierarchy.add_goal(t1_goal).unwrap();
-
-    hierarchy
-}
+// NOTE: create_test_hierarchy is imported from parent module (super::create_test_hierarchy)
+// It was moved there to avoid duplication and uses context_graph_core::purpose module.
 
 /// Extract fingerprint ID from tools/call response.
 fn extract_fingerprint_id_from_response(result: &serde_json::Value) -> Option<String> {
@@ -235,11 +210,10 @@ async fn manual_fsv_memory_store_physical_verification() {
         stored_fp.semantic.e13_splade.indices.len()
     );
 
-    // 4. Verify purpose vector
-    println!("\n   PURPOSE VECTOR (13 alignments):");
-    for (i, alignment) in stored_fp.purpose_vector.alignments.iter().enumerate() {
-        println!("   - E{} alignment: {:.4}", i + 1, alignment);
-    }
+    // 4. Note: purpose_vector was removed from TeleologicalFingerprint
+    println!("\n   FINGERPRINT METADATA:");
+    println!("   - Access count: {}", stored_fp.access_count);
+    println!("   - Last updated: {}", stored_fp.last_updated);
 
     // =========================================================================
     // EVIDENCE OF SUCCESS
@@ -431,13 +405,12 @@ async fn manual_fsv_edge_case_memetic_status() {
 
     println!("   layers: {}", data["layers"]);
 
-    // Verify layer statuses from StubLayerStatusProvider
+    // Verify layer statuses from StubLayerStatusProvider (4-layer system - all active)
     let layers = &data["layers"];
     assert_eq!(layers["perception"].as_str().unwrap(), "active", "perception should be active");
     assert_eq!(layers["memory"].as_str().unwrap(), "active", "memory should be active");
-    assert_eq!(layers["reasoning"].as_str().unwrap(), "stub", "reasoning should be stub");
-    assert_eq!(layers["action"].as_str().unwrap(), "stub", "action should be stub");
-    assert_eq!(layers["meta"].as_str().unwrap(), "stub", "meta should be stub");
+    assert_eq!(layers["action"].as_str().unwrap(), "active", "action should be active");
+    assert_eq!(layers["meta"].as_str().unwrap(), "active", "meta should be active");
 
     println!("\n✓ EDGE CASE VERIFIED: get_memetic_status returns correct layer statuses\n");
 }

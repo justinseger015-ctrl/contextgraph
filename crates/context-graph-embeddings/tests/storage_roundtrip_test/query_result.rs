@@ -61,7 +61,7 @@ fn test_multi_space_aggregation() {
         EmbedderQueryResult::from_similarity(id, 12, 0.7, 2),
     ];
 
-    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.65);
+    let multi = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // Verify embedder_count
     assert_eq!(multi.embedder_count, 3, "Should count 3 embedders");
@@ -100,36 +100,5 @@ fn test_multi_space_empty_results_panics() {
     let _ = MultiSpaceQueryResult::from_embedder_results(
         Uuid::new_v4(),
         &[], // Empty
-        0.75,
     );
-}
-
-/// Test purpose alignment filter at 0.55 threshold.
-#[test]
-fn test_purpose_alignment_filter() {
-    let id = Uuid::new_v4();
-    let results = vec![EmbedderQueryResult::from_similarity(id, 0, 0.9, 0)];
-
-    // Above threshold
-    let multi_high = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.60);
-    assert!(
-        multi_high.passes_alignment_filter(0.55),
-        "0.60 >= 0.55 should pass"
-    );
-
-    // At threshold
-    let multi_at = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.55);
-    assert!(
-        multi_at.passes_alignment_filter(0.55),
-        "0.55 >= 0.55 should pass"
-    );
-
-    // Below threshold
-    let multi_low = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.50);
-    assert!(
-        !multi_low.passes_alignment_filter(0.55),
-        "0.50 < 0.55 should fail"
-    );
-
-    println!("[PASS] Purpose alignment filter at 0.55 threshold verified");
 }

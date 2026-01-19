@@ -1,8 +1,6 @@
 //! Helper functions for RocksDbTeleologicalStore.
 //!
-//! Contains utility functions for computing similarity and purpose alignment.
-
-use context_graph_core::types::fingerprint::PurposeVector;
+//! Contains utility functions for computing similarity.
 
 /// Compute cosine similarity between two dense vectors.
 pub fn compute_cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
@@ -26,9 +24,4 @@ pub fn compute_cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     } else {
         dot / denom
     }
-}
-
-/// Compute purpose alignment for a fingerprint.
-pub fn query_purpose_alignment(pv: &PurposeVector) -> f32 {
-    pv.aggregate_alignment()
 }

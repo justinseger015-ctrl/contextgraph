@@ -332,16 +332,11 @@ impl CrossSpaceSimilarityEngine for DefaultCrossSpaceEngine {
         }
 
         // Step 4: Get weights based on strategy
-        let mut weights = self.get_weights(&config.weighting_strategy);
+        let weights = self.get_weights(&config.weighting_strategy);
 
-        // Apply purpose weighting if enabled
-        if config.use_purpose_weighting {
-            for (weight, alignment) in weights.iter_mut().zip(fp1.purpose_vector.alignments.iter())
-            {
-                *weight *= alignment.abs();
-            }
-            Self::normalize_weights(&mut weights);
-        }
+        // Note: Purpose weighting was removed when alignment/purpose fields were removed
+        // from TeleologicalFingerprint. The config.use_purpose_weighting field is now a no-op.
+        // Weights are applied as-is based on the weighting strategy.
 
         // Step 5: Compute aggregated score
         let (score, raw_score) = Self::weighted_average(&space_scores, &weights);
@@ -365,12 +360,8 @@ impl CrossSpaceSimilarityEngine for DefaultCrossSpaceEngine {
             } else {
                 None
             },
-            purpose_contribution: if config.use_purpose_weighting {
-                // Purpose contribution is the modification factor from purpose weighting
-                Some(fp1.purpose_vector.coherence)
-            } else {
-                None
-            },
+            // Purpose contribution is always None now since purpose weighting was removed
+            purpose_contribution: None,
             confidence,
             rrf_score: None,
         };

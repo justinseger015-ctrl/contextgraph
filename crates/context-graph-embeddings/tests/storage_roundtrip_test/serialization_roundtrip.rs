@@ -141,7 +141,7 @@ fn test_multi_space_query_result_roundtrip() {
         EmbedderQueryResult::from_similarity(id, 2, 0.8, 2),
     ];
 
-    let original = MultiSpaceQueryResult::from_embedder_results(id, &results, 0.72);
+    let original = MultiSpaceQueryResult::from_embedder_results(id, &results);
 
     // Use bincode instead of JSON because JSON doesn't support NaN
     let bytes = bincode::serialize(&original).expect("Serialize");
@@ -150,7 +150,6 @@ fn test_multi_space_query_result_roundtrip() {
     assert_eq!(restored.id, original.id);
     assert_eq!(restored.embedder_count, original.embedder_count);
     assert!((restored.rrf_score - original.rrf_score).abs() < f32::EPSILON);
-    assert!((restored.purpose_alignment - original.purpose_alignment).abs() < f32::EPSILON);
 
     // Check embedder similarities including NaN handling
     for i in 0..13 {

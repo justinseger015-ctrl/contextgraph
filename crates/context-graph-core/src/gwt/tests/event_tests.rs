@@ -41,7 +41,7 @@ async fn test_memory_enters_boosts_dopamine() {
     // BEFORE
     let before_da = {
         let mgr = gwt.neuromod_manager.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("BEFORE: dopamine = {:.3}", before_da);
 
@@ -57,7 +57,7 @@ async fn test_memory_enters_boosts_dopamine() {
     // AFTER - Read via separate lock
     let after_da = {
         let mgr = gwt.neuromod_manager.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("AFTER: dopamine = {:.3}", after_da);
 
@@ -177,7 +177,7 @@ async fn test_full_event_flow_integration() {
     // Get initial dopamine
     let initial_da = {
         let mgr = gwt.neuromod_manager.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("  - dopamine: {:.3}", initial_da);
 
@@ -195,7 +195,7 @@ async fn test_full_event_flow_integration() {
 
     let after_enter_da = {
         let mgr = gwt.neuromod_manager.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!("  - dopamine after entry: {:.3}", after_enter_da);
     assert!(after_enter_da > initial_da, "DA should increase on entry");
@@ -237,7 +237,7 @@ async fn test_full_event_flow_integration() {
     println!("\nFINAL STATE:");
     let final_da = {
         let mgr = gwt.neuromod_manager.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
     println!(
         "  - dopamine: {:.3} (started at {:.3})",
@@ -286,7 +286,7 @@ async fn test_concurrent_event_broadcast() {
     // Verify dopamine increased 10 times
     let final_da = {
         let mgr = gwt.neuromod_manager.read().await;
-        mgr.get_hopfield_beta()
+        mgr.get_retrieval_sharpness()
     };
 
     // 10 increments of 0.2 = 2.0 increase from baseline 3.0 = 5.0 (clamped)

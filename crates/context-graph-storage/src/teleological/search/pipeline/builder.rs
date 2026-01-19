@@ -17,7 +17,6 @@ pub struct PipelineBuilder {
     pub(crate) query_tokens: Option<Vec<Vec<f32>>>,
     pub(crate) stages: Option<Vec<PipelineStage>>,
     pub(crate) k: Option<usize>,
-    pub(crate) purpose_vector: Option<[f32; 13]>,
 }
 
 impl PipelineBuilder {
@@ -30,7 +29,6 @@ impl PipelineBuilder {
             query_tokens: None,
             stages: None,
             k: None,
-            purpose_vector: None,
         }
     }
 
@@ -70,12 +68,6 @@ impl PipelineBuilder {
         self
     }
 
-    /// Set purpose vector for alignment filtering.
-    pub fn purpose(mut self, pv: [f32; 13]) -> Self {
-        self.purpose_vector = Some(pv);
-        self
-    }
-
     /// Execute the pipeline.
     pub fn execute(self, pipeline: &RetrievalPipeline) -> Result<PipelineResult, PipelineError> {
         let query_splade = self.query_splade.unwrap_or_default();
@@ -85,13 +77,10 @@ impl PipelineBuilder {
 
         let stages = self.stages.unwrap_or_else(|| PipelineStage::all().to_vec());
 
-        // Create modified config with k and purpose vector
+        // Create modified config with k
         let mut config = pipeline.config.clone();
         if let Some(k) = self.k {
             config.k = k;
-        }
-        if let Some(pv) = self.purpose_vector {
-            config.purpose_vector = Some(pv);
         }
 
         // Note: This is a workaround since we can't modify pipeline's config

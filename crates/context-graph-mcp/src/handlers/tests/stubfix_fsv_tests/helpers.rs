@@ -3,7 +3,7 @@
 use sha2::{Digest, Sha256};
 
 use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 
 // ============================================================================
@@ -24,15 +24,15 @@ pub(crate) const E11_DIM: usize = 384;
 pub(crate) const E12_TOKEN_DIM: usize = 128;
 pub(crate) const NUM_EMBEDDERS: usize = 13;
 
-/// Create a synthetic fingerprint with configurable alignment and access count.
+/// Create a synthetic fingerprint with configurable access count.
 ///
 /// Parameters:
 /// - content: Used to generate content hash and embeddings deterministically
-/// - theta: The alignment_score alignment value [0.0, 1.0]
+/// - _purpose_value: DEPRECATED - no longer used (PurposeVector removed)
 /// - access_count: Number of times this fingerprint has been accessed
 pub(crate) fn create_test_fingerprint(
     content: &str,
-    theta: f32,
+    _purpose_value: f32,
     access_count: u64,
 ) -> TeleologicalFingerprint {
     let content_hash = {
@@ -42,11 +42,8 @@ pub(crate) fn create_test_fingerprint(
     };
 
     let semantic = create_test_semantic(&content_hash);
-    let purpose_vector = create_test_purpose_vector(theta);
 
-    let mut fp = TeleologicalFingerprint::new(semantic, purpose_vector, content_hash);
-    // Override theta and access_count for test control
-    fp.alignment_score = theta;
+    let mut fp = TeleologicalFingerprint::new(semantic, content_hash);
     fp.access_count = access_count;
     fp
 }
@@ -136,23 +133,5 @@ pub(crate) fn create_test_semantic(hash: &[u8; 32]) -> SemanticFingerprint {
     }
 }
 
-/// Create purpose vector with specified theta alignment.
-pub(crate) fn create_test_purpose_vector(theta: f32) -> PurposeVector {
-    // Create alignments that produce the desired theta
-    let alignments: [f32; NUM_EMBEDDERS] = [
-        theta * 0.9,
-        theta * 0.7,
-        theta * 0.65,
-        theta * 0.6,
-        theta * 0.75,
-        theta * 0.5,
-        theta * 0.8,
-        theta * 0.7,
-        theta * 0.4,
-        theta * 0.55,
-        theta * 0.6,
-        theta * 0.85,
-        theta * 0.5,
-    ];
-    PurposeVector::new(alignments)
-}
+// NOTE: create_test_purpose_vector was removed along with PurposeVector.
+// TeleologicalFingerprint no longer has a purpose_vector field.

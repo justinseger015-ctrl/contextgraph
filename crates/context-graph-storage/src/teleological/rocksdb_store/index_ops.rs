@@ -16,7 +16,7 @@ use super::store::RocksDbTeleologicalStore;
 impl RocksDbTeleologicalStore {
     /// Add fingerprint to per-embedder HNSW indexes for O(log n) search.
     ///
-    /// Inserts vectors into all 12 HNSW-capable embedder indexes plus PurposeVector.
+    /// Inserts vectors into all HNSW-capable embedder indexes.
     /// E6, E12, E13 are skipped (they use different index types).
     ///
     /// # FAIL FAST
@@ -28,20 +28,10 @@ impl RocksDbTeleologicalStore {
 
         // Add to all HNSW-capable dense embedder indexes
         for embedder in EmbedderIndex::all_hnsw() {
-            // Skip PurposeVector - handled separately at the end
-            if embedder == EmbedderIndex::PurposeVector {
-                continue;
-            }
-
             if let Some(index) = self.index_registry.get(embedder) {
                 let vector = Self::get_embedder_vector(&fp.semantic, embedder);
                 index.insert(id, vector)?;
             }
-        }
-
-        // Add purpose vector to its dedicated 13D index
-        if let Some(pv_index) = self.index_registry.get(EmbedderIndex::PurposeVector) {
-            pv_index.insert(id, &fp.purpose_vector.alignments)?;
         }
 
         debug!(
@@ -62,7 +52,6 @@ impl RocksDbTeleologicalStore {
     /// - E6Sparse: Use inverted index
     /// - E12LateInteraction: Use MaxSim
     /// - E13Splade: Use inverted index
-    /// - PurposeVector: Use purpose_vector.alignments directly
     pub(crate) fn get_embedder_vector(
         semantic: &SemanticFingerprint,
         embedder: EmbedderIndex,
@@ -91,15 +80,12 @@ impl RocksDbTeleologicalStore {
             EmbedderIndex::E13Splade => {
                 panic!("FAIL FAST: E13 is sparse - use inverted index, not HNSW")
             }
-            EmbedderIndex::PurposeVector => {
-                panic!("FAIL FAST: PurposeVector is not in SemanticFingerprint - use purpose_vector.alignments")
-            }
         }
     }
 
     /// Remove fingerprint from all per-embedder indexes.
     ///
-    /// Removes the ID from all 12 HNSW indexes.
+    /// Removes the ID from all 11 HNSW indexes.
     pub(crate) fn remove_from_indexes(&self, id: Uuid) -> Result<(), IndexError> {
         for (_embedder, index) in self.index_registry.iter() {
             // Remove returns bool (found or not), we ignore it

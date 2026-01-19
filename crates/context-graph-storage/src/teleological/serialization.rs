@@ -90,13 +90,9 @@ pub fn serialize_teleological_fingerprint(fp: &TeleologicalFingerprint) -> Vec<u
     if !(MIN_FINGERPRINT_SIZE..=MAX_FINGERPRINT_SIZE).contains(&size) {
         panic!(
             "SERIALIZATION ERROR: TeleologicalFingerprint size {} bytes outside expected range \
-             [{}, {}]. Fingerprint ID: {:?}. Evolution snapshots: {}. \
-             This indicates missing or corrupted embeddings, or unexpectedly large evolution history.",
-            size,
-            MIN_FINGERPRINT_SIZE,
-            MAX_FINGERPRINT_SIZE,
-            fp.id,
-            fp.purpose_evolution.len()
+             [{}, {}]. Fingerprint ID: {:?}. \
+             This indicates missing or corrupted embeddings.",
+            size, MIN_FINGERPRINT_SIZE, MAX_FINGERPRINT_SIZE, fp.id,
         );
     }
 

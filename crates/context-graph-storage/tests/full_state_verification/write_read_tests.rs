@@ -76,21 +76,20 @@ async fn test_physical_write_read_verification() {
         retrieved.semantic.e9_hdc.len()
     );
     println!(
-        "    Purpose alignments dim: {} (expected 13)",
-        retrieved.purpose_vector.alignments.len()
+        "    Content hash: {:02x?}",
+        &retrieved.content_hash[..4]
     );
 
     // Verify exact vector match
     let e1_match = fingerprint.semantic.e1_semantic == retrieved.semantic.e1_semantic;
-    let purpose_match =
-        fingerprint.purpose_vector.alignments == retrieved.purpose_vector.alignments;
+    let hash_match = fingerprint.content_hash == retrieved.content_hash;
 
     println!("    E1 vector exact match: {}", e1_match);
-    println!("    Purpose alignments exact match: {}", purpose_match);
+    println!("    Content hash exact match: {}", hash_match);
 
     assert_eq!(retrieved.id, id, "ID mismatch!");
     assert!(e1_match, "E1 semantic vector mismatch!");
-    assert!(purpose_match, "Purpose alignments mismatch!");
+    assert!(hash_match, "Content hash mismatch!");
 
     println!("\n[PASS] Physical write/read verification successful");
     println!("================================================================================\n");
@@ -108,10 +107,6 @@ fn test_full_state_verification_summary() {
     println!("║    - Writes fingerprint to RocksDB                                           ║");
     println!("║    - Performs SEPARATE raw byte read from Source of Truth                    ║");
     println!("║    - Verifies exact byte-level match                                         ║");
-    println!("║                                                                              ║");
-    println!("║  - Purpose Vector CF Verification                                            ║");
-    println!("║    - Verifies 52-byte purpose vectors in dedicated CF                        ║");
-    println!("║    - Shows raw hex dump of stored data                                       ║");
     println!("║                                                                              ║");
     println!("║  - E1 Matryoshka Truncation Verification                                     ║");
     println!("║    - Verifies 1024D -> 128D truncation (512 bytes stored)                    ║");

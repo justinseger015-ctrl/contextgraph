@@ -7,10 +7,9 @@ use super::distance::DistanceMetric;
 
 /// Embedder index enum matching constitution.yaml embedder list.
 ///
-/// 15 variants total:
+/// 14 variants total:
 /// - E1-E13: Core embedders (13)
 /// - E1Matryoshka128: E1 truncated to 128D for Stage 2 fast filtering
-/// - PurposeVector: 13D teleological alignment vector
 ///
 /// # Non-HNSW Embedders
 /// - E6Sparse: Inverted index (legacy sparse slot)
@@ -46,8 +45,6 @@ pub enum EmbedderIndex {
     E12LateInteraction,
     /// E13: ~30K SPLADE sparse (inverted index, NOT HNSW)
     E13Splade,
-    /// 13D teleological purpose vector
-    PurposeVector,
 }
 
 impl EmbedderIndex {
@@ -84,9 +81,9 @@ impl EmbedderIndex {
         }
     }
 
-    /// Get 0-12 index from embedder. Returns None for E1Matryoshka128, PurposeVector.
+    /// Get 0-12 index from embedder. Returns None for E1Matryoshka128.
     ///
-    /// These special embedders are not part of the core 13-embedder array.
+    /// E1Matryoshka128 is a special embedder not part of the core 13-embedder array.
     pub fn to_index(&self) -> Option<usize> {
         match self {
             Self::E1Semantic => Some(0),
@@ -102,7 +99,7 @@ impl EmbedderIndex {
             Self::E11Entity => Some(10),
             Self::E12LateInteraction => Some(11),
             Self::E13Splade => Some(12),
-            Self::E1Matryoshka128 | Self::PurposeVector => None,
+            Self::E1Matryoshka128 => None,
         }
     }
 
@@ -130,10 +127,9 @@ impl EmbedderIndex {
 
     /// Get all HNSW-capable embedder indexes.
     ///
-    /// Returns 12 entries (excludes E6, E12, E13):
+    /// Returns 11 entries (excludes E6, E12, E13):
     /// - 10 dense embedders (E1-E5, E7-E11)
     /// - E1Matryoshka128 (Stage 2 fast filter)
-    /// - PurposeVector (Stage 5 teleological)
     pub fn all_hnsw() -> Vec<Self> {
         vec![
             Self::E1Semantic,
@@ -147,7 +143,6 @@ impl EmbedderIndex {
             Self::E9HDC,
             Self::E10Multimodal,
             Self::E11Entity,
-            Self::PurposeVector,
         ]
     }
 
@@ -170,7 +165,6 @@ impl EmbedderIndex {
             Self::E11Entity => Some(E11_DIM),
             Self::E12LateInteraction => None, // Token-level
             Self::E13Splade => None,          // Inverted index
-            Self::PurposeVector => Some(PURPOSE_VECTOR_DIM),
         }
     }
 
@@ -213,7 +207,6 @@ mod tests {
     fn test_embedder_uses_hnsw() {
         assert!(EmbedderIndex::E1Semantic.uses_hnsw());
         assert!(EmbedderIndex::E1Matryoshka128.uses_hnsw());
-        assert!(EmbedderIndex::PurposeVector.uses_hnsw());
 
         assert!(!EmbedderIndex::E6Sparse.uses_hnsw());
         assert!(!EmbedderIndex::E12LateInteraction.uses_hnsw());
@@ -230,15 +223,14 @@ mod tests {
     }
 
     #[test]
-    fn test_all_hnsw_count_is_12() {
+    fn test_all_hnsw_count_is_11() {
         let hnsw_embedders = EmbedderIndex::all_hnsw();
-        assert_eq!(hnsw_embedders.len(), 12);
+        assert_eq!(hnsw_embedders.len(), 11);
     }
 
     #[test]
     fn test_to_index_special_embedders() {
         assert_eq!(EmbedderIndex::E1Matryoshka128.to_index(), None);
-        assert_eq!(EmbedderIndex::PurposeVector.to_index(), None);
     }
 
     #[test]

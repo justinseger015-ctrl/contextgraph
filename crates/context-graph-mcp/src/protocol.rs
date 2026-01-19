@@ -313,7 +313,7 @@ pub mod methods {
     pub const GOAL_HIERARCHY_QUERY: &str = "goal/hierarchy_query";
     /// Find memories aligned to a specific goal
     pub const GOAL_ALIGNED_MEMORIES: &str = "goal/aligned_memories";
-    /// Detect alignment drift in memories (to be refactored in TASK-LOGIC-010 to use teleological arrays)
+    /// Detect purpose drift in memories (to be refactored in TASK-LOGIC-010 to use teleological arrays)
     pub const PURPOSE_DRIFT_CHECK: &str = "purpose/drift_check";
 
     // Meta-UTL operations (TASK-S005)

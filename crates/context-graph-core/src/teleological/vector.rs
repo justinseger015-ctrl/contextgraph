@@ -8,13 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use super::groups::GroupAlignments;
 use super::synergy_matrix::CROSS_CORRELATION_COUNT;
-use super::types::{ProfileId, TuckerCore, NUM_EMBEDDERS};
-use crate::types::fingerprint::PurposeVector;
+use super::types::{ProfileId, TopicProfile, TuckerCore, NUM_EMBEDDERS};
 
 /// TeleologicalVector: Complete fused representation of a memory's teleological signature.
 ///
 /// Combines:
-/// - Purpose Vector (13D alignment to Strategic goals)
+/// - Topic Profile (13D embedder weights for topic detection)
 /// - Cross-correlations (78 unique embedding pair interactions)
 /// - Group alignments (6D hierarchical aggregation)
 /// - Optional Tucker core for compressed tensor representation
@@ -22,8 +21,8 @@ use crate::types::fingerprint::PurposeVector;
 /// From teleoplan.md: "TELEOLOGICAL VECTOR = 13 perspectives x 1024 dimensions"
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TeleologicalVector {
-    /// 13D purpose vector: alignment of each embedding to Strategic goals
-    pub purpose_vector: PurposeVector,
+    /// 13D topic profile: weight of each embedding in topic detection
+    pub topic_profile: TopicProfile,
 
     /// 78 cross-correlations: synergy-weighted interactions between embedding pairs
     /// Order: (0,1), (0,2), ..., (0,12), (1,2), ..., (11,12)
@@ -46,13 +45,13 @@ pub struct TeleologicalVector {
 }
 
 impl TeleologicalVector {
-    /// Create a new TeleologicalVector from a purpose vector.
+    /// Create a new TeleologicalVector from a topic profile.
     ///
     /// Cross-correlations and group alignments are initialized to zero.
     /// Use `with_correlations()` or fusion methods to populate.
-    pub fn new(purpose_vector: PurposeVector) -> Self {
+    pub fn new(topic_profile: TopicProfile) -> Self {
         Self {
-            purpose_vector,
+            topic_profile,
             cross_correlations: vec![0.0; CROSS_CORRELATION_COUNT],
             group_alignments: GroupAlignments::default(),
             tucker_core: None,
@@ -67,7 +66,7 @@ impl TeleologicalVector {
     ///
     /// Panics if cross_correlations length is not exactly CROSS_CORRELATION_COUNT (78).
     pub fn with_all(
-        purpose_vector: PurposeVector,
+        topic_profile: TopicProfile,
         cross_correlations: Vec<f32>,
         group_alignments: GroupAlignments,
         confidence: f32,
@@ -79,7 +78,7 @@ impl TeleologicalVector {
             cross_correlations.len()
         );
         Self {
-            purpose_vector,
+            topic_profile,
             cross_correlations,
             group_alignments,
             tucker_core: None,
@@ -150,16 +149,16 @@ impl TeleologicalVector {
     /// Compute overall alignment score.
     ///
     /// Weighted combination of:
-    /// - Purpose vector aggregate (40%)
+    /// - Topic profile aggregate (40%)
     /// - Group alignment average (30%)
     /// - Cross-correlation average (20%)
     /// - Confidence (10%)
     pub fn overall_alignment(&self) -> f32 {
-        let pv_score = self.purpose_vector.aggregate_alignment();
+        let tp_score = self.topic_profile.aggregate_alignment();
         let group_score = self.group_alignments.average();
         let corr_score = self.average_correlation();
 
-        0.4 * pv_score + 0.3 * group_score + 0.2 * corr_score + 0.1 * self.confidence
+        0.4 * tp_score + 0.3 * group_score + 0.2 * corr_score + 0.1 * self.confidence
     }
 
     /// Average of all cross-correlations.
@@ -170,10 +169,10 @@ impl TeleologicalVector {
 
     /// Compute cosine similarity between two TeleologicalVectors.
     ///
-    /// Uses normalized combination of purpose vector and cross-correlations.
+    /// Uses normalized combination of topic profile and cross-correlations.
     pub fn similarity(&self, other: &Self) -> f32 {
-        // Purpose vector similarity (weight: 0.6)
-        let pv_sim = self.purpose_vector.similarity(&other.purpose_vector);
+        // Topic profile similarity (weight: 0.6)
+        let tp_sim = self.topic_profile.similarity(&other.topic_profile);
 
         // Cross-correlation similarity (weight: 0.3)
         let mut corr_dot = 0.0f32;
@@ -195,7 +194,7 @@ impl TeleologicalVector {
         // Group alignment similarity (weight: 0.1)
         let group_sim = self.group_alignments.similarity(&other.group_alignments);
 
-        0.6 * pv_sim + 0.3 * corr_sim + 0.1 * group_sim
+        0.6 * tp_sim + 0.3 * corr_sim + 0.1 * group_sim
     }
 
     /// Set the profile ID.
@@ -231,7 +230,7 @@ impl TeleologicalVector {
 
 impl Default for TeleologicalVector {
     fn default() -> Self {
-        Self::new(PurposeVector::default())
+        Self::new(TopicProfile::default())
     }
 }
 
@@ -239,16 +238,16 @@ impl Default for TeleologicalVector {
 mod tests {
     use super::*;
 
-    fn make_purpose_vector(values: [f32; NUM_EMBEDDERS]) -> PurposeVector {
-        PurposeVector::new(values)
+    fn make_topic_profile(values: [f32; NUM_EMBEDDERS]) -> TopicProfile {
+        TopicProfile::new(values)
     }
 
     #[test]
     fn test_teleological_vector_new() {
-        let pv = make_purpose_vector([0.8; NUM_EMBEDDERS]);
-        let tv = TeleologicalVector::new(pv.clone());
+        let tp = make_topic_profile([0.8; NUM_EMBEDDERS]);
+        let tv = TeleologicalVector::new(tp.clone());
 
-        assert_eq!(tv.purpose_vector.alignments, pv.alignments);
+        assert_eq!(tv.topic_profile.alignments, tp.alignments);
         assert_eq!(tv.cross_correlations.len(), CROSS_CORRELATION_COUNT);
         assert!(tv.tucker_core.is_none());
         assert!(tv.profile_id.is_none());
@@ -259,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_teleological_vector_with_all() {
-        let pv = make_purpose_vector([0.7; NUM_EMBEDDERS]);
+        let tp = make_topic_profile([0.7; NUM_EMBEDDERS]);
         let cross = vec![0.5; CROSS_CORRELATION_COUNT];
         let groups = GroupAlignments {
             factual: 0.8,
@@ -270,7 +269,7 @@ mod tests {
             implementation: 0.9,
         };
 
-        let tv = TeleologicalVector::with_all(pv, cross.clone(), groups.clone(), 0.85);
+        let tv = TeleologicalVector::with_all(tp, cross.clone(), groups.clone(), 0.85);
 
         assert_eq!(tv.cross_correlations, cross);
         assert!((tv.group_alignments.factual - 0.8).abs() < f32::EPSILON);
@@ -281,14 +280,14 @@ mod tests {
 
     #[test]
     fn test_teleological_vector_confidence_clamping() {
-        let pv = make_purpose_vector([0.5; NUM_EMBEDDERS]);
+        let tp = make_topic_profile([0.5; NUM_EMBEDDERS]);
         let cross = vec![0.0; CROSS_CORRELATION_COUNT];
         let groups = GroupAlignments::default();
 
-        let tv_high = TeleologicalVector::with_all(pv.clone(), cross.clone(), groups.clone(), 1.5);
+        let tv_high = TeleologicalVector::with_all(tp.clone(), cross.clone(), groups.clone(), 1.5);
         assert!((tv_high.confidence - 1.0).abs() < f32::EPSILON);
 
-        let tv_low = TeleologicalVector::with_all(pv, cross, groups, -0.5);
+        let tv_low = TeleologicalVector::with_all(tp, cross, groups, -0.5);
         assert!((tv_low.confidence - 0.0).abs() < f32::EPSILON);
 
         println!("[PASS] Confidence clamped to [0.0, 1.0]");
@@ -345,8 +344,8 @@ mod tests {
 
     #[test]
     fn test_teleological_vector_overall_alignment() {
-        let pv = make_purpose_vector([0.8; NUM_EMBEDDERS]);
-        let mut tv = TeleologicalVector::new(pv);
+        let tp = make_topic_profile([0.8; NUM_EMBEDDERS]);
+        let mut tv = TeleologicalVector::new(tp);
 
         // Set cross-correlations to 0.6
         for i in 0..CROSS_CORRELATION_COUNT {
@@ -389,8 +388,8 @@ mod tests {
 
     #[test]
     fn test_teleological_vector_similarity_identical() {
-        let pv = make_purpose_vector([0.75; NUM_EMBEDDERS]);
-        let mut tv = TeleologicalVector::new(pv);
+        let tp = make_topic_profile([0.75; NUM_EMBEDDERS]);
+        let mut tv = TeleologicalVector::new(tp);
 
         // Set some non-zero cross-correlations to avoid zero-norm edge case
         for i in 0..CROSS_CORRELATION_COUNT {
@@ -418,8 +417,8 @@ mod tests {
 
     #[test]
     fn test_teleological_vector_similarity_different() {
-        let tv1 = TeleologicalVector::new(make_purpose_vector([0.9; NUM_EMBEDDERS]));
-        let tv2 = TeleologicalVector::new(make_purpose_vector([0.1; NUM_EMBEDDERS]));
+        let tv1 = TeleologicalVector::new(make_topic_profile([0.9; NUM_EMBEDDERS]));
+        let tv2 = TeleologicalVector::new(make_topic_profile([0.1; NUM_EMBEDDERS]));
 
         let sim = tv1.similarity(&tv2);
         assert!(
@@ -486,7 +485,7 @@ mod tests {
     fn test_teleological_vector_default() {
         let tv = TeleologicalVector::default();
 
-        assert_eq!(tv.purpose_vector.alignments, [0.0; NUM_EMBEDDERS]);
+        assert_eq!(tv.topic_profile.alignments, [0.0; NUM_EMBEDDERS]);
         assert_eq!(tv.cross_correlations, vec![0.0; CROSS_CORRELATION_COUNT]);
         assert!(tv.tucker_core.is_none());
 
@@ -495,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_teleological_vector_serialization() {
-        let mut tv = TeleologicalVector::new(make_purpose_vector([0.7; NUM_EMBEDDERS]));
+        let mut tv = TeleologicalVector::new(make_topic_profile([0.7; NUM_EMBEDDERS]));
         tv.set_correlation(1, 4, 0.8);
         tv.confidence = 0.95;
 

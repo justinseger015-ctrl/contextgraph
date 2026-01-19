@@ -1,4 +1,4 @@
-//! HNSW and inverted index configuration for 5-stage retrieval pipeline.
+//! HNSW and inverted index configuration for 4-stage retrieval pipeline.
 //!
 //! # Index Types
 //!
@@ -8,7 +8,6 @@
 //! | 2 | Matryoshka 128D | HNSW | E1 (truncated) |
 //! | 3 | Full embeddings | HNSW x 10 | E1-E5, E7-E11 |
 //! | 4 | ColBERT MaxSim | Token-level | E12 |
-//! | 5 | Purpose vector | HNSW 13D | PurposeVector |
 //!
 //! # FAIL FAST. NO FALLBACKS.
 //!
@@ -34,9 +33,9 @@
 //! let config = get_hnsw_config(EmbedderIndex::E1Semantic).unwrap();
 //! assert_eq!(config.dimension, 1024);
 //!
-//! // Get all HNSW configs (12 total)
+//! // Get all HNSW configs (11 total)
 //! let configs = all_hnsw_configs();
-//! assert_eq!(configs.len(), 12);
+//! assert_eq!(configs.len(), 11);
 //!
 //! // Compute cosine distance
 //! let a = vec![1.0, 0.0, 0.0];

@@ -17,9 +17,8 @@
 
 use crate::teleological::{
     types::{EMBEDDING_DIM, NUM_EMBEDDERS},
-    GroupAlignments, SynergyMatrix, TeleologicalVector,
+    GroupAlignments, SynergyMatrix, TeleologicalVector, TopicProfile,
 };
-use crate::types::fingerprint::PurposeVector;
 
 use super::correlation_extractor::{CorrelationConfig, CorrelationExtractor};
 use super::synergy_service::SynergyService;
@@ -61,8 +60,8 @@ pub struct MeaningExtractionResult {
 /// Confidence scores for each pipeline stage.
 #[derive(Clone, Debug, Default)]
 pub struct StageConfidences {
-    /// Purpose vector computation confidence
-    pub purpose_vector: f32,
+    /// Topic profile computation confidence
+    pub topic_profile: f32,
     /// Correlation extraction confidence
     pub correlations: f32,
     /// Group aggregation confidence
@@ -80,8 +79,8 @@ pub struct StageConfidences {
 ///
 /// let pipeline = MeaningPipeline::new();
 /// let embeddings = vec![vec![0.0f32; 1024]; 13];
-/// let purpose_vector = [0.8f32; 13];
-/// let result = pipeline.extract(&embeddings, &purpose_vector);
+/// let topic_alignments = [0.8f32; 13];
+/// let result = pipeline.extract(&embeddings, &topic_alignments);
 /// ```
 pub struct MeaningPipeline {
     config: MeaningPipelineConfig,
@@ -123,7 +122,7 @@ impl MeaningPipeline {
     ///
     /// # Arguments
     /// * `embeddings` - 13 embedding vectors, each of dimension 1024
-    /// * `purpose_alignments` - 13D purpose vector alignments
+    /// * `topic_alignments` - 13D topic profile alignments
     ///
     /// # Panics
     ///
@@ -131,7 +130,7 @@ impl MeaningPipeline {
     pub fn extract(
         &self,
         embeddings: &[Vec<f32>],
-        purpose_alignments: &[f32; NUM_EMBEDDERS],
+        topic_alignments: &[f32; NUM_EMBEDDERS],
     ) -> MeaningExtractionResult {
         assert!(
             embeddings.len() == NUM_EMBEDDERS,
@@ -150,9 +149,9 @@ impl MeaningPipeline {
             );
         }
 
-        // Stage 1: Create purpose vector
-        let purpose_vector = PurposeVector::new(*purpose_alignments);
-        let pv_confidence = self.compute_purpose_confidence(&purpose_vector);
+        // Stage 1: Create topic profile
+        let topic_profile = TopicProfile::new(*topic_alignments);
+        let tp_confidence = self.compute_topic_confidence(&topic_profile);
 
         // Stage 2: Extract cross-correlations
         let corr_result = self
@@ -161,15 +160,15 @@ impl MeaningPipeline {
         let corr_confidence = 1.0 - corr_result.sparsity;
 
         // Stage 3: Compute group alignments
-        let group_alignments = GroupAlignments::from_alignments(purpose_alignments, None);
+        let group_alignments = GroupAlignments::from_alignments(topic_alignments, None);
         let group_confidence = group_alignments.coherence();
 
         // Build TeleologicalVector
         let mut vector = TeleologicalVector::with_all(
-            purpose_vector,
+            topic_profile,
             corr_result.correlations.to_vec(),
             group_alignments,
-            pv_confidence * corr_confidence * group_confidence,
+            tp_confidence * corr_confidence * group_confidence,
         );
 
         // Stage 4: Optional Tucker decomposition
@@ -179,12 +178,12 @@ impl MeaningPipeline {
         }
 
         // Calculate embedding coverage
-        let active_embeddings = purpose_alignments.iter().filter(|&&a| a > 0.1).count();
+        let active_embeddings = topic_alignments.iter().filter(|&&a| a > 0.1).count();
         let embedding_coverage = active_embeddings as f32 / NUM_EMBEDDERS as f32;
 
         // Overall confidence
         let overall_confidence =
-            (pv_confidence * 0.4 + corr_confidence * 0.3 + group_confidence * 0.3)
+            (tp_confidence * 0.4 + corr_confidence * 0.3 + group_confidence * 0.3)
                 * embedding_coverage.sqrt();
 
         vector.confidence = overall_confidence;
@@ -193,7 +192,7 @@ impl MeaningPipeline {
             vector,
             confidence: overall_confidence,
             stage_confidences: StageConfidences {
-                purpose_vector: pv_confidence,
+                topic_profile: tp_confidence,
                 correlations: corr_confidence,
                 groups: group_confidence,
                 overall: overall_confidence,
@@ -204,15 +203,15 @@ impl MeaningPipeline {
 
     /// Extract meaning with synergy-aligned correlations.
     ///
-    /// Uses purpose vector to modulate synergy contributions.
+    /// Uses topic profile to modulate synergy contributions.
     pub fn extract_aligned(
         &self,
         embeddings: &[Vec<f32>],
-        purpose_alignments: &[f32; NUM_EMBEDDERS],
+        topic_alignments: &[f32; NUM_EMBEDDERS],
     ) -> MeaningExtractionResult {
         // Get synergy-aligned correlations
-        let purpose_vector = PurposeVector::new(*purpose_alignments);
-        let aligned_synergies = self.synergy_service.get_aligned_synergies(&purpose_vector);
+        let topic_profile = TopicProfile::new(*topic_alignments);
+        let aligned_synergies = self.synergy_service.get_aligned_synergies(&topic_profile);
 
         // Create modified synergy matrix for correlation extraction
         let mut aligned_matrix = SynergyMatrix::new();
@@ -229,28 +228,28 @@ impl MeaningPipeline {
             .correlation_extractor
             .extract(embeddings, Some(&aligned_matrix));
 
-        let pv_confidence = self.compute_purpose_confidence(&purpose_vector);
+        let tp_confidence = self.compute_topic_confidence(&topic_profile);
         let corr_confidence = 1.0 - corr_result.sparsity;
-        let group_alignments = GroupAlignments::from_alignments(purpose_alignments, None);
+        let group_alignments = GroupAlignments::from_alignments(topic_alignments, None);
         let group_confidence = group_alignments.coherence();
 
-        let overall_confidence = pv_confidence * corr_confidence * group_confidence;
+        let overall_confidence = tp_confidence * corr_confidence * group_confidence;
 
         let vector = TeleologicalVector::with_all(
-            purpose_vector,
+            topic_profile,
             corr_result.correlations.to_vec(),
             group_alignments,
             overall_confidence,
         );
 
-        let active_embeddings = purpose_alignments.iter().filter(|&&a| a > 0.1).count();
+        let active_embeddings = topic_alignments.iter().filter(|&&a| a > 0.1).count();
         let embedding_coverage = active_embeddings as f32 / NUM_EMBEDDERS as f32;
 
         MeaningExtractionResult {
             vector,
             confidence: overall_confidence,
             stage_confidences: StageConfidences {
-                purpose_vector: pv_confidence,
+                topic_profile: tp_confidence,
                 correlations: corr_confidence,
                 groups: group_confidence,
                 overall: overall_confidence,
@@ -259,10 +258,10 @@ impl MeaningPipeline {
         }
     }
 
-    /// Compute confidence for a purpose vector.
-    fn compute_purpose_confidence(&self, pv: &PurposeVector) -> f32 {
-        let aggregate = pv.aggregate_alignment();
-        let non_zero = pv.alignments.iter().filter(|&&a| a > 0.1).count();
+    /// Compute confidence for a topic profile.
+    fn compute_topic_confidence(&self, tp: &TopicProfile) -> f32 {
+        let aggregate = tp.aggregate_alignment();
+        let non_zero = tp.alignments.iter().filter(|&&a| a > 0.1).count();
         let coverage = non_zero as f32 / NUM_EMBEDDERS as f32;
 
         // Higher confidence if good alignment with good coverage
@@ -305,7 +304,7 @@ mod tests {
         vec![vec![fill; EMBEDDING_DIM]; NUM_EMBEDDERS]
     }
 
-    fn make_purpose_alignments(value: f32) -> [f32; NUM_EMBEDDERS] {
+    fn make_topic_alignments(value: f32) -> [f32; NUM_EMBEDDERS] {
         [value; NUM_EMBEDDERS]
     }
 
@@ -321,7 +320,7 @@ mod tests {
     fn test_extract_uniform() {
         let pipeline = MeaningPipeline::new();
         let embeddings = make_embeddings(0.5);
-        let alignments = make_purpose_alignments(0.8);
+        let alignments = make_topic_alignments(0.8);
 
         let result = pipeline.extract(&embeddings, &alignments);
 
@@ -338,12 +337,12 @@ mod tests {
     fn test_extract_builds_complete_vector() {
         let pipeline = MeaningPipeline::new();
         let embeddings = make_embeddings(0.3);
-        let alignments = make_purpose_alignments(0.7);
+        let alignments = make_topic_alignments(0.7);
 
         let result = pipeline.extract(&embeddings, &alignments);
 
         // Vector should have all components
-        assert_eq!(result.vector.purpose_vector.alignments, alignments);
+        assert_eq!(result.vector.topic_profile.alignments, alignments);
         assert_eq!(result.vector.cross_correlations.len(), 78);
         assert!(result.vector.group_alignments.average() > 0.0);
 
@@ -354,12 +353,12 @@ mod tests {
     fn test_stage_confidences() {
         let pipeline = MeaningPipeline::new();
         let embeddings = make_embeddings(0.5);
-        let alignments = make_purpose_alignments(0.9);
+        let alignments = make_topic_alignments(0.9);
 
         let result = pipeline.extract(&embeddings, &alignments);
 
         // All stage confidences should be positive
-        assert!(result.stage_confidences.purpose_vector > 0.0);
+        assert!(result.stage_confidences.topic_profile > 0.0);
         assert!(result.stage_confidences.correlations >= 0.0);
         assert!(result.stage_confidences.groups > 0.0);
         assert!(result.stage_confidences.overall > 0.0);
@@ -373,7 +372,7 @@ mod tests {
         let embeddings = make_embeddings(0.5);
 
         // Full coverage
-        let full_alignments = make_purpose_alignments(0.8);
+        let full_alignments = make_topic_alignments(0.8);
         let full_result = pipeline.extract(&embeddings, &full_alignments);
         assert!(full_result.embedding_coverage > 0.9);
 
@@ -397,10 +396,10 @@ mod tests {
         let embeddings = make_embeddings(0.5);
 
         // High alignment = likely meaningful
-        let high_result = pipeline.extract(&embeddings, &make_purpose_alignments(0.9));
+        let high_result = pipeline.extract(&embeddings, &make_topic_alignments(0.9));
 
         // Low alignment = less meaningful
-        let low_result = pipeline.extract(&embeddings, &make_purpose_alignments(0.1));
+        let low_result = pipeline.extract(&embeddings, &make_topic_alignments(0.1));
 
         // High should have higher confidence than low
         assert!(high_result.confidence > low_result.confidence);
@@ -412,7 +411,7 @@ mod tests {
     fn test_extract_aligned() {
         let pipeline = MeaningPipeline::new();
         let embeddings = make_embeddings(0.5);
-        let alignments = make_purpose_alignments(0.8);
+        let alignments = make_topic_alignments(0.8);
 
         let result = pipeline.extract_aligned(&embeddings, &alignments);
 
@@ -426,7 +425,7 @@ mod tests {
     fn test_extract_wrong_embedding_count() {
         let pipeline = MeaningPipeline::new();
         let embeddings = vec![vec![0.0f32; EMBEDDING_DIM]; 10]; // Wrong count
-        let alignments = make_purpose_alignments(0.5);
+        let alignments = make_topic_alignments(0.5);
 
         let _ = pipeline.extract(&embeddings, &alignments);
     }

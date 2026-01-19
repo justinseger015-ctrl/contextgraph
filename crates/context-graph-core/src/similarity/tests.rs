@@ -10,7 +10,7 @@
 
 use super::*;
 use crate::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
 };
 use uuid::Uuid;
 
@@ -100,22 +100,17 @@ fn create_test_fingerprint(seed: u64) -> TeleologicalFingerprint {
         values: values13,
     };
 
-    // Create purpose vector
-    let alignments: [f32; NUM_EMBEDDERS] = std::array::from_fn(|_| lcg_next(&mut state));
-    let purpose_vector = PurposeVector::new(alignments);
-
     // Create content hash
     let content_hash = [seed as u8; 32];
 
-    TeleologicalFingerprint::new(semantic, purpose_vector, content_hash)
+    TeleologicalFingerprint::new(semantic, content_hash)
 }
 
 /// Create a fingerprint with all zero embeddings (edge case).
 fn create_empty_fingerprint() -> TeleologicalFingerprint {
     let semantic = SemanticFingerprint::zeroed();
-    let purpose_vector = PurposeVector::default();
     let content_hash = [0u8; 32];
-    TeleologicalFingerprint::new(semantic, purpose_vector, content_hash)
+    TeleologicalFingerprint::new(semantic, content_hash)
 }
 
 // ============================================================================

@@ -4,13 +4,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, warn};
 
-use context_graph_core::purpose::{
-    DefaultPurposeComputer, PurposeComputeConfig, PurposeVectorComputer,
-};
 use context_graph_core::traits::TeleologicalSearchOptions;
-use context_graph_core::types::fingerprint::{
-    PurposeVector, TeleologicalFingerprint, NUM_EMBEDDERS,
-};
+use context_graph_core::types::fingerprint::{TeleologicalFingerprint, NUM_EMBEDDERS};
 use context_graph_core::teleological::matrix_search::embedder_names;
 use context_graph_core::types::UtlContext;
 
@@ -43,23 +38,8 @@ impl Handlers {
             .and_then(|v| v.as_f64())
             .unwrap_or(0.5);
 
-        // Get goal_vector from top-level strategic goal for UTL alignment computation
-        // Per constitution.yaml: alignment = cos(content_embedding, goal_vector)
-        // Without goal_vector, alignment always returns 1.0 (useless)
-        // Per TASK-CORE-005: Use E1 semantic embedding from TeleologicalArray for UTL alignment
-        let goal_vector = {
-            let hierarchy = self.goal_hierarchy.read();
-            hierarchy
-                .top_level_goals()
-                .first()
-                .map(|ns| ns.teleological_array.e1_semantic.clone())
-        };
-
         // Compute UTL metrics for the content
-        let context = UtlContext {
-            goal_vector,
-            ..Default::default()
-        };
+        let context = UtlContext::default();
         let metrics = match self.utl_processor.compute_metrics(&content, &context).await {
             Ok(m) => m,
             Err(e) => {
@@ -82,70 +62,13 @@ impl Handlers {
         hasher.update(content.as_bytes());
         let content_hash: [u8; 32] = hasher.finalize().into();
 
-        // AUTONOMOUS OPERATION: Compute purpose vector if top-level goal exists,
-        // otherwise use default (neutral) alignment.
-        //
-        // From contextprd.md: "The array [of 13 embeddings] IS the teleological vector"
-        // Purpose alignment is SECONDARY metadata - the 13-embedding fingerprint is primary.
-        // This allows autonomous operation without manual goal configuration.
-        //
-        // When top-level goal exists: PV = [A(E1,V), A(E2,V), ..., A(E13,V)]
-        // where A(Ei, V) = cos(theta) between embedder i and goal V
-        //
-        // When no top-level goal: PV = [0.0; 13] (neutral alignment)
-        // Memories can be stored immediately; purpose can be recomputed later.
-        let purpose_vector = {
-            let hierarchy = self.goal_hierarchy.read().clone();
-
-            // If no top-level goal is defined, use default purpose vector
-            // This enables AUTONOMOUS operation - no manual configuration required
-            if hierarchy.top_level_goals().is_empty() {
-                debug!(
-                    "inject_context: No top-level goal configured. Using default purpose vector. \
-                     Memory will be stored with neutral alignment (can be recomputed later)."
-                );
-                PurposeVector::default()
-            } else {
-                // Compute purpose vector using DefaultPurposeComputer
-                // This computes alignment for each of 13 embedding spaces
-                let config = PurposeComputeConfig::with_hierarchy(hierarchy);
-
-                match DefaultPurposeComputer::new()
-                    .compute_purpose(&embedding_output.fingerprint, &config)
-                    .await
-                {
-                    Ok(pv) => {
-                        debug!(
-                            aggregate_alignment = pv.aggregate_alignment(),
-                            dominant_embedder = pv.dominant_embedder,
-                            coherence = pv.coherence,
-                            "inject_context: Purpose vector computed for semantic fingerprint"
-                        );
-                        pv
-                    }
-                    Err(e) => {
-                        // If top-level goal exists but computation fails, THAT is an error
-                        error!(
-                            error = %e,
-                            "inject_context: Failed to compute purpose vector. \
-                             Cannot store memory without alignment metadata."
-                        );
-                        return self.tool_error_with_pulse(
-                            id,
-                            &format!("Purpose vector computation failed: {}", e),
-                        );
-                    }
-                }
-            }
-        };
-
         // TASK-FIX-CLUSTERING: Compute cluster array BEFORE fingerprint is consumed
         // This must be done before TeleologicalFingerprint::new() moves the semantic fingerprint.
         let cluster_array = embedding_output.fingerprint.to_cluster_array();
 
-        // Create TeleologicalFingerprint with REAL computed purpose vector
+        // Create TeleologicalFingerprint (no PurposeVector - alignment removed)
         let fingerprint =
-            TeleologicalFingerprint::new(embedding_output.fingerprint, purpose_vector, content_hash);
+            TeleologicalFingerprint::new(embedding_output.fingerprint, content_hash);
         let fingerprint_id = fingerprint.id;
 
         // Store in TeleologicalMemoryStore
@@ -251,72 +174,13 @@ impl Handlers {
         hasher.update(content.as_bytes());
         let content_hash: [u8; 32] = hasher.finalize().into();
 
-        // ARCH-03: AUTONOMOUS OPERATION - Compute purpose vector if strategic goal exists,
-        // otherwise use default (neutral) alignment for autonomous seeding.
-        //
-        // From contextprd.md: "The array [of 13 embeddings] IS the teleological vector"
-        // Purpose alignment is SECONDARY metadata - the 13-embedding fingerprint is primary.
-        // This allows autonomous operation without manual strategic goal configuration.
-        //
-        // When strategic goal exists: PV = [A(E1,V), A(E2,V), ..., A(E13,V)]
-        // where A(Ei, V) = cos(theta) between embedder i and strategic goal V
-        //
-        // When no strategic goal: PV = [0.0; 13] (neutral alignment)
-        // Memories can be stored immediately; purpose can be recomputed later via
-        // topic clustering once enough fingerprints exist.
-        let purpose_vector = {
-            let hierarchy = self.goal_hierarchy.read().clone();
-
-            // If no strategic goal is defined, use default purpose vector
-            // This enables AUTONOMOUS operation per ARCH-03 - no manual configuration required
-            if hierarchy.top_level_goals().is_empty() {
-                debug!(
-                    "store_memory: No strategic goal configured. Using default purpose vector. \
-                     Memory will be stored with neutral alignment (can be recomputed later \
-                     via topic clustering)."
-                );
-                PurposeVector::default()
-            } else {
-                // Compute purpose vector using DefaultPurposeComputer
-                // This computes alignment for each of 13 embedding spaces
-                let config = PurposeComputeConfig::with_hierarchy(hierarchy);
-
-                match DefaultPurposeComputer::new()
-                    .compute_purpose(&embedding_output.fingerprint, &config)
-                    .await
-                {
-                    Ok(pv) => {
-                        debug!(
-                            aggregate_alignment = pv.aggregate_alignment(),
-                            dominant_embedder = pv.dominant_embedder,
-                            coherence = pv.coherence,
-                            "store_memory: Purpose vector computed for semantic fingerprint"
-                        );
-                        pv
-                    }
-                    Err(e) => {
-                        // If strategic goal exists but computation fails, THAT is an error
-                        error!(
-                            error = %e,
-                            "store_memory: Failed to compute purpose vector. \
-                             Cannot store memory without alignment metadata."
-                        );
-                        return self.tool_error_with_pulse(
-                            id,
-                            &format!("Purpose vector computation failed: {}", e),
-                        );
-                    }
-                }
-            }
-        };
-
         // TASK-FIX-CLUSTERING: Compute cluster array BEFORE fingerprint is consumed
         // This must be done before TeleologicalFingerprint::new() moves the semantic fingerprint.
         let cluster_array = embedding_output.fingerprint.to_cluster_array();
 
-        // Create TeleologicalFingerprint with REAL computed purpose vector
+        // Create TeleologicalFingerprint (no PurposeVector - alignment removed)
         let fingerprint =
-            TeleologicalFingerprint::new(embedding_output.fingerprint, purpose_vector, content_hash);
+            TeleologicalFingerprint::new(embedding_output.fingerprint, content_hash);
         let fingerprint_id = fingerprint.id;
 
         match self.teleological_store.store(fingerprint).await {
@@ -454,9 +318,7 @@ impl Handlers {
                         let mut entry = json!({
                             "fingerprintId": r.fingerprint.id.to_string(),
                             "similarity": r.similarity,
-                            "purposeAlignment": r.purpose_alignment,
-                            "dominantEmbedder": dominant_name,
-                            "alignmentScore": r.fingerprint.alignment_score
+                            "dominantEmbedder": dominant_name
                         });
                         // Only include content field when includeContent=true
                         if include_content {

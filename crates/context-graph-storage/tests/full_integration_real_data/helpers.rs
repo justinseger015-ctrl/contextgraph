@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use context_graph_core::types::fingerprint::{
-    PurposeVector, SemanticFingerprint, SparseVector, TeleologicalFingerprint, NUM_EMBEDDERS,
+    SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
 use context_graph_storage::teleological::RocksDbTeleologicalStore;
 use rand::Rng;
@@ -72,13 +72,6 @@ pub fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
     }
 }
 
-/// Generate a REAL PurposeVector with random alignments.
-pub fn generate_real_purpose_vector() -> PurposeVector {
-    let mut rng = rand::thread_rng();
-    let alignments: [f32; NUM_EMBEDDERS] = std::array::from_fn(|_| rng.gen_range(0.3..0.95));
-    PurposeVector::new(alignments)
-}
-
 /// Generate a REAL content hash (SHA-256 simulation).
 pub fn generate_real_content_hash() -> [u8; 32] {
     let mut rng = rand::thread_rng();
@@ -92,7 +85,6 @@ pub fn generate_real_content_hash() -> [u8; 32] {
 pub fn create_real_fingerprint() -> TeleologicalFingerprint {
     TeleologicalFingerprint::new(
         generate_real_semantic_fingerprint(),
-        generate_real_purpose_vector(),
         generate_real_content_hash(),
     )
 }
@@ -102,7 +94,6 @@ pub fn create_real_fingerprint_with_id(id: Uuid) -> TeleologicalFingerprint {
     TeleologicalFingerprint::with_id(
         id,
         generate_real_semantic_fingerprint(),
-        generate_real_purpose_vector(),
         generate_real_content_hash(),
     )
 }
