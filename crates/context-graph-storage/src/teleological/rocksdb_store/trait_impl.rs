@@ -209,4 +209,13 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
     ) -> CoreResult<Option<context_graph_core::clustering::PersistedTopicPortfolio>> {
         self.load_latest_topic_portfolio_async().await
     }
+
+    // ==================== Clustering Support ====================
+
+    async fn scan_fingerprints_for_clustering(
+        &self,
+        limit: Option<usize>,
+    ) -> CoreResult<Vec<(Uuid, [Vec<f32>; 13])>> {
+        self.scan_fingerprints_for_clustering_async(limit).await
+    }
 }

@@ -408,32 +408,6 @@ impl RocksDbTeleologicalStore {
         })
     }
 
-    /// Check if a file path exists in the index.
-    ///
-    /// # Arguments
-    /// * `file_path` - The file path to check
-    ///
-    /// # Returns
-    /// true if the file has entries in the index.
-    pub(crate) async fn file_exists_in_index_async(&self, file_path: &str) -> CoreResult<bool> {
-        let cf = self.cf_file_index();
-        let key = file_path.as_bytes();
-
-        match self.db.get_cf(cf, key) {
-            Ok(Some(_)) => Ok(true),
-            Ok(None) => Ok(false),
-            Err(e) => {
-                error!(
-                    "FILE_INDEX ERROR: Failed to check existence for '{}': {}",
-                    file_path, e
-                );
-                Err(CoreError::StorageError(format!(
-                    "Failed to check file index for '{}': {}",
-                    file_path, e
-                )))
-            }
-        }
-    }
 }
 
 #[cfg(test)]

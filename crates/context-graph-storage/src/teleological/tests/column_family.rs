@@ -18,7 +18,7 @@ fn test_teleological_cf_names_count() {
         "Must have exactly {} teleological column families",
         TELEOLOGICAL_CF_COUNT
     );
-    assert_eq!(TELEOLOGICAL_CF_COUNT, 12); // 10 active + 2 legacy CFs total (includes source_metadata)
+    assert_eq!(TELEOLOGICAL_CF_COUNT, 14); // 12 active + 2 legacy CFs total
 }
 
 #[test]
@@ -171,15 +171,15 @@ fn test_get_all_teleological_cf_descriptors_returns_25() {
     let cache = Cache::new_lru_cache(256 * 1024 * 1024);
     let descriptors = get_all_teleological_cf_descriptors(&cache);
 
-    // 12 teleological + 13 quantized embedder = 25
-    // TASK-STORAGE-P2-001: +1 for CF_E12_LATE_INTERACTION
-    // TASK-CONTENT-001: +1 for CF_CONTENT
-    // LEGACY-COMPAT: +2 for legacy CFs (session_identity, ego_node)
-    // FILE-WATCHER: +1 for CF_SOURCE_METADATA
+    // 14 teleological + 13 quantized embedder = 27
+    // Teleological (14): fingerprints, topic_profiles, e13_splade_inverted, e1_matryoshka_128,
+    //   synergy_matrix, teleological_profiles, teleological_vectors, content, source_metadata,
+    //   file_index, topic_portfolio, e12_late_interaction, session_identity, ego_node
+    // Quantized (13): emb_0 through emb_12
     assert_eq!(
         descriptors.len(),
-        25,
-        "Must return 12 teleological + 13 quantized = 25 CFs"
+        27,
+        "Must return 14 teleological + 13 quantized = 27 CFs"
     );
 }
 

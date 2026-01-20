@@ -579,8 +579,14 @@ impl HDBSCANClusterer {
 
     /// Detect a threshold for edge weight "gap" that separates clusters.
     ///
-    /// Uses a simple heuristic: find an edge that is significantly larger
-    /// than the median edge weight (3x or more), which indicates cluster boundaries.
+    /// For semantic embeddings (cosine distance), we use an absolute threshold
+    /// approach since relative gap detection fails when distances are uniformly
+    /// distributed in a narrow range (typical for embeddings).
+    ///
+    /// Strategy:
+    /// 1. For Cosine metric: Use absolute threshold of 0.25 (similarity 0.75)
+    ///    Points closer than this are clustered together.
+    /// 2. For other metrics: Use adaptive approach based on distribution.
     fn detect_gap_threshold(&self, mst: &[(usize, usize, f32)]) -> f32 {
         if mst.is_empty() {
             return f32::MAX;
@@ -588,36 +594,47 @@ impl HDBSCANClusterer {
 
         // Edges are already sorted by weight
         let weights: Vec<f32> = mst.iter().map(|(_, _, w)| *w).collect();
+        let n = weights.len();
 
-        // Compute median weight
-        let mid = weights.len() / 2;
-        let median = if weights.len() % 2 == 0 {
+        // For Cosine distance, use absolute threshold
+        // Cosine distance = 1 - similarity, so 0.25 means similarity >= 0.75
+        if self.params.metric == DistanceMetric::Cosine
+            || self.params.metric == DistanceMetric::AsymmetricCosine
+        {
+            // Use 0.20 as threshold (similarity >= 0.80 to cluster together)
+            // This is tight enough to separate ML/DB/DevOps topics
+            return 0.20;
+        }
+
+        // For Jaccard (sparse embeddings), use higher threshold
+        if self.params.metric == DistanceMetric::Jaccard {
+            return 0.50;
+        }
+
+        // Compute statistics for other metrics
+        let mid = n / 2;
+        let median = if n % 2 == 0 && n > 1 {
             (weights[mid - 1] + weights[mid]) / 2.0
         } else {
             weights[mid]
         };
 
-        // Find first edge that is significantly larger (3x median or 10x previous)
-        for i in 1..weights.len() {
-            let ratio_to_median = if median > 0.0 {
-                weights[i] / median
-            } else {
-                1.0
-            };
+        // Find first significant gap
+        for i in 1..n {
             let ratio_to_prev = if weights[i - 1] > 0.0 {
                 weights[i] / weights[i - 1]
             } else {
                 1.0
             };
 
-            // Large gap detected
-            if ratio_to_median > 3.0 && ratio_to_prev > 5.0 {
+            // Jump of 1.5x from previous edge indicates boundary
+            if ratio_to_prev >= 1.5 {
                 return weights[i];
             }
         }
 
-        // No gap found, use all edges
-        f32::MAX
+        // Fallback to median
+        median
     }
 
     /// Identify core points in each cluster.

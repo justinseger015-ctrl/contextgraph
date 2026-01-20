@@ -35,6 +35,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::stability::TopicStabilityTracker;
 use super::topic::Topic;
 
 // =============================================================================
@@ -315,6 +316,252 @@ impl Default for PersistedTopicPortfolio {
             session_id: String::new(),
             persisted_at_ms: 0,
         }
+    }
+}
+
+// =============================================================================
+// TopicPortfolio - Live Topic Portfolio with Stability Tracking
+// =============================================================================
+
+/// Live topic portfolio with integrated stability tracking.
+///
+/// This is the runtime counterpart to `PersistedTopicPortfolio`. It holds
+/// topics in a HashMap for O(1) lookup and integrates `TopicStabilityTracker`
+/// for dream trigger support (per AP-70).
+///
+/// # AP-70 Compliance
+///
+/// Dream triggers require: entropy > 0.7 AND churn > 0.5
+/// The stability_tracker computes churn from topic snapshots.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use context_graph_core::clustering::TopicPortfolio;
+///
+/// let mut portfolio = TopicPortfolio::new();
+///
+/// // After clustering operations...
+/// portfolio.take_stability_snapshot();
+/// let churn = portfolio.track_churn();
+///
+/// // Check if dream should trigger
+/// let should_dream = portfolio.check_dream_trigger(current_entropy);
+/// ```
+#[derive(Debug)]
+pub struct TopicPortfolio {
+    /// Topic storage: UUID -> Topic for O(1) lookup.
+    topics: std::collections::HashMap<uuid::Uuid, Topic>,
+
+    /// Stability tracker for churn calculation and dream triggers.
+    stability_tracker: TopicStabilityTracker,
+}
+
+impl Default for TopicPortfolio {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TopicPortfolio {
+    /// Create a new empty portfolio with default stability tracking.
+    pub fn new() -> Self {
+        Self {
+            topics: std::collections::HashMap::new(),
+            stability_tracker: TopicStabilityTracker::new(),
+        }
+    }
+
+    /// Create a portfolio with custom stability thresholds.
+    ///
+    /// # Arguments
+    ///
+    /// * `churn_threshold` - Churn threshold for dream trigger (default 0.5)
+    /// * `entropy_threshold` - Entropy threshold for dream trigger (default 0.7)
+    /// * `entropy_duration_secs` - Required high-entropy duration (default 300)
+    pub fn with_thresholds(
+        churn_threshold: f32,
+        entropy_threshold: f32,
+        entropy_duration_secs: u64,
+    ) -> Self {
+        Self {
+            topics: std::collections::HashMap::new(),
+            stability_tracker: TopicStabilityTracker::with_thresholds(
+                churn_threshold,
+                entropy_threshold,
+                entropy_duration_secs,
+            ),
+        }
+    }
+
+    /// Insert or update a topic.
+    pub fn insert(&mut self, topic: Topic) {
+        self.topics.insert(topic.id, topic);
+    }
+
+    /// Get a topic by ID.
+    pub fn get(&self, id: &uuid::Uuid) -> Option<&Topic> {
+        self.topics.get(id)
+    }
+
+    /// Get a mutable reference to a topic.
+    pub fn get_mut(&mut self, id: &uuid::Uuid) -> Option<&mut Topic> {
+        self.topics.get_mut(id)
+    }
+
+    /// Remove a topic by ID.
+    pub fn remove(&mut self, id: &uuid::Uuid) -> Option<Topic> {
+        self.topics.remove(id)
+    }
+
+    /// Check if a topic exists.
+    pub fn contains(&self, id: &uuid::Uuid) -> bool {
+        self.topics.contains_key(id)
+    }
+
+    /// Get all topics as a reference to the internal HashMap.
+    pub fn topics(&self) -> &std::collections::HashMap<uuid::Uuid, Topic> {
+        &self.topics
+    }
+
+    /// Get all topics as a mutable reference.
+    pub fn topics_mut(&mut self) -> &mut std::collections::HashMap<uuid::Uuid, Topic> {
+        &mut self.topics
+    }
+
+    /// Get an iterator over topics.
+    pub fn iter(&self) -> impl Iterator<Item = (&uuid::Uuid, &Topic)> {
+        self.topics.iter()
+    }
+
+    /// Get topic count.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.topics.len()
+    }
+
+    /// Check if portfolio is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.topics.is_empty()
+    }
+
+    /// Clear all topics (preserves stability history).
+    pub fn clear(&mut self) {
+        self.topics.clear();
+    }
+
+    // =========================================================================
+    // Stability Tracking (AP-70)
+    // =========================================================================
+
+    /// Take a stability snapshot of current topics.
+    ///
+    /// Call this periodically (e.g., every minute) to track portfolio changes.
+    pub fn take_stability_snapshot(&mut self) {
+        let topics_vec: Vec<Topic> = self.topics.values().cloned().collect();
+        self.stability_tracker.take_snapshot(&topics_vec);
+    }
+
+    /// Compute churn by comparing current state to ~1 hour ago.
+    ///
+    /// # Returns
+    ///
+    /// Churn rate [0.0, 1.0] where:
+    /// - 0.0 = no change (stable)
+    /// - 1.0 = complete turnover
+    pub fn track_churn(&mut self) -> f32 {
+        self.stability_tracker.track_churn()
+    }
+
+    /// Get current churn rate (last computed value).
+    #[inline]
+    pub fn current_churn(&self) -> f32 {
+        self.stability_tracker.current_churn()
+    }
+
+    /// Check if dream consolidation should trigger (AP-70).
+    ///
+    /// Per constitution AP-70, triggers when EITHER:
+    /// 1. entropy > 0.7 AND churn > 0.5 (both simultaneously)
+    /// 2. entropy > 0.7 for 5+ continuous minutes
+    ///
+    /// # Arguments
+    ///
+    /// * `entropy` - Current system entropy [0.0, 1.0]
+    ///
+    /// # Returns
+    ///
+    /// true if dream should be triggered
+    pub fn check_dream_trigger(&mut self, entropy: f32) -> bool {
+        self.stability_tracker.check_dream_trigger(entropy)
+    }
+
+    /// Get reference to stability tracker for advanced queries.
+    pub fn stability_tracker(&self) -> &TopicStabilityTracker {
+        &self.stability_tracker
+    }
+
+    /// Get mutable reference to stability tracker.
+    pub fn stability_tracker_mut(&mut self) -> &mut TopicStabilityTracker {
+        &mut self.stability_tracker
+    }
+
+    /// Reset entropy tracking (call after dream completes).
+    pub fn reset_entropy_tracking(&mut self) {
+        self.stability_tracker.reset_entropy_tracking();
+    }
+
+    /// Check if system is stable (low churn over 6 hours).
+    pub fn is_stable(&self) -> bool {
+        self.stability_tracker.is_stable()
+    }
+
+    /// Get average churn over specified hours.
+    pub fn average_churn(&self, hours: i64) -> f32 {
+        self.stability_tracker.average_churn(hours)
+    }
+
+    // =========================================================================
+    // Persistence Integration
+    // =========================================================================
+
+    /// Export to a persisted portfolio snapshot.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Session identifier
+    /// * `entropy` - Current system entropy
+    pub fn export(&self, session_id: impl Into<String>, entropy: f32) -> PersistedTopicPortfolio {
+        let topics: Vec<Topic> = self.topics.values().cloned().collect();
+        PersistedTopicPortfolio::new(
+            topics,
+            self.stability_tracker.current_churn(),
+            entropy,
+            session_id.into(),
+        )
+    }
+
+    /// Import topics from a persisted portfolio.
+    ///
+    /// Replaces current topics with imported ones. Does NOT restore
+    /// stability tracker state (snapshots are not persisted).
+    ///
+    /// # Returns
+    ///
+    /// Number of topics imported.
+    pub fn import(&mut self, portfolio: &PersistedTopicPortfolio) -> usize {
+        self.topics.clear();
+        for topic in &portfolio.topics {
+            self.topics.insert(topic.id, topic.clone());
+        }
+        self.topics.len()
+    }
+
+    /// Get portfolio summary (topic_count, total_members).
+    pub fn summary(&self) -> (usize, usize) {
+        let total_members: usize = self.topics.values().map(|t| t.member_count()).sum();
+        (self.topics.len(), total_members)
     }
 }
 

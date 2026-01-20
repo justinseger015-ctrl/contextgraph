@@ -271,10 +271,14 @@ fn fsv_test_case_1_full_trigger_lifecycle() {
 
 #[test]
 fn fsv_test_case_2_entropy_tracking_reset() {
-    println!("\n=== FSV Test Case 2: Entropy Trigger with Tracking Reset ===\n");
+    println!("\n=== FSV Test Case 2: Entropy Trigger with Tracking Reset (AP-70) ===\n");
 
     let mut manager = TriggerManager::new();
     *manager.entropy_window_mut() = EntropyWindow::with_params(Duration::from_millis(50), 0.7);
+
+    // AP-70: Set high churn (> 0.5) so entropy can trigger
+    manager.update_churn(0.6);
+    println!("Setup: churn=0.6 (above 0.5 threshold per AP-70)");
 
     // Push entropy 0.8 (starts tracking)
     manager.update_entropy(0.8);
@@ -282,7 +286,7 @@ fn fsv_test_case_2_entropy_tracking_reset() {
         "t0: pushed entropy 0.8, should_trigger={}",
         manager.should_trigger()
     );
-    assert!(!manager.should_trigger(), "Should not trigger immediately");
+    assert!(!manager.should_trigger(), "Should not trigger immediately - need sustained entropy");
 
     // Wait 30ms
     thread::sleep(Duration::from_millis(30));
@@ -324,7 +328,7 @@ fn fsv_test_case_2_entropy_tracking_reset() {
     );
     assert!(
         manager.should_trigger(),
-        "Should trigger now - sustained for >50ms"
+        "Should trigger now - sustained entropy > 50ms AND churn > 0.5 (AP-70)"
     );
 
     println!("\n=== Test Case 2 PASSED ===\n");

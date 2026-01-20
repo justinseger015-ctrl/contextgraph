@@ -17,6 +17,7 @@ use crate::teleological::column_families::{
     CF_FINGERPRINTS, CF_TOPIC_PORTFOLIO, QUANTIZED_EMBEDDER_CFS, TELEOLOGICAL_CFS,
 };
 use crate::teleological::schema::parse_fingerprint_key;
+use crate::teleological::serialization::deserialize_teleological_fingerprint;
 
 use super::store::RocksDbTeleologicalStore;
 use super::types::TeleologicalStoreError;
@@ -389,5 +390,72 @@ impl RocksDbTeleologicalStore {
             }
             .into()),
         }
+    }
+}
+
+// ============================================================================
+// Clustering Support Operations
+// ============================================================================
+
+impl RocksDbTeleologicalStore {
+    /// Scan all fingerprints and return their embeddings for clustering.
+    ///
+    /// This method iterates over all fingerprints in storage and extracts
+    /// their 13-element embedding arrays for use in HDBSCAN clustering.
+    ///
+    /// # Arguments
+    /// * `limit` - Optional maximum number of fingerprints to scan
+    ///
+    /// # Returns
+    /// Vector of (fingerprint_id, embeddings_array) tuples.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - RocksDB iteration failed
+    /// - `CoreError::SerializationError` - Fingerprint deserialization failed
+    pub(crate) async fn scan_fingerprints_for_clustering_async(
+        &self,
+        limit: Option<usize>,
+    ) -> CoreResult<Vec<(Uuid, [Vec<f32>; 13])>> {
+        info!(limit = ?limit, "Scanning fingerprints for clustering");
+
+        let cf = self.get_cf(CF_FINGERPRINTS)?;
+        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+
+        let mut results = Vec::new();
+
+        for item in iter {
+            let (key, value) = item.map_err(|e| {
+                TeleologicalStoreError::rocksdb_op("iterate", CF_FINGERPRINTS, None, e)
+            })?;
+
+            // Parse fingerprint ID from key
+            let id = parse_fingerprint_key(&key);
+
+            // Skip soft-deleted fingerprints
+            if self.is_soft_deleted(&id) {
+                continue;
+            }
+
+            // Deserialize fingerprint using the custom serialization format
+            // (has version prefix, not plain bincode)
+            let fp = deserialize_teleological_fingerprint(&value);
+
+            // Extract the 13 embeddings as cluster array
+            let cluster_array = fp.semantic.to_cluster_array();
+            results.push((id, cluster_array));
+
+            // Apply limit if specified
+            if let Some(max) = limit {
+                if results.len() >= max {
+                    break;
+                }
+            }
+        }
+
+        info!(
+            count = results.len(),
+            "Scanned fingerprints for clustering complete"
+        );
+        Ok(results)
     }
 }

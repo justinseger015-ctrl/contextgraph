@@ -46,7 +46,7 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::embeddings::category::{category_for, EmbedderCategory};
+use crate::embeddings::category::category_for;
 use crate::embeddings::config::get_dimension;
 use crate::teleological::Embedder;
 
@@ -55,6 +55,7 @@ use super::cluster::Cluster;
 use super::error::ClusterError;
 use super::hdbscan::{hdbscan_defaults, HDBSCANClusterer, HDBSCANParams};
 use super::membership::ClusterMembership;
+use super::stability::TopicStabilityTracker;
 use super::topic::{Topic, TopicProfile};
 
 // =============================================================================
@@ -251,6 +252,9 @@ pub struct MultiSpaceClusterManager {
 
     /// Total number of memories inserted.
     total_memories: usize,
+
+    /// Topic stability tracker for churn calculation and dream triggers (AP-70).
+    stability_tracker: TopicStabilityTracker,
 }
 
 impl MultiSpaceClusterManager {
@@ -278,6 +282,7 @@ impl MultiSpaceClusterManager {
             spaces,
             topics: HashMap::new(),
             total_memories: 0,
+            stability_tracker: TopicStabilityTracker::new(),
         })
     }
 
@@ -478,85 +483,198 @@ impl MultiSpaceClusterManager {
     ///
     /// Discovers topics where memories cluster together in multiple spaces
     /// with weighted_agreement >= 2.5 (ARCH-09).
+    ///
+    /// FIXED: Now uses proper weighted agreement between memory pairs instead of
+    /// requiring exact cluster matches across ALL spaces. Two memories form a topic
+    /// edge if they share clusters in enough spaces to meet the 2.5 threshold.
     fn synthesize_topics(&mut self) -> Result<(), ClusterError> {
         self.topics.clear();
 
-        // Group memories by their cluster assignments across spaces
-        let mut memory_profiles: HashMap<Uuid, TopicProfile> = HashMap::new();
+        // Build memory -> (embedder -> cluster_id) map
+        let mut mem_clusters: HashMap<Uuid, HashMap<Embedder, i32>> = HashMap::new();
 
-        // Collect cluster assignments for each memory
-        for state in &self.spaces {
-            for (memory_id, membership) in &state.memberships {
-                let profile = memory_profiles.entry(*memory_id).or_default();
+        for (i, embedder) in Embedder::all().enumerate() {
+            for (memory_id, membership) in &self.spaces[i].memberships {
+                mem_clusters
+                    .entry(*memory_id)
+                    .or_default()
+                    .insert(embedder, membership.cluster_id);
+            }
+        }
 
-                // Set strength based on membership probability
-                if membership.cluster_id >= 0 {
-                    profile.set_strength(membership.space, membership.membership_probability);
+        if mem_clusters.is_empty() {
+            self.take_stability_snapshot();
+            return Ok(());
+        }
+
+        // Collect memory IDs for pairwise comparison
+        let memory_ids: Vec<Uuid> = mem_clusters.keys().cloned().collect();
+        let n = memory_ids.len();
+
+        if n < 2 {
+            self.take_stability_snapshot();
+            return Ok(());
+        }
+
+        // Find edges: pairs with weighted_agreement >= TOPIC_THRESHOLD (2.5)
+        let mut edges: Vec<(usize, usize)> = Vec::new();
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let wa = Self::compute_pairwise_weighted_agreement(
+                    &memory_ids[i],
+                    &memory_ids[j],
+                    &mem_clusters,
+                );
+                if wa >= TOPIC_THRESHOLD {
+                    edges.push((i, j));
                 }
             }
         }
 
-        // Find memories that meet topic threshold
-        let mut topic_candidates: HashMap<String, Vec<Uuid>> = HashMap::new();
+        // Union-Find to group connected memories
+        let mut parent: Vec<usize> = (0..n).collect();
 
-        for (memory_id, profile) in &memory_profiles {
-            if profile.is_topic() {
-                // Create a topic key based on cluster assignments
-                let key = self.make_topic_key(memory_id);
-                topic_candidates.entry(key).or_default().push(*memory_id);
+        fn find(parent: &mut [usize], i: usize) -> usize {
+            if parent[i] != i {
+                parent[i] = find(parent, parent[i]);
+            }
+            parent[i]
+        }
+
+        fn union(parent: &mut [usize], i: usize, j: usize) {
+            let pi = find(parent, i);
+            let pj = find(parent, j);
+            if pi != pj {
+                parent[pi] = pj;
             }
         }
 
-        // Create Topic objects for groups with enough members
-        for (_, member_ids) in topic_candidates {
-            if member_ids.len() >= self.params.hdbscan_params.min_cluster_size {
-                // Compute average profile for the topic
-                let avg_profile = self.compute_average_profile(&member_ids, &memory_profiles);
-
-                // Build cluster_ids map
-                let mut cluster_ids = HashMap::new();
-                if let Some(first_id) = member_ids.first() {
-                    for (i, embedder) in Embedder::all().enumerate() {
-                        if let Some(membership) = self.spaces[i].memberships.get(first_id) {
-                            if membership.cluster_id >= 0 {
-                                cluster_ids.insert(embedder, membership.cluster_id);
-                            }
-                        }
-                    }
-                }
-
-                let topic = Topic::new(avg_profile, cluster_ids, member_ids);
-                self.topics.insert(topic.id, topic);
-            }
+        for (i, j) in edges {
+            union(&mut parent, i, j);
         }
+
+        // Group by component root
+        let mut components: HashMap<usize, Vec<Uuid>> = HashMap::new();
+        for i in 0..n {
+            let root = find(&mut parent, i);
+            components.entry(root).or_default().push(memory_ids[i]);
+        }
+
+        // Create topics from groups with >= 2 members
+        for members in components.into_values() {
+            if members.len() < 2 {
+                continue;
+            }
+
+            // Compute topic profile (fraction of members in dominant cluster per space)
+            let profile = Self::compute_topic_profile_from_clusters(&members, &mem_clusters);
+
+            // Only create topic if profile meets threshold
+            if !profile.is_topic() {
+                continue;
+            }
+
+            // Compute cluster_ids (most common cluster per space)
+            let cluster_ids = Self::compute_dominant_cluster_ids(&members, &mem_clusters);
+
+            let topic = Topic::new(profile, cluster_ids, members);
+            self.topics.insert(topic.id, topic);
+        }
+
+        // Take a stability snapshot after synthesizing topics (AP-70)
+        self.take_stability_snapshot();
 
         Ok(())
     }
 
-    /// Make a topic key from a memory's cluster assignments.
-    fn make_topic_key(&self, memory_id: &Uuid) -> String {
-        let mut key_parts: Vec<String> = Vec::new();
+    /// Compute weighted agreement between two memories.
+    ///
+    /// Uses category weights per constitution:
+    /// - SEMANTIC (E1, E5, E6, E7, E10, E12, E13): 1.0
+    /// - TEMPORAL (E2, E3, E4): 0.0 (excluded per AP-60)
+    /// - RELATIONAL (E8, E11): 0.5
+    /// - STRUCTURAL (E9): 0.5
+    fn compute_pairwise_weighted_agreement(
+        mem_a: &Uuid,
+        mem_b: &Uuid,
+        mem_clusters: &HashMap<Uuid, HashMap<Embedder, i32>>,
+    ) -> f32 {
+        let Some(clusters_a) = mem_clusters.get(mem_a) else {
+            return 0.0;
+        };
+        let Some(clusters_b) = mem_clusters.get(mem_b) else {
+            return 0.0;
+        };
 
-        for (i, embedder) in Embedder::all().enumerate() {
-            let category = category_for(embedder);
+        let mut weighted = 0.0f32;
+        for embedder in Embedder::all() {
+            let ca = clusters_a.get(&embedder).copied().unwrap_or(-1);
+            let cb = clusters_b.get(&embedder).copied().unwrap_or(-1);
 
-            // Only use semantic, relational, and structural for topic keys
-            // Temporal (E2-E4) excluded per AP-60
-            if category == EmbedderCategory::Temporal {
-                continue;
+            // Both in same non-noise cluster
+            if ca != -1 && ca == cb {
+                weighted += category_for(embedder).topic_weight();
             }
+        }
+        weighted
+    }
 
-            if let Some(membership) = self.spaces[i].memberships.get(memory_id) {
-                if membership.cluster_id >= 0 {
-                    key_parts.push(format!("{}:{}", embedder.index(), membership.cluster_id));
+    /// Compute topic profile from cluster memberships.
+    ///
+    /// For each space, the strength is the fraction of members in the dominant cluster.
+    fn compute_topic_profile_from_clusters(
+        members: &[Uuid],
+        mem_clusters: &HashMap<Uuid, HashMap<Embedder, i32>>,
+    ) -> TopicProfile {
+        if members.is_empty() {
+            return TopicProfile::new([0.0f32; 13]);
+        }
+
+        let mut strengths = [0.0f32; 13];
+        for embedder in Embedder::all() {
+            let mut counts: HashMap<i32, usize> = HashMap::new();
+            for mem_id in members {
+                if let Some(clusters) = mem_clusters.get(mem_id) {
+                    let cid = clusters.get(&embedder).copied().unwrap_or(-1);
+                    if cid != -1 {
+                        *counts.entry(cid).or_insert(0) += 1;
+                    }
                 }
+            }
+            if let Some((_, &count)) = counts.iter().max_by_key(|(_, &c)| c) {
+                strengths[embedder.index()] = count as f32 / members.len() as f32;
             }
         }
 
-        key_parts.join(",")
+        TopicProfile::new(strengths)
+    }
+
+    /// Compute the dominant cluster ID for each embedding space.
+    fn compute_dominant_cluster_ids(
+        members: &[Uuid],
+        mem_clusters: &HashMap<Uuid, HashMap<Embedder, i32>>,
+    ) -> HashMap<Embedder, i32> {
+        let mut result = HashMap::new();
+        for embedder in Embedder::all() {
+            let mut counts: HashMap<i32, usize> = HashMap::new();
+            for mem_id in members {
+                if let Some(clusters) = mem_clusters.get(mem_id) {
+                    let cid = clusters.get(&embedder).copied().unwrap_or(-1);
+                    if cid != -1 {
+                        *counts.entry(cid).or_insert(0) += 1;
+                    }
+                }
+            }
+            if let Some((&dominant, _)) = counts.iter().max_by_key(|(_, &c)| c) {
+                result.insert(embedder, dominant);
+            }
+        }
+        result
     }
 
     /// Compute average profile from a set of memories.
+    #[allow(dead_code)]
     fn compute_average_profile(
         &self,
         memory_ids: &[Uuid],
@@ -744,6 +862,45 @@ impl MultiSpaceClusterManager {
         )
     }
 
+    /// Export the current topic portfolio using internal churn rate.
+    ///
+    /// This is the preferred method as it uses the stability tracker's
+    /// computed churn rate instead of requiring an external value.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Session identifier for tracking
+    /// * `entropy` - Current system entropy (from external source)
+    ///
+    /// # Returns
+    ///
+    /// A `PersistedTopicPortfolio` ready for storage.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use context_graph_core::clustering::MultiSpaceClusterManager;
+    ///
+    /// let manager = MultiSpaceClusterManager::with_defaults().unwrap();
+    /// let portfolio = manager.export_portfolio_with_internal_churn("session-123", 0.45);
+    ///
+    /// assert_eq!(portfolio.session_id, "session-123");
+    /// ```
+    pub fn export_portfolio_with_internal_churn(
+        &self,
+        session_id: impl Into<String>,
+        entropy: f32,
+    ) -> crate::clustering::PersistedTopicPortfolio {
+        let topics: Vec<Topic> = self.topics.values().cloned().collect();
+
+        crate::clustering::PersistedTopicPortfolio::new(
+            topics,
+            self.stability_tracker.current_churn(),
+            entropy,
+            session_id.into(),
+        )
+    }
+
     /// Import topics from a persisted portfolio.
     ///
     /// Restores topics from a previous session's portfolio snapshot.
@@ -790,6 +947,26 @@ impl MultiSpaceClusterManager {
         self.topics.clear();
     }
 
+    /// Clear all per-space data (embeddings, memory_ids, memberships, clusters).
+    ///
+    /// This is used before loading fingerprints from storage to ensure
+    /// we cluster ALL fingerprints, not just those added during this session.
+    ///
+    /// Also clears topics since they'll be re-synthesized after reclustering.
+    pub fn clear_all_spaces(&mut self) {
+        for space in &mut self.spaces {
+            space.embeddings.clear();
+            space.memory_ids.clear();
+            space.memberships.clear();
+            space.clusters.clear();
+            space.updates_since_recluster = 0;
+        }
+        self.topics.clear();
+        self.total_memories = 0;
+
+        tracing::info!("Cleared all 13 embedding spaces for fresh clustering");
+    }
+
     /// Get portfolio-level summary for persistence.
     ///
     /// Returns a tuple of (topic_count, total_members).
@@ -797,6 +974,78 @@ impl MultiSpaceClusterManager {
     pub fn portfolio_summary(&self) -> (usize, usize) {
         let total_members: usize = self.topics.values().map(|t| t.member_count()).sum();
         (self.topics.len(), total_members)
+    }
+
+    // =========================================================================
+    // Topic Stability Tracking (AP-70 Compliance)
+    // =========================================================================
+
+    /// Take a stability snapshot of current topics.
+    ///
+    /// Call this periodically (e.g., every minute) or after topic synthesis
+    /// to track portfolio changes for churn calculation.
+    pub fn take_stability_snapshot(&mut self) {
+        let topics_vec: Vec<Topic> = self.topics.values().cloned().collect();
+        self.stability_tracker.take_snapshot(&topics_vec);
+    }
+
+    /// Compute churn by comparing current state to ~1 hour ago.
+    ///
+    /// # Returns
+    ///
+    /// Churn rate [0.0, 1.0] where:
+    /// - 0.0 = no change (stable)
+    /// - 1.0 = complete turnover
+    pub fn track_churn(&mut self) -> f32 {
+        self.stability_tracker.track_churn()
+    }
+
+    /// Get current churn rate (last computed value).
+    #[inline]
+    pub fn current_churn(&self) -> f32 {
+        self.stability_tracker.current_churn()
+    }
+
+    /// Check if dream consolidation should trigger (AP-70).
+    ///
+    /// Per constitution AP-70, triggers when EITHER:
+    /// 1. entropy > 0.7 AND churn > 0.5 (both simultaneously)
+    /// 2. entropy > 0.7 for 5+ continuous minutes
+    ///
+    /// # Arguments
+    ///
+    /// * `entropy` - Current system entropy [0.0, 1.0]
+    ///
+    /// # Returns
+    ///
+    /// true if dream should be triggered
+    pub fn check_dream_trigger(&mut self, entropy: f32) -> bool {
+        self.stability_tracker.check_dream_trigger(entropy)
+    }
+
+    /// Get reference to stability tracker for advanced queries.
+    pub fn stability_tracker(&self) -> &TopicStabilityTracker {
+        &self.stability_tracker
+    }
+
+    /// Get mutable reference to stability tracker.
+    pub fn stability_tracker_mut(&mut self) -> &mut TopicStabilityTracker {
+        &mut self.stability_tracker
+    }
+
+    /// Reset entropy tracking (call after dream completes).
+    pub fn reset_entropy_tracking(&mut self) {
+        self.stability_tracker.reset_entropy_tracking();
+    }
+
+    /// Check if system is stable (low churn over 6 hours).
+    pub fn is_stable(&self) -> bool {
+        self.stability_tracker.is_stable()
+    }
+
+    /// Get average churn over specified hours.
+    pub fn average_churn(&self, hours: i64) -> f32 {
+        self.stability_tracker.average_churn(hours)
     }
 }
 

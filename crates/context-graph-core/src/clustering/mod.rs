@@ -55,10 +55,10 @@ pub use manager::{
     UpdateStatus, DEFAULT_RECLUSTER_THRESHOLD, MAX_WEIGHTED_AGREEMENT, TOPIC_THRESHOLD,
 };
 pub use membership::ClusterMembership;
-pub use persistence::{PersistedTopicPortfolio, PersistenceError};
+pub use persistence::{PersistedTopicPortfolio, PersistenceError, TopicPortfolio};
 pub use stability::{
     TopicSnapshot, TopicStabilityTracker, DEFAULT_CHURN_THRESHOLD, DEFAULT_ENTROPY_DURATION_SECS,
     DEFAULT_ENTROPY_THRESHOLD, SNAPSHOT_RETENTION_HOURS,
 };
 pub use synthesizer::{TopicSynthesizer, DEFAULT_MERGE_THRESHOLD, DEFAULT_MIN_SILHOUETTE};
-pub use topic::{Topic, TopicPhase, TopicProfile, TopicStability};
+pub use topic::{Topic, TopicPhase, TopicProfile, TopicStability, TOPIC_SILHOUETTE_THRESHOLD};

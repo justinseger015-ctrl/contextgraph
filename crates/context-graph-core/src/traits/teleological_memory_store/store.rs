@@ -493,4 +493,30 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     async fn load_latest_topic_portfolio(
         &self,
     ) -> CoreResult<Option<crate::clustering::PersistedTopicPortfolio>>;
+
+    // =========================================================================
+    // Clustering Support
+    // =========================================================================
+
+    /// Scan all fingerprints and return their embeddings for clustering.
+    ///
+    /// This method is used by detect_topics to populate the cluster_manager
+    /// with all existing fingerprints from storage before running HDBSCAN.
+    ///
+    /// Returns a vector of (fingerprint_id, embeddings_array) tuples.
+    /// The embeddings_array is the 13-element array of embedding vectors.
+    ///
+    /// # Arguments
+    /// * `limit` - Optional limit on number of fingerprints to scan (None = all)
+    ///
+    /// # Returns
+    /// Vector of (Uuid, [Vec<f32>; 13]) tuples for each fingerprint.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    /// - `CoreError::SerializationError` - Deserialization failure
+    async fn scan_fingerprints_for_clustering(
+        &self,
+        limit: Option<usize>,
+    ) -> CoreResult<Vec<(uuid::Uuid, [Vec<f32>; 13])>>;
 }

@@ -2,6 +2,7 @@
 //!
 //! Per constitution ARCH-09: Topic threshold is weighted_agreement >= 2.5
 //! Per constitution AP-60: Temporal embedders (E2-E4) NEVER count toward topic detection
+//! Per constitution clustering.parameters.silhouette_threshold: 0.3
 //!
 //! # Weighted Agreement Formula
 //!
@@ -16,6 +17,15 @@
 //! - TEMPORAL (E2, E3, E4): 0.0 (NEVER counts)
 //! - RELATIONAL (E8, E11): 0.5
 //! - STRUCTURAL (E9): 0.5
+//!
+//! # Silhouette Validation
+//!
+//! Topics are only valid if their average silhouette score >= 0.3
+//! (per constitution clustering.parameters.silhouette_threshold).
+
+/// Minimum silhouette score threshold for valid topics.
+/// Per constitution clustering.parameters.silhouette_threshold.
+pub const TOPIC_SILHOUETTE_THRESHOLD: f32 = 0.3;
 
 use std::collections::HashMap;
 
@@ -341,6 +351,10 @@ pub struct Topic {
     pub member_memories: Vec<Uuid>,
     /// Confidence score = weighted_agreement / 8.5 (per ARCH-09).
     pub confidence: f32,
+    /// Average silhouette score from contributing clusters.
+    /// Per constitution clustering.parameters.silhouette_threshold: 0.3
+    /// Default is 1.0 (valid) if not computed.
+    pub silhouette_score: f32,
     /// Stability metrics.
     pub stability: TopicStability,
     /// Creation timestamp.
@@ -386,6 +400,7 @@ impl Topic {
             cluster_ids,
             member_memories: members,
             confidence,
+            silhouette_score: 1.0, // Default to valid, updated when cluster silhouettes are computed
             stability: TopicStability::new(),
             created_at: Utc::now(),
         }
@@ -410,10 +425,39 @@ impl Topic {
         self.name = Some(name);
     }
 
-    /// Check if this topic is valid (weighted_agreement >= 2.5 per ARCH-09).
+    /// Check if this topic is valid.
+    ///
+    /// Per constitution requirements:
+    /// - ARCH-09: weighted_agreement >= 2.5
+    /// - clustering.parameters.silhouette_threshold: silhouette >= 0.3
     #[inline]
     pub fn is_valid(&self) -> bool {
+        self.profile.is_topic() && self.silhouette_score >= TOPIC_SILHOUETTE_THRESHOLD
+    }
+
+    /// Check if topic meets weighted_agreement threshold only.
+    ///
+    /// Use this for initial topic candidate detection before silhouette is computed.
+    #[inline]
+    pub fn meets_weighted_agreement(&self) -> bool {
         self.profile.is_topic()
+    }
+
+    /// Update the silhouette score from contributing cluster quality.
+    ///
+    /// Call after HDBSCAN reclustering to set the average silhouette of
+    /// clusters that contribute to this topic.
+    ///
+    /// # Arguments
+    /// * `score` - Average silhouette score from contributing clusters (-1.0..=1.0)
+    pub fn set_silhouette_score(&mut self, score: f32) {
+        self.silhouette_score = score.clamp(-1.0, 1.0);
+    }
+
+    /// Check if silhouette score meets threshold.
+    #[inline]
+    pub fn has_valid_silhouette(&self) -> bool {
+        self.silhouette_score >= TOPIC_SILHOUETTE_THRESHOLD
     }
 
     /// Get member count.

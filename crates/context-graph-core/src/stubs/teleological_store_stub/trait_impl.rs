@@ -360,4 +360,34 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
         debug!("Loading latest topic portfolio from in-memory store");
         Ok(self.topic_portfolios.get("__latest__").map(|r| r.clone()))
     }
+
+    async fn scan_fingerprints_for_clustering(
+        &self,
+        limit: Option<usize>,
+    ) -> CoreResult<Vec<(uuid::Uuid, [Vec<f32>; 13])>> {
+        debug!(limit = ?limit, "Scanning fingerprints for clustering from in-memory store");
+
+        let mut results = Vec::new();
+
+        for entry in self.data.iter() {
+            // Skip soft-deleted fingerprints
+            if self.deleted.contains_key(entry.key()) {
+                continue;
+            }
+
+            let fp = entry.value();
+            let cluster_array = fp.semantic.to_cluster_array();
+            results.push((fp.id, cluster_array));
+
+            // Apply limit if specified
+            if let Some(max) = limit {
+                if results.len() >= max {
+                    break;
+                }
+            }
+        }
+
+        debug!(count = results.len(), "Scanned fingerprints for clustering");
+        Ok(results)
+    }
 }

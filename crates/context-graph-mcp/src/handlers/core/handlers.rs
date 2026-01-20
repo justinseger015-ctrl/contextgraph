@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use serde_json::json;
-use tracing::info;
+use tracing::{info, warn};
 
 use context_graph_core::clustering::{MultiSpaceClusterManager, TopicStabilityTracker};
 use context_graph_core::monitoring::LayerStatusProvider;
@@ -108,8 +108,20 @@ impl Handlers {
     /// Handle MCP initialize request.
     ///
     /// Returns server capabilities per MCP protocol.
+    /// Also restores topic portfolio from storage on initialization.
     pub async fn handle_initialize(&self, id: Option<JsonRpcId>) -> JsonRpcResponse {
         info!("MCP initialize request received");
+
+        // Restore topic portfolio from storage on server init
+        match self.restore_topic_portfolio().await {
+            Ok(topic_count) => {
+                info!(topic_count, "Topic portfolio restored during MCP initialize");
+            }
+            Err(e) => {
+                // Log error but don't fail initialization - new sessions can start fresh
+                warn!(error = %e, "Failed to restore topic portfolio during init (continuing with empty portfolio)");
+            }
+        }
 
         let capabilities = json!({
             "protocolVersion": "2024-11-05",

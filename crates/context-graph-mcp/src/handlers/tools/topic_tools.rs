@@ -406,8 +406,59 @@ impl Handlers {
             "detect_topics: Starting topic detection"
         );
 
+        // FIX-BUG-001: Load all fingerprints from storage into cluster_manager BEFORE reclustering.
+        // Previously, the cluster_manager only contained fingerprints added during the current session
+        // via inject_context/store_memory, missing all existing fingerprints in storage.
+        info!("detect_topics: Loading all fingerprints from storage for clustering...");
+
+        let fingerprints = match self.teleological_store.scan_fingerprints_for_clustering(None).await {
+            Ok(fps) => fps,
+            Err(e) => {
+                error!(error = %e, "detect_topics: Failed to scan fingerprints from storage");
+                return self.tool_error_with_pulse(
+                    id,
+                    &format!("Storage error: Failed to scan fingerprints: {}", e),
+                );
+            }
+        };
+
+        info!(
+            fingerprint_count = fingerprints.len(),
+            "detect_topics: Scanned fingerprints from storage"
+        );
+
         // TASK-INTEG-TOPIC: Trigger reclustering via cluster_manager
         let mut cluster_manager = self.cluster_manager.write();
+
+        // Clear existing data in cluster_manager and load all fingerprints from storage
+        // This ensures we cluster ALL fingerprints, not just those added during this session.
+        cluster_manager.clear_all_spaces();
+
+        let mut insert_errors = 0;
+        for (fp_id, cluster_array) in &fingerprints {
+            if let Err(e) = cluster_manager.insert(*fp_id, cluster_array) {
+                warn!(
+                    fingerprint_id = %fp_id,
+                    error = %e,
+                    "detect_topics: Failed to insert fingerprint into cluster_manager"
+                );
+                insert_errors += 1;
+            }
+        }
+
+        if insert_errors > 0 {
+            warn!(
+                insert_errors = insert_errors,
+                total = fingerprints.len(),
+                "detect_topics: Some fingerprints failed to insert"
+            );
+        }
+
+        info!(
+            inserted = fingerprints.len() - insert_errors,
+            errors = insert_errors,
+            "detect_topics: Loaded fingerprints into cluster_manager"
+        );
 
         // Track topics before reclustering
         let topics_before: std::collections::HashSet<uuid::Uuid> =

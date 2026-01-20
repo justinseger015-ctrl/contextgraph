@@ -120,10 +120,15 @@ pub enum GpuMonitorError {
 ///
 /// Holds thresholds for dream trigger conditions.
 ///
-/// # Constitution Compliance
+/// # Constitution Compliance (AP-70)
 ///
 /// - `entropy_threshold`: default 0.7 per `dream.trigger.entropy`
+/// - `churn_threshold`: default 0.5 per AP-70
 /// - `cooldown`: default 60s to prevent trigger spam
+///
+/// # AP-70 Trigger Condition
+///
+/// Dream triggers when: entropy > 0.7 AND churn > 0.5
 ///
 /// # Example
 ///
@@ -134,14 +139,19 @@ pub enum GpuMonitorError {
 ///
 /// // Custom configuration
 /// let custom = TriggerConfig::default()
-///     .with_entropy_threshold(0.8);
+///     .with_entropy_threshold(0.8)
+///     .with_churn_threshold(0.6);
 /// custom.validate(); // Panics if invalid
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct TriggerConfig {
     /// Entropy threshold for high entropy trigger (default: 0.7)
-    /// Constitution: `dream.trigger.entropy > 0.7 for 5min`
+    /// Constitution: `dream.trigger.entropy > 0.7`
     pub entropy_threshold: f32,
+
+    /// Churn threshold for dream trigger (default: 0.5)
+    /// Constitution AP-70: trigger when entropy > 0.7 AND churn > 0.5
+    pub churn_threshold: f32,
 
     /// Cooldown between triggers (default: 60 seconds)
     /// Prevents rapid re-triggering
@@ -153,6 +163,7 @@ impl Default for TriggerConfig {
     fn default() -> Self {
         Self {
             entropy_threshold: 0.7, // Constitution: dream.trigger.entropy
+            churn_threshold: 0.5,   // Constitution AP-70: churn > 0.5
             cooldown: Duration::from_secs(60),
         }
     }
@@ -169,6 +180,7 @@ impl TriggerConfig {
     /// # Constitution Bounds
     ///
     /// - `entropy_threshold`: MUST be in [0.0, 1.0]
+    /// - `churn_threshold`: MUST be in [0.0, 1.0]
     /// - `cooldown`: No explicit bound, but Duration::ZERO is unusual
     #[track_caller]
     pub fn validate(&self) {
@@ -177,6 +189,12 @@ impl TriggerConfig {
             "TriggerConfig: entropy_threshold must be in [0.0, 1.0], got {}. \
              Constitution: dream.trigger.entropy threshold",
             self.entropy_threshold
+        );
+        assert!(
+            (0.0..=1.0).contains(&self.churn_threshold),
+            "TriggerConfig: churn_threshold must be in [0.0, 1.0], got {}. \
+             Constitution AP-70: churn threshold",
+            self.churn_threshold
         );
     }
 
@@ -196,6 +214,17 @@ impl TriggerConfig {
     /// * `threshold` - Entropy threshold [0.0, 1.0]. Higher = less sensitive.
     pub fn with_entropy_threshold(mut self, threshold: f32) -> Self {
         self.entropy_threshold = threshold;
+        self
+    }
+
+    /// Builder: set churn threshold.
+    ///
+    /// # Arguments
+    ///
+    /// * `threshold` - Churn threshold [0.0, 1.0]. Higher = less sensitive.
+    ///   Per AP-70: default is 0.5.
+    pub fn with_churn_threshold(mut self, threshold: f32) -> Self {
+        self.churn_threshold = threshold;
         self
     }
 
@@ -258,14 +287,15 @@ impl TriggerHistoryItem {
 /// Unified trigger manager for dream cycles.
 ///
 /// Combines all trigger mechanisms into a single interface:
-/// - High entropy (>0.7 sustained for 5 minutes)
+/// - High entropy (>0.7) AND high churn (>0.5) per AP-70
 /// - GPU overload (approaching 30% usage)
 /// - Manual trigger
 ///
-/// # Constitution Compliance
+/// # Constitution Compliance (AP-70)
 ///
 /// - Entropy threshold: 0.7 (Constitution dream.trigger)
-/// - Entropy window: 5 minutes (Constitution dream.trigger)
+/// - Churn threshold: 0.5 (Constitution AP-70)
+/// - Dream triggers when: entropy > 0.7 AND churn > 0.5
 /// - GPU threshold: 0.30 (Constitution dream.constraints.gpu)
 /// - Cooldown: 60 seconds (prevents trigger spam)
 ///
@@ -273,7 +303,7 @@ impl TriggerHistoryItem {
 ///
 /// 1. Manual - User-initiated, bypasses cooldown
 /// 2. GpuOverload - GPU approaching 30% budget
-/// 3. HighEntropy - Entropy > 0.7 for 5 minutes
+/// 3. HighEntropyAndChurn - Entropy > 0.7 AND churn > 0.5 (AP-70)
 #[derive(Debug)]
 pub struct TriggerManager {
     /// Trigger history (TASK-S03) - capped at 100 entries
@@ -286,6 +316,9 @@ pub struct TriggerManager {
 
     /// GPU utilization state
     gpu_state: GpuTriggerState,
+
+    /// Current churn rate from topic stability (AP-70)
+    current_churn: f32,
 
     /// Manual trigger with requested phase (TASK-DREAM-PH-002).
     ///
@@ -325,6 +358,7 @@ impl TriggerManager {
             config,
             entropy_window: EntropyWindow::new(), // Uses Constitution defaults
             gpu_state: GpuTriggerState::new(),    // Uses Constitution defaults
+            current_churn: 0.0, // AP-70: Start with zero churn
             manual_trigger: None, // TASK-DREAM-PH-002: Now stores Option<DreamPhase>
             last_trigger_reason: None,
             last_trigger_time: None,
@@ -349,6 +383,7 @@ impl TriggerManager {
             config,
             entropy_window: EntropyWindow::new(),
             gpu_state: GpuTriggerState::new(),
+            current_churn: 0.0, // AP-70: Start with zero churn
             manual_trigger: None, // TASK-DREAM-PH-002: Now stores Option<DreamPhase>
             last_trigger_reason: None,
             last_trigger_time: None,
@@ -417,6 +452,49 @@ impl TriggerManager {
         }
     }
 
+    /// Update churn rate from topic stability tracking (AP-70).
+    ///
+    /// Called periodically (e.g., after each topic synthesis) with
+    /// the current churn rate from TopicStabilityTracker.
+    ///
+    /// # Arguments
+    /// * `churn` - Current churn rate [0.0, 1.0] from TopicStabilityTracker
+    ///
+    /// # AP-70 Constitution Reference
+    /// Dream triggers when: entropy > 0.7 AND churn > 0.5
+    pub fn update_churn(&mut self, churn: f32) {
+        if !self.enabled {
+            return;
+        }
+
+        self.current_churn = churn.clamp(0.0, 1.0);
+
+        if churn > self.config.churn_threshold {
+            debug!(
+                "High churn detected: {:.3} > threshold {:.3}",
+                churn, self.config.churn_threshold
+            );
+        }
+    }
+
+    /// Get current churn rate.
+    #[inline]
+    pub fn current_churn(&self) -> f32 {
+        self.current_churn
+    }
+
+    /// Get churn threshold from config (AP-70).
+    #[inline]
+    pub fn churn_threshold(&self) -> f32 {
+        self.config.churn_threshold
+    }
+
+    /// Check if churn exceeds threshold (AP-70).
+    #[inline]
+    pub fn is_high_churn(&self) -> bool {
+        self.current_churn > self.config.churn_threshold
+    }
+
     /// Request a manual dream trigger with specific phase.
     ///
     /// TASK-DREAM-PH-002: Now accepts a phase parameter.
@@ -440,18 +518,19 @@ impl TriggerManager {
     ///
     /// 1. Manual - User-initiated, bypasses cooldown
     /// 2. GpuOverload - GPU approaching 30% budget
-    /// 3. HighEntropy - Entropy > 0.7 for 5 minutes
+    /// 3. HighEntropy - Entropy > 0.7 AND churn > 0.5 (AP-70)
     ///
     /// # Returns
     ///
     /// * `Some(reason)` - If trigger condition met
     /// * `None` - If no trigger condition met or in cooldown
     ///
-    /// # Constitution Compliance
+    /// # Constitution Compliance (AP-70)
     ///
     /// - Manual bypasses cooldown (highest priority)
     /// - GpuOverload when GPU > 30% (Constitution dream.constraints.gpu)
-    /// - HighEntropy when entropy > 0.7 for 5min (Constitution dream.trigger.entropy)
+    /// - HighEntropy triggers ONLY when: entropy > 0.7 AND churn > 0.5
+    ///   Per AP-70: "Dream triggers MUST use entropy > 0.7 AND churn > 0.5"
     pub fn check_triggers(&self) -> Option<ExtendedTriggerReason> {
         if !self.enabled {
             return None;
@@ -477,8 +556,18 @@ impl TriggerManager {
             return Some(ExtendedTriggerReason::GpuOverload);
         }
 
-        // Priority 3: HighEntropy
-        if self.entropy_window.should_trigger() {
+        // Priority 3: HighEntropy AND HighChurn (AP-70)
+        // Per constitution AP-70: Dream triggers require BOTH:
+        // - entropy > 0.7 (sustained for required duration)
+        // - churn > 0.5
+        let is_high_entropy = self.entropy_window.should_trigger();
+        let is_high_churn = self.current_churn > self.config.churn_threshold;
+
+        if is_high_entropy && is_high_churn {
+            debug!(
+                "AP-70 trigger condition met: entropy sustained > 0.7, churn {:.3} > {:.3}",
+                self.current_churn, self.config.churn_threshold
+            );
             return Some(ExtendedTriggerReason::HighEntropy);
         }
 
@@ -1339,7 +1428,7 @@ mod tests {
     // ============ Entropy Trigger Tests ============
 
     #[test]
-    fn test_trigger_manager_entropy_requires_sustained_high() {
+    fn test_trigger_manager_entropy_requires_sustained_high_and_churn() {
         // Use short window for testing with REAL time
         let mut manager = TriggerManager::new();
         manager.entropy_window = EntropyWindow::with_params(Duration::from_millis(50), 0.7);
@@ -1349,17 +1438,64 @@ mod tests {
         manager.update_entropy(0.8);
         assert!(!manager.should_trigger(), "Should not trigger immediately");
 
-        // Wait for window duration plus margin
+        // Wait for window duration plus margin, but still no churn
         thread::sleep(Duration::from_millis(60));
         manager.update_entropy(0.85);
 
+        // AP-70: Entropy alone should NOT trigger without high churn
+        assert!(
+            !manager.should_trigger(),
+            "Entropy alone should NOT trigger per AP-70"
+        );
+
+        // Now add high churn (> 0.5) - should trigger per AP-70
+        manager.update_churn(0.6);
+
         assert!(
             manager.should_trigger(),
-            "Should trigger after sustained high entropy"
+            "Should trigger after sustained high entropy AND high churn (AP-70)"
         );
         assert_eq!(
             manager.check_triggers(),
             Some(ExtendedTriggerReason::HighEntropy)
+        );
+    }
+
+    #[test]
+    fn test_trigger_manager_high_entropy_without_churn_does_not_trigger() {
+        // AP-70 compliance: entropy > 0.7 alone should NOT trigger
+        let mut manager = TriggerManager::new();
+        manager.entropy_window = EntropyWindow::with_params(Duration::from_millis(50), 0.7);
+        manager.trigger_cooldown = Duration::from_millis(1);
+
+        // High entropy
+        manager.update_entropy(0.9);
+        thread::sleep(Duration::from_millis(60));
+        manager.update_entropy(0.9);
+
+        // Low churn (< 0.5)
+        manager.update_churn(0.3);
+
+        assert!(
+            !manager.should_trigger(),
+            "High entropy with low churn should NOT trigger per AP-70"
+        );
+    }
+
+    #[test]
+    fn test_trigger_manager_high_churn_without_entropy_does_not_trigger() {
+        // AP-70 compliance: churn > 0.5 alone should NOT trigger
+        let mut manager = TriggerManager::new();
+
+        // Low entropy
+        manager.update_entropy(0.3);
+
+        // High churn (> 0.5)
+        manager.update_churn(0.7);
+
+        assert!(
+            !manager.should_trigger(),
+            "High churn with low entropy should NOT trigger per AP-70"
         );
     }
 
@@ -1851,12 +1987,14 @@ mod tests {
         // Test exact boundary values
         let config = TriggerConfig {
             entropy_threshold: 1.0,
+            churn_threshold: 1.0,
             cooldown: Duration::ZERO,
         };
         config.validate(); // Should pass - 0.0 and 1.0 are valid
 
         let config_max = TriggerConfig {
             entropy_threshold: 0.0,
+            churn_threshold: 0.0,
             cooldown: Duration::from_secs(86400), // 24 hours
         };
         config_max.validate(); // Should pass

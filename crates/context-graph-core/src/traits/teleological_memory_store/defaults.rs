@@ -313,4 +313,21 @@ pub trait TeleologicalMemoryStoreDefaults: Send + Sync {
     ) -> CoreResult<Option<crate::clustering::PersistedTopicPortfolio>> {
         Ok(None)
     }
+
+    // ==================== Clustering Support Defaults ====================
+
+    /// Default: Scan fingerprints for clustering - returns empty vec.
+    ///
+    /// # Arguments
+    /// * `limit` - Optional limit (unused in default implementation)
+    ///
+    /// # Returns
+    /// Empty vector - backend does not support scanning.
+    async fn scan_fingerprints_for_clustering_default(
+        &self,
+        limit: Option<usize>,
+    ) -> CoreResult<Vec<(uuid::Uuid, [Vec<f32>; 13])>> {
+        let _ = limit; // Suppress unused warning
+        Ok(Vec::new())
+    }
 }
