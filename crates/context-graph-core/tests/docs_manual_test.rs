@@ -12,7 +12,7 @@ use context_graph_core::memory::capture::{
     EmbeddingProvider, MemoryCaptureService, TestEmbeddingProvider,
 };
 use context_graph_core::memory::store::MemoryStore;
-use context_graph_core::memory::watcher::MDFileWatcher;
+use context_graph_core::memory::watcher::GitFileWatcher;
 use context_graph_core::stubs::InMemoryTeleologicalStore;
 use context_graph_core::traits::TeleologicalMemoryStore;
 use context_graph_core::types::SourceType;
@@ -66,7 +66,7 @@ async fn test_real_docs_directory_processing() {
     ));
 
     // Create file watcher for ./docs/
-    let mut watcher = MDFileWatcher::new(
+    let mut watcher = GitFileWatcher::new(
         vec![docs_dir.clone()],
         capture_service.clone(),
         "docs-test-session".to_string(),

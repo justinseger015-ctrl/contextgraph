@@ -384,7 +384,8 @@ fn default_watcher_session_id() -> String {
 impl Default for WatcherConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            // Enabled by default to index ./docs automatically
+            enabled: true,
             watch_paths: default_watch_paths(),
             session_id: default_watcher_session_id(),
         }

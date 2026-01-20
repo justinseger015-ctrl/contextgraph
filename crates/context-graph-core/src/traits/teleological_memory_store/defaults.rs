@@ -172,4 +172,98 @@ pub trait TeleologicalMemoryStoreDefaults: Send + Sync {
         // Default returns None for all IDs since source metadata storage is not supported
         Ok(vec![None; ids.len()])
     }
+
+    /// Default: Find fingerprints by file path - returns empty vec.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to search for
+    ///
+    /// # Returns
+    /// Empty vector (backend does not support source metadata scanning).
+    async fn find_fingerprints_by_file_path_default(&self, file_path: &str) -> CoreResult<Vec<Uuid>> {
+        let _ = file_path; // Suppress unused warnings
+        Ok(vec![])
+    }
+
+    // ==================== File Index Defaults ====================
+
+    /// Default: List indexed files - returns unsupported error.
+    ///
+    /// # Returns
+    /// Error indicating file index not supported by backend.
+    async fn list_indexed_files_default(&self) -> CoreResult<Vec<crate::types::FileIndexEntry>> {
+        Err(CoreError::Internal(format!(
+            "File index not supported by {} backend",
+            self.backend_type()
+        )))
+    }
+
+    /// Default: Get fingerprints for file - returns empty vec.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to look up
+    ///
+    /// # Returns
+    /// Empty vector (backend does not support file index).
+    async fn get_fingerprints_for_file_default(&self, file_path: &str) -> CoreResult<Vec<Uuid>> {
+        let _ = file_path; // Suppress unused warnings
+        Ok(vec![])
+    }
+
+    /// Default: Index file fingerprint - returns unsupported error.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path
+    /// * `fingerprint_id` - The fingerprint UUID to add
+    ///
+    /// # Returns
+    /// Error indicating file index not supported by backend.
+    async fn index_file_fingerprint_default(
+        &self,
+        file_path: &str,
+        fingerprint_id: Uuid,
+    ) -> CoreResult<()> {
+        let _ = (file_path, fingerprint_id); // Suppress unused warnings
+        Err(CoreError::Internal(format!(
+            "File index not supported by {} backend",
+            self.backend_type()
+        )))
+    }
+
+    /// Default: Unindex file fingerprint - returns false.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path
+    /// * `fingerprint_id` - The fingerprint UUID to remove
+    ///
+    /// # Returns
+    /// false (backend does not support file index).
+    async fn unindex_file_fingerprint_default(
+        &self,
+        file_path: &str,
+        fingerprint_id: Uuid,
+    ) -> CoreResult<bool> {
+        let _ = (file_path, fingerprint_id); // Suppress unused warnings
+        Ok(false)
+    }
+
+    /// Default: Clear file index - returns 0.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to clear
+    ///
+    /// # Returns
+    /// 0 (backend does not support file index).
+    async fn clear_file_index_default(&self, file_path: &str) -> CoreResult<usize> {
+        let _ = file_path; // Suppress unused warnings
+        Ok(0)
+    }
+
+    /// Default: Get file watcher stats - returns empty stats.
+    ///
+    /// # Returns
+    /// Empty FileWatcherStats.
+    async fn get_file_watcher_stats_default(&self) -> CoreResult<crate::types::FileWatcherStats> {
+        Ok(crate::types::FileWatcherStats::default())
+    }
 }

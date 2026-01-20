@@ -44,6 +44,7 @@
 
 mod content;
 mod crud;
+mod file_index;
 mod helpers;
 mod index_ops;
 mod inverted_index;
@@ -61,3 +62,6 @@ mod tests;
 pub use helpers::compute_cosine_similarity;
 pub use store::RocksDbTeleologicalStore;
 pub use types::{TeleologicalStoreConfig, TeleologicalStoreError, TeleologicalStoreResult};
+
+// Re-export core file index types for convenience
+pub use context_graph_core::types::file_index::{FileIndexEntry, FileWatcherStats};

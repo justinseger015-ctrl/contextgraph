@@ -4,6 +4,7 @@
 
 use super::*;
 use tempfile::TempDir;
+use uuid::Uuid;
 
 use context_graph_core::traits::TeleologicalMemoryStore;
 use context_graph_core::types::fingerprint::{
@@ -513,4 +514,185 @@ async fn test_corruption_detection_error_details() {
             "Error path should match database path"
         );
     }
+}
+
+// =============================================================================
+// FILE INDEX TESTS (CF_FILE_INDEX column family)
+// =============================================================================
+
+/// Test that file index operations work correctly with RocksDB storage.
+#[tokio::test]
+async fn test_file_index_crud_operations() {
+    println!("\n=== FSV: RocksDB File Index CRUD Test ===\n");
+
+    let tmp = TempDir::new().unwrap();
+    let store = create_initialized_store(tmp.path());
+
+    let file_path1 = "/test/docs/file1.md";
+    let file_path2 = "/test/docs/file2.md";
+
+    // Create fingerprints to index
+    let fp1 = create_test_fingerprint_with_seed(1);
+    let fp2 = create_test_fingerprint_with_seed(2);
+    let fp3 = create_test_fingerprint_with_seed(3);
+    let id1 = fp1.id;
+    let id2 = fp2.id;
+    let id3 = fp3.id;
+
+    // Store fingerprints first (file index references these)
+    store.store(fp1).await.unwrap();
+    store.store(fp2).await.unwrap();
+    store.store(fp3).await.unwrap();
+
+    println!("PHASE 1: Index file fingerprints");
+
+    // Index fingerprints for file1 (two chunks)
+    store.index_file_fingerprint(file_path1, id1).await.unwrap();
+    store.index_file_fingerprint(file_path1, id2).await.unwrap();
+
+    // Index fingerprint for file2 (one chunk)
+    store.index_file_fingerprint(file_path2, id3).await.unwrap();
+
+    println!("  Indexed 2 fingerprints for file1, 1 for file2");
+
+    println!("\nPHASE 2: Retrieve fingerprints by file path");
+
+    let file1_ids = store.get_fingerprints_for_file(file_path1).await.unwrap();
+    let file2_ids = store.get_fingerprints_for_file(file_path2).await.unwrap();
+
+    assert_eq!(file1_ids.len(), 2, "File1 should have 2 fingerprints");
+    assert_eq!(file2_ids.len(), 1, "File2 should have 1 fingerprint");
+
+    assert!(file1_ids.contains(&id1), "File1 should contain id1");
+    assert!(file1_ids.contains(&id2), "File1 should contain id2");
+    assert!(file2_ids.contains(&id3), "File2 should contain id3");
+
+    println!("  ✓ File1 has {} fingerprints", file1_ids.len());
+    println!("  ✓ File2 has {} fingerprints", file2_ids.len());
+
+    println!("\nPHASE 3: List indexed files");
+
+    let indexed_files = store.list_indexed_files().await.unwrap();
+    assert_eq!(indexed_files.len(), 2, "Should have 2 indexed files");
+
+    let paths: Vec<&str> = indexed_files.iter().map(|e| e.file_path.as_str()).collect();
+    assert!(paths.contains(&file_path1), "Should contain file1");
+    assert!(paths.contains(&file_path2), "Should contain file2");
+
+    println!("  ✓ Found {} indexed files", indexed_files.len());
+
+    println!("\nPHASE 4: Get file watcher stats");
+
+    let stats = store.get_file_watcher_stats().await.unwrap();
+    assert_eq!(stats.total_files, 2, "Should have 2 files");
+    assert_eq!(stats.total_chunks, 3, "Should have 3 total chunks");
+    assert_eq!(stats.min_chunks, 1, "Min chunks should be 1");
+    assert_eq!(stats.max_chunks, 2, "Max chunks should be 2");
+
+    println!("  ✓ Stats: {} files, {} chunks", stats.total_files, stats.total_chunks);
+
+    println!("\nPHASE 5: Unindex a fingerprint");
+
+    let removed = store.unindex_file_fingerprint(file_path1, id1).await.unwrap();
+    assert!(removed, "Should have removed id1 from file1");
+
+    let file1_ids_after = store.get_fingerprints_for_file(file_path1).await.unwrap();
+    assert_eq!(file1_ids_after.len(), 1, "File1 should now have 1 fingerprint");
+    assert!(file1_ids_after.contains(&id2), "File1 should still contain id2");
+
+    println!("  ✓ Unindexed id1 from file1, now has {} fingerprints", file1_ids_after.len());
+
+    println!("\nPHASE 6: Clear file index");
+
+    let cleared = store.clear_file_index(file_path1).await.unwrap();
+    assert_eq!(cleared, 1, "Should have cleared 1 fingerprint from file1");
+
+    let file1_ids_cleared = store.get_fingerprints_for_file(file_path1).await.unwrap();
+    assert!(file1_ids_cleared.is_empty(), "File1 should have no fingerprints");
+
+    // File1 should no longer appear in list
+    let indexed_files_after = store.list_indexed_files().await.unwrap();
+    let paths_after: Vec<&str> = indexed_files_after.iter().map(|e| e.file_path.as_str()).collect();
+    assert!(!paths_after.contains(&file_path1), "File1 should not be in index");
+    assert!(paths_after.contains(&file_path2), "File2 should still be in index");
+
+    println!("  ✓ Cleared file1 index, {} files remain", indexed_files_after.len());
+
+    println!("\n=== FSV: PASSED - File index CRUD operations work correctly ===\n");
+}
+
+/// Test that file index persists across store reopens.
+#[tokio::test]
+async fn test_file_index_persistence() {
+    println!("\n=== FSV: RocksDB File Index Persistence Test ===\n");
+
+    let tmp = TempDir::new().unwrap();
+    let file_path = "/test/persistent.md";
+    let fp = create_test_fingerprint_with_seed(100);
+    let id = fp.id;
+
+    // Phase 1: Store and index
+    {
+        let store = create_initialized_store(tmp.path());
+        store.store(fp).await.unwrap();
+        store.index_file_fingerprint(file_path, id).await.unwrap();
+
+        let ids = store.get_fingerprints_for_file(file_path).await.unwrap();
+        assert_eq!(ids.len(), 1, "Should have 1 fingerprint before close");
+        println!("  Indexed 1 fingerprint before close");
+    }
+    // Store dropped, DB closed
+
+    // Phase 2: Reopen and verify persistence
+    {
+        let store = create_initialized_store(tmp.path());
+        let ids = store.get_fingerprints_for_file(file_path).await.unwrap();
+        assert_eq!(ids.len(), 1, "Should have 1 fingerprint after reopen");
+        assert_eq!(ids[0], id, "Should be the same fingerprint ID");
+
+        let indexed_files = store.list_indexed_files().await.unwrap();
+        assert_eq!(indexed_files.len(), 1, "Should have 1 indexed file");
+        assert_eq!(indexed_files[0].file_path, file_path, "File path should match");
+
+        println!("  ✓ File index persisted across store reopen");
+    }
+
+    println!("\n=== FSV: PASSED - File index persistence verified ===\n");
+}
+
+/// Test empty file index behavior.
+#[tokio::test]
+async fn test_file_index_empty_cases() {
+    println!("\n=== FSV: RocksDB File Index Empty Cases Test ===\n");
+
+    let tmp = TempDir::new().unwrap();
+    let store = create_initialized_store(tmp.path());
+
+    // List on empty index
+    let files = store.list_indexed_files().await.unwrap();
+    assert!(files.is_empty(), "Empty index should return empty list");
+    println!("  ✓ list_indexed_files returns empty for new store");
+
+    // Get fingerprints for non-existent file
+    let ids = store.get_fingerprints_for_file("/nonexistent.md").await.unwrap();
+    assert!(ids.is_empty(), "Non-existent file should return empty list");
+    println!("  ✓ get_fingerprints_for_file returns empty for non-existent file");
+
+    // Stats on empty index
+    let stats = store.get_file_watcher_stats().await.unwrap();
+    assert_eq!(stats.total_files, 0, "Empty index should have 0 files");
+    assert_eq!(stats.total_chunks, 0, "Empty index should have 0 chunks");
+    println!("  ✓ get_file_watcher_stats returns zeros for empty index");
+
+    // Clear non-existent file
+    let cleared = store.clear_file_index("/nonexistent.md").await.unwrap();
+    assert_eq!(cleared, 0, "Clearing non-existent file should return 0");
+    println!("  ✓ clear_file_index returns 0 for non-existent file");
+
+    // Unindex from non-existent file
+    let removed = store.unindex_file_fingerprint("/nonexistent.md", Uuid::new_v4()).await.unwrap();
+    assert!(!removed, "Unindexing from non-existent file should return false");
+    println!("  ✓ unindex_file_fingerprint returns false for non-existent file");
+
+    println!("\n=== FSV: PASSED - Empty index edge cases handled correctly ===\n");
 }

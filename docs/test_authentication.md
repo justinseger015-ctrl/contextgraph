@@ -46,6 +46,23 @@ For traditional session-based auth:
 - CSRF tokens for form submissions
 - Automatic session invalidation on password change
 
+## Biometric Authentication (REVISION 2.0 - January 2026)
+
+Context Graph now supports QUANTUM-RESISTANT biometric authentication methods with post-quantum cryptography:
+
+- **Fingerprint Scanner Integration**: WebAuthn-based fingerprint verification using FIDO2 protocols
+- **Facial Recognition**: On-device face matching with liveness detection to prevent spoofing
+- **Voice Authentication**: Speaker verification for hands-free authentication scenarios
+- **Behavioral Biometrics**: Keystroke dynamics and mouse movement pattern analysis
+
+### Biometric Enrollment Flow
+
+1. User initiates biometric enrollment from settings
+2. Device captures biometric template locally
+3. Template is encrypted and bound to user's FIDO2 credential
+4. Server stores only the credential ID, never raw biometrics
+5. Subsequent authentications verify against local template
+
 ## Security Best Practices
 
 - Always use HTTPS in production
@@ -53,3 +70,4 @@ For traditional session-based auth:
 - Use bcrypt for password hashing (cost factor 12)
 - Store secrets in environment variables
 - Implement account lockout after failed attempts
+- **NEW**: Enable biometric factors for sensitive operations

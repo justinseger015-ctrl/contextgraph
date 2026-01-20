@@ -347,4 +347,95 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     /// # Errors
     /// - `CoreError::StorageError` - Storage backend failure
     async fn get_source_metadata_batch(&self, ids: &[Uuid]) -> CoreResult<Vec<Option<SourceMetadata>>>;
+
+    /// Find all fingerprint IDs that have source metadata matching a file path.
+    ///
+    /// Scans all source metadata entries and returns UUIDs of fingerprints
+    /// whose file_path matches the given path. Used for stale embedding cleanup
+    /// when files are modified.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to search for
+    ///
+    /// # Returns
+    /// * `Ok(Vec<Uuid>)` - UUIDs of matching fingerprints (may be empty)
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn find_fingerprints_by_file_path(&self, file_path: &str) -> CoreResult<Vec<Uuid>>;
+
+    // ==================== File Index Storage ====================
+    // Enables O(1) lookup of fingerprints by file path for file watcher management.
+    // See `defaults.rs` for default implementations.
+
+    /// List all files that have embeddings in the knowledge graph.
+    ///
+    /// Returns entries for all files tracked in the file index.
+    ///
+    /// # Returns
+    /// Vector of FileIndexEntry for all indexed files.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn list_indexed_files(&self) -> CoreResult<Vec<crate::types::FileIndexEntry>>;
+
+    /// Get all fingerprint IDs for a specific file path (O(1) via index).
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to look up
+    ///
+    /// # Returns
+    /// Vector of fingerprint UUIDs for the file, empty if not found.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn get_fingerprints_for_file(&self, file_path: &str) -> CoreResult<Vec<Uuid>>;
+
+    /// Add fingerprint ID to file index (called on MDFileChunk store).
+    ///
+    /// Creates the index entry if it doesn't exist, or adds to existing entry.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path
+    /// * `fingerprint_id` - The fingerprint UUID to add
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn index_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<()>;
+
+    /// Remove fingerprint ID from file index (called on delete).
+    ///
+    /// If the entry becomes empty after removal, deletes the entire entry.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path
+    /// * `fingerprint_id` - The fingerprint UUID to remove
+    ///
+    /// # Returns
+    /// true if the fingerprint was found and removed, false otherwise.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn unindex_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<bool>;
+
+    /// Clear all fingerprints for a file from index (bulk delete).
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to clear
+    ///
+    /// # Returns
+    /// Number of fingerprints that were in the index before clearing.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn clear_file_index(&self, file_path: &str) -> CoreResult<usize>;
+
+    /// Get statistics about file watcher content.
+    ///
+    /// # Returns
+    /// FileWatcherStats with aggregated information.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn get_file_watcher_stats(&self) -> CoreResult<crate::types::FileWatcherStats>;
 }

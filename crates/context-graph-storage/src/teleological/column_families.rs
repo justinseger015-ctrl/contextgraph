@@ -92,6 +92,20 @@ pub const CF_CONTENT: &str = "content";
 /// - Point lookups only by UUID
 pub const CF_SOURCE_METADATA: &str = "source_metadata";
 
+/// Column family for file path to fingerprint ID index.
+///
+/// Secondary index enabling O(1) lookup of fingerprints by file path.
+/// Used by file watcher management tools for efficient cleanup and reconciliation.
+///
+/// Key: file_path bytes (UTF-8, variable length)
+/// Value: FileIndexEntry serialized via bincode (Vec<Uuid> + metadata)
+///
+/// # Storage Details
+/// - LZ4 compression (file paths and UUID lists compress well)
+/// - Bloom filter for fast path existence checks
+/// - Prefix iteration for path-based queries
+pub const CF_FILE_INDEX: &str = "file_index";
+
 // =============================================================================
 // TASK-STORAGE-P2-001: E12 LATE INTERACTION COLUMN FAMILY
 // =============================================================================
@@ -137,7 +151,7 @@ pub const CF_SESSION_IDENTITY: &str = "session_identity";
 /// It is no longer used but must be opened for databases created with older versions.
 pub const CF_EGO_NODE: &str = "ego_node";
 
-/// All teleological column family names (12 total: 4 original + 3 teleological + 1 content + 1 source_metadata + 1 e12_late_interaction + 2 legacy).
+/// All teleological column family names (13 total: 4 original + 3 teleological + 1 content + 1 source_metadata + 1 file_index + 1 e12_late_interaction + 2 legacy).
 pub const TELEOLOGICAL_CFS: &[&str] = &[
     CF_FINGERPRINTS,
     CF_TOPIC_PROFILES,
@@ -151,6 +165,8 @@ pub const TELEOLOGICAL_CFS: &[&str] = &[
     CF_CONTENT,
     // Source metadata storage CF
     CF_SOURCE_METADATA,
+    // File index for file watcher management
+    CF_FILE_INDEX,
     // TASK-STORAGE-P2-001: E12 Late Interaction token storage CF
     CF_E12_LATE_INTERACTION,
     // Legacy CFs for backwards compatibility
@@ -158,8 +174,8 @@ pub const TELEOLOGICAL_CFS: &[&str] = &[
     CF_EGO_NODE,
 ];
 
-/// Total count of teleological CFs (should be 12: 10 active + 2 legacy).
-pub const TELEOLOGICAL_CF_COUNT: usize = 12;
+/// Total count of teleological CFs (should be 13: 11 active + 2 legacy).
+pub const TELEOLOGICAL_CF_COUNT: usize = 13;
 
 // =============================================================================
 // QUANTIZED EMBEDDER COLUMN FAMILIES (13 CFs for per-embedder storage)
@@ -466,6 +482,35 @@ pub fn source_metadata_cf_options(cache: &Cache) -> Options {
     opts
 }
 
+/// Options for file index storage (file_path -> Vec<Uuid> mapping).
+///
+/// # Configuration
+/// - LZ4 compression (file paths and UUID lists compress well)
+/// - Bloom filter for fast path existence checks
+/// - Prefix scan support for listing all files
+///
+/// # Key Format
+/// UTF-8 file path bytes (variable length).
+///
+/// # Value Format
+/// FileIndexEntry serialized via bincode (~100-2000 bytes depending on chunk count).
+///
+/// # FAIL FAST Policy
+/// No fallback options - let RocksDB error on open if misconfigured.
+pub fn file_index_cf_options(cache: &Cache) -> Options {
+    let mut block_opts = BlockBasedOptions::default();
+    block_opts.set_block_cache(cache);
+    block_opts.set_bloom_filter(10.0, false);
+    block_opts.set_cache_index_and_filter_blocks(true);
+
+    let mut opts = Options::default();
+    opts.set_block_based_table_factory(&block_opts);
+    opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+    opts.create_if_missing(true);
+    // FAIL FAST: No fallback options - let RocksDB error on open if misconfigured
+    opts
+}
+
 // =============================================================================
 // TASK-STORAGE-P2-001: CF OPTION BUILDER FOR E12 LATE INTERACTION
 // =============================================================================
@@ -554,15 +599,15 @@ pub fn quantized_embedder_cf_options(cache: &Cache) -> Options {
     opts
 }
 
-/// Get all 12 teleological column family descriptors.
+/// Get all 13 teleological column family descriptors.
 ///
-/// Returns 12 descriptors: 4 original + 3 teleological + 1 content + 1 source_metadata + 1 e12_late_interaction + 2 legacy.
+/// Returns 13 descriptors: 4 original + 3 teleological + 1 content + 1 source_metadata + 1 file_index + 1 e12_late_interaction + 2 legacy.
 ///
 /// # Arguments
 /// * `cache` - Shared block cache (recommended: 256MB via `Cache::new_lru_cache`)
 ///
 /// # Returns
-/// Vector of 11 `ColumnFamilyDescriptor`s for teleological storage.
+/// Vector of 13 `ColumnFamilyDescriptor`s for teleological storage.
 ///
 /// # Example
 /// ```ignore
@@ -571,7 +616,7 @@ pub fn quantized_embedder_cf_options(cache: &Cache) -> Options {
 ///
 /// let cache = Cache::new_lru_cache(256 * 1024 * 1024); // 256MB
 /// let descriptors = get_teleological_cf_descriptors(&cache);
-/// assert_eq!(descriptors.len(), 12);
+/// assert_eq!(descriptors.len(), 13);
 /// ```
 pub fn get_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
     vec![
@@ -596,6 +641,8 @@ pub fn get_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescrip
         ColumnFamilyDescriptor::new(CF_CONTENT, content_cf_options(cache)),
         // Source metadata storage CF
         ColumnFamilyDescriptor::new(CF_SOURCE_METADATA, source_metadata_cf_options(cache)),
+        // File index for file watcher management
+        ColumnFamilyDescriptor::new(CF_FILE_INDEX, file_index_cf_options(cache)),
         // TASK-STORAGE-P2-001: E12 Late Interaction token storage CF
         ColumnFamilyDescriptor::new(
             CF_E12_LATE_INTERACTION,
@@ -636,14 +683,14 @@ pub fn get_quantized_embedder_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyD
 
 /// Get ALL teleological + quantized embedder column family descriptors.
 ///
-/// Returns 25 descriptors total: 12 teleological (10 active + 2 legacy) + 13 quantized embedder.
+/// Returns 26 descriptors total: 13 teleological (11 active + 2 legacy) + 13 quantized embedder.
 /// Use this when opening a database that needs both fingerprint and per-embedder storage.
 ///
 /// # Arguments
 /// * `cache` - Shared block cache (recommended: 256MB via `Cache::new_lru_cache`)
 ///
 /// # Returns
-/// Vector of 24 `ColumnFamilyDescriptor`s.
+/// Vector of 26 `ColumnFamilyDescriptor`s.
 ///
 /// # Example
 /// ```ignore
@@ -652,7 +699,7 @@ pub fn get_quantized_embedder_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyD
 ///
 /// let cache = Cache::new_lru_cache(256 * 1024 * 1024); // 256MB
 /// let descriptors = get_all_teleological_cf_descriptors(&cache);
-/// assert_eq!(descriptors.len(), 25); // 12 teleological + 13 embedder
+/// assert_eq!(descriptors.len(), 26); // 13 teleological + 13 embedder
 /// ```
 pub fn get_all_teleological_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
     let mut descriptors = get_teleological_cf_descriptors(cache);

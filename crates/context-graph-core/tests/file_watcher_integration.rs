@@ -16,14 +16,34 @@ use context_graph_core::memory::capture::{
     EmbeddingProvider, MemoryCaptureService, TestEmbeddingProvider,
 };
 use context_graph_core::memory::store::MemoryStore;
-use context_graph_core::memory::watcher::MDFileWatcher;
+use context_graph_core::memory::watcher::GitFileWatcher;
 use context_graph_core::stubs::InMemoryTeleologicalStore;
 use context_graph_core::traits::TeleologicalMemoryStore;
-use context_graph_core::types::SourceType;
+use context_graph_core::types::{SourceMetadata, SourceType};
+use std::process::Command;
+
+/// Initialize git repo with user config
+fn init_git_repo(dir: &std::path::Path) {
+    Command::new("git")
+        .args(["init"])
+        .current_dir(dir)
+        .output()
+        .expect("git init");
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(dir)
+        .output()
+        .expect("git config email");
+    Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(dir)
+        .output()
+        .expect("git config name");
+}
 
 /// Helper to create test environment
 async fn setup_test_env() -> (
-    MDFileWatcher,
+    GitFileWatcher,
     Arc<MemoryStore>,
     Arc<InMemoryTeleologicalStore>,
     TempDir,  // db_dir
@@ -31,6 +51,9 @@ async fn setup_test_env() -> (
 ) {
     let db_dir = TempDir::new().expect("create db temp dir");
     let watch_dir = TempDir::new().expect("create watch temp dir");
+
+    // Initialize git repo for GitFileWatcher
+    init_git_repo(watch_dir.path());
 
     let memory_store = Arc::new(MemoryStore::new(db_dir.path()).expect("create memory store"));
     let teleological_store = Arc::new(InMemoryTeleologicalStore::new());
@@ -42,7 +65,7 @@ async fn setup_test_env() -> (
         teleological_store.clone(),
     ));
 
-    let watcher = MDFileWatcher::new(
+    let watcher = GitFileWatcher::new(
         vec![watch_dir.path().to_path_buf()],
         capture_service,
         "test-session".to_string(),
@@ -93,7 +116,7 @@ async fn test_watcher_processes_new_file_with_source_metadata() {
 
     // Verify source metadata exists in TeleologicalMemoryStore
     for (i, memory) in memories.iter().enumerate() {
-        let source_metadata = teleological_store
+        let source_metadata: Option<SourceMetadata> = teleological_store
             .get_source_metadata(memory.id)
             .await
             .expect("get source metadata");
@@ -327,4 +350,109 @@ async fn test_multiple_files_isolated() {
     watcher.stop();
 
     println!("\n=== FSV: PASSED - Multiple files properly isolated ===\n");
+}
+
+/// Test: File index is populated and can be queried
+#[tokio::test]
+async fn test_file_index_integration() {
+    println!("\n=== FSV: File Index Integration Test ===\n");
+
+    let (mut watcher, memory_store, teleological_store, _db_dir, watch_dir) = setup_test_env().await;
+
+    // Create two markdown files
+    let file1_path = watch_dir.path().join("index_test1.md");
+    let file2_path = watch_dir.path().join("index_test2.md");
+
+    let file1_content = "# Index Test File 1\n\nThis is content for index testing file one.\n\nIt has multiple paragraphs to create chunks.";
+    let file2_content = "# Index Test File 2\n\nThis is content for index testing file two.\n\nAlso has multiple paragraphs.";
+
+    fs::write(&file1_path, file1_content).expect("write file1");
+    fs::write(&file2_path, file2_content).expect("write file2");
+
+    println!("PHASE 1: Creating markdown files and starting watcher");
+
+    watcher.start().await.expect("start watcher");
+    sleep(Duration::from_millis(500)).await;
+
+    let path1 = file1_path.canonicalize().expect("canonicalize").to_string_lossy().to_string();
+    let path2 = file2_path.canonicalize().expect("canonicalize").to_string_lossy().to_string();
+
+    println!("\nPHASE 2: Verifying file index entries created");
+
+    // Verify list_indexed_files returns both files
+    let indexed_files = teleological_store.list_indexed_files().await.expect("list indexed files");
+    println!("  Found {} indexed files", indexed_files.len());
+
+    let indexed_paths: Vec<&str> = indexed_files.iter().map(|e| e.file_path.as_str()).collect();
+    assert!(indexed_paths.contains(&path1.as_str()), "File1 should be indexed");
+    assert!(indexed_paths.contains(&path2.as_str()), "File2 should be indexed");
+    println!("  ✓ Both files found in index");
+
+    // Verify get_fingerprints_for_file returns correct fingerprints
+    let file1_fingerprints = teleological_store.get_fingerprints_for_file(&path1).await.expect("get file1 fingerprints");
+    let file2_fingerprints = teleological_store.get_fingerprints_for_file(&path2).await.expect("get file2 fingerprints");
+
+    println!("  File1 fingerprints: {}", file1_fingerprints.len());
+    println!("  File2 fingerprints: {}", file2_fingerprints.len());
+
+    assert!(!file1_fingerprints.is_empty(), "File1 should have fingerprints");
+    assert!(!file2_fingerprints.is_empty(), "File2 should have fingerprints");
+
+    // Verify fingerprint counts match memory store
+    let memories1 = memory_store.get_by_file_path(&path1).expect("get memories1");
+    let memories2 = memory_store.get_by_file_path(&path2).expect("get memories2");
+
+    assert_eq!(file1_fingerprints.len(), memories1.len(), "File1 fingerprint count should match memory count");
+    assert_eq!(file2_fingerprints.len(), memories2.len(), "File2 fingerprint count should match memory count");
+    println!("  ✓ Fingerprint counts match memory counts");
+
+    // Verify memory IDs match between file index and memory store
+    let memory1_ids: std::collections::HashSet<_> = memories1.iter().map(|m| m.id).collect();
+    let memory2_ids: std::collections::HashSet<_> = memories2.iter().map(|m| m.id).collect();
+    let file1_id_set: std::collections::HashSet<_> = file1_fingerprints.into_iter().collect();
+    let file2_id_set: std::collections::HashSet<_> = file2_fingerprints.into_iter().collect();
+
+    assert_eq!(memory1_ids, file1_id_set, "File1 fingerprint IDs should match memory IDs");
+    assert_eq!(memory2_ids, file2_id_set, "File2 fingerprint IDs should match memory IDs");
+    println!("  ✓ Fingerprint IDs match memory IDs");
+
+    println!("\nPHASE 3: Verifying file_watcher_stats");
+
+    let stats = teleological_store.get_file_watcher_stats().await.expect("get stats");
+    println!("  Total files: {}", stats.total_files);
+    println!("  Total chunks: {}", stats.total_chunks);
+    println!("  Avg chunks per file: {:.2}", stats.avg_chunks_per_file);
+
+    assert_eq!(stats.total_files, 2, "Should have 2 files");
+    assert_eq!(stats.total_chunks, memories1.len() + memories2.len(), "Total chunks should match");
+    println!("  ✓ Stats match expected values");
+
+    println!("\nPHASE 4: Deleting file1 and verifying index cleanup");
+
+    // Delete file1 memories using delete_by_file_path
+    let capture_service = watcher.capture_service();
+    let deleted = capture_service.delete_by_file_path(&path1).await.expect("delete file1");
+    println!("  Deleted {} memories", deleted);
+
+    // Verify file1 is no longer in the index
+    let indexed_files_after = teleological_store.list_indexed_files().await.expect("list after delete");
+    let indexed_paths_after: Vec<&str> = indexed_files_after.iter().map(|e| e.file_path.as_str()).collect();
+
+    assert!(!indexed_paths_after.contains(&path1.as_str()), "File1 should NOT be in index after deletion");
+    assert!(indexed_paths_after.contains(&path2.as_str()), "File2 should still be in index");
+    println!("  ✓ File1 removed from index, File2 still present");
+
+    // Verify get_fingerprints_for_file returns empty for deleted file
+    let file1_fingerprints_after = teleological_store.get_fingerprints_for_file(&path1).await.expect("get file1 after");
+    assert!(file1_fingerprints_after.is_empty(), "File1 should have no fingerprints after deletion");
+    println!("  ✓ File1 has no fingerprints in index");
+
+    // Verify stats updated
+    let stats_after = teleological_store.get_file_watcher_stats().await.expect("get stats after");
+    assert_eq!(stats_after.total_files, 1, "Should have 1 file after deletion");
+    println!("  ✓ Stats updated after deletion");
+
+    watcher.stop();
+
+    println!("\n=== FSV: PASSED - File index integration working correctly ===\n");
 }

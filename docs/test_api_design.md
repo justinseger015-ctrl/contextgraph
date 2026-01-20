@@ -98,3 +98,42 @@ API versioning via URL path:
 - 100 requests per minute for authenticated users
 - 20 requests per minute for anonymous users
 - X-RateLimit-Remaining header in responses
+
+## GraphQL Gateway (UPDATED 2026)
+
+Context Graph now provides a GraphQL gateway for complex queries:
+
+### Schema Design Principles
+
+- **Federation**: Microservices expose subgraphs that are composed into a unified supergraph
+- **Relay Specification**: Compliant with Relay's connection and node patterns
+- **Dataloader Pattern**: N+1 queries prevented through automatic batching
+
+### Example Query
+
+```graphql
+query GetUserWithPosts($userId: ID!) {
+  node(id: $userId) {
+    ... on User {
+      name
+      posts(first: 10) {
+        edges {
+          node {
+            title
+            createdAt
+          }
+        }
+        pageInfo {
+          hasNextPage
+        }
+      }
+    }
+  }
+}
+```
+
+### Subscriptions for Real-Time Updates
+
+- WebSocket transport for live data
+- Server-Sent Events fallback for older clients
+- Automatic reconnection with exponential backoff

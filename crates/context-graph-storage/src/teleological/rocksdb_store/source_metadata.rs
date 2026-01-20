@@ -198,4 +198,57 @@ impl RocksDbTeleologicalStore {
 
         Ok(exists)
     }
+
+    /// Find all fingerprint IDs that have source metadata matching a file path.
+    ///
+    /// Scans all source metadata entries and returns UUIDs of fingerprints
+    /// whose file_path matches the given path. Used for stale embedding cleanup
+    /// when files are modified.
+    ///
+    /// # Arguments
+    /// * `file_path` - The file path to search for
+    ///
+    /// # Returns
+    /// * `Ok(Vec<Uuid>)` - UUIDs of matching fingerprints
+    /// * `Err` - If scan fails
+    pub(crate) async fn find_fingerprints_by_file_path(
+        &self,
+        file_path: &str,
+    ) -> CoreResult<Vec<Uuid>> {
+        let cf = self.cf_source_metadata();
+        let mut matching_ids = Vec::new();
+
+        // Iterate through all source metadata entries
+        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        for item in iter {
+            match item {
+                Ok((key, value)) => {
+                    // Parse UUID from key (format: "source_metadata:{uuid}")
+                    let key_str = String::from_utf8_lossy(&key);
+                    if let Some(uuid_str) = key_str.strip_prefix("source_metadata:") {
+                        if let Ok(id) = Uuid::parse_str(uuid_str) {
+                            // Deserialize metadata and check file_path
+                            if let Ok(metadata) = bincode::deserialize::<SourceMetadata>(&value) {
+                                if let Some(ref path) = metadata.file_path {
+                                    if path == file_path {
+                                        matching_ids.push(id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error iterating source metadata: {}", e);
+                }
+            }
+        }
+
+        debug!(
+            "Found {} fingerprints for file path {}",
+            matching_ids.len(),
+            file_path
+        );
+        Ok(matching_ids)
+    }
 }

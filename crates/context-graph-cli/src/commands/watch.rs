@@ -10,7 +10,7 @@
 //! context-graph-cli -vv watch --path ./docs --session-id my-session
 //! ```
 //!
-//! This command starts the MDFileWatcher service that:
+//! This command starts the GitFileWatcher service that:
 //! 1. Monitors the specified directory for .md file changes
 //! 2. Chunks new/modified files using TextChunker (200 words, 50 overlap)
 //! 3. Stores chunks with source metadata (MDFileChunk, file_path, chunk_index)
@@ -25,7 +25,7 @@ use context_graph_core::memory::{
     EmbeddingProvider, MemoryCaptureService, MultiArrayEmbeddingAdapter,
 };
 use context_graph_core::memory::store::MemoryStore;
-use context_graph_core::memory::watcher::MDFileWatcher;
+use context_graph_core::memory::watcher::GitFileWatcher;
 use context_graph_embeddings::{get_warm_provider, initialize_global_warm_provider, is_warm_initialized};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -122,7 +122,7 @@ pub async fn handle_watch(args: WatchArgs) -> i32 {
     let capture_service = Arc::new(MemoryCaptureService::new(memory_store.clone(), embedder));
 
     // Create file watcher
-    let mut watcher = match MDFileWatcher::new(
+    let mut watcher = match GitFileWatcher::new(
         vec![args.path.clone()],
         capture_service,
         args.session_id.clone(),

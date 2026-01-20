@@ -25,10 +25,6 @@ bincode.workspace = true
 # RocksDB for Memory storage (TASK-P1-005: MemoryStore)
 rocksdb = "0.22"
 
-# File system watching for MDFileWatcher (TASK-P1-008)
-notify = "8.2"
-notify-debouncer-mini = "0.7"
-
 # PII detection regex patterns for L1 Sensing Layer (SEC-01, SEC-02)
 regex = "1.10"
 
@@ -66,6 +62,18 @@ tempfile = "3.10"
 tokio = { workspace = true, features = ["test-util"] }
 rand_chacha = "0.3"
 criterion = { version = "0.5", features = ["html_reports"] }
+
+[[test]]
+name = "file_watcher_integration"
+required-features = ["test-utils"]
+
+[[test]]
+name = "docs_manual_test"
+required-features = ["test-utils"]
+
+[[test]]
+name = "source_metadata_integration"
+required-features = ["test-utils"]
 
 [[example]]
 name = "cognitive_pulse"

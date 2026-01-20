@@ -90,6 +90,12 @@ impl Handlers {
             tool_names::TRIGGER_DREAM => self.call_trigger_dream(id, arguments).await,
             tool_names::GET_DREAM_STATUS => self.call_get_dream_status(id, arguments).await,
 
+            // ========== FILE WATCHER TOOLS (File index management) ==========
+            tool_names::LIST_WATCHED_FILES => self.call_list_watched_files(id, arguments).await,
+            tool_names::GET_FILE_WATCHER_STATS => self.call_get_file_watcher_stats(id).await,
+            tool_names::DELETE_FILE_CONTENT => self.call_delete_file_content(id, arguments).await,
+            tool_names::RECONCILE_FILES => self.call_reconcile_files(id, arguments).await,
+
             // Unknown tool
             _ => JsonRpcResponse::error(
                 id,

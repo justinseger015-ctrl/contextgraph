@@ -156,4 +156,34 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
     async fn get_source_metadata_batch(&self, ids: &[Uuid]) -> CoreResult<Vec<Option<SourceMetadata>>> {
         self.get_source_metadata_batch_async(ids).await
     }
+
+    async fn find_fingerprints_by_file_path(&self, file_path: &str) -> CoreResult<Vec<Uuid>> {
+        self.find_fingerprints_by_file_path(file_path).await
+    }
+
+    // ==================== File Index Storage ====================
+
+    async fn list_indexed_files(&self) -> CoreResult<Vec<context_graph_core::types::file_index::FileIndexEntry>> {
+        self.list_indexed_files_async().await
+    }
+
+    async fn get_fingerprints_for_file(&self, file_path: &str) -> CoreResult<Vec<Uuid>> {
+        self.get_fingerprints_for_file_async(file_path).await
+    }
+
+    async fn index_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<()> {
+        self.index_file_fingerprint_async(file_path, fingerprint_id).await
+    }
+
+    async fn unindex_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<bool> {
+        self.unindex_file_fingerprint_async(file_path, fingerprint_id).await
+    }
+
+    async fn clear_file_index(&self, file_path: &str) -> CoreResult<usize> {
+        self.clear_file_index_async(file_path).await
+    }
+
+    async fn get_file_watcher_stats(&self) -> CoreResult<context_graph_core::types::file_index::FileWatcherStats> {
+        self.get_file_watcher_stats_async().await
+    }
 }

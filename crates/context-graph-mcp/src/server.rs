@@ -46,7 +46,7 @@ pub enum TransportMode {
 }
 
 use context_graph_core::config::Config;
-use context_graph_core::memory::watcher::MDFileWatcher;
+use context_graph_core::memory::watcher::GitFileWatcher;
 use context_graph_core::memory::{MemoryCaptureService, MultiArrayEmbeddingAdapter};
 use context_graph_core::memory::store::MemoryStore;
 use context_graph_core::traits::{
@@ -525,19 +525,30 @@ impl McpServer {
             }
         };
 
-        // Create storage path for file watcher (same as MCP server)
-        let db_path = Self::resolve_storage_path(&self.config);
+        // Create separate storage path for file watcher's MemoryStore
+        // Uses a subdirectory to avoid RocksDB column family conflicts with main teleological store
+        let base_db_path = Self::resolve_storage_path(&self.config);
+        let watcher_db_path = base_db_path.join("watcher_memory");
+        Self::ensure_directory_exists(&watcher_db_path);
 
-        // Create memory store
-        let memory_store = Arc::new(MemoryStore::new(&db_path).map_err(|e| {
-            anyhow::anyhow!("Failed to create memory store for file watcher: {}", e)
+        // Create memory store in separate directory
+        let memory_store = Arc::new(MemoryStore::new(&watcher_db_path).map_err(|e| {
+            anyhow::anyhow!("Failed to create memory store for file watcher at {:?}: {}", watcher_db_path, e)
         })?);
 
         // Create embedding adapter
         let embedder = Arc::new(MultiArrayEmbeddingAdapter::new(provider));
 
-        // Create capture service
-        let capture_service = Arc::new(MemoryCaptureService::new(memory_store.clone(), embedder));
+        // Clone teleological store for file watcher integration
+        // This enables file watcher memories to be searchable via MCP tools
+        let teleological_store = Arc::clone(&self.teleological_store);
+
+        // Create capture service WITH teleological store for MCP search integration
+        let capture_service = Arc::new(MemoryCaptureService::with_teleological_store(
+            memory_store.clone(),
+            embedder,
+            teleological_store,
+        ));
 
         // Convert watch paths to PathBufs
         let watch_paths: Vec<PathBuf> = self
@@ -567,7 +578,7 @@ impl McpServer {
                 );
 
                 // Create file watcher
-                let mut watcher = match MDFileWatcher::new(watch_paths.clone(), capture_service, session_id.clone()) {
+                let mut watcher = match GitFileWatcher::new(watch_paths.clone(), capture_service, session_id.clone()) {
                     Ok(w) => w,
                     Err(e) => {
                         error!(error = %e, "Failed to create file watcher");

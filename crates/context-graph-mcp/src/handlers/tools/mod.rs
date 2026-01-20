@@ -8,11 +8,13 @@
 //! - get_topic_portfolio, get_topic_stability, detect_topics, get_divergence_alerts (topic_tools.rs)
 //! - forget_concept, boost_importance (curation_tools.rs)
 //! - trigger_dream, get_dream_status (dream_tools.rs)
+//! - list_watched_files, get_file_watcher_stats, delete_file_content, reconcile_files (file_watcher_tools.rs)
 
 mod consolidation;
 mod curation_tools;
 mod dispatch;
 mod dream_tools;
+mod file_watcher_tools;
 mod helpers;
 mod memory_tools;
 mod status_tools;

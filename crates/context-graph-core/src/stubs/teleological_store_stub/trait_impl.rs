@@ -219,4 +219,111 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
             .map(|id| self.source_metadata.get(id).map(|r| r.clone()))
             .collect())
     }
+
+    async fn find_fingerprints_by_file_path(&self, file_path: &str) -> CoreResult<Vec<Uuid>> {
+        let mut matching_ids = Vec::new();
+        for entry in self.source_metadata.iter() {
+            if let Some(ref path) = entry.value().file_path {
+                if path == file_path {
+                    matching_ids.push(*entry.key());
+                }
+            }
+        }
+        debug!("Found {} fingerprints for file_path: {}", matching_ids.len(), file_path);
+        Ok(matching_ids)
+    }
+
+    // ==================== File Index Storage ====================
+    // In-memory stub implementation uses source_metadata scanning as fallback
+
+    async fn list_indexed_files(&self) -> CoreResult<Vec<crate::types::FileIndexEntry>> {
+        use std::collections::HashMap;
+        use crate::types::FileIndexEntry;
+
+        // Build file entries from source_metadata (fallback scan approach)
+        let mut file_map: HashMap<String, Vec<Uuid>> = HashMap::new();
+        for entry in self.source_metadata.iter() {
+            if let Some(ref path) = entry.value().file_path {
+                file_map.entry(path.clone()).or_default().push(*entry.key());
+            }
+        }
+
+        let entries: Vec<FileIndexEntry> = file_map
+            .into_iter()
+            .map(|(path, ids)| {
+                let mut entry = FileIndexEntry::new(path);
+                for id in ids {
+                    entry.add_fingerprint(id);
+                }
+                entry
+            })
+            .collect();
+
+        debug!("Listed {} indexed files from in-memory store", entries.len());
+        Ok(entries)
+    }
+
+    async fn get_fingerprints_for_file(&self, file_path: &str) -> CoreResult<Vec<Uuid>> {
+        // Delegate to find_fingerprints_by_file_path (same behavior for stub)
+        self.find_fingerprints_by_file_path(file_path).await
+    }
+
+    async fn index_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<()> {
+        // In-memory stub: No-op, source_metadata is already tracking by file_path
+        debug!(
+            "index_file_fingerprint called for '{}' with {} (no-op in stub)",
+            file_path, fingerprint_id
+        );
+        Ok(())
+    }
+
+    async fn unindex_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<bool> {
+        // In-memory stub: No-op, source_metadata will be cleaned up by delete operations
+        debug!(
+            "unindex_file_fingerprint called for '{}' with {} (no-op in stub)",
+            file_path, fingerprint_id
+        );
+        Ok(false)
+    }
+
+    async fn clear_file_index(&self, file_path: &str) -> CoreResult<usize> {
+        // In-memory stub: Count matching entries but don't maintain separate index
+        let count = self.find_fingerprints_by_file_path(file_path).await?.len();
+        debug!(
+            "clear_file_index called for '{}': {} entries (no-op in stub)",
+            file_path, count
+        );
+        Ok(count)
+    }
+
+    async fn get_file_watcher_stats(&self) -> CoreResult<crate::types::FileWatcherStats> {
+        use std::collections::HashMap;
+
+        // Build stats from source_metadata
+        let mut file_chunks: HashMap<String, usize> = HashMap::new();
+        for entry in self.source_metadata.iter() {
+            if let Some(ref path) = entry.value().file_path {
+                *file_chunks.entry(path.clone()).or_default() += 1;
+            }
+        }
+
+        if file_chunks.is_empty() {
+            return Ok(crate::types::FileWatcherStats::default());
+        }
+
+        let total_files = file_chunks.len();
+        let chunk_counts: Vec<usize> = file_chunks.values().cloned().collect();
+        let total_chunks: usize = chunk_counts.iter().sum();
+        let min_chunks = *chunk_counts.iter().min().unwrap_or(&0);
+        let max_chunks = *chunk_counts.iter().max().unwrap_or(&0);
+        let avg_chunks_per_file = total_chunks as f64 / total_files as f64;
+
+        Ok(crate::types::FileWatcherStats {
+            total_files,
+            total_chunks,
+            avg_chunks_per_file,
+            min_chunks,
+            max_chunks,
+        })
+    }
 }
