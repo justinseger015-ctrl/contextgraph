@@ -84,6 +84,7 @@ mod multi;
 mod pipeline;
 mod result;
 mod single;
+pub mod temporal_boost;
 mod token_storage;
 
 // Re-export error types

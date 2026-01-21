@@ -61,12 +61,13 @@ pub mod util;
 pub use config::{BenchmarkConfig, TierConfig};
 pub use datasets::{BenchmarkDataset, DatasetGenerator, GroundTruth};
 pub use metrics::{
-    ClusteringMetrics, PerformanceMetrics, RetrievalMetrics, ScalingMetrics,
+    ClusteringMetrics, PerformanceMetrics, RetrievalMetrics, ScalingMetrics, TemporalMetrics,
 };
 pub use reports::{BenchmarkReport, ReportFormat};
-pub use runners::{BenchmarkHarness, BenchmarkResults};
+pub use runners::{BenchmarkHarness, BenchmarkResults, TemporalBenchmarkConfig, TemporalBenchmarkResults, TemporalBenchmarkRunner};
 pub use realdata::{
     ChunkRecord, DatasetLoader, DatasetMetadata, RealDataBenchConfig, RealDataBenchRunner,
     RealDataEmbedder, RealDataResults, RealDataset,
 };
 pub use scaling::{DegradationAnalysis, ScalingLimits};
+pub use datasets::{TemporalBenchmarkDataset, TemporalDatasetConfig, TemporalDatasetGenerator};

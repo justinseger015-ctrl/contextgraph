@@ -46,7 +46,13 @@ pub use nervous_layer::NervousLayer;
 pub use teleological_memory_store::{
     NormalizationStrategyOption, SearchStrategy, TeleologicalMemoryStore,
     TeleologicalMemoryStoreExt, TeleologicalSearchOptions, TeleologicalSearchResult,
-    TeleologicalStorageBackend,
+    TeleologicalStorageBackend, TemporalBreakdown,
+};
+
+// Temporal search options (ARCH-14)
+pub use teleological_memory_store::{
+    ChainRetrievalOptions, DecayFunction, MultiAnchorMode, PeriodicOptions, SequenceDirection,
+    SequenceOptions, TemporalScale, TemporalSearchOptions, TimeWindow,
 };
 
 // UTL processor trait

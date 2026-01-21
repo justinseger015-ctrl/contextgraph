@@ -6,6 +6,39 @@ use crate::embeddings::category::category_for;
 use crate::teleological::Embedder;
 use crate::types::fingerprint::TeleologicalFingerprint;
 
+/// Temporal boost breakdown for interpretability.
+///
+/// Provides visibility into per-component temporal contributions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemporalBreakdown {
+    /// E2 recency score [0.0, 1.0].
+    /// Higher = more recent (based on decay function).
+    pub recency_score: f32,
+
+    /// E3 periodic score [0.0, 1.0].
+    /// Higher = better hour/day pattern match.
+    pub periodic_score: f32,
+
+    /// E4 sequence score [0.0, 1.0].
+    /// Higher = closer to anchor in sequence.
+    pub sequence_score: f32,
+
+    /// Combined temporal score [0.0, 1.0].
+    /// Weighted combination: 50% recency + 35% sequence + 15% periodic.
+    pub combined_score: f32,
+}
+
+impl Default for TemporalBreakdown {
+    fn default() -> Self {
+        Self {
+            recency_score: 1.0,
+            periodic_score: 0.5,
+            sequence_score: 0.5,
+            combined_score: 0.5,
+        }
+    }
+}
+
 /// Search result from teleological memory queries.
 ///
 /// Contains the matched fingerprint along with scoring metadata
@@ -37,6 +70,13 @@ pub struct TeleologicalSearchResult {
     /// TASK-CONTENT-004: Added for content hydration in search results.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+
+    /// Temporal boost breakdown for interpretability.
+    ///
+    /// Populated when temporal boosts are applied (temporal_weight > 0).
+    /// Shows per-component contributions for debugging and analysis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temporal_breakdown: Option<TemporalBreakdown>,
 }
 
 impl TeleologicalSearchResult {
@@ -50,9 +90,16 @@ impl TeleologicalSearchResult {
             fingerprint,
             similarity,
             embedder_scores,
-            stage_scores: [0.0; 5], // Populated by pipeline stages
-            content: None,          // Populated by content hydration
+            stage_scores: [0.0; 5],    // Populated by pipeline stages
+            content: None,              // Populated by content hydration
+            temporal_breakdown: None,   // Populated by apply_temporal_boosts
         }
+    }
+
+    /// Set the temporal breakdown for interpretability.
+    pub fn with_temporal_breakdown(mut self, breakdown: TemporalBreakdown) -> Self {
+        self.temporal_breakdown = Some(breakdown);
+        self
     }
 
     /// Get the dominant embedder (highest weighted score).
@@ -102,6 +149,7 @@ mod tests {
             embedder_scores: scores,
             stage_scores: [0.0; 5],
             content: None,
+            temporal_breakdown: None,
         };
 
         assert_eq!(result.dominant_embedder(), 5); // E6 is semantic, should be dominant
@@ -124,6 +172,7 @@ mod tests {
             embedder_scores: scores,
             stage_scores: [0.0; 5],
             content: None,
+            temporal_breakdown: None,
         };
 
         // E1 (index 0) should be dominant, NOT E2 (index 1)

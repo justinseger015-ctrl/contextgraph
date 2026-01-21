@@ -915,17 +915,25 @@ fn run_ablation_studies(
     // Using SemanticFingerprint from the embedded dataset
     use context_graph_core::types::fingerprint::SemanticFingerprint;
 
-    // Embedder extraction functions - dense vectors only (sparse/token-level need special handling)
-    let embedder_configs: Vec<(&str, fn(&SemanticFingerprint) -> &Vec<f32>)> = vec![
+    // ALL 13 embedders - dense vectors (E1-E5, E7-E11), sparse (E6, E13), token-level (E12)
+    // Dense embedder extraction functions
+    let dense_embedder_configs: Vec<(&str, fn(&SemanticFingerprint) -> &Vec<f32>)> = vec![
         ("E1_semantic", |fp: &SemanticFingerprint| &fp.e1_semantic),
-        ("E5_causal", |fp: &SemanticFingerprint| &fp.e5_causal_as_cause), // Use cause vector for search
+        ("E2_temporal", |fp: &SemanticFingerprint| &fp.e2_temporal_recent),
+        ("E3_periodic", |fp: &SemanticFingerprint| &fp.e3_temporal_periodic),
+        ("E4_positional", |fp: &SemanticFingerprint| &fp.e4_temporal_positional),
+        ("E5_causal", |fp: &SemanticFingerprint| &fp.e5_causal_as_cause),
         ("E7_code", |fp: &SemanticFingerprint| &fp.e7_code),
+        ("E8_graph", |fp: &SemanticFingerprint| &fp.e8_graph),
+        ("E9_hdc", |fp: &SemanticFingerprint| &fp.e9_hdc),
         ("E10_multimodal", |fp: &SemanticFingerprint| &fp.e10_multimodal),
+        ("E11_entity", |fp: &SemanticFingerprint| &fp.e11_entity),
     ];
 
     let mut mrr_scores: HashMap<String, f64> = HashMap::new();
 
-    for (name, extractor) in &embedder_configs {
+    // Measure dense embedders
+    for (name, extractor) in &dense_embedder_configs {
         // Build index for this embedder
         let mut emb_ids: Vec<Uuid> = Vec::new();
         let mut emb_vecs: Vec<Vec<f32>> = Vec::new();
@@ -994,14 +1002,148 @@ fn run_ablation_studies(
         eprintln!("    {} MRR@10: {:.4} (from {} queries)", name, mrr, count);
     }
 
-    // Temporal embedders are excluded per constitution (AP-60)
-    for name in ["E2_temporal", "E3_periodic", "E4_positional"] {
-        mrr_scores.insert(name.to_string(), 0.0);
+    // Measure sparse embedders (E6, E13) using sparse dot product
+    eprintln!("  Measuring sparse embedders (E6, E13)...");
+
+    // E6 sparse
+    {
+        let mut mrr_sum = 0.0;
+        let mut count = 0;
+
+        for query_chunk in queries.iter().take(50) {
+            let query_uuid = query_chunk.uuid();
+            let query_topic = dataset.get_topic_idx(query_chunk);
+            let query_doc_id = &query_chunk.doc_id;
+
+            let Some(query_fp) = embedded.fingerprints.get(&query_uuid) else { continue };
+            if query_fp.e6_sparse.indices.is_empty() { continue; }
+
+            let same_doc_uuids: std::collections::HashSet<Uuid> = embedded.chunk_info.iter()
+                .filter(|(_, info)| &info.doc_id == query_doc_id)
+                .map(|(id, _)| *id)
+                .collect();
+
+            let mut scores: Vec<(Uuid, f32)> = embedded.fingerprints.iter()
+                .filter(|(id, _)| !same_doc_uuids.contains(id))
+                .map(|(id, fp)| {
+                    let sim = query_fp.e6_sparse.dot(&fp.e6_sparse);
+                    (*id, sim)
+                })
+                .collect();
+
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let relevant: Vec<Uuid> = embedded.topic_assignments.iter()
+                .filter(|(id, topic)| **topic == query_topic && !same_doc_uuids.contains(id))
+                .map(|(id, _)| *id)
+                .collect();
+
+            if !relevant.is_empty() {
+                if let Some(pos) = scores.iter().take(10).position(|(id, _)| relevant.contains(id)) {
+                    mrr_sum += 1.0 / (pos as f64 + 1.0);
+                }
+                count += 1;
+            }
+        }
+
+        let mrr = if count > 0 { mrr_sum / count as f64 } else { 0.0 };
+        mrr_scores.insert("E6_sparse".to_string(), mrr);
+        eprintln!("    E6_sparse MRR@10: {:.4} (from {} queries)", mrr, count);
     }
 
-    // Supporting embedders (not directly measured in this benchmark)
-    for name in ["E6_sparse", "E8_graph", "E9_hdc", "E11_entity", "E12_late", "E13_splade"] {
-        mrr_scores.insert(name.to_string(), 0.0); // Not measured (would need SPLADE/ColBERT infrastructure)
+    // E13 SPLADE
+    {
+        let mut mrr_sum = 0.0;
+        let mut count = 0;
+
+        for query_chunk in queries.iter().take(50) {
+            let query_uuid = query_chunk.uuid();
+            let query_topic = dataset.get_topic_idx(query_chunk);
+            let query_doc_id = &query_chunk.doc_id;
+
+            let Some(query_fp) = embedded.fingerprints.get(&query_uuid) else { continue };
+            if query_fp.e13_splade.indices.is_empty() { continue; }
+
+            let same_doc_uuids: std::collections::HashSet<Uuid> = embedded.chunk_info.iter()
+                .filter(|(_, info)| &info.doc_id == query_doc_id)
+                .map(|(id, _)| *id)
+                .collect();
+
+            let mut scores: Vec<(Uuid, f32)> = embedded.fingerprints.iter()
+                .filter(|(id, _)| !same_doc_uuids.contains(id))
+                .map(|(id, fp)| {
+                    let sim = query_fp.e13_splade.dot(&fp.e13_splade);
+                    (*id, sim)
+                })
+                .collect();
+
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let relevant: Vec<Uuid> = embedded.topic_assignments.iter()
+                .filter(|(id, topic)| **topic == query_topic && !same_doc_uuids.contains(id))
+                .map(|(id, _)| *id)
+                .collect();
+
+            if !relevant.is_empty() {
+                if let Some(pos) = scores.iter().take(10).position(|(id, _)| relevant.contains(id)) {
+                    mrr_sum += 1.0 / (pos as f64 + 1.0);
+                }
+                count += 1;
+            }
+        }
+
+        let mrr = if count > 0 { mrr_sum / count as f64 } else { 0.0 };
+        mrr_scores.insert("E13_splade".to_string(), mrr);
+        eprintln!("    E13_splade MRR@10: {:.4} (from {} queries)", mrr, count);
+    }
+
+    // Measure E12 (late interaction / ColBERT) using MaxSim
+    eprintln!("  Measuring token-level embedder (E12)...");
+    {
+        let mut mrr_sum = 0.0;
+        let mut count = 0;
+
+        for query_chunk in queries.iter().take(50) {
+            let query_uuid = query_chunk.uuid();
+            let query_topic = dataset.get_topic_idx(query_chunk);
+            let query_doc_id = &query_chunk.doc_id;
+
+            let Some(query_fp) = embedded.fingerprints.get(&query_uuid) else { continue };
+            if query_fp.e12_late_interaction.is_empty() { continue; }
+
+            // Exclude same-document chunks
+            let same_doc_uuids: std::collections::HashSet<Uuid> = embedded.chunk_info.iter()
+                .filter(|(_, info)| &info.doc_id == query_doc_id)
+                .map(|(id, _)| *id)
+                .collect();
+
+            // Compute MaxSim scores (ColBERT-style)
+            let mut scores: Vec<(Uuid, f32)> = embedded.fingerprints.iter()
+                .filter(|(id, _)| !same_doc_uuids.contains(id))
+                .map(|(id, fp)| {
+                    let sim = maxsim(&query_fp.e12_late_interaction, &fp.e12_late_interaction);
+                    (*id, sim)
+                })
+                .collect();
+
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let relevant: Vec<Uuid> = embedded.topic_assignments.iter()
+                .filter(|(id, topic)| **topic == query_topic && !same_doc_uuids.contains(id))
+                .map(|(id, _)| *id)
+                .collect();
+
+            if !relevant.is_empty() {
+                if let Some(pos) = scores.iter().take(10).position(|(id, _)| relevant.contains(id)) {
+                    mrr_sum += 1.0 / (pos as f64 + 1.0);
+                }
+                count += 1;
+            }
+        }
+
+        let mrr = if count > 0 { mrr_sum / count as f64 } else { 0.0 };
+        mrr_scores.insert("E12_late".to_string(), mrr);
+        eprintln!("    E12_late MRR@10: {:.4} (from {} queries)", mrr, count);
     }
 
     // Compute contributions as percentage of total MRR
@@ -1451,6 +1593,25 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     } else {
         0.0
     }
+}
+
+/// MaxSim for ColBERT-style late interaction scoring.
+/// For each query token, find the max similarity to any document token, then sum.
+fn maxsim(query_tokens: &[Vec<f32>], doc_tokens: &[Vec<f32>]) -> f32 {
+    if query_tokens.is_empty() || doc_tokens.is_empty() {
+        return 0.0;
+    }
+
+    let mut total = 0.0;
+    for q_token in query_tokens {
+        let max_sim = doc_tokens.iter()
+            .map(|d_token| cosine_similarity(q_token, d_token))
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or(0.0);
+        total += max_sim;
+    }
+
+    total / query_tokens.len() as f32
 }
 
 // ============================================================================

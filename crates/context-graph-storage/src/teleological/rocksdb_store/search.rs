@@ -50,6 +50,8 @@ use context_graph_core::fusion::{EmbedderRanking, FusionStrategy, fuse_rankings}
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions, TeleologicalSearchResult};
 use context_graph_core::types::fingerprint::{SemanticFingerprint, SparseVector};
 
+use crate::teleological::search::temporal_boost;
+
 use crate::teleological::column_families::CF_E13_SPLADE_INVERTED;
 use crate::teleological::indexes::{EmbedderIndex, EmbedderIndexOps};
 use crate::teleological::schema::e13_splade_inverted_key;
@@ -154,14 +156,20 @@ impl RocksDbTeleologicalStore {
     /// - `E1Only`: Original E1-only HNSW search (backward compatible)
     /// - `MultiSpace`: Weighted fusion of semantic embedders
     /// - `Pipeline`: Full 3-stage retrieval
+    ///
+    /// Also supports temporal options (ARCH-14):
+    /// - E2 Recency: Decay functions, time windows, session filtering
+    /// - E3 Periodic: Hour-of-day, day-of-week pattern matching
+    /// - E4 Sequence: Before/after anchor memory retrieval
     pub(crate) async fn search_semantic_async(
         &self,
         query: &SemanticFingerprint,
         options: TeleologicalSearchOptions,
     ) -> CoreResult<Vec<TeleologicalSearchResult>> {
         debug!(
-            "Searching semantic with strategy={:?}, top_k={}, min_similarity={}",
-            options.strategy, options.top_k, options.min_similarity
+            "Searching semantic with strategy={:?}, top_k={}, min_similarity={}, temporal_weight={}",
+            options.strategy, options.top_k, options.min_similarity,
+            options.temporal_options.temporal_weight
         );
 
         // Branch based on search strategy
@@ -181,9 +189,26 @@ impl RocksDbTeleologicalStore {
             }
         };
 
-        // Apply recency boost if configured (POST-retrieval per ARCH-14)
+        // Apply time window filter if configured
+        if let Some(ref window) = options.temporal_options.time_window {
+            if window.is_defined() {
+                temporal_boost::filter_by_time_window(&mut results, window, |r| {
+                    r.fingerprint.created_at.timestamp_millis()
+                });
+            }
+        }
+
+        // Apply legacy recency boost if configured (backward compatibility)
+        // Note: recency_boost is deprecated, use temporal_options.temporal_weight instead
+        #[allow(deprecated)]
         if options.recency_boost > 0.0 {
+            #[allow(deprecated)]
             self.apply_recency_boost(&mut results, query, options.recency_boost);
+        }
+
+        // Apply full temporal boost system (ARCH-14) if configured
+        if options.temporal_options.has_any_boost() {
+            self.apply_full_temporal_boosts(&mut results, query, &options).await?;
         }
 
         debug!("Semantic search returned {} results", results.len());
@@ -773,6 +798,88 @@ impl RocksDbTeleologicalStore {
                 .partial_cmp(&a.similarity)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+    }
+
+    /// Apply full temporal boost system POST-retrieval (ARCH-14).
+    ///
+    /// This method applies E2/E3/E4 temporal boosts based on the temporal_options:
+    /// - E2 Recency: Decay functions (linear, exponential, step)
+    /// - E3 Periodic: Hour-of-day, day-of-week pattern matching
+    /// - E4 Sequence: Before/after anchor memory relationships
+    ///
+    /// # Arguments
+    ///
+    /// * `results` - Search results to boost (modified in place)
+    /// * `query` - Query semantic fingerprint
+    /// * `options` - Search options with temporal configuration
+    async fn apply_full_temporal_boosts(
+        &self,
+        results: &mut Vec<TeleologicalSearchResult>,
+        query: &SemanticFingerprint,
+        options: &TeleologicalSearchOptions,
+    ) -> CoreResult<()> {
+        debug!(
+            "Applying full temporal boosts: weight={}, decay={:?}",
+            options.temporal_options.temporal_weight,
+            options.temporal_options.decay_function
+        );
+
+        if results.is_empty() {
+            return Ok(());
+        }
+
+        // Collect fingerprints and timestamps for all results
+        let mut fingerprints: HashMap<Uuid, SemanticFingerprint> = HashMap::new();
+        let mut timestamps: HashMap<Uuid, i64> = HashMap::new();
+
+        for result in results.iter() {
+            let id = result.fingerprint.id;
+            fingerprints.insert(id, result.fingerprint.semantic.clone());
+            timestamps.insert(id, result.fingerprint.created_at.timestamp_millis());
+        }
+
+        // If sequence options are set, fetch the anchor fingerprint
+        let (anchor_fp, anchor_ts) = if let Some(ref seq_opts) = options.temporal_options.sequence_options {
+            if !seq_opts.anchor_id.is_nil() {
+                // Try to fetch anchor fingerprint from storage
+                match self.get_fingerprint_raw(seq_opts.anchor_id) {
+                    Ok(Some(data)) => {
+                        let anchor = deserialize_teleological_fingerprint(&data);
+                        let ts = anchor.created_at.timestamp_millis();
+                        (Some(anchor.semantic), Some(ts))
+                    }
+                    _ => {
+                        warn!(
+                            "Temporal boost: Could not fetch anchor fingerprint {}, skipping sequence boost",
+                            seq_opts.anchor_id
+                        );
+                        (None, None)
+                    }
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
+
+        // Apply temporal boosts using the temporal_boost module
+        let _boost_data = temporal_boost::apply_temporal_boosts(
+            results,
+            query,
+            &options.temporal_options,
+            &fingerprints,
+            &timestamps,
+            anchor_fp.as_ref(),
+            anchor_ts,
+        );
+
+        debug!(
+            "Temporal boosts applied to {} results",
+            results.len()
+        );
+
+        Ok(())
     }
 
     /// Search by text (internal async wrapper).

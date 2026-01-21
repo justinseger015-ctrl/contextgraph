@@ -43,5 +43,11 @@ mod store;
 pub use backend::TeleologicalStorageBackend;
 pub use ext::TeleologicalMemoryStoreExt;
 pub use options::{NormalizationStrategyOption, SearchStrategy, TeleologicalSearchOptions};
-pub use result::TeleologicalSearchResult;
+pub use result::{TeleologicalSearchResult, TemporalBreakdown};
 pub use store::TeleologicalMemoryStore;
+
+// Re-export temporal search types (ARCH-14)
+pub use options::{
+    ChainRetrievalOptions, DecayFunction, MultiAnchorMode, PeriodicOptions, SequenceDirection,
+    SequenceOptions, TemporalScale, TemporalSearchOptions, TimeWindow,
+};

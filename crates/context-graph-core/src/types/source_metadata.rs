@@ -52,6 +52,14 @@ pub struct SourceMetadata {
 
     /// Optional tool name (for HookDescription)
     pub tool_name: Option<String>,
+
+    /// Session ID when memory was created (for temporal filtering).
+    /// Enables filtering memories to a specific Claude Code session.
+    pub session_id: Option<String>,
+
+    /// Sequence number within session (for E4 temporal ordering).
+    /// Memories with higher sequence numbers are more recent within the session.
+    pub session_sequence: Option<u64>,
 }
 
 /// Type of memory source.
@@ -80,6 +88,8 @@ impl Default for SourceMetadata {
             end_line: None,
             hook_type: None,
             tool_name: None,
+            session_id: None,
+            session_sequence: None,
         }
     }
 }
@@ -102,6 +112,8 @@ impl SourceMetadata {
             end_line: None,
             hook_type: None,
             tool_name: None,
+            session_id: None,
+            session_sequence: None,
         }
     }
 
@@ -130,6 +142,8 @@ impl SourceMetadata {
             end_line: Some(end_line),
             hook_type: None,
             tool_name: None,
+            session_id: None,
+            session_sequence: None,
         }
     }
 
@@ -149,6 +163,8 @@ impl SourceMetadata {
             end_line: None,
             hook_type: Some(hook_type.into()),
             tool_name,
+            session_id: None,
+            session_sequence: None,
         }
     }
 
@@ -163,6 +179,8 @@ impl SourceMetadata {
             end_line: None,
             hook_type: None,
             tool_name: None,
+            session_id: None,
+            session_sequence: None,
         }
     }
 
@@ -177,7 +195,21 @@ impl SourceMetadata {
             end_line: None,
             hook_type: None,
             tool_name: None,
+            session_id: None,
+            session_sequence: None,
         }
+    }
+
+    /// Set session context for temporal tracking.
+    ///
+    /// # Arguments
+    ///
+    /// * `session_id` - Claude Code session ID
+    /// * `session_sequence` - Order within session
+    pub fn with_session(mut self, session_id: impl Into<String>, session_sequence: u64) -> Self {
+        self.session_id = Some(session_id.into());
+        self.session_sequence = Some(session_sequence);
+        self
     }
 
     /// Check if this is an MDFileChunk source.

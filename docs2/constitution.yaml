@@ -70,6 +70,14 @@ arch_rules:
   ARCH-17: "E11 Entity SHOULD use entity linking for disambiguation when possible, not just embedding similarity"
   ARCH-18: "Multi-space fusion SHOULD use Weighted Reciprocal Rank Fusion (RRF), not weighted score sum"
 
+  # Temporal Embedder Usage (E2/E3/E4)
+  ARCH-19: "E2 recency MUST support configurable decay functions (linear, exponential, step) for freshness scoring"
+  ARCH-20: "E3 periodic MUST be used for time-of-day/day-of-week pattern matching via cosine similarity"
+  ARCH-21: "E4 sequence MUST be used for before/after temporal ordering with directional filtering"
+  ARCH-22: "Temporal boosts MUST be applied POST-retrieval as score adjustments, NOT in similarity fusion"
+  ARCH-23: "Session filtering MUST use session_id from SourceMetadata for same-session retrieval"
+  ARCH-24: "Temporal scale (micro/meso/macro/long/archival) determines decay half-life defaults"
+
 # ===============================================================================
 # CODING STANDARDS
 # ===============================================================================
@@ -321,12 +329,46 @@ topic_system:
   # TEMPORAL CONTEXT ENRICHMENT
   # -------------------------------------------------------------------------
   temporal_enrichment:
-    description: "Temporal embedders provide context badges, not topic triggers"
+    description: "Temporal embedders provide POST-RETRIEVAL boosts and filtering"
     badges:
       same_session: "E2 similarity > 0.8 -> 'From same session'"
       same_day: "E3 similarity > 0.7 -> 'From today'"
       same_period: "E4 similarity > 0.6 -> 'Around same time'"
-    usage: "Metadata on injected memories, NOT similarity/divergence triggers"
+    usage: "POST-RETRIEVAL scoring adjustments, NOT similarity fusion"
+
+    # E2 Recency Options (ARCH-19)
+    e2_recency:
+      decay_functions:
+        linear: "score = max(0, 1 - age/max_age)"
+        exponential: "score = exp(-age * 0.693 / half_life)"
+        step: "Fresh(<5min)=1.0, Recent(<1h)=0.8, Today(<1d)=0.5, Older=0.1"
+        no_decay: "score = 1.0 (disabled)"
+      default_half_life: 86400  # 1 day in seconds
+      time_window: "Optional start_ms/end_ms for hard filtering"
+
+    # E3 Periodic Options (ARCH-20)
+    e3_periodic:
+      target_hour: "0-23 for hour-of-day matching"
+      target_day_of_week: "0-6 (Sun-Sat) for day-of-week matching"
+      auto_detect: "Use current time as target"
+      weight: "[0.0-1.0] boost weight for periodic matches"
+      usage: "Find memories from similar times of day/week"
+
+    # E4 Sequence Options (ARCH-21)
+    e4_sequence:
+      anchor_id: "Memory UUID to find before/after"
+      direction: "Before, After, Both"
+      max_distance: "Maximum sequence positions away"
+      weight: "[0.0-1.0] boost weight for sequence proximity"
+      usage: "Reconstruct conversation flow, find related work"
+
+    # Multi-Scale Temporal (ARCH-24)
+    temporal_scales:
+      micro: { desc: "Seconds to minutes", half_life: 300 }     # 5 minutes
+      meso: { desc: "Hours", half_life: 3600 }                  # 1 hour
+      macro: { desc: "Days", half_life: 86400 }                 # 1 day
+      long: { desc: "Weeks", half_life: 604800 }                # 1 week
+      archival: { desc: "Months+", half_life: 2592000 }         # 30 days
 
 # ===============================================================================
 # MEMORY SOURCES
@@ -512,6 +554,32 @@ mcp:
   version: "2024-11-05"
   transport: [stdio, sse]
 
+  # -------------------------------------------------------------------------
+  # SEARCH_GRAPH TEMPORAL PARAMETERS (ARCH-19 to ARCH-24)
+  # -------------------------------------------------------------------------
+  search_graph_temporal_params:
+    # E2 Recency Parameters
+    temporalWeight: { type: number, range: "[0.0-1.0]", default: 0.0, desc: "Global weight for temporal boosts (0=disabled)" }
+    decayFunction: { type: string, values: ["linear", "exponential", "step", "none"], default: "exponential", desc: "E2 decay function" }
+    decayHalfLifeSecs: { type: integer, default: 86400, desc: "Half-life for exponential decay" }
+
+    # Time Window Filtering
+    lastHours: { type: integer, desc: "Shortcut: filter to last N hours" }
+    lastDays: { type: integer, desc: "Shortcut: filter to last N days" }
+    sessionId: { type: string, desc: "Filter to specific session" }
+
+    # E3 Periodic Parameters
+    periodicBoost: { type: number, range: "[0.0-1.0]", default: 0.0, desc: "Weight for E3 periodic matching" }
+    targetHour: { type: integer, range: "[0-23]", desc: "Target hour for periodic matching" }
+    targetDayOfWeek: { type: integer, range: "[0-6]", desc: "Target day (0=Sun) for periodic matching" }
+
+    # E4 Sequence Parameters
+    sequenceAnchor: { type: uuid, desc: "Memory ID to find before/after" }
+    sequenceDirection: { type: string, values: ["before", "after", "both"], default: "both", desc: "Sequence direction" }
+
+    # Temporal Scale
+    temporalScale: { type: string, values: ["micro", "meso", "macro", "long", "archival"], default: "macro", desc: "Temporal reasoning scale" }
+
   core_tools:
     topic:
       - get_topic_portfolio
@@ -580,7 +648,9 @@ embeddings:
 # ===============================================================================
 storage:
   primary: { dev: rocksdb, prod: scylladb }
-  schema: ["id:UUID", "embeddings:BYTEA", "topic_profile:REAL[13]", "source:ENUM(HookDescription,ClaudeResponse,MDFileChunk)", "coherence:REAL", "created_at:TIMESTAMPTZ", "session_id:VARCHAR", "chunk_metadata:JSONB"]
+  schema: ["id:UUID", "embeddings:BYTEA", "topic_profile:REAL[13]", "source:ENUM(HookDescription,ClaudeResponse,MDFileChunk)", "coherence:REAL", "created_at:TIMESTAMPTZ", "session_id:VARCHAR", "session_sequence:BIGINT", "chunk_metadata:JSONB"]
+  # session_id: Claude Code session ID for temporal filtering (ARCH-23)
+  # session_sequence: Order within session for E4 sequence queries
   indexes:
     L2A_sparse: "E13 SPLADE inverted"
     L2B_matryoshka: "E1[..128] HNSW M:32"

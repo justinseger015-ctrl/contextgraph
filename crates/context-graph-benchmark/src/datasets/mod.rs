@@ -5,10 +5,12 @@
 
 pub mod generator;
 pub mod ground_truth;
+pub mod temporal;
 pub mod topic_clusters;
 
 pub use generator::{DatasetGenerator, GeneratorConfig};
 pub use ground_truth::GroundTruth;
+pub use temporal::{TemporalBenchmarkDataset, TemporalDatasetConfig, TemporalDatasetGenerator};
 pub use topic_clusters::{TopicCluster, TopicGenerator};
 
 use std::collections::{HashMap, HashSet};

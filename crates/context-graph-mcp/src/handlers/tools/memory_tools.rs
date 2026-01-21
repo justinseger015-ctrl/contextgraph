@@ -425,15 +425,175 @@ impl Handlers {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // =========================================================================
+        // TEMPORAL SEARCH PARAMETERS (ARCH-14)
+        // =========================================================================
+
+        // Parse temporalWeight (master weight for all temporal boosts)
+        let temporal_weight = args
+            .get("temporalWeight")
+            .and_then(|v| v.as_f64())
+            .map(|v| (v as f32).clamp(0.0, 1.0))
+            .unwrap_or(0.0);
+
+        // Parse decayFunction (linear, exponential, step, none)
+        let decay_function = args
+            .get("decayFunction")
+            .and_then(|v| v.as_str())
+            .map(|s| match s.to_lowercase().as_str() {
+                "linear" => context_graph_core::traits::DecayFunction::Linear,
+                "exponential" => context_graph_core::traits::DecayFunction::Exponential,
+                "step" => context_graph_core::traits::DecayFunction::Step,
+                "none" | "no_decay" => context_graph_core::traits::DecayFunction::NoDecay,
+                _ => context_graph_core::traits::DecayFunction::Linear,
+            })
+            .unwrap_or(context_graph_core::traits::DecayFunction::Linear);
+
+        // Parse decayHalfLifeSecs (for exponential decay)
+        let decay_half_life = args
+            .get("decayHalfLifeSecs")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(86400); // 1 day default
+
+        // Parse lastHours shortcut (filter to last N hours)
+        let last_hours = args.get("lastHours").and_then(|v| v.as_u64());
+
+        // Parse lastDays shortcut (filter to last N days)
+        let last_days = args.get("lastDays").and_then(|v| v.as_u64());
+
+        // Parse sessionId (filter to specific session)
+        let session_id = args
+            .get("sessionId")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        // Parse periodicBoost (weight for E3 periodic matching)
+        let periodic_boost = args
+            .get("periodicBoost")
+            .and_then(|v| v.as_f64())
+            .map(|v| (v as f32).clamp(0.0, 1.0));
+
+        // Parse targetHour (0-23) for periodic matching
+        let target_hour = args
+            .get("targetHour")
+            .and_then(|v| v.as_u64())
+            .map(|v| (v as u8).min(23));
+
+        // Parse targetDayOfWeek (0=Sun, 6=Sat) for periodic matching
+        let target_day_of_week = args
+            .get("targetDayOfWeek")
+            .and_then(|v| v.as_u64())
+            .map(|v| (v as u8).min(6));
+
+        // Parse sequenceAnchor (UUID) for E4 sequence-based retrieval
+        let sequence_anchor = args
+            .get("sequenceAnchor")
+            .and_then(|v| v.as_str())
+            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+
+        // Parse sequenceDirection (before, after, both)
+        let sequence_direction = args
+            .get("sequenceDirection")
+            .and_then(|v| v.as_str())
+            .map(|s| match s.to_lowercase().as_str() {
+                "before" => context_graph_core::traits::SequenceDirection::Before,
+                "after" => context_graph_core::traits::SequenceDirection::After,
+                _ => context_graph_core::traits::SequenceDirection::Both,
+            })
+            .unwrap_or(context_graph_core::traits::SequenceDirection::Both);
+
+        // Parse temporalScale (micro, meso, macro, long, archival)
+        let temporal_scale = args
+            .get("temporalScale")
+            .and_then(|v| v.as_str())
+            .map(|s| match s.to_lowercase().as_str() {
+                "micro" => context_graph_core::traits::TemporalScale::Micro,
+                "meso" => context_graph_core::traits::TemporalScale::Meso,
+                "macro" => context_graph_core::traits::TemporalScale::Macro,
+                "long" => context_graph_core::traits::TemporalScale::Long,
+                "archival" => context_graph_core::traits::TemporalScale::Archival,
+                _ => context_graph_core::traits::TemporalScale::Meso,
+            })
+            .unwrap_or(context_graph_core::traits::TemporalScale::Meso);
+
         // Build search options with multi-space parameters
         let mut options = TeleologicalSearchOptions::quick(top_k)
             .with_min_similarity(min_similarity)
             .with_strategy(strategy)
-            .with_recency_boost(recency_boost)
             .with_rerank(enable_rerank);
 
         if let Some(profile) = weight_profile {
             options = options.with_weight_profile(&profile);
+        }
+
+        // Apply temporal options - handle both new temporalWeight and legacy recencyBoost
+        // Per ARCH-14: Temporal is a POST-retrieval boost, not similarity
+        let effective_temporal_weight = if temporal_weight > 0.0 {
+            temporal_weight
+        } else if recency_boost > 0.0 {
+            // Legacy migration: recencyBoost -> temporal_weight with exponential decay
+            recency_boost
+        } else {
+            0.0
+        };
+
+        if effective_temporal_weight > 0.0 {
+            // Determine decay function - use exponential for legacy recencyBoost
+            let effective_decay = if temporal_weight > 0.0 {
+                decay_function
+            } else {
+                // Legacy recencyBoost used exponential decay
+                context_graph_core::traits::DecayFunction::Exponential
+            };
+
+            options = options
+                .with_temporal_weight(effective_temporal_weight)
+                .with_decay_function(effective_decay)
+                .with_temporal_scale(temporal_scale);
+
+            // Apply decay half-life if exponential
+            if matches!(effective_decay, context_graph_core::traits::DecayFunction::Exponential) {
+                options.temporal_options.decay_half_life_secs = decay_half_life;
+            }
+        }
+
+        // Apply time window filters (shortcuts)
+        if let Some(hours) = last_hours {
+            options = options.with_last_hours(hours);
+        } else if let Some(days) = last_days {
+            options = options.with_last_days(days);
+        }
+
+        // Apply session filter
+        if let Some(ref sid) = session_id {
+            options = options.with_session_filter(sid);
+        }
+
+        // Apply periodic boost if configured
+        if let Some(weight) = periodic_boost {
+            let mut periodic = context_graph_core::traits::PeriodicOptions::default();
+            periodic.weight = weight;
+            if let Some(hour) = target_hour {
+                periodic.target_hour = Some(hour);
+            }
+            if let Some(dow) = target_day_of_week {
+                periodic.target_day_of_week = Some(dow);
+            }
+            // Auto-detect if no specific targets set
+            if periodic.target_hour.is_none() && periodic.target_day_of_week.is_none() {
+                periodic.auto_detect = true;
+            }
+            options.temporal_options.periodic_options = Some(periodic);
+        }
+
+        // Apply sequence anchor if configured
+        if let Some(anchor_id) = sequence_anchor {
+            let seq_opts = context_graph_core::traits::SequenceOptions {
+                anchor_id,
+                direction: sequence_direction,
+                ..Default::default()
+            };
+            options.temporal_options.sequence_options = Some(seq_opts);
         }
 
         debug!(
@@ -441,7 +601,8 @@ impl Handlers {
             weight_profile = ?options.weight_profile,
             recency_boost = recency_boost,
             enable_rerank = enable_rerank,
-            "search_graph: Multi-space options configured"
+            temporal_weight = temporal_weight,
+            "search_graph: Multi-space and temporal options configured"
         );
 
         // Generate query embedding
