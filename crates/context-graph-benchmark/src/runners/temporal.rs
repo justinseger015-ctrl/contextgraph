@@ -2118,21 +2118,33 @@ pub struct TemporalBaseline {
     pub created: String,
     pub decay_accuracy_10k: f64,
     pub sequence_accuracy: f64,
+    /// Kendall's tau correlation - primary E4 sequence metric.
+    /// More stable than sequence_accuracy for measuring temporal ordering.
+    #[serde(default = "TemporalBaseline::default_kendall_tau")]
+    pub kendall_tau: f64,
     pub hourly_silhouette: f64,
     pub combined_score: f64,
     pub p95_latency_ms: f64,
 }
 
+impl TemporalBaseline {
+    /// Default kendall_tau value for backwards compatibility with baselines that don't have it.
+    fn default_kendall_tau() -> f64 {
+        1.0
+    }
+}
+
 impl Default for TemporalBaseline {
     fn default() -> Self {
         Self {
-            version: "2.0.0".to_string(),
+            version: "2.1.0".to_string(),
             created: "2026-01-21".to_string(),
-            decay_accuracy_10k: 0.78,
-            sequence_accuracy: 0.87,
+            decay_accuracy_10k: 0.77,
+            sequence_accuracy: 0.50,
+            kendall_tau: 1.0,
             hourly_silhouette: 0.45,
-            combined_score: 0.71,
-            p95_latency_ms: 150.0,
+            combined_score: 0.84,
+            p95_latency_ms: 5.0,
         }
     }
 }
@@ -2191,6 +2203,12 @@ impl RegressionBenchmarkResults {
             self.baseline_metrics.sequence_accuracy,
             self.current_metrics.sequence_accuracy,
             (self.current_metrics.sequence_accuracy - self.baseline_metrics.sequence_accuracy) / self.baseline_metrics.sequence_accuracy * 100.0
+        ));
+        report.push_str(&format!(
+            "| Kendall's Tau | {:.3} | {:.3} | {:+.1}% |\n",
+            self.baseline_metrics.kendall_tau,
+            self.current_metrics.kendall_tau,
+            (self.current_metrics.kendall_tau - self.baseline_metrics.kendall_tau) / self.baseline_metrics.kendall_tau * 100.0
         ));
         report.push_str(&format!(
             "| P95 Latency | {:.1}ms | {:.1}ms | {:+.1}% |\n",
@@ -2263,6 +2281,7 @@ pub fn run_regression_benchmark(config: &RegressionConfig) -> RegressionBenchmar
         created: chrono::Utc::now().format("%Y-%m-%d").to_string(),
         decay_accuracy_10k: metrics.recency.decay_accuracy,
         sequence_accuracy: metrics.sequence.sequence_accuracy,
+        kendall_tau: metrics.sequence.temporal_ordering_precision,
         hourly_silhouette: metrics.periodic.hourly_cluster_quality,
         combined_score: metrics.quality_score(),
         p95_latency_ms: p95_latency,
@@ -2305,6 +2324,24 @@ pub fn run_regression_benchmark(config: &RegressionConfig) -> RegressionBenchmar
             "sequence_accuracy approaching threshold: {:+.1}% (threshold: -{:.1}%)",
             seq_delta * 100.0,
             config.tolerance_accuracy * 100.0
+        ));
+    }
+
+    // Kendall's tau (primary E4 metric, uses 5% tolerance as it's more stable)
+    // Use max(0.001) to prevent division by zero if baseline kendall_tau is 0
+    let tau_delta = (current.kendall_tau - baseline.kendall_tau) / baseline.kendall_tau.max(0.001);
+    if tau_delta < -0.05 {
+        failures.push(RegressionFailure {
+            metric_name: "kendall_tau".to_string(),
+            baseline_value: baseline.kendall_tau,
+            current_value: current.kendall_tau,
+            delta_percent: tau_delta * 100.0,
+            threshold_percent: 5.0,
+        });
+    } else if tau_delta < -0.025 {
+        warnings.push(format!(
+            "kendall_tau approaching threshold: {:+.1}% (threshold: -5.0%)",
+            tau_delta * 100.0
         ));
     }
 

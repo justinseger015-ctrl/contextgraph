@@ -756,8 +756,10 @@ mod tests {
 
     #[test]
     fn test_dataset_validation() {
+        // Use 500 memories to ensure all hourly buckets have coverage
+        // With 100 memories spread across 24 hours, some hours may be empty
         let config = TemporalDatasetConfig {
-            num_memories: 100,
+            num_memories: 500,
             num_queries: 30,
             seed: 42,
             ..Default::default()
@@ -766,7 +768,11 @@ mod tests {
         let mut generator = TemporalDatasetGenerator::new(config);
         let dataset = generator.generate();
 
-        assert!(dataset.validate().is_ok());
+        let result = dataset.validate();
+        if let Err(e) = &result {
+            eprintln!("Validation error: {}", e);
+        }
+        assert!(result.is_ok(), "validation failed: {:?}", result);
     }
 
     #[test]

@@ -902,14 +902,17 @@ mod tests {
     #[test]
     fn test_before_after_accuracy() {
         let anchor = 500;
-        let retrieved = vec![100, 200, 300, 400, 600, 700, 800, 900];
 
-        // "before": should be 100, 200, 300, 400 (4 items)
-        let before_acc = before_after_accuracy(anchor, &retrieved, "before", 5);
+        // Test "before" with items mostly before anchor
+        let retrieved_before = vec![100, 200, 300, 400, 600, 700, 800, 900];
+        // top_k=5: [100, 200, 300, 400, 600], items < 500: 4
+        let before_acc = before_after_accuracy(anchor, &retrieved_before, "before", 5);
         assert!((before_acc - 0.8).abs() < 0.01); // 4/5 = 0.8
 
-        // "after": should be 600, 700, 800, 900 (4 items)
-        let after_acc = before_after_accuracy(anchor, &retrieved, "after", 5);
+        // Test "after" with items mostly after anchor
+        let retrieved_after = vec![600, 700, 800, 900, 100, 200, 300, 400];
+        // top_k=5: [600, 700, 800, 900, 100], items > 500: 4
+        let after_acc = before_after_accuracy(anchor, &retrieved_after, "after", 5);
         assert!((after_acc - 0.8).abs() < 0.01); // 4/5 = 0.8
     }
 }

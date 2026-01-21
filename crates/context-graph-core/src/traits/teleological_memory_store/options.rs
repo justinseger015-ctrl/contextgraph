@@ -838,7 +838,13 @@ impl TemporalSearchOptions {
     /// E2 decay accuracy degrades at larger corpus sizes with fixed half-life.
     /// This method scales the half-life with corpus size to maintain accuracy.
     ///
-    /// Formula: base_half_life * sqrt(corpus_size / 5000)
+    /// Uses log-based formula for gentler adjustment than sqrt:
+    /// - At 100 memories: multiplier ≈ 0.9 (-10%)
+    /// - At 1,000 memories: multiplier = 1.0 (no change, calibration point)
+    /// - At 10,000 memories: multiplier ≈ 1.1 (+10%)
+    /// - At 100,000 memories: multiplier ≈ 1.2 (+20%)
+    ///
+    /// Formula: base_half_life * (1 + 0.1 * log10(corpus_size / 1000))
     ///
     /// # Arguments
     ///
@@ -846,24 +852,29 @@ impl TemporalSearchOptions {
     ///
     /// # Returns
     ///
-    /// Adaptive half-life in seconds (minimum 60s, clamped)
+    /// Adaptive half-life in seconds (minimum 60s)
     ///
     /// # Example
     ///
     /// ```ignore
     /// let options = TemporalSearchOptions::default();
-    /// // At 1K memories: ~0.45x base half-life
-    /// assert!(options.adaptive_half_life(1000) < options.effective_half_life());
-    /// // At 5K memories: 1x base half-life
-    /// assert_eq!(options.adaptive_half_life(5000), options.effective_half_life());
-    /// // At 20K memories: 2x base half-life
-    /// assert!(options.adaptive_half_life(20000) > options.effective_half_life());
+    /// // At 100 memories: ~0.9x base half-life
+    /// let hl_100 = options.adaptive_half_life(100);
+    /// // At 1K memories: 1.0x base half-life (calibration point)
+    /// let hl_1k = options.adaptive_half_life(1000);
+    /// assert!((hl_1k as f64 - options.effective_half_life() as f64).abs() < 1.0);
+    /// // At 10K memories: ~1.1x base half-life
+    /// let hl_10k = options.adaptive_half_life(10000);
+    /// assert!(hl_10k > hl_1k);
     /// ```
     pub fn adaptive_half_life(&self, corpus_size: usize) -> u64 {
         let base = self.effective_half_life() as f64;
-        // Scale multiplier: sqrt(corpus_size / 5000), with min of 0.5
-        let multiplier = ((corpus_size as f64) / 5000.0).sqrt().max(0.5);
-        // Minimum half-life of 60 seconds
+
+        // Log-based formula: base * (1 + 0.1 * log10(corpus_size / 1000))
+        // Calibrated at 1K memories (multiplier = 1.0)
+        let ratio = (corpus_size as f64 / 1000.0).max(0.1);
+        let multiplier = (1.0 + 0.1 * ratio.log10()).clamp(0.8, 2.0);
+
         (base * multiplier).max(60.0) as u64
     }
 

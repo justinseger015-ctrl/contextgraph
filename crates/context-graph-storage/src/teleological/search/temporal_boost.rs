@@ -282,13 +282,18 @@ pub fn compute_periodic_match_fallback(
 ///
 /// * `anchor_e4` - Anchor memory's E4 positional embedding
 /// * `memory_e4` - Memory E4 positional embedding
-/// * `memory_ts` - Memory timestamp
-/// * `anchor_ts` - Anchor timestamp
+/// * `memory_ts` - Memory timestamp (milliseconds)
+/// * `anchor_ts` - Anchor timestamp (milliseconds)
 /// * `direction` - Search direction (Before, After, Both)
 ///
 /// # Returns
 ///
 /// Similarity score [0.0, 1.0], 0.0 if direction constraint not met
+///
+/// # Note
+///
+/// A 1ms tolerance is applied to the "After" direction to handle edge cases
+/// where timestamps are very close (essentially simultaneous events).
 pub fn compute_e4_sequence_score(
     anchor_e4: &[f32],
     memory_e4: &[f32],
@@ -304,7 +309,8 @@ pub fn compute_e4_sequence_score(
             }
         }
         SequenceDirection::After => {
-            if memory_ts <= anchor_ts {
+            // 1ms tolerance for edge cases where timestamps are very close
+            if memory_ts <= anchor_ts + 1 {
                 return 0.0;
             }
         }
@@ -323,14 +329,18 @@ pub fn compute_e4_sequence_score(
 ///
 /// # Arguments
 ///
-/// * `memory_ts` - Memory timestamp
-/// * `anchor_ts` - Anchor timestamp
+/// * `memory_ts` - Memory timestamp (milliseconds)
+/// * `anchor_ts` - Anchor timestamp (milliseconds)
 /// * `direction` - Search direction
 /// * `max_distance_secs` - Maximum temporal distance for scoring
 ///
 /// # Returns
 ///
 /// Proximity score [0.0, 1.0], 0.0 if direction constraint not met
+///
+/// # Note
+///
+/// A 1ms tolerance is applied to the "After" direction to handle edge cases.
 pub fn compute_sequence_proximity_fallback(
     memory_ts: i64,
     anchor_ts: i64,
@@ -345,7 +355,8 @@ pub fn compute_sequence_proximity_fallback(
             }
         }
         SequenceDirection::After => {
-            if memory_ts <= anchor_ts {
+            // 1ms tolerance for edge cases where timestamps are very close
+            if memory_ts <= anchor_ts + 1 {
                 return 0.0;
             }
         }
@@ -377,6 +388,10 @@ pub fn compute_sequence_proximity_fallback(
 /// # Returns
 ///
 /// Proximity score [0.0, 1.0], 0.0 if direction constraint not met
+///
+/// # Note
+///
+/// A 1ms tolerance is applied to the "After" direction to handle edge cases.
 pub fn compute_sequence_proximity_exponential(
     memory_ts: i64,
     anchor_ts: i64,
@@ -391,7 +406,8 @@ pub fn compute_sequence_proximity_exponential(
             }
         }
         SequenceDirection::After => {
-            if memory_ts <= anchor_ts {
+            // 1ms tolerance for edge cases where timestamps are very close
+            if memory_ts <= anchor_ts + 1 {
                 return 0.0;
             }
         }
@@ -816,6 +832,25 @@ mod tests {
 
         let score = compute_e4_sequence_score(&anchor_e4, &memory_e4, 1500, anchor_ts, SequenceDirection::Both);
         assert!(score > 0.9, "Both direction should match after");
+    }
+
+    #[test]
+    fn test_after_direction_boundary_tolerance() {
+        let anchor_ts = 1000i64;
+        let anchor_e4 = vec![1.0; 512];
+        let memory_e4 = vec![1.0; 512];
+
+        // At anchor_ts (same time): should be rejected
+        let score = compute_e4_sequence_score(&anchor_e4, &memory_e4, 1000, anchor_ts, SequenceDirection::After);
+        assert_eq!(score, 0.0, "Same timestamp should be rejected for After");
+
+        // At anchor_ts + 1 (within tolerance): should be rejected
+        let score = compute_e4_sequence_score(&anchor_e4, &memory_e4, 1001, anchor_ts, SequenceDirection::After);
+        assert_eq!(score, 0.0, "Timestamp within 1ms tolerance should be rejected for After");
+
+        // At anchor_ts + 2 (beyond tolerance): should be accepted
+        let score = compute_e4_sequence_score(&anchor_e4, &memory_e4, 1002, anchor_ts, SequenceDirection::After);
+        assert!(score > 0.9, "Timestamp beyond 1ms tolerance should be accepted for After");
     }
 
     #[test]
