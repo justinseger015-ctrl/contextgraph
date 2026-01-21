@@ -146,15 +146,23 @@ pub fn transe_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// # Metrics by Embedder
 /// - E1 (Semantic): Cosine
 /// - E2-E4 (Temporal): Cosine
-/// - E5 (Causal): Cosine (asymmetric handled at embedding time)
+/// - E5 (Causal): Cosine (asymmetric handled at embedding time via dual vectors)
 /// - E6 (Sparse): Jaccard
-/// - E7 (Code): Cosine
+/// - E7 (Code): Cosine (query-type detection handled at embedding time)
 /// - E8 (Emotional): Cosine
-/// - E9 (HDC): Cosine (stored as projected dense, not binary)
+/// - E9 (HDC): Cosine on projected dense (see note below)
 /// - E10 (Multimodal): Cosine
-/// - E11 (Entity): TransE
-/// - E12 (LateInteraction): MaxSim
-/// - E13 (KeywordSplade): Jaccard
+/// - E11 (Entity): TransE (with optional entity linking via entity module)
+/// - E12 (LateInteraction): MaxSim (used for Stage 3 re-ranking only)
+/// - E13 (KeywordSplade): Jaccard (used for Stage 1 recall only)
+///
+/// # E9 HDC Note
+///
+/// E9 uses 10,000-bit native hypervectors internally but projects to 1024D dense
+/// for storage and indexing compatibility (see constants.rs). Cosine similarity
+/// on the projected representation is used. For true Hamming distance on binary
+/// HDC vectors, the `hamming_similarity()` function with `BinaryVector` can be
+/// used if native binary storage is implemented in the future.
 ///
 /// # Arguments
 /// * `embedder` - Which embedding space to compare

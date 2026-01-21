@@ -293,7 +293,9 @@ fn test_semantic_fingerprint_validate_e13_sparse_length_mismatch() {
 fn test_semantic_fingerprint_validate_all_multiple_errors() {
     let mut fp = SemanticFingerprint::zeroed();
     fp.e1_semantic = vec![0.0; 100]; // Wrong E1
-    fp.e5_causal = vec![0.0; 100]; // Wrong E5
+    // E5 now uses dual vectors - set both to wrong dimensions
+    fp.e5_causal_as_cause = vec![0.0; 100]; // Wrong E5 cause
+    fp.e5_causal_as_effect = vec![0.0; 100]; // Wrong E5 effect
     fp.e7_code = vec![0.0; 100]; // Wrong E7
 
     let result = fp.validate_all();

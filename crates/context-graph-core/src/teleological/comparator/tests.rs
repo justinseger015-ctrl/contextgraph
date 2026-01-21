@@ -26,12 +26,15 @@ mod tests {
             v
         };
 
+        let e5_vec = create_normalized_vec(E5_DIM, base_value);
         SemanticFingerprint {
             e1_semantic: create_normalized_vec(E1_DIM, base_value),
             e2_temporal_recent: create_normalized_vec(E2_DIM, base_value),
             e3_temporal_periodic: create_normalized_vec(E3_DIM, base_value),
             e4_temporal_positional: create_normalized_vec(E4_DIM, base_value),
-            e5_causal: create_normalized_vec(E5_DIM, base_value),
+            e5_causal_as_cause: e5_vec.clone(),
+            e5_causal_as_effect: e5_vec,
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse: SparseVector::empty(),
             e7_code: create_normalized_vec(E7_DIM, base_value),
             e8_graph: create_normalized_vec(E8_DIM, base_value),
@@ -115,6 +118,8 @@ mod tests {
             e2_temporal_recent: vec![],
             e3_temporal_periodic: vec![],
             e4_temporal_positional: vec![],
+            e5_causal_as_cause: vec![],
+            e5_causal_as_effect: vec![],
             e5_causal: vec![],
             e6_sparse: SparseVector::empty(),
             e7_code: vec![],
@@ -131,6 +136,8 @@ mod tests {
             e2_temporal_recent: vec![1.0 / (E2_DIM as f32).sqrt(); E2_DIM],
             e3_temporal_periodic: vec![],
             e4_temporal_positional: vec![],
+            e5_causal_as_cause: vec![],
+            e5_causal_as_effect: vec![],
             e5_causal: vec![],
             e6_sparse: SparseVector::empty(),
             e7_code: vec![],
@@ -406,6 +413,8 @@ mod tests {
             e2_temporal_recent: vec![],
             e3_temporal_periodic: vec![],
             e4_temporal_positional: vec![],
+            e5_causal_as_cause: vec![],
+            e5_causal_as_effect: vec![],
             e5_causal: vec![],
             e6_sparse: SparseVector::empty(),
             e7_code: vec![],

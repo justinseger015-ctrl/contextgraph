@@ -235,7 +235,9 @@ impl RealDataEmbedder {
                 e2_temporal_recent: e2,
                 e3_temporal_periodic: e3,
                 e4_temporal_positional: e4,
-                e5_causal: e5,
+                e5_causal_as_cause: e5.clone(),
+                e5_causal_as_effect: e5,
+                e5_causal: Vec::new(), // Empty - using new dual format
                 e6_sparse: e6,
                 e7_code: e7,
                 e8_graph: e8,
@@ -415,7 +417,10 @@ mod tests {
         // Check fingerprint dimensions
         let (_, fp) = embedded.fingerprints.iter().next().unwrap();
         assert_eq!(fp.e1_semantic.len(), 1024);
-        assert_eq!(fp.e5_causal.len(), 768);
+        // E5 uses dual vectors (cause + effect) for asymmetric causal similarity
+        assert_eq!(fp.e5_causal_as_cause.len(), 768);
+        assert_eq!(fp.e5_causal_as_effect.len(), 768);
+        assert!(fp.e5_causal.is_empty(), "Legacy e5_causal should be empty");
         assert_eq!(fp.e7_code.len(), 1536);
     }
 

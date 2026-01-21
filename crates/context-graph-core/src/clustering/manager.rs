@@ -2289,12 +2289,15 @@ mod tests {
         // Use variation as seed modifier for reproducible but varied embeddings
         let seed = (variation * 1000.0) as u64;
 
+        let e5_vec = generate_domain_embedding(get_dimension(Embedder::Causal), domain, variation, seed + 400);
         SemanticFingerprint {
             e1_semantic: generate_domain_embedding(get_dimension(Embedder::Semantic), domain, variation, seed),
             e2_temporal_recent: generate_domain_embedding(get_dimension(Embedder::TemporalRecent), "all", 0.5, seed + 100),
             e3_temporal_periodic: generate_domain_embedding(get_dimension(Embedder::TemporalPeriodic), "all", 0.5, seed + 200),
             e4_temporal_positional: generate_domain_embedding(get_dimension(Embedder::TemporalPositional), "all", 0.5, seed + 300),
-            e5_causal: generate_domain_embedding(get_dimension(Embedder::Causal), domain, variation, seed + 400),
+            e5_causal_as_cause: e5_vec.clone(),
+            e5_causal_as_effect: e5_vec,
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse: SparseVector::empty(),
             e7_code: generate_domain_embedding(get_dimension(Embedder::Code), domain, variation, seed + 500),
             e8_graph: generate_domain_embedding(get_dimension(Embedder::Emotional), "all", 0.5, seed + 600),
@@ -2752,13 +2755,16 @@ mod tests {
         }
 
         let seed = (domain_idx as u64 * 1000) + (variation * 100.0) as u64;
+        let e5_vec = generate_15domain_embedding(get_dimension(Embedder::Causal), domain_idx, variation, seed + 400);
 
         SemanticFingerprint {
             e1_semantic: generate_15domain_embedding(get_dimension(Embedder::Semantic), domain_idx, variation, seed),
             e2_temporal_recent: generate_15domain_embedding(get_dimension(Embedder::TemporalRecent), 7, 0.5, seed + 100),
             e3_temporal_periodic: generate_15domain_embedding(get_dimension(Embedder::TemporalPeriodic), 7, 0.5, seed + 200),
             e4_temporal_positional: generate_15domain_embedding(get_dimension(Embedder::TemporalPositional), 7, 0.5, seed + 300),
-            e5_causal: generate_15domain_embedding(get_dimension(Embedder::Causal), domain_idx, variation, seed + 400),
+            e5_causal_as_cause: e5_vec.clone(),
+            e5_causal_as_effect: e5_vec,
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse: SparseVector::empty(),
             e7_code: generate_15domain_embedding(get_dimension(Embedder::Code), domain_idx, variation, seed + 500),
             e8_graph: generate_15domain_embedding(get_dimension(Embedder::Emotional), 7, 0.5, seed + 600),

@@ -11,7 +11,10 @@ fn test_semantic_fingerprint_zeroed() {
     assert!(fp.e2_temporal_recent.iter().all(|&v| v == 0.0));
     assert!(fp.e3_temporal_periodic.iter().all(|&v| v == 0.0));
     assert!(fp.e4_temporal_positional.iter().all(|&v| v == 0.0));
-    assert!(fp.e5_causal.iter().all(|&v| v == 0.0));
+    // E5 now uses dual vectors for asymmetric causal similarity
+    assert!(fp.e5_causal_as_cause.iter().all(|&v| v == 0.0));
+    assert!(fp.e5_causal_as_effect.iter().all(|&v| v == 0.0));
+    assert!(fp.e5_causal.is_empty()); // Legacy field is empty
     assert!(fp.e7_code.iter().all(|&v| v == 0.0));
     assert!(fp.e8_graph.iter().all(|&v| v == 0.0));
     assert!(fp.e9_hdc.iter().all(|&v| v == 0.0));
@@ -31,7 +34,10 @@ fn test_semantic_fingerprint_dimensions() {
     assert_eq!(fp.e2_temporal_recent.len(), E2_DIM);
     assert_eq!(fp.e3_temporal_periodic.len(), E3_DIM);
     assert_eq!(fp.e4_temporal_positional.len(), E4_DIM);
-    assert_eq!(fp.e5_causal.len(), E5_DIM);
+    // E5 now uses dual vectors for asymmetric causal similarity
+    assert_eq!(fp.e5_causal_as_cause.len(), E5_DIM);
+    assert_eq!(fp.e5_causal_as_effect.len(), E5_DIM);
+    assert!(fp.e5_causal.is_empty(), "Legacy e5_causal should be empty in new format");
     assert_eq!(fp.e7_code.len(), E7_DIM);
     assert_eq!(fp.e8_graph.len(), E8_DIM);
     assert_eq!(fp.e9_hdc.len(), E9_DIM);

@@ -12,12 +12,15 @@ use super::real_hnsw_tests::random_vector;
 
 /// Helper to create a minimal valid SemanticFingerprint.
 fn create_test_fingerprint() -> SemanticFingerprint {
+    let e5_vec = random_vector(768);
     SemanticFingerprint {
         e1_semantic: random_vector(1024),
         e2_temporal_recent: random_vector(512),
         e3_temporal_periodic: random_vector(512),
         e4_temporal_positional: random_vector(512),
-        e5_causal: random_vector(768),
+        e5_causal_as_cause: e5_vec.clone(),
+        e5_causal_as_effect: e5_vec,
+        e5_causal: Vec::new(), // Using new dual format
         e6_sparse: SparseVector::new(vec![100, 200], vec![0.5, 0.3]).unwrap(),
         e7_code: random_vector(1536),
         e8_graph: random_vector(384),

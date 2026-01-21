@@ -49,12 +49,15 @@ fn create_test_fingerprint_with_seed(seed: u64) -> TeleologicalFingerprint {
     };
 
     // Create SemanticFingerprint with correct fields (per semantic/fingerprint.rs)
+    let e5_vec = generate_vec(768, seed + 4);
     let semantic = SemanticFingerprint {
         e1_semantic: generate_vec(1024, seed),               // 1024D
         e2_temporal_recent: generate_vec(512, seed + 1),     // 512D
         e3_temporal_periodic: generate_vec(512, seed + 2),   // 512D
         e4_temporal_positional: generate_vec(512, seed + 3), // 512D
-        e5_causal: generate_vec(768, seed + 4),              // 768D
+        e5_causal_as_cause: e5_vec.clone(),                  // 768D (as cause)
+        e5_causal_as_effect: e5_vec,                         // 768D (as effect)
+        e5_causal: Vec::new(),                               // Empty - using new dual format
         e6_sparse: generate_sparse(seed + 5),                // Sparse
         e7_code: generate_vec(1536, seed + 6),               // 1536D
         e8_graph: generate_vec(384, seed + 7),               // 384D

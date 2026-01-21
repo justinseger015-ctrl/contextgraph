@@ -15,9 +15,30 @@
 //! Temporal embedders (E2-E4) measure TIME proximity, not TOPIC similarity.
 //! They are excluded from similarity scoring and applied as post-retrieval boosts.
 //!
+//! # Fusion Strategies (ARCH-18)
+//!
+//! When using MultiSpace or Pipeline strategies, score fusion can use:
+//!
+//! - **WeightedSum** (legacy): Simple weighted sum of similarity scores
+//! - **WeightedRRF** (default per ARCH-18): Weighted Reciprocal Rank Fusion
+//!
+//! RRF formula: `RRF_score(d) = Sum(weight_i / (rank_i + k))`
+//!
+//! RRF is more robust to score distribution differences between embedders.
+//!
+//! # ARCH-16 Compliance
+//!
+//! E7 Code embedder uses query-type-aware similarity computation:
+//! - **Code2Code**: Query is actual code syntax (e.g., "fn process<T>")
+//! - **Text2Code**: Query is natural language about code (e.g., "batch function")
+//! - **NonCode**: Query is not code-related
+//!
+//! When `query_text` is provided in search options, the query type is auto-detected.
+//!
 //! References:
 //! - [Cascading Retrieval](https://www.pinecone.io/blog/cascading-retrieval/)
 //! - [Fusion Analysis](https://dl.acm.org/doi/10.1145/3596512)
+//! - [Elastic Weighted RRF](https://www.elastic.co/blog/weighted-reciprocal-rank-fusion-rrf)
 
 use std::collections::{HashMap, HashSet};
 
@@ -25,6 +46,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use context_graph_core::error::{CoreError, CoreResult};
+use context_graph_core::fusion::{EmbedderRanking, FusionStrategy, fuse_rankings};
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions, TeleologicalSearchResult};
 use context_graph_core::types::fingerprint::{SemanticFingerprint, SparseVector};
 
@@ -44,16 +66,18 @@ use super::types::TeleologicalStoreError;
 // =============================================================================
 
 /// Semantic embedder indices that contribute to similarity scoring.
-/// E2-E4 (temporal) are EXCLUDED per AP-71 and research findings.
+/// Per constitution (ARCH-13, AP-71, AP-73, AP-74):
+/// - E2-E4 (temporal) are EXCLUDED - used for post-retrieval boosts
+/// - E12 (ColBERT) is EXCLUDED - used in Stage 3 rerank only (AP-73)
+/// - E13 (SPLADE) is EXCLUDED - used in Stage 1 recall only (AP-74)
 #[allow(dead_code)]
-const SEMANTIC_EMBEDDER_INDICES: [usize; 7] = [
+const SEMANTIC_EMBEDDER_INDICES: [usize; 6] = [
     0,  // E1 - Semantic
-    4,  // E5 - Causal
+    4,  // E5 - Causal (asymmetric per ARCH-15)
     5,  // E6 - Sparse
-    6,  // E7 - Code
+    6,  // E7 - Code (query-type aware per ARCH-16)
     9,  // E10 - Multimodal
-    10, // E11 - Entity
-    11, // E12 - Late Interaction
+    10, // E11 - Entity (with entity linking per ARCH-17)
 ];
 
 /// Default weights for semantic search profile.
@@ -211,8 +235,13 @@ impl RocksDbTeleologicalStore {
             if let Some(data) = self.get_fingerprint_raw(id)? {
                 let fp = deserialize_teleological_fingerprint(&data);
 
-                // Compute all 13 embedder scores using helper
-                let embedder_scores = self.compute_embedder_scores(query, &fp.semantic);
+                // Compute all 13 embedder scores with E7 query-type awareness (ARCH-16)
+                let code_query_type = options.effective_code_query_type();
+                let embedder_scores = self.compute_embedder_scores_with_code_query_type(
+                    query,
+                    &fp.semantic,
+                    code_query_type,
+                );
 
                 results.push(TeleologicalSearchResult::new(fp, similarity, embedder_scores));
             }
@@ -235,73 +264,151 @@ impl RocksDbTeleologicalStore {
     ///
     /// Uses weighted combination of semantic embedders (E1, E5, E7, E10).
     /// Temporal embedders (E2-E4) have weight 0.0 per AP-71.
+    ///
+    /// Supports two fusion strategies (ARCH-18):
+    /// - `WeightedSum`: Legacy weighted sum of similarity scores
+    /// - `WeightedRRF`: Weighted Reciprocal Rank Fusion (default)
     async fn search_multi_space(
         &self,
         query: &SemanticFingerprint,
         options: &TeleologicalSearchOptions,
     ) -> CoreResult<Vec<TeleologicalSearchResult>> {
-        // Step 1: Get candidates from E1 HNSW (primary dense retrieval)
+        let weights = self.resolve_weights(options);
+        let k = (options.top_k * 3).max(50);
+
+        // =========================================================================
+        // STEP 1: Get ranked results from each embedder for RRF fusion
+        // =========================================================================
+        let mut embedder_rankings: Vec<EmbedderRanking> = Vec::new();
+
+        // E1 Semantic (primary dense retrieval)
         let entry_embedder = EmbedderIndex::E1Semantic;
         let entry_index = self.index_registry.get(entry_embedder).ok_or_else(|| {
             CoreError::IndexError(format!("Index {:?} not found", entry_embedder))
         })?;
 
-        // Use larger candidate pool for multi-space scoring
-        let k = (options.top_k * 3).max(50);
-        let candidates = entry_index
+        let e1_candidates = entry_index
             .search(&query.e1_semantic, k, None)
             .map_err(|e| {
                 error!("E1 search failed: {}", e);
                 CoreError::IndexError(e.to_string())
             })?;
 
-        // Step 2: Get candidate IDs from E5 Causal (if available)
-        let mut candidate_ids: HashSet<Uuid> = candidates.iter().map(|(id, _)| *id).collect();
+        // Filter soft-deleted and convert distance to similarity
+        let e1_ranked: Vec<(Uuid, f32)> = e1_candidates
+            .into_iter()
+            .filter(|(id, _)| options.include_deleted || !self.is_soft_deleted(id))
+            .map(|(id, dist)| (id, 1.0 - dist.min(1.0)))
+            .collect();
 
+        if !e1_ranked.is_empty() {
+            embedder_rankings.push(EmbedderRanking::new("E1", weights[0], e1_ranked));
+        }
+
+        // E5 Causal (if available)
         if let Some(e5_index) = self.index_registry.get(EmbedderIndex::E5Causal) {
-            if let Ok(e5_candidates) = e5_index.search(&query.e5_causal, k, None) {
-                candidate_ids.extend(e5_candidates.iter().map(|(id, _)| *id));
+            if let Ok(e5_candidates) = e5_index.search(query.e5_active_vector(), k, None) {
+                let e5_ranked: Vec<(Uuid, f32)> = e5_candidates
+                    .into_iter()
+                    .filter(|(id, _)| options.include_deleted || !self.is_soft_deleted(id))
+                    .map(|(id, dist)| (id, 1.0 - dist.min(1.0)))
+                    .collect();
+
+                if !e5_ranked.is_empty() && weights[4] > 0.0 {
+                    embedder_rankings.push(EmbedderRanking::new("E5", weights[4], e5_ranked));
+                }
             }
         }
 
-        // Step 3: Get candidate IDs from E7 Code (if available)
+        // E7 Code (if available)
         if let Some(e7_index) = self.index_registry.get(EmbedderIndex::E7Code) {
             if let Ok(e7_candidates) = e7_index.search(&query.e7_code, k, None) {
-                candidate_ids.extend(e7_candidates.iter().map(|(id, _)| *id));
+                let e7_ranked: Vec<(Uuid, f32)> = e7_candidates
+                    .into_iter()
+                    .filter(|(id, _)| options.include_deleted || !self.is_soft_deleted(id))
+                    .map(|(id, dist)| (id, 1.0 - dist.min(1.0)))
+                    .collect();
+
+                if !e7_ranked.is_empty() && weights[6] > 0.0 {
+                    embedder_rankings.push(EmbedderRanking::new("E7", weights[6], e7_ranked));
+                }
+            }
+        }
+
+        // E10 Multimodal (if available)
+        if let Some(e10_index) = self.index_registry.get(EmbedderIndex::E10Multimodal) {
+            if let Ok(e10_candidates) = e10_index.search(&query.e10_multimodal, k, None) {
+                let e10_ranked: Vec<(Uuid, f32)> = e10_candidates
+                    .into_iter()
+                    .filter(|(id, _)| options.include_deleted || !self.is_soft_deleted(id))
+                    .map(|(id, dist)| (id, 1.0 - dist.min(1.0)))
+                    .collect();
+
+                if !e10_ranked.is_empty() && weights[9] > 0.0 {
+                    embedder_rankings.push(EmbedderRanking::new("E10", weights[9], e10_ranked));
+                }
             }
         }
 
         debug!(
-            "Multi-space search: {} unique candidates from E1+E5+E7",
-            candidate_ids.len()
+            "Multi-space search: {} embedder rankings collected, fusion_strategy={:?}",
+            embedder_rankings.len(),
+            options.fusion_strategy
         );
 
-        // Step 4: Compute weighted fusion scores for all candidates
-        let weights = self.resolve_weights(options);
-        let mut results = Vec::with_capacity(candidate_ids.len());
+        // =========================================================================
+        // STEP 2: Fuse results using configured strategy (ARCH-18)
+        // =========================================================================
+        let fused_results = fuse_rankings(
+            &embedder_rankings,
+            options.fusion_strategy,
+            options.top_k * 2, // Get extra candidates for filtering
+        );
 
-        for id in candidate_ids {
-            // Skip soft-deleted
-            if !options.include_deleted && self.is_soft_deleted(&id) {
-                continue;
-            }
+        debug!(
+            "Fusion produced {} candidates using {:?}",
+            fused_results.len(),
+            options.fusion_strategy
+        );
 
+        // =========================================================================
+        // STEP 3: Build final results with full embedder scores
+        // =========================================================================
+        let code_query_type = options.effective_code_query_type();
+        let mut results = Vec::with_capacity(fused_results.len());
+
+        for fused in fused_results {
             // Fetch full fingerprint from RocksDB
-            if let Some(data) = self.get_fingerprint_raw(id)? {
+            if let Some(data) = self.get_fingerprint_raw(fused.doc_id)? {
                 let fp = deserialize_teleological_fingerprint(&data);
 
-                // Compute all 13 embedder scores
-                let embedder_scores = self.compute_embedder_scores(query, &fp.semantic);
+                // Compute all 13 embedder scores with E7 query-type awareness (ARCH-16)
+                let embedder_scores = self.compute_embedder_scores_with_code_query_type(
+                    query,
+                    &fp.semantic,
+                    code_query_type,
+                );
 
-                // Compute weighted fusion (semantic embedders only)
-                let fusion_score = compute_semantic_fusion(&embedder_scores, &weights);
+                // For WeightedSum strategy, use the legacy score computation
+                // For WeightedRRF, the fused_score is already the RRF score
+                let final_score = match options.fusion_strategy {
+                    FusionStrategy::WeightedSum => {
+                        // Use direct weighted sum of computed embedder scores
+                        compute_semantic_fusion(&embedder_scores, &weights)
+                    }
+                    FusionStrategy::WeightedRRF => {
+                        // Use RRF score from fusion, normalized to [0, 1] range
+                        // RRF scores are typically small (< 0.1), so we normalize
+                        fused.fused_score * 10.0 // Scale for readability
+                    }
+                };
 
                 // Apply min_similarity filter
-                if fusion_score < options.min_similarity {
+                if final_score < options.min_similarity {
                     continue;
                 }
 
-                results.push(TeleologicalSearchResult::new(fp, fusion_score, embedder_scores));
+                results.push(TeleologicalSearchResult::new(fp, final_score, embedder_scores));
             }
         }
 
@@ -315,7 +422,11 @@ impl RocksDbTeleologicalStore {
         // Truncate to top_k
         results.truncate(options.top_k);
 
-        debug!("Multi-space search returned {} results", results.len());
+        debug!(
+            "Multi-space search returned {} results with {:?} fusion",
+            results.len(),
+            options.fusion_strategy
+        );
         Ok(results)
     }
 
@@ -388,7 +499,7 @@ impl RocksDbTeleologicalStore {
 
         // Also add candidates from E5 Causal for better recall on reasoning queries
         if let Some(e5_index) = self.index_registry.get(EmbedderIndex::E5Causal) {
-            if let Ok(e5_candidates) = e5_index.search(&query.e5_causal, recall_k / 2, None) {
+            if let Ok(e5_candidates) = e5_index.search(query.e5_active_vector(), recall_k / 2, None) {
                 let e5_count = e5_candidates.len();
                 candidate_ids.extend(e5_candidates.into_iter().map(|(id, _)| id));
                 debug!("Stage 1: E5 Causal returned {} additional candidates", e5_count);
@@ -417,9 +528,14 @@ impl RocksDbTeleologicalStore {
         // =========================================================================
         // STAGE 2: MULTI-SPACE SCORING (Weighted fusion of semantic embedders)
         // Per AP-73: Temporal (E2-E4) MUST NOT be used in similarity scoring
+        // Per ARCH-16: E7 Code uses query-type-aware similarity
+        // Per ARCH-18: Supports both WeightedSum and WeightedRRF fusion strategies
         // =========================================================================
         let weights = self.resolve_weights(options);
-        let mut scored_candidates: Vec<(Uuid, f32, [f32; 13], SemanticFingerprint)> =
+        let code_query_type = options.effective_code_query_type();
+
+        // First, compute embedder scores for all candidates
+        let mut candidate_data: Vec<(Uuid, [f32; 13], SemanticFingerprint)> =
             Vec::with_capacity(candidate_ids.len());
 
         for id in candidate_ids {
@@ -432,18 +548,81 @@ impl RocksDbTeleologicalStore {
             if let Some(data) = self.get_fingerprint_raw(id)? {
                 let fp = deserialize_teleological_fingerprint(&data);
 
-                // Compute all 13 embedder scores (includes E6 sparse similarity)
-                let embedder_scores = self.compute_embedder_scores(query, &fp.semantic);
+                // Compute all 13 embedder scores with E7 query-type awareness (ARCH-16)
+                let embedder_scores = self.compute_embedder_scores_with_code_query_type(
+                    query,
+                    &fp.semantic,
+                    code_query_type,
+                );
 
-                // Compute weighted fusion (semantic embedders only, temporal=0)
-                let fusion_score = compute_semantic_fusion(&embedder_scores, &weights);
-
-                // Apply min_similarity filter at Stage 2
-                if fusion_score >= options.min_similarity {
-                    scored_candidates.push((id, fusion_score, embedder_scores, fp.semantic.clone()));
-                }
+                candidate_data.push((id, embedder_scores, fp.semantic.clone()));
             }
         }
+
+        // Build scored candidates based on fusion strategy (ARCH-18)
+        let mut scored_candidates: Vec<(Uuid, f32, [f32; 13], SemanticFingerprint)> =
+            match options.fusion_strategy {
+                FusionStrategy::WeightedSum => {
+                    // Legacy: Direct weighted sum of embedder scores
+                    candidate_data
+                        .into_iter()
+                        .map(|(id, scores, semantic)| {
+                            let fusion_score = compute_semantic_fusion(&scores, &weights);
+                            (id, fusion_score, scores, semantic)
+                        })
+                        .filter(|(_, score, _, _)| *score >= options.min_similarity)
+                        .collect()
+                }
+                FusionStrategy::WeightedRRF => {
+                    // Build per-embedder rankings from candidates
+                    let semantic_indices = [
+                        (0, "E1", weights[0]),   // E1 Semantic
+                        (4, "E5", weights[4]),   // E5 Causal
+                        (6, "E7", weights[6]),   // E7 Code
+                        (9, "E10", weights[9]),  // E10 Multimodal
+                    ];
+
+                    let mut embedder_rankings: Vec<EmbedderRanking> = Vec::new();
+
+                    for (idx, name, weight) in semantic_indices {
+                        if weight <= 0.0 {
+                            continue;
+                        }
+
+                        // Sort candidates by this embedder's score
+                        let mut ranked: Vec<(Uuid, f32)> = candidate_data
+                            .iter()
+                            .map(|(id, scores, _)| (*id, scores[idx]))
+                            .collect();
+                        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+                        if !ranked.is_empty() {
+                            embedder_rankings.push(EmbedderRanking::new(name, weight, ranked));
+                        }
+                    }
+
+                    // Fuse using RRF
+                    let fused = fuse_rankings(&embedder_rankings, FusionStrategy::WeightedRRF, stage2_k * 2);
+
+                    // Map back to full candidate data
+                    let candidate_map: HashMap<Uuid, ([f32; 13], SemanticFingerprint)> = candidate_data
+                        .into_iter()
+                        .map(|(id, scores, semantic)| (id, (scores, semantic)))
+                        .collect();
+
+                    fused
+                        .into_iter()
+                        .filter_map(|f| {
+                            candidate_map.get(&f.doc_id).map(|(scores, semantic)| {
+                                // Scale RRF score for readability (RRF scores are typically small)
+                                let scaled_score = f.fused_score * 10.0;
+                                (f.doc_id, scaled_score, *scores, semantic.clone())
+                            })
+                        })
+                        .filter(|(_, score, _, _)| *score >= options.min_similarity)
+                        .collect()
+                }
+            };
 
         // Sort by fusion score descending
         scored_candidates.sort_by(|a, b| {
@@ -454,8 +633,9 @@ impl RocksDbTeleologicalStore {
         scored_candidates.truncate(stage2_k);
 
         info!(
-            "Stage 2 complete: {} candidates after weighted fusion scoring",
-            scored_candidates.len()
+            "Stage 2 complete: {} candidates after {:?} fusion scoring",
+            scored_candidates.len(),
+            options.fusion_strategy
         );
 
         if scored_candidates.is_empty() {

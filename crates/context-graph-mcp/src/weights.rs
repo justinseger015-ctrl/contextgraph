@@ -50,10 +50,15 @@ use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
 /// - **Special Profiles**: temporal_navigation (for explicit time-based queries)
 /// - **Category-Weighted**: category_weighted (constitution-compliant)
 ///
-/// E12 (Late Interaction) and E13 (SPLADE) have low weights in aggregation
-/// because they're primarily used in pipeline stages:
-/// - E13: Stage 1 recall (inverted index)
-/// - E12: Stage 3 re-ranking (MaxSim)
+/// # IMPORTANT: Pipeline-Stage Embedders (E12, E13) - per ARCH-13
+///
+/// E12 (Late Interaction) and E13 (SPLADE) have weight 0.0 in ALL semantic scoring profiles
+/// because they're used in specific pipeline stages, NOT for similarity scoring:
+/// - E13: Stage 1 recall ONLY (inverted index) - per AP-74
+/// - E12: Stage 3 re-ranking ONLY (MaxSim) - per AP-73
+///
+/// This ensures these embedders contribute through their proper roles in the pipeline,
+/// not through score fusion which would misuse their specialized capabilities.
 pub const WEIGHT_PROFILES: &[(&str, [f32; NUM_EMBEDDERS])] = &[
     // =========================================================================
     // SEMANTIC PROFILES - Temporal (E2-E4) = 0.0 per AP-71
@@ -166,28 +171,29 @@ pub const WEIGHT_PROFILES: &[(&str, [f32; NUM_EMBEDDERS])] = &[
         ],
     ),
 
-    // Category-Weighted: Constitution-compliant weights per CLAUDE.md
-    // SEMANTIC (E1,E5,E6,E7,E10,E12,E13): weight 1.0
+    // Category-Weighted: Constitution-compliant weights per CLAUDE.md and ARCH-13
+    // SEMANTIC (E1,E5,E6,E7,E10): weight 1.0
     // TEMPORAL (E2,E3,E4): weight 0.0 per AP-60
     // RELATIONAL (E8,E11): weight 0.5
     // STRUCTURAL (E9): weight 0.5
-    // max_weighted_agreement = 8.5
+    // PIPELINE-STAGE (E12,E13): weight 0.0 per ARCH-13 (used in pipeline stages, not scoring)
+    // max_weighted_agreement = 6.5 (5*1.0 + 3*0.5 = 6.5)
     (
         "category_weighted",
         [
-            1.0 / 8.5,   // E1_Semantic (SEMANTIC)
-            0.0,         // E2_Temporal_Recent (TEMPORAL - excluded)
-            0.0,         // E3_Temporal_Periodic (TEMPORAL - excluded)
-            0.0,         // E4_Temporal_Positional (TEMPORAL - excluded)
-            1.0 / 8.5,   // E5_Causal (SEMANTIC)
-            1.0 / 8.5,   // E6_Sparse (SEMANTIC)
-            1.0 / 8.5,   // E7_Code (SEMANTIC)
-            0.5 / 8.5,   // E8_Graph (RELATIONAL)
-            0.5 / 8.5,   // E9_HDC (STRUCTURAL)
-            1.0 / 8.5,   // E10_Multimodal (SEMANTIC)
-            0.5 / 8.5,   // E11_Entity (RELATIONAL)
-            1.0 / 8.5,   // E12_Late_Interaction (SEMANTIC)
-            1.0 / 8.5,   // E13_SPLADE (SEMANTIC)
+            1.0 / 6.5,   // E1_Semantic (SEMANTIC)
+            0.0,         // E2_Temporal_Recent (TEMPORAL - excluded per AP-60)
+            0.0,         // E3_Temporal_Periodic (TEMPORAL - excluded per AP-60)
+            0.0,         // E4_Temporal_Positional (TEMPORAL - excluded per AP-60)
+            1.0 / 6.5,   // E5_Causal (SEMANTIC)
+            1.0 / 6.5,   // E6_Sparse (SEMANTIC)
+            1.0 / 6.5,   // E7_Code (SEMANTIC)
+            0.5 / 6.5,   // E8_Graph (RELATIONAL)
+            0.5 / 6.5,   // E9_HDC (STRUCTURAL)
+            1.0 / 6.5,   // E10_Multimodal (SEMANTIC)
+            0.5 / 6.5,   // E11_Entity (RELATIONAL)
+            0.0,         // E12_Late_Interaction (PIPELINE-STAGE - rerank only per AP-73)
+            0.0,         // E13_SPLADE (PIPELINE-STAGE - recall only per AP-74)
         ],
     ),
 
@@ -439,7 +445,7 @@ mod tests {
         // Per AP-71: Temporal embedders (E2-E4) MUST NOT be used in similarity scoring
         // All semantic search profiles should have E2-E4 = 0.0
 
-        let semantic_profiles = ["semantic_search", "causal_reasoning", "code_search", "fact_checking"];
+        let semantic_profiles = ["semantic_search", "causal_reasoning", "code_search", "fact_checking", "category_weighted"];
 
         for profile_name in semantic_profiles {
             let weights = get_weight_profile(profile_name).expect(&format!(
@@ -471,11 +477,48 @@ mod tests {
     }
 
     #[test]
+    fn test_pipeline_stage_embedders_excluded_from_semantic_profiles() {
+        // Per ARCH-13: E12 (rerank-only) and E13 (recall-only) MUST be 0.0 in semantic scoring profiles
+        // E12 is used in Stage 3 re-ranking (ColBERT MaxSim) per AP-73
+        // E13 is used in Stage 1 recall (SPLADE inverted index) per AP-74
+
+        let semantic_profiles = ["semantic_search", "causal_reasoning", "code_search", "fact_checking", "category_weighted"];
+
+        for profile_name in semantic_profiles {
+            let weights = get_weight_profile(profile_name).expect(&format!(
+                "Profile '{}' should exist",
+                profile_name
+            ));
+
+            assert_eq!(
+                weights[11], 0.0,
+                "E12 (late interaction) should be 0.0 in '{}' profile per ARCH-13 (rerank-only)",
+                profile_name
+            );
+            assert_eq!(
+                weights[12], 0.0,
+                "E13 (SPLADE) should be 0.0 in '{}' profile per ARCH-13 (recall-only)",
+                profile_name
+            );
+
+            println!(
+                "[VERIFIED] Profile '{}' has pipeline-stage embedders (E12-E13) = 0.0 per ARCH-13",
+                profile_name
+            );
+        }
+    }
+
+    #[test]
     fn test_category_weighted_profile() {
-        // Per constitution: SEMANTIC=1.0, TEMPORAL=0.0, RELATIONAL=0.5, STRUCTURAL=0.5
+        // Per constitution and ARCH-13:
+        // SEMANTIC (E1,E5,E6,E7,E10) = 1.0
+        // TEMPORAL (E2-E4) = 0.0 per AP-60
+        // RELATIONAL (E8,E11) = 0.5
+        // STRUCTURAL (E9) = 0.5
+        // PIPELINE-STAGE (E12,E13) = 0.0 per ARCH-13
         let weights = get_weight_profile("category_weighted").expect("category_weighted should exist");
 
-        // Temporal (E2-E4) = 0.0
+        // Temporal (E2-E4) = 0.0 per AP-60
         assert_eq!(weights[1], 0.0, "E2 should be 0.0 (TEMPORAL)");
         assert_eq!(weights[2], 0.0, "E3 should be 0.0 (TEMPORAL)");
         assert_eq!(weights[3], 0.0, "E4 should be 0.0 (TEMPORAL)");
@@ -483,6 +526,7 @@ mod tests {
         // SEMANTIC embedders should have non-zero weights
         assert!(weights[0] > 0.0, "E1 should have non-zero weight (SEMANTIC)");
         assert!(weights[4] > 0.0, "E5 should have non-zero weight (SEMANTIC)");
+        assert!(weights[5] > 0.0, "E6 should have non-zero weight (SEMANTIC)");
         assert!(weights[6] > 0.0, "E7 should have non-zero weight (SEMANTIC)");
         assert!(weights[9] > 0.0, "E10 should have non-zero weight (SEMANTIC)");
 
@@ -490,7 +534,14 @@ mod tests {
         assert!(weights[7] > 0.0, "E8 should have non-zero weight (RELATIONAL)");
         assert!(weights[10] > 0.0, "E11 should have non-zero weight (RELATIONAL)");
 
-        println!("[VERIFIED] category_weighted profile follows constitution");
+        // STRUCTURAL embedder
+        assert!(weights[8] > 0.0, "E9 should have non-zero weight (STRUCTURAL)");
+
+        // Pipeline-stage embedders (E12, E13) = 0.0 per ARCH-13
+        assert_eq!(weights[11], 0.0, "E12 should be 0.0 (rerank-only per ARCH-13, AP-73)");
+        assert_eq!(weights[12], 0.0, "E13 should be 0.0 (recall-only per ARCH-13, AP-74)");
+
+        println!("[VERIFIED] category_weighted profile follows constitution and ARCH-13");
     }
 
     #[test]

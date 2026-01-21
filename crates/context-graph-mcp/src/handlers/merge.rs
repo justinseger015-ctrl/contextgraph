@@ -497,8 +497,18 @@ impl Handlers {
                 .map(|f| &f.semantic.e4_temporal_positional)
                 .collect(),
         );
-        let e5_causal = Self::average_dense_vectors(
-            fingerprints.iter().map(|f| &f.semantic.e5_causal).collect(),
+        // For E5, average both cause and effect vectors separately
+        let e5_causal_as_cause = Self::average_dense_slices(
+            fingerprints
+                .iter()
+                .map(|f| f.semantic.get_e5_as_cause())
+                .collect(),
+        );
+        let e5_causal_as_effect = Self::average_dense_slices(
+            fingerprints
+                .iter()
+                .map(|f| f.semantic.get_e5_as_effect())
+                .collect(),
         );
         let e7_code =
             Self::average_dense_vectors(fingerprints.iter().map(|f| &f.semantic.e7_code).collect());
@@ -542,7 +552,9 @@ impl Handlers {
             e2_temporal_recent,
             e3_temporal_periodic,
             e4_temporal_positional,
-            e5_causal,
+            e5_causal_as_cause,
+            e5_causal_as_effect,
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse,
             e7_code,
             e8_graph,
@@ -589,8 +601,18 @@ impl Handlers {
                 .map(|f| &f.semantic.e4_temporal_positional)
                 .collect(),
         );
-        let e5_causal = Self::intersection_dense_vectors(
-            fingerprints.iter().map(|f| &f.semantic.e5_causal).collect(),
+        // For E5, intersection both cause and effect vectors separately
+        let e5_causal_as_cause = Self::intersection_dense_slices(
+            fingerprints
+                .iter()
+                .map(|f| f.semantic.get_e5_as_cause())
+                .collect(),
+        );
+        let e5_causal_as_effect = Self::intersection_dense_slices(
+            fingerprints
+                .iter()
+                .map(|f| f.semantic.get_e5_as_effect())
+                .collect(),
         );
         let e7_code = Self::intersection_dense_vectors(
             fingerprints.iter().map(|f| &f.semantic.e7_code).collect(),
@@ -652,7 +674,9 @@ impl Handlers {
             e2_temporal_recent,
             e3_temporal_periodic,
             e4_temporal_positional,
-            e5_causal,
+            e5_causal_as_cause,
+            e5_causal_as_effect,
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse,
             e7_code,
             e8_graph,
@@ -710,8 +734,19 @@ impl Handlers {
                 .collect(),
             &weights,
         );
-        let e5_causal = Self::weighted_average_dense_vectors(
-            fingerprints.iter().map(|f| &f.semantic.e5_causal).collect(),
+        // For E5, weighted average both cause and effect vectors separately
+        let e5_causal_as_cause = Self::weighted_average_dense_slices(
+            fingerprints
+                .iter()
+                .map(|f| f.semantic.get_e5_as_cause())
+                .collect(),
+            &weights,
+        );
+        let e5_causal_as_effect = Self::weighted_average_dense_slices(
+            fingerprints
+                .iter()
+                .map(|f| f.semantic.get_e5_as_effect())
+                .collect(),
             &weights,
         );
         let e7_code = Self::weighted_average_dense_vectors(
@@ -771,7 +806,9 @@ impl Handlers {
             e2_temporal_recent,
             e3_temporal_periodic,
             e4_temporal_positional,
-            e5_causal,
+            e5_causal_as_cause,
+            e5_causal_as_effect,
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse,
             e7_code,
             e8_graph,
@@ -785,16 +822,21 @@ impl Handlers {
 
     /// Average multiple dense vectors element-wise and normalize.
     fn average_dense_vectors(vectors: Vec<&Vec<f32>>) -> Vec<f32> {
-        if vectors.is_empty() {
+        Self::average_dense_slices(vectors.iter().map(|v| v.as_slice()).collect())
+    }
+
+    /// Average multiple dense slices element-wise and normalize.
+    fn average_dense_slices(slices: Vec<&[f32]>) -> Vec<f32> {
+        if slices.is_empty() {
             return Vec::new();
         }
 
-        let dim = vectors[0].len();
-        let n = vectors.len() as f32;
+        let dim = slices[0].len();
+        let n = slices.len() as f32;
         let mut result = vec![0.0f32; dim];
 
-        for vec in &vectors {
-            for (i, &val) in vec.iter().enumerate() {
+        for slice in &slices {
+            for (i, &val) in slice.iter().enumerate() {
                 if i < dim {
                     result[i] += val / n;
                 }
@@ -807,23 +849,28 @@ impl Handlers {
 
     /// Intersection of dense vectors: keep only dimensions significant in ALL.
     fn intersection_dense_vectors(vectors: Vec<&Vec<f32>>) -> Vec<f32> {
-        if vectors.is_empty() {
+        Self::intersection_dense_slices(vectors.iter().map(|v| v.as_slice()).collect())
+    }
+
+    /// Intersection of dense slices: keep only dimensions significant in ALL.
+    fn intersection_dense_slices(slices: Vec<&[f32]>) -> Vec<f32> {
+        if slices.is_empty() {
             return Vec::new();
         }
 
-        let dim = vectors[0].len();
-        let n = vectors.len() as f32;
+        let dim = slices[0].len();
+        let n = slices.len() as f32;
         let mut result = vec![0.0f32; dim];
 
         for (i, result_val) in result.iter_mut().enumerate().take(dim) {
-            let all_significant = vectors.iter().all(|v| {
+            let all_significant = slices.iter().all(|v| {
                 v.get(i)
                     .map(|&x| x.abs() >= INTERSECTION_THRESHOLD)
                     .unwrap_or(false)
             });
 
             if all_significant {
-                let sum: f32 = vectors.iter().filter_map(|v| v.get(i)).sum();
+                let sum: f32 = slices.iter().filter_map(|v| v.get(i)).sum();
                 *result_val = sum / n;
             }
         }
@@ -834,15 +881,20 @@ impl Handlers {
 
     /// Weighted average of dense vectors.
     fn weighted_average_dense_vectors(vectors: Vec<&Vec<f32>>, weights: &[f32]) -> Vec<f32> {
-        if vectors.is_empty() {
+        Self::weighted_average_dense_slices(vectors.iter().map(|v| v.as_slice()).collect(), weights)
+    }
+
+    /// Weighted average of dense slices.
+    fn weighted_average_dense_slices(slices: Vec<&[f32]>, weights: &[f32]) -> Vec<f32> {
+        if slices.is_empty() {
             return Vec::new();
         }
 
-        let dim = vectors[0].len();
+        let dim = slices[0].len();
         let mut result = vec![0.0f32; dim];
 
-        for (vec, &weight) in vectors.iter().zip(weights.iter()) {
-            for (i, &val) in vec.iter().enumerate() {
+        for (slice, &weight) in slices.iter().zip(weights.iter()) {
+            for (i, &val) in slice.iter().enumerate() {
                 if i < dim {
                     result[i] += val * weight;
                 }

@@ -179,7 +179,9 @@ impl DatasetGenerator {
             e2_temporal_recent: embeddings.e2,
             e3_temporal_periodic: embeddings.e3,
             e4_temporal_positional: embeddings.e4,
-            e5_causal: embeddings.e5,
+            e5_causal_as_cause: embeddings.e5.clone(),
+            e5_causal_as_effect: embeddings.e5,
+            e5_causal: Vec::new(), // Empty - using new dual format
             e6_sparse: self.generate_sparse(E6_SPARSE_VOCAB, self.config.sparse_entries_e6),
             e7_code: embeddings.e7,
             e8_graph: embeddings.e8,
@@ -351,7 +353,10 @@ mod tests {
             assert_eq!(fp.e2_temporal_recent.len(), E2_DIM);
             assert_eq!(fp.e3_temporal_periodic.len(), E3_DIM);
             assert_eq!(fp.e4_temporal_positional.len(), E4_DIM);
-            assert_eq!(fp.e5_causal.len(), E5_DIM);
+            // E5 uses dual vectors (cause + effect) for asymmetric causal similarity
+            assert_eq!(fp.e5_causal_as_cause.len(), E5_DIM);
+            assert_eq!(fp.e5_causal_as_effect.len(), E5_DIM);
+            assert!(fp.e5_causal.is_empty(), "Legacy e5_causal should be empty");
             assert_eq!(fp.e7_code.len(), E7_DIM);
             assert_eq!(fp.e8_graph.len(), E8_DIM);
             assert_eq!(fp.e9_hdc.len(), E9_DIM);

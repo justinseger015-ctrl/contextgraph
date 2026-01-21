@@ -231,13 +231,20 @@ async fn test_inject_context_produces_all_13_embeddings_with_gpu() {
     );
     assert_eq!(e4_dim, E4_DIM, "E4 must be {}D", E4_DIM);
 
-    // E5: Causal (768D)
-    let e5_dim = stored_fp.semantic.e5_causal.len();
+    // E5: Causal (768D) - uses dual vectors for asymmetric similarity
+    let e5_cause_dim = stored_fp.semantic.e5_causal_as_cause.len();
+    let e5_effect_dim = stored_fp.semantic.e5_causal_as_effect.len();
     println!(
-        "  E5  (Causal):           {} dims (expected {})",
-        e5_dim, E5_DIM
+        "  E5  (Causal cause):     {} dims (expected {})",
+        e5_cause_dim, E5_DIM
     );
-    assert_eq!(e5_dim, E5_DIM, "E5 must be {}D", E5_DIM);
+    println!(
+        "  E5  (Causal effect):    {} dims (expected {})",
+        e5_effect_dim, E5_DIM
+    );
+    assert_eq!(e5_cause_dim, E5_DIM, "E5 cause must be {}D", E5_DIM);
+    assert_eq!(e5_effect_dim, E5_DIM, "E5 effect must be {}D", E5_DIM);
+    assert!(stored_fp.semantic.e5_causal.is_empty(), "Legacy e5_causal should be empty");
 
     // E6: Sparse (variable active, 30522 vocab)
     let e6_active = stored_fp.semantic.e6_sparse.indices.len();
@@ -368,14 +375,21 @@ async fn test_gpu_embeddings_are_nonzero() {
         e1_norm
     );
 
-    // E5: Causal - should have values for content with causal language
-    let e5_nonzero = has_nonzero_values(&stored_fp.semantic.e5_causal);
-    let e5_norm = l2_norm(&stored_fp.semantic.e5_causal);
+    // E5: Causal - uses dual vectors for asymmetric similarity
+    let e5_cause_nonzero = has_nonzero_values(&stored_fp.semantic.e5_causal_as_cause);
+    let e5_effect_nonzero = has_nonzero_values(&stored_fp.semantic.e5_causal_as_effect);
+    let e5_cause_norm = l2_norm(&stored_fp.semantic.e5_causal_as_cause);
+    let e5_effect_norm = l2_norm(&stored_fp.semantic.e5_causal_as_effect);
     println!(
-        "  E5  (Causal):      non-zero={}, L2 norm={:.6}",
-        e5_nonzero, e5_norm
+        "  E5  (Causal cause):  non-zero={}, L2 norm={:.6}",
+        e5_cause_nonzero, e5_cause_norm
     );
-    assert!(e5_nonzero, "E5 (Causal) MUST have non-zero values");
+    println!(
+        "  E5  (Causal effect): non-zero={}, L2 norm={:.6}",
+        e5_effect_nonzero, e5_effect_norm
+    );
+    assert!(e5_cause_nonzero, "E5 (Causal cause) MUST have non-zero values");
+    assert!(e5_effect_nonzero, "E5 (Causal effect) MUST have non-zero values");
 
     // E7: Code - should work on technical content
     let e7_nonzero = has_nonzero_values(&stored_fp.semantic.e7_code);
@@ -419,7 +433,8 @@ async fn test_gpu_embeddings_are_nonzero() {
         ("E2", &stored_fp.semantic.e2_temporal_recent),
         ("E3", &stored_fp.semantic.e3_temporal_periodic),
         ("E4", &stored_fp.semantic.e4_temporal_positional),
-        ("E5", &stored_fp.semantic.e5_causal),
+        ("E5 cause", &stored_fp.semantic.e5_causal_as_cause),
+        ("E5 effect", &stored_fp.semantic.e5_causal_as_effect),
         ("E7", &stored_fp.semantic.e7_code),
         ("E8", &stored_fp.semantic.e8_graph),
         ("E9", &stored_fp.semantic.e9_hdc),
@@ -438,10 +453,10 @@ async fn test_gpu_embeddings_are_nonzero() {
         dense_embeddings.len()
     );
 
-    // At minimum, semantic embeddings (E1, E5, E7, E8, E10, E11) must be non-zero
+    // At minimum, semantic embeddings (E1, E5 cause, E5 effect, E7, E8, E10, E11) must be non-zero
     assert!(
-        nonzero_count >= 6,
-        "At least 6 semantic embeddings must be non-zero. Got {}. Likely stub data!",
+        nonzero_count >= 7,
+        "At least 7 semantic embeddings must be non-zero. Got {}. Likely stub data!",
         nonzero_count
     );
 

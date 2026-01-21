@@ -9,14 +9,28 @@
 //!   Temporal embedders (E2-E4) are excluded from scoring per research findings.
 //! - **Pipeline**: Full 3-stage retrieval: Recall → Score → Re-rank.
 //!
+//! # Fusion Strategies (ARCH-18)
+//!
+//! When using MultiSpace or Pipeline strategies, score fusion can use:
+//!
+//! - **WeightedSum** (legacy): Simple weighted sum of similarity scores
+//! - **WeightedRRF** (default per ARCH-18): Weighted Reciprocal Rank Fusion
+//!
+//! RRF formula: `RRF_score(d) = Sum(weight_i / (rank_i + k))`
+//!
+//! RRF is more robust to score distribution differences between embedders.
+//!
 //! # Research References
 //!
 //! - [Cascading Retrieval](https://www.pinecone.io/blog/cascading-retrieval/) - 48% improvement
 //! - [Fusion Analysis](https://dl.acm.org/doi/10.1145/3596512) - Convex combination beats RRF
+//! - [Elastic Weighted RRF](https://www.elastic.co/blog/weighted-reciprocal-rank-fusion-rrf)
 //! - [ColBERT Late Interaction](https://weaviate.io/blog/late-interaction-overview)
 
 use serde::{Deserialize, Serialize};
 
+use crate::code::CodeQueryType;
+use crate::fusion::FusionStrategy;
 use crate::types::fingerprint::SemanticFingerprint;
 
 /// Search strategy for semantic queries.
@@ -161,6 +175,47 @@ pub struct TeleologicalSearchOptions {
     /// Default: `MinMax`.
     #[serde(default)]
     pub normalization: NormalizationStrategyOption,
+
+    /// Fusion strategy for combining multi-embedder results (ARCH-18).
+    ///
+    /// - `WeightedSum`: Legacy weighted sum of similarity scores
+    /// - `WeightedRRF`: Weighted Reciprocal Rank Fusion (default per ARCH-18)
+    ///
+    /// RRF formula: `RRF_score(d) = Sum(weight_i / (rank_i + k))`
+    ///
+    /// RRF is recommended because it:
+    /// - Preserves individual embedder rankings
+    /// - Is robust to score distribution differences between embedders
+    /// - Works well with varying numbers of results per embedder
+    ///
+    /// Default: `WeightedRRF` per ARCH-18.
+    #[serde(default)]
+    pub fusion_strategy: FusionStrategy,
+
+    // =========================================================================
+    // Code Query Type Detection (ARCH-16)
+    // =========================================================================
+
+    /// Original query text for code query type detection.
+    ///
+    /// When provided, enables E7 Code embedder similarity adjustment
+    /// based on detected query type (Code2Code, Text2Code, NonCode).
+    ///
+    /// Per ARCH-16: E7 Code MUST detect query type and use appropriate
+    /// similarity computation.
+    #[serde(default)]
+    pub query_text: Option<String>,
+
+    /// Pre-computed code query type.
+    ///
+    /// If `None` and `query_text` is provided, the type will be
+    /// auto-detected. If explicitly set, skips auto-detection.
+    ///
+    /// - `Code2Code`: Query is actual code syntax (e.g., "fn process<T>")
+    /// - `Text2Code`: Query is natural language about code (e.g., "batch function")
+    /// - `NonCode`: Query is not code-related
+    #[serde(default)]
+    pub code_query_type: Option<CodeQueryType>,
 }
 
 impl Default for TeleologicalSearchOptions {
@@ -178,6 +233,11 @@ impl Default for TeleologicalSearchOptions {
             recency_boost: 0.0,
             enable_rerank: false,
             normalization: NormalizationStrategyOption::default(),
+            // Fusion strategy (ARCH-18) - WeightedRRF by default
+            fusion_strategy: FusionStrategy::default(),
+            // Code query type detection (ARCH-16)
+            query_text: None,
+            code_query_type: None,
         }
     }
 }
@@ -316,6 +376,97 @@ impl TeleologicalSearchOptions {
         self.normalization = strategy;
         self
     }
+
+    /// Set the fusion strategy for combining multi-embedder results (ARCH-18).
+    ///
+    /// # Arguments
+    ///
+    /// * `strategy` - Fusion strategy (`WeightedSum` or `WeightedRRF`)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use context_graph_core::traits::TeleologicalSearchOptions;
+    /// use context_graph_core::fusion::FusionStrategy;
+    ///
+    /// let opts = TeleologicalSearchOptions::quick(10)
+    ///     .with_fusion_strategy(FusionStrategy::WeightedRRF);
+    /// ```
+    #[inline]
+    pub fn with_fusion_strategy(mut self, strategy: FusionStrategy) -> Self {
+        self.fusion_strategy = strategy;
+        self
+    }
+
+    // =========================================================================
+    // Code Query Type Builder Methods (ARCH-16)
+    // =========================================================================
+
+    /// Set the query text for E7 Code query type detection.
+    ///
+    /// When provided, enables automatic detection of whether the query is:
+    /// - Code2Code: Actual code syntax (e.g., "fn process<T>()")
+    /// - Text2Code: Natural language about code (e.g., "batch processing function")
+    /// - NonCode: Not code-related
+    ///
+    /// E7 similarity computation is adjusted based on detected type.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The original query text
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use context_graph_core::traits::TeleologicalSearchOptions;
+    ///
+    /// let opts = TeleologicalSearchOptions::quick(10)
+    ///     .with_query_text("impl Iterator for Counter");
+    /// ```
+    #[inline]
+    pub fn with_query_text(mut self, query: &str) -> Self {
+        self.query_text = Some(query.to_string());
+        self
+    }
+
+    /// Explicitly set the code query type.
+    ///
+    /// Use this to override auto-detection when you know the query type.
+    ///
+    /// # Arguments
+    ///
+    /// * `query_type` - The code query type
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use context_graph_core::traits::TeleologicalSearchOptions;
+    /// use context_graph_core::code::CodeQueryType;
+    ///
+    /// let opts = TeleologicalSearchOptions::quick(10)
+    ///     .with_code_query_type(CodeQueryType::Code2Code);
+    /// ```
+    #[inline]
+    pub fn with_code_query_type(mut self, query_type: CodeQueryType) -> Self {
+        self.code_query_type = Some(query_type);
+        self
+    }
+
+    /// Get the effective code query type, detecting if necessary.
+    ///
+    /// Returns:
+    /// - The explicitly set `code_query_type` if present
+    /// - Auto-detected type from `query_text` if present
+    /// - `None` if neither is available
+    pub fn effective_code_query_type(&self) -> Option<CodeQueryType> {
+        if let Some(explicit) = self.code_query_type {
+            return Some(explicit);
+        }
+        if let Some(ref text) = self.query_text {
+            return Some(crate::code::detect_code_query_type(text));
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -329,6 +480,8 @@ mod tests {
         assert_eq!(opts.min_similarity, 0.0);
         assert!(!opts.include_deleted);
         assert!(opts.embedder_indices.is_empty());
+        // ARCH-18: Default fusion strategy should be WeightedRRF
+        assert_eq!(opts.fusion_strategy, crate::fusion::FusionStrategy::WeightedRRF);
     }
 
     #[test]
@@ -346,5 +499,21 @@ mod tests {
         assert_eq!(opts.top_k, 20);
         assert_eq!(opts.min_similarity, 0.5);
         assert_eq!(opts.embedder_indices, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_search_options_fusion_strategy() {
+        // Test default is WeightedRRF per ARCH-18
+        let opts = TeleologicalSearchOptions::default();
+        assert_eq!(opts.fusion_strategy, crate::fusion::FusionStrategy::WeightedRRF);
+
+        // Test builder method
+        let opts = TeleologicalSearchOptions::quick(10)
+            .with_fusion_strategy(crate::fusion::FusionStrategy::WeightedSum);
+        assert_eq!(opts.fusion_strategy, crate::fusion::FusionStrategy::WeightedSum);
+
+        let opts = TeleologicalSearchOptions::quick(10)
+            .with_fusion_strategy(crate::fusion::FusionStrategy::WeightedRRF);
+        assert_eq!(opts.fusion_strategy, crate::fusion::FusionStrategy::WeightedRRF);
     }
 }

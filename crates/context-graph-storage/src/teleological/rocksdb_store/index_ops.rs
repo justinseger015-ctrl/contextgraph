@@ -2,10 +2,18 @@
 //!
 //! Contains methods for adding/removing fingerprints to/from HNSW indexes
 //! and computing embedder scores.
+//!
+//! # ARCH-16 Compliance
+//!
+//! E7 Code embedder supports query-type-aware similarity computation:
+//! - Code2Code: Sharpens similarity for structural matches
+//! - Text2Code: Standard semantic similarity
+//! - NonCode: Reduced E7 weight
 
 use tracing::debug;
 use uuid::Uuid;
 
+use context_graph_core::code::{CodeQueryType, compute_e7_similarity_with_query_type};
 use context_graph_core::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint};
 
 use crate::teleological::indexes::{EmbedderIndex, EmbedderIndexOps, IndexError};
@@ -66,7 +74,7 @@ impl RocksDbTeleologicalStore {
             EmbedderIndex::E2TemporalRecent => &semantic.e2_temporal_recent,
             EmbedderIndex::E3TemporalPeriodic => &semantic.e3_temporal_periodic,
             EmbedderIndex::E4TemporalPositional => &semantic.e4_temporal_positional,
-            EmbedderIndex::E5Causal => &semantic.e5_causal,
+            EmbedderIndex::E5Causal => semantic.e5_active_vector(),
             EmbedderIndex::E6Sparse => {
                 panic!("FAIL FAST: E6 is sparse - use inverted index, not HNSW")
             }
@@ -96,19 +104,43 @@ impl RocksDbTeleologicalStore {
         Ok(())
     }
 
-    /// Compute similarity scores for all 13 embedders.
+    /// Compute similarity scores for all 13 embedders with E7 query-type awareness.
     ///
-    /// Uses cosine similarity for dense embedders (E1-E5, E7-E11).
-    /// Uses SparseVector::cosine_similarity for sparse embedders (E6, E13).
-    /// Uses MaxSim for late-interaction embedder (E12).
+    /// Per ARCH-16: E7 Code embedder MUST detect query type and use appropriate
+    /// similarity computation.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Query semantic fingerprint
+    /// * `stored` - Stored document semantic fingerprint
+    /// * `code_query_type` - Optional code query type for E7 adjustment
+    ///
+    /// # Query Type Adjustments (E7 only)
+    ///
+    /// * `Code2Code`: Sharpens similarity curve (boosts high, penalizes low)
+    /// * `Text2Code`: Standard semantic similarity (no adjustment)
+    /// * `NonCode`: Reduces E7 similarity weight by 50%
+    /// * `None`: No adjustment (backward compatible)
     ///
     /// # ARCH-02 Compliance
     /// All comparisons are apples-to-apples: E1<->E1, E6<->E6, etc.
-    pub(crate) fn compute_embedder_scores(
+    pub(crate) fn compute_embedder_scores_with_code_query_type(
         &self,
         query: &SemanticFingerprint,
         stored: &SemanticFingerprint,
+        code_query_type: Option<CodeQueryType>,
     ) -> [f32; 13] {
+        // E7 Code similarity with query-type awareness
+        let e7_score = match code_query_type {
+            Some(query_type) => {
+                compute_e7_similarity_with_query_type(&query.e7_code, &stored.e7_code, query_type)
+            }
+            None => {
+                // No query type - use standard cosine similarity
+                compute_cosine_similarity(&query.e7_code, &stored.e7_code)
+            }
+        };
+
         [
             // E1-E5: Dense embedders - cosine similarity
             compute_cosine_similarity(&query.e1_semantic, &stored.e1_semantic),
@@ -118,11 +150,12 @@ impl RocksDbTeleologicalStore {
                 &query.e4_temporal_positional,
                 &stored.e4_temporal_positional,
             ),
-            compute_cosine_similarity(&query.e5_causal, &stored.e5_causal),
+            compute_cosine_similarity(query.e5_active_vector(), stored.e5_active_vector()),
             // E6: Sparse embedder - sparse cosine similarity
             query.e6_sparse.cosine_similarity(&stored.e6_sparse),
-            // E7-E11: Dense embedders - cosine similarity
-            compute_cosine_similarity(&query.e7_code, &stored.e7_code),
+            // E7: Code embedder with query-type awareness (ARCH-16)
+            e7_score,
+            // E8-E11: Dense embedders - cosine similarity
             compute_cosine_similarity(&query.e8_graph, &stored.e8_graph),
             compute_cosine_similarity(&query.e9_hdc, &stored.e9_hdc),
             compute_cosine_similarity(&query.e10_multimodal, &stored.e10_multimodal),

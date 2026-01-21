@@ -654,12 +654,19 @@ impl MultiArrayEmbeddingProvider for ProductionMultiArrayProvider {
         let total_latency = start.elapsed();
 
         // Construct fingerprint
+        // Note: For true asymmetric causal retrieval per CAWAI research, a dual-encoder
+        // model would produce different vectors for cause vs effect roles. Currently
+        // we use the same embedding for both, which is a valid placeholder until
+        // dual-encoder models are integrated. The asymmetric COMPARISON logic in
+        // similarity computation handles the directional semantics.
         let fingerprint = SemanticFingerprint {
             e1_semantic: e1_vec,
             e2_temporal_recent: e2_vec,
             e3_temporal_periodic: e3_vec,
             e4_temporal_positional: e4_vec,
-            e5_causal: e5_vec,
+            e5_causal_as_cause: e5_vec.clone(),
+            e5_causal_as_effect: e5_vec,
+            e5_causal: Vec::new(), // Empty - using new dual format
             e6_sparse,
             e7_code: e7_vec,
             e8_graph: e8_vec,

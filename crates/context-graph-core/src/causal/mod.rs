@@ -26,7 +26,8 @@ pub mod scm;
 
 pub use asymmetric::{
     adjust_batch_similarities, compute_asymmetric_similarity, compute_asymmetric_similarity_simple,
-    CausalDirection, InterventionContext,
+    compute_e5_asymmetric_fingerprint_similarity, compute_e5_asymmetric_full,
+    detect_causal_query_intent, CausalDirection, InterventionContext,
 };
 pub use inference::{InferenceDirection, InferenceResult, OmniInfer};
 pub use scm::{CausalEdge, CausalGraph, CausalNode};

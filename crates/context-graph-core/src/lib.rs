@@ -31,10 +31,13 @@
 pub mod atc;
 pub mod causal;
 pub mod clustering;
+pub mod code;
 pub mod config;
 pub mod dream;
 pub mod embeddings;
+pub mod entity;
 pub mod error;
+pub mod fusion;
 pub mod injection;
 pub mod gwt;
 pub mod index;
@@ -101,4 +104,16 @@ pub use injection::{
     InjectionCandidate, InjectionCategory, InjectionResult, TokenBudget,
     DEFAULT_TOKEN_BUDGET, BRIEF_BUDGET,
     TemporalBadge, TemporalBadgeType, TemporalEnrichmentProvider,
+};
+
+// Code query detection (ARCH-16) - query-type-aware E7 similarity
+pub use code::{
+    CodeQueryType, detect_code_query_type, compute_e7_similarity_with_query_type,
+    e7_weight_adjustment,
+};
+
+// Fusion strategies (ARCH-18) - Weighted RRF for multi-embedder fusion
+pub use fusion::{
+    FusionStrategy, EmbedderRanking, FusedResult, RRF_K,
+    fuse_rankings, weighted_rrf, weighted_sum, normalize_minmax,
 };

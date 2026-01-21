@@ -313,6 +313,231 @@ pub fn adjust_batch_similarities(
         .collect()
 }
 
+// =============================================================================
+// E5 Asymmetric Fingerprint-Based Similarity (CAWAI-Inspired)
+// =============================================================================
+
+use crate::types::fingerprint::SemanticFingerprint;
+
+/// Compute asymmetric E5 causal similarity between query and document fingerprints.
+///
+/// This function implements the asymmetric similarity computation specified in
+/// CAWAI research (https://arxiv.org/html/2504.04700v1) for causal retrieval:
+///
+/// - For "why" queries (query is searching for causes):
+///   query_as_cause is compared against doc_as_effect
+///
+/// - For "what happens" queries (query is searching for effects):
+///   query_as_effect is compared against doc_as_cause
+///
+/// # Arguments
+///
+/// * `query` - Query fingerprint
+/// * `doc` - Document fingerprint to compare against
+/// * `query_is_cause` - If true, treat query as potential cause (for "why" queries);
+///                      if false, treat query as potential effect (for "what happens" queries)
+///
+/// # Returns
+///
+/// Cosine similarity between the appropriate E5 vectors, clamped to [0, 1].
+/// Uses the asymmetric pairing:
+/// - query_is_cause=true:  cosine(query.e5_as_cause, doc.e5_as_effect)
+/// - query_is_cause=false: cosine(query.e5_as_effect, doc.e5_as_cause)
+///
+/// # Example
+///
+/// ```
+/// # #[cfg(feature = "test-utils")]
+/// # {
+/// use context_graph_core::causal::asymmetric::compute_e5_asymmetric_fingerprint_similarity;
+/// use context_graph_core::types::fingerprint::SemanticFingerprint;
+///
+/// let query = SemanticFingerprint::zeroed();
+/// let doc = SemanticFingerprint::zeroed();
+///
+/// // For "why did X happen?" queries, query is looking for causes (query_is_cause=true)
+/// let sim = compute_e5_asymmetric_fingerprint_similarity(&query, &doc, true);
+/// assert!(sim >= 0.0 && sim <= 1.0);
+/// # }
+/// ```
+pub fn compute_e5_asymmetric_fingerprint_similarity(
+    query: &SemanticFingerprint,
+    doc: &SemanticFingerprint,
+    query_is_cause: bool,
+) -> f32 {
+    let (query_vec, doc_vec) = if query_is_cause {
+        // Query represents a potential cause, looking for effects
+        // Compare query's cause encoding against doc's effect encoding
+        (query.get_e5_as_cause(), doc.get_e5_as_effect())
+    } else {
+        // Query represents a potential effect, looking for causes
+        // Compare query's effect encoding against doc's cause encoding
+        (query.get_e5_as_effect(), doc.get_e5_as_cause())
+    };
+
+    cosine_similarity_f32(query_vec, doc_vec).max(0.0)
+}
+
+/// Compute E5 asymmetric similarity with direction modifier applied.
+///
+/// Combines the raw asymmetric similarity with the Constitution-specified
+/// direction modifiers (cause→effect=1.2, effect→cause=0.8).
+///
+/// # Formula
+///
+/// ```text
+/// sim = asymmetric_cosine × direction_mod × (0.7 + 0.3 × intervention_overlap)
+/// ```
+///
+/// # Arguments
+///
+/// * `query` - Query fingerprint
+/// * `doc` - Document fingerprint
+/// * `query_direction` - Causal direction of the query
+/// * `result_direction` - Causal direction of the document
+/// * `query_context` - Optional intervention context for query
+/// * `result_context` - Optional intervention context for document
+///
+/// # Returns
+///
+/// Adjusted similarity score (may exceed 1.0 due to amplification).
+pub fn compute_e5_asymmetric_full(
+    query: &SemanticFingerprint,
+    doc: &SemanticFingerprint,
+    query_direction: CausalDirection,
+    result_direction: CausalDirection,
+    query_context: Option<&InterventionContext>,
+    result_context: Option<&InterventionContext>,
+) -> f32 {
+    // Determine asymmetric pairing based on query direction
+    let query_is_cause = matches!(query_direction, CausalDirection::Cause);
+
+    // Get base asymmetric similarity
+    let base_sim = compute_e5_asymmetric_fingerprint_similarity(query, doc, query_is_cause);
+
+    // Apply Constitution formula with direction modifier
+    compute_asymmetric_similarity(
+        base_sim,
+        query_direction,
+        result_direction,
+        query_context,
+        result_context,
+    )
+}
+
+/// Detect causal query intent from query text.
+///
+/// Analyzes the query text to determine if the user is asking for:
+/// - Causes ("why", "what causes", "reason for") -> returns CausalDirection::Cause
+/// - Effects ("what happens", "result of", "consequence") -> returns CausalDirection::Effect
+/// - Unknown direction -> returns CausalDirection::Unknown
+///
+/// # Arguments
+///
+/// * `query` - The query text to analyze
+///
+/// # Returns
+///
+/// The detected causal direction of the query.
+///
+/// # Example
+///
+/// ```
+/// use context_graph_core::causal::asymmetric::{detect_causal_query_intent, CausalDirection};
+///
+/// assert_eq!(detect_causal_query_intent("why does rust have ownership?"), CausalDirection::Cause);
+/// assert_eq!(detect_causal_query_intent("what causes memory leaks?"), CausalDirection::Cause);
+/// assert_eq!(detect_causal_query_intent("what happens if I delete this file?"), CausalDirection::Effect);
+/// assert_eq!(detect_causal_query_intent("show me the code"), CausalDirection::Unknown);
+/// ```
+pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
+    let query_lower = query.to_lowercase();
+
+    // Cause-seeking indicators (user wants to find WHY something happened)
+    // When asking "why", the user has an effect and wants the cause
+    // So query represents what the user is investigating as an effect
+    let cause_indicators = [
+        "why ",
+        "why?",
+        "what cause",
+        "what causes",
+        "what caused",
+        "reason for",
+        "reasons for",
+        "reason behind",
+        "because of what",
+        "due to what",
+        "what led to",
+        "what leads to",
+        "explain why",
+        "how come",
+    ];
+
+    // Effect-seeking indicators (user wants to find WHAT HAPPENS)
+    // When asking "what happens", the user has a cause and wants effects
+    let effect_indicators = [
+        "what happen",
+        "what will happen",
+        "what would happen",
+        "consequence of",
+        "consequences of",
+        "result of",
+        "results of",
+        "effect of",
+        "effects of",
+        "impact of",
+        "outcome of",
+        "if i ",
+        "if you ",
+        "what does it do",
+        "what will it do",
+        "then what",
+    ];
+
+    // Check cause indicators first (they're more common in natural language)
+    for indicator in cause_indicators {
+        if query_lower.contains(indicator) {
+            return CausalDirection::Cause;
+        }
+    }
+
+    // Check effect indicators
+    for indicator in effect_indicators {
+        if query_lower.contains(indicator) {
+            return CausalDirection::Effect;
+        }
+    }
+
+    CausalDirection::Unknown
+}
+
+/// Helper: compute cosine similarity between two f32 slices.
+///
+/// Returns a value in [-1, 1]. For empty or zero-norm vectors, returns 0.0.
+fn cosine_similarity_f32(a: &[f32], b: &[f32]) -> f32 {
+    if a.is_empty() || b.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+
+    let mut dot = 0.0f32;
+    let mut norm_a = 0.0f32;
+    let mut norm_b = 0.0f32;
+
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        norm_a += x * x;
+        norm_b += y * y;
+    }
+
+    let norm_product = (norm_a * norm_b).sqrt();
+
+    if norm_product < f32::EPSILON {
+        0.0
+    } else {
+        dot / norm_product
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -654,5 +879,141 @@ mod tests {
             cause_to_effect, effect_to_cause
         );
         println!("  Ratio: {} (expected 1.5)", ratio);
+    }
+
+    // ============================================================================
+    // Causal Query Intent Detection Tests
+    // ============================================================================
+
+    #[test]
+    fn test_detect_causal_query_why() {
+        assert_eq!(
+            detect_causal_query_intent("why does rust have ownership?"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("Why is the sky blue?"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] 'why' queries detected as Cause");
+    }
+
+    #[test]
+    fn test_detect_causal_query_what_causes() {
+        assert_eq!(
+            detect_causal_query_intent("what causes memory leaks?"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("What caused the test failure?"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] 'what causes' queries detected as Cause");
+    }
+
+    #[test]
+    fn test_detect_causal_query_reason() {
+        assert_eq!(
+            detect_causal_query_intent("reason for the error"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("what's the reason behind this design?"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] 'reason for/behind' queries detected as Cause");
+    }
+
+    #[test]
+    fn test_detect_causal_query_what_happens() {
+        assert_eq!(
+            detect_causal_query_intent("what happens if I delete this file?"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("what will happen when I run this?"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] 'what happens' queries detected as Effect");
+    }
+
+    #[test]
+    fn test_detect_causal_query_consequence() {
+        assert_eq!(
+            detect_causal_query_intent("consequence of removing this line"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("what are the effects of this change?"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] 'consequence/effect' queries detected as Effect");
+    }
+
+    #[test]
+    fn test_detect_causal_query_if_condition() {
+        assert_eq!(
+            detect_causal_query_intent("if I enable feature X, what happens?"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("if you run make clean, then what?"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] 'if' condition queries detected as Effect");
+    }
+
+    #[test]
+    fn test_detect_causal_query_unknown() {
+        assert_eq!(
+            detect_causal_query_intent("show me the code"),
+            CausalDirection::Unknown
+        );
+        assert_eq!(
+            detect_causal_query_intent("list all files"),
+            CausalDirection::Unknown
+        );
+        assert_eq!(
+            detect_causal_query_intent("format this function"),
+            CausalDirection::Unknown
+        );
+        println!("[VERIFIED] Non-causal queries detected as Unknown");
+    }
+
+    #[test]
+    fn test_cosine_similarity_f32_basic() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        let sim = cosine_similarity_f32(&a, &b);
+        assert!((sim - 1.0).abs() < 1e-6, "Identical vectors should have sim=1.0");
+
+        let c = vec![0.0, 1.0, 0.0];
+        let sim_ortho = cosine_similarity_f32(&a, &c);
+        assert!(sim_ortho.abs() < 1e-6, "Orthogonal vectors should have sim=0.0");
+
+        let d = vec![-1.0, 0.0, 0.0];
+        let sim_opp = cosine_similarity_f32(&a, &d);
+        assert!((sim_opp - (-1.0)).abs() < 1e-6, "Opposite vectors should have sim=-1.0");
+
+        println!("[VERIFIED] cosine_similarity_f32 works correctly");
+    }
+
+    #[test]
+    fn test_cosine_similarity_f32_edge_cases() {
+        // Empty vectors
+        let empty: Vec<f32> = vec![];
+        assert_eq!(cosine_similarity_f32(&empty, &empty), 0.0);
+
+        // Mismatched lengths
+        let a = vec![1.0, 2.0];
+        let b = vec![1.0, 2.0, 3.0];
+        assert_eq!(cosine_similarity_f32(&a, &b), 0.0);
+
+        // Zero norm vectors
+        let zeros = vec![0.0, 0.0, 0.0];
+        let ones = vec![1.0, 1.0, 1.0];
+        assert_eq!(cosine_similarity_f32(&zeros, &ones), 0.0);
+
+        println!("[VERIFIED] cosine_similarity_f32 handles edge cases");
     }
 }

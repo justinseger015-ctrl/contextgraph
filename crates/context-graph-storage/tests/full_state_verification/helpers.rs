@@ -41,12 +41,15 @@ pub fn generate_real_sparse_vector(target_nnz: usize) -> SparseVector {
 }
 
 pub fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
+    let e5_vec = generate_real_unit_vector(768);
     SemanticFingerprint {
         e1_semantic: generate_real_unit_vector(1024),
         e2_temporal_recent: generate_real_unit_vector(512),
         e3_temporal_periodic: generate_real_unit_vector(512),
         e4_temporal_positional: generate_real_unit_vector(512),
-        e5_causal: generate_real_unit_vector(768),
+        e5_causal_as_cause: e5_vec.clone(),
+        e5_causal_as_effect: e5_vec,
+        e5_causal: Vec::new(), // Empty - using new dual format
         e6_sparse: generate_real_sparse_vector(100),
         e7_code: generate_real_unit_vector(1536),
         e8_graph: generate_real_unit_vector(384),

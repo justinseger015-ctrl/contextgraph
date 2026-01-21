@@ -606,7 +606,9 @@ mod tests {
             e2_temporal_recent: vec![offset; get_dimension(Embedder::TemporalRecent)],
             e3_temporal_periodic: vec![offset; get_dimension(Embedder::TemporalPeriodic)],
             e4_temporal_positional: vec![offset; get_dimension(Embedder::TemporalPositional)],
-            e5_causal: vec![offset; get_dimension(Embedder::Causal)],
+            e5_causal_as_cause: vec![offset; get_dimension(Embedder::Causal)],
+            e5_causal_as_effect: vec![offset; get_dimension(Embedder::Causal)],
+            e5_causal: Vec::new(), // Using new dual format
             e6_sparse: SparseVector::empty(),
             e7_code: vec![offset; get_dimension(Embedder::Code)],
             e8_graph: vec![offset; get_dimension(Embedder::Emotional)],

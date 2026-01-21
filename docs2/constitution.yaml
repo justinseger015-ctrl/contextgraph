@@ -61,8 +61,14 @@ arch_rules:
 
   # Multi-Space Search Architecture (TASK-MULTISPACE)
   ARCH-12: "Search strategies: E1Only (default), MultiSpace (weighted fusion), Pipeline (3-stage)"
-  ARCH-13: "Weight profiles MUST have E2-E4 = 0.0 for semantic search"
+  ARCH-13: "Weight profiles MUST have E2-E4=0.0 (temporal), E12=0.0 (rerank-only), E13=0.0 (recall-only) for semantic scoring profiles"
   ARCH-14: "Recency boost is applied POST-retrieval as: final = semantic*(1-boost) + temporal*boost"
+
+  # Embedder-Specific Optimizations (from retrieval research)
+  ARCH-15: "E5 Causal MUST use asymmetric similarity with separate cause/effect vector encodings - cause→effect direction matters"
+  ARCH-16: "E7 Code MUST detect query type (Code2Code vs Text2Code) and use appropriate encoder for each"
+  ARCH-17: "E11 Entity SHOULD use entity linking for disambiguation when possible, not just embedding similarity"
+  ARCH-18: "Multi-space fusion SHOULD use Weighted Reciprocal Rank Fusion (RRF), not weighted score sum"
 
 # ===============================================================================
 # CODING STANDARDS
@@ -124,6 +130,11 @@ forbidden:
   AP-74: "E12 ColBERT MUST only be used for re-ranking, NOT initial retrieval"
   AP-75: "E13 SPLADE MUST be used for Stage 1 recall, NOT final ranking"
   AP-76: "Multi-stage retrieval pipeline MUST use: Stage 1 (sparse recall) → Stage 2 (dense scoring) → Stage 3 (optional rerank)"
+
+  # Embedder-specific anti-patterns (from optimization research)
+  AP-77: "E5 Causal MUST NOT use symmetric cosine similarity - causal relationships are directional"
+  AP-78: "E7 Code MUST NOT treat code queries and NL-about-code queries identically"
+  AP-79: "Multi-space scoring MUST NOT use simple weighted sum - use Weighted RRF for rank preservation"
 
   # High
   AP-11: "Check existing utils before creating helpers"

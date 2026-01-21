@@ -155,7 +155,23 @@ pub struct SemanticFingerprint {
     /// E4: Temporal-Positional (sinusoidal PE) - 512D dense embedding.
     pub e4_temporal_positional: Vec<f32>,
 
-    /// E5: Causal (Longformer SCM) - 768D dense embedding.
+    /// E5: Causal (Longformer SCM) - 768D dense embedding (as cause).
+    ///
+    /// This vector encodes the text as a potential cause in causal relationships.
+    /// For asymmetric similarity: query_as_cause is compared against doc_as_effect.
+    pub e5_causal_as_cause: Vec<f32>,
+
+    /// E5: Causal (Longformer SCM) - 768D dense embedding (as effect).
+    ///
+    /// This vector encodes the text as a potential effect in causal relationships.
+    /// For asymmetric similarity: query_as_effect is compared against doc_as_cause.
+    pub e5_causal_as_effect: Vec<f32>,
+
+    /// E5: Causal - Legacy single vector (deprecated, kept for backward compatibility).
+    ///
+    /// New code should use `e5_causal_as_cause` and `e5_causal_as_effect` instead.
+    /// This field is populated during deserialization of old fingerprints.
+    #[serde(default)]
     pub e5_causal: Vec<f32>,
 
     /// E6: Sparse Lexical (SPLADE) - sparse vector with ~1500 active of 30522 vocab.
@@ -203,7 +219,9 @@ impl SemanticFingerprint {
             e2_temporal_recent: vec![0.0; E2_DIM],
             e3_temporal_periodic: vec![0.0; E3_DIM],
             e4_temporal_positional: vec![0.0; E4_DIM],
-            e5_causal: vec![0.0; E5_DIM],
+            e5_causal_as_cause: vec![0.0; E5_DIM],
+            e5_causal_as_effect: vec![0.0; E5_DIM],
+            e5_causal: Vec::new(), // Legacy field, empty by default
             e6_sparse: SparseVector::empty(),
             e7_code: vec![0.0; E7_DIM],
             e8_graph: vec![0.0; E8_DIM],
@@ -216,13 +234,16 @@ impl SemanticFingerprint {
     }
 
     /// Get embedding by index (0-12).
+    ///
+    /// For E5 (index 4), returns the `e5_causal_as_cause` vector by default.
+    /// Use `get_e5_as_effect()` for asymmetric similarity comparisons.
     pub fn get_embedding(&self, idx: usize) -> Option<EmbeddingSlice<'_>> {
         match idx {
             0 => Some(EmbeddingSlice::Dense(&self.e1_semantic)),
             1 => Some(EmbeddingSlice::Dense(&self.e2_temporal_recent)),
             2 => Some(EmbeddingSlice::Dense(&self.e3_temporal_periodic)),
             3 => Some(EmbeddingSlice::Dense(&self.e4_temporal_positional)),
-            4 => Some(EmbeddingSlice::Dense(&self.e5_causal)),
+            4 => Some(EmbeddingSlice::Dense(self.e5_active_vector())),
             5 => Some(EmbeddingSlice::Sparse(&self.e6_sparse)),
             6 => Some(EmbeddingSlice::Dense(&self.e7_code)),
             7 => Some(EmbeddingSlice::Dense(&self.e8_graph)),
@@ -235,13 +256,64 @@ impl SemanticFingerprint {
         }
     }
 
+    /// Get the active E5 causal vector for standard operations.
+    ///
+    /// Returns `e5_causal_as_cause` if populated, otherwise falls back to
+    /// the legacy `e5_causal` field for backward compatibility.
+    ///
+    /// This is the default E5 vector used for symmetric similarity comparisons
+    /// (when causal direction is unknown or not relevant).
+    #[inline]
+    pub fn e5_active_vector(&self) -> &[f32] {
+        if !self.e5_causal_as_cause.is_empty() {
+            &self.e5_causal_as_cause
+        } else {
+            &self.e5_causal
+        }
+    }
+
+    /// Get E5 causal embedding encoded as a potential cause.
+    ///
+    /// Use this for asymmetric similarity when the query represents a cause.
+    #[inline]
+    pub fn get_e5_as_cause(&self) -> &[f32] {
+        if !self.e5_causal_as_cause.is_empty() {
+            &self.e5_causal_as_cause
+        } else {
+            &self.e5_causal
+        }
+    }
+
+    /// Get E5 causal embedding encoded as a potential effect.
+    ///
+    /// Use this for asymmetric similarity when the query represents an effect.
+    #[inline]
+    pub fn get_e5_as_effect(&self) -> &[f32] {
+        if !self.e5_causal_as_effect.is_empty() {
+            &self.e5_causal_as_effect
+        } else {
+            &self.e5_causal
+        }
+    }
+
+    /// Check if this fingerprint has asymmetric E5 causal vectors.
+    ///
+    /// Returns `true` if both `e5_causal_as_cause` and `e5_causal_as_effect`
+    /// are populated, `false` if only the legacy `e5_causal` field is used.
+    #[inline]
+    pub fn has_asymmetric_e5(&self) -> bool {
+        !self.e5_causal_as_cause.is_empty() && !self.e5_causal_as_effect.is_empty()
+    }
+
     /// Compute total storage size in bytes (heap allocations only).
     pub fn storage_size(&self) -> usize {
         let dense_size = (self.e1_semantic.len()
             + self.e2_temporal_recent.len()
             + self.e3_temporal_periodic.len()
             + self.e4_temporal_positional.len()
-            + self.e5_causal.len()
+            + self.e5_causal_as_cause.len()
+            + self.e5_causal_as_effect.len()
+            + self.e5_causal.len() // Legacy field
             + self.e7_code.len()
             + self.e8_graph.len()
             + self.e9_hdc.len()
@@ -339,7 +411,7 @@ impl SemanticFingerprint {
             Embedder::TemporalRecent => EmbeddingRef::Dense(&self.e2_temporal_recent),
             Embedder::TemporalPeriodic => EmbeddingRef::Dense(&self.e3_temporal_periodic),
             Embedder::TemporalPositional => EmbeddingRef::Dense(&self.e4_temporal_positional),
-            Embedder::Causal => EmbeddingRef::Dense(&self.e5_causal),
+            Embedder::Causal => EmbeddingRef::Dense(self.e5_active_vector()),
             Embedder::Sparse => EmbeddingRef::Sparse(&self.e6_sparse),
             Embedder::Code => EmbeddingRef::Dense(&self.e7_code),
             Embedder::Emotional => EmbeddingRef::Dense(&self.e8_graph),
@@ -357,15 +429,24 @@ impl SemanticFingerprint {
     /// Sparse embeddings (E6, E13) are always considered complete (can be empty).
     /// Token-level embedding (E12) is always considered complete (can have 0 tokens).
     ///
+    /// For E5 Causal, accepts either:
+    /// - Both e5_causal_as_cause and e5_causal_as_effect populated (new format)
+    /// - Only e5_causal populated (legacy format)
+    ///
     /// # Returns
     ///
     /// `true` if all dense embeddings have correct dimensions, `false` otherwise.
     pub fn is_complete(&self) -> bool {
+        // E5 check: either new dual vectors OR legacy single vector
+        let e5_complete = (self.e5_causal_as_cause.len() == E5_DIM
+            && self.e5_causal_as_effect.len() == E5_DIM)
+            || self.e5_causal.len() == E5_DIM;
+
         self.e1_semantic.len() == E1_DIM
             && self.e2_temporal_recent.len() == E2_DIM
             && self.e3_temporal_periodic.len() == E3_DIM
             && self.e4_temporal_positional.len() == E4_DIM
-            && self.e5_causal.len() == E5_DIM
+            && e5_complete
             && self.e7_code.len() == E7_DIM
             && self.e8_graph.len() == E8_DIM
             && self.e9_hdc.len() == E9_DIM
@@ -440,7 +521,7 @@ impl SemanticFingerprint {
             self.e2_temporal_recent.clone(),
             self.e3_temporal_periodic.clone(),
             self.e4_temporal_positional.clone(),
-            self.e5_causal.clone(),
+            self.e5_active_vector().to_vec(), // Use active E5 vector
             self.e6_sparse.to_dense(E6_SPARSE_VOCAB),
             self.e7_code.clone(),
             self.e8_graph.clone(),
@@ -450,6 +531,35 @@ impl SemanticFingerprint {
             e12_pooled,
             self.e13_splade.to_dense(E13_SPLADE_VOCAB),
         ]
+    }
+
+    /// Migrate a legacy fingerprint to the new dual E5 format.
+    ///
+    /// If the fingerprint has only the legacy `e5_causal` field populated,
+    /// this method copies it to both `e5_causal_as_cause` and `e5_causal_as_effect`.
+    ///
+    /// This is useful when loading old fingerprints that need to work with
+    /// asymmetric similarity computation.
+    pub fn migrate_legacy_e5(&mut self) {
+        if !self.e5_causal.is_empty()
+            && self.e5_causal_as_cause.is_empty()
+            && self.e5_causal_as_effect.is_empty()
+        {
+            // Copy legacy E5 to both cause and effect vectors
+            self.e5_causal_as_cause = self.e5_causal.clone();
+            self.e5_causal_as_effect = self.e5_causal.clone();
+        }
+    }
+
+    /// Check if this fingerprint uses the legacy single E5 format.
+    ///
+    /// Returns `true` if the fingerprint has only `e5_causal` populated
+    /// and both `e5_causal_as_cause` and `e5_causal_as_effect` are empty.
+    #[inline]
+    pub fn is_legacy_e5_format(&self) -> bool {
+        !self.e5_causal.is_empty()
+            && self.e5_causal_as_cause.is_empty()
+            && self.e5_causal_as_effect.is_empty()
     }
 }
 
@@ -463,6 +573,8 @@ impl PartialEq for SemanticFingerprint {
             && self.e2_temporal_recent == other.e2_temporal_recent
             && self.e3_temporal_periodic == other.e3_temporal_periodic
             && self.e4_temporal_positional == other.e4_temporal_positional
+            && self.e5_causal_as_cause == other.e5_causal_as_cause
+            && self.e5_causal_as_effect == other.e5_causal_as_effect
             && self.e5_causal == other.e5_causal
             && self.e6_sparse == other.e6_sparse
             && self.e7_code == other.e7_code

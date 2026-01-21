@@ -3,15 +3,21 @@
 use crate::types::fingerprint::semantic::*;
 use crate::types::fingerprint::SparseVector;
 
+// E5 now uses dual vectors (cause + effect), so we have one additional E5 embedding worth of storage.
+// New dense size = TOTAL_DENSE_DIMS + E5_DIM = 7424 + 768 = 8192
+// Storage = 8192 * 4 = 32768 bytes
+const NEW_DENSE_STORAGE: usize = (TOTAL_DENSE_DIMS + E5_DIM) * std::mem::size_of::<f32>();
+
 #[test]
 fn test_semantic_fingerprint_storage_size_zeroed() {
     let fp = SemanticFingerprint::zeroed();
     let size = fp.storage_size();
 
-    let expected = TOTAL_DENSE_DIMS * std::mem::size_of::<f32>();
-    // TOTAL_DENSE_DIMS = 7424, * 4 bytes = 29696
-    assert_eq!(expected, 29696);
-    assert_eq!(size, expected);
+    // With dual E5 vectors (cause + effect), storage includes both
+    // TOTAL_DENSE_DIMS = 7424, + E5_DIM for the second E5 = 8192
+    // 8192 * 4 bytes = 32768
+    assert_eq!(NEW_DENSE_STORAGE, 32768);
+    assert_eq!(size, NEW_DENSE_STORAGE);
 }
 
 #[test]
@@ -23,8 +29,8 @@ fn test_semantic_fingerprint_storage_size_with_sparse() {
 
     let size = fp.storage_size();
 
-    // 29696 (dense) + 24 (4 indices * 2 bytes + 4 values * 4 bytes = 8 + 16 = 24)
-    let expected = 29696 + 24;
+    // 32768 (dense with dual E5) + 24 (4 indices * 2 bytes + 4 values * 4 bytes = 8 + 16 = 24)
+    let expected = NEW_DENSE_STORAGE + 24;
     assert_eq!(size, expected);
 }
 
@@ -36,8 +42,8 @@ fn test_semantic_fingerprint_storage_size_with_tokens() {
 
     let size = fp.storage_size();
 
-    // 29696 (dense) + 10 tokens * 128 dims * 4 bytes = 29696 + 5120
-    let expected = 29696 + 5120;
+    // 32768 (dense with dual E5) + 10 tokens * 128 dims * 4 bytes = 32768 + 5120
+    let expected = NEW_DENSE_STORAGE + 5120;
     assert_eq!(size, expected);
 }
 
@@ -53,12 +59,13 @@ fn test_semantic_fingerprint_typical_storage_size() {
 
     let size = fp.storage_size();
 
-    // 29696 (dense) + 9000 (1500 sparse entries) + 25600 (50 tokens * 128 * 4)
-    let expected = 29696 + 9000 + 25600;
+    // 32768 (dense with dual E5) + 9000 (1500 sparse entries) + 25600 (50 tokens * 128 * 4)
+    let expected = NEW_DENSE_STORAGE + 9000 + 25600;
     assert_eq!(size, expected);
 
-    assert!(size > 60_000);
-    assert!(size < 70_000);
+    // Updated bounds for dual E5 vectors
+    assert!(size > 65_000);
+    assert!(size < 75_000);
 }
 
 #[test]
@@ -67,7 +74,9 @@ fn test_semantic_fingerprint_serialization_roundtrip() {
 
     fp.e1_semantic[0] = 1.0;
     fp.e1_semantic[100] = 2.5;
-    fp.e5_causal[50] = 3.125; // Use a non-PI value
+    // E5 now uses dual vectors for asymmetric causal similarity
+    fp.e5_causal_as_cause[50] = 3.125;
+    fp.e5_causal_as_effect[50] = 3.125;
     fp.e9_hdc[1023] = -1.0; // E9 now has 1024 dims (projected)
 
     fp.e6_sparse =
@@ -89,7 +98,8 @@ fn test_semantic_fingerprint_serialization_roundtrip() {
 
     assert_eq!(restored.e1_semantic[0], 1.0);
     assert_eq!(restored.e1_semantic[100], 2.5);
-    assert_eq!(restored.e5_causal[50], 3.125);
+    assert_eq!(restored.e5_causal_as_cause[50], 3.125);
+    assert_eq!(restored.e5_causal_as_effect[50], 3.125);
     assert_eq!(restored.e9_hdc[1023], -1.0);
     assert_eq!(restored.e6_sparse.nnz(), 3);
     assert_eq!(restored.e13_splade.nnz(), 3);

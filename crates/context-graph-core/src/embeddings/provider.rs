@@ -243,12 +243,16 @@ impl StubMultiArrayProvider {
         latencies[12] = e13_lat; // E13
 
         // Build fingerprint
+        // For E5, we use the same vector for both cause and effect in stub mode
+        // (real models would produce different encodings)
         let fingerprint = SemanticFingerprint {
             e1_semantic: e1_vec,
             e2_temporal_recent: e2_vec,
             e3_temporal_periodic: e3_vec,
             e4_temporal_positional: e4_vec,
-            e5_causal: e5_vec,
+            e5_causal_as_cause: e5_vec.clone(),
+            e5_causal_as_effect: e5_vec,
+            e5_causal: Vec::new(), // Empty - using new dual format
             e6_sparse,
             e7_code: e7_vec,
             e8_graph: e8_vec,
@@ -493,7 +497,10 @@ mod tests {
         assert_eq!(fp.e2_temporal_recent.len(), 512, "E2 should be 512D");
         assert_eq!(fp.e3_temporal_periodic.len(), 512, "E3 should be 512D");
         assert_eq!(fp.e4_temporal_positional.len(), 512, "E4 should be 512D");
-        assert_eq!(fp.e5_causal.len(), 768, "E5 should be 768D");
+        // E5 now uses dual vectors for asymmetric causal similarity
+        assert_eq!(fp.e5_causal_as_cause.len(), 768, "E5 cause should be 768D");
+        assert_eq!(fp.e5_causal_as_effect.len(), 768, "E5 effect should be 768D");
+        assert!(fp.e5_causal.is_empty(), "E5 legacy should be empty in new format");
         // E6 is sparse - check nnz instead
         assert!(fp.e6_sparse.nnz() > 0, "E6 should have active indices");
         assert_eq!(fp.e7_code.len(), 1536, "E7 should be 1536D");

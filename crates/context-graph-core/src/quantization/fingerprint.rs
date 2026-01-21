@@ -595,7 +595,8 @@ pub fn quantize_fingerprint(
     // PQ-8 quantization for high-dimensional semantic embeddings
     // Using num_subvectors = dim / 32 for each embedder
     let e1_semantic = quantize_pq8(&fp.e1_semantic, E1_DIM / 32, Embedder::Semantic)?; // 32 subvectors
-    let e5_causal = quantize_pq8(&fp.e5_causal, E5_DIM / 32, Embedder::Causal)?; // 24 subvectors
+    // For E5, we quantize the active vector (cause vector takes precedence over legacy)
+    let e5_causal = quantize_pq8(fp.e5_active_vector(), E5_DIM / 32, Embedder::Causal)?; // 24 subvectors
     let e7_code = quantize_pq8(&fp.e7_code, E7_DIM / 32, Embedder::Code)?; // 48 subvectors
     let e10_multimodal = quantize_pq8(&fp.e10_multimodal, E10_DIM / 32, Embedder::Multimodal)?; // 24 subvectors
 
@@ -685,12 +686,16 @@ pub fn dequantize_fingerprint(
     let e6_sparse = dequantize_sparse(&qfp.e6_sparse, Embedder::Sparse)?;
     let e13_splade = dequantize_sparse(&qfp.e13_splade, Embedder::KeywordSplade)?;
 
+    // Dequantized E5 is stored in both cause and effect vectors
+    // (quantization loses the distinction, so we reconstruct symmetrically)
     Ok(SemanticFingerprint {
         e1_semantic,
         e2_temporal_recent,
         e3_temporal_periodic,
         e4_temporal_positional,
-        e5_causal,
+        e5_causal_as_cause: e5_causal.clone(),
+        e5_causal_as_effect: e5_causal,
+        e5_causal: Vec::new(), // Using new dual format
         e6_sparse,
         e7_code,
         e8_graph,
@@ -710,7 +715,8 @@ fn validate_fingerprint_dimensions(
     check_dim(fp.e2_temporal_recent.len(), E2_DIM, Embedder::TemporalRecent)?;
     check_dim(fp.e3_temporal_periodic.len(), E3_DIM, Embedder::TemporalPeriodic)?;
     check_dim(fp.e4_temporal_positional.len(), E4_DIM, Embedder::TemporalPositional)?;
-    check_dim(fp.e5_causal.len(), E5_DIM, Embedder::Causal)?;
+    // Use active vector for E5 validation (handles both new and legacy formats)
+    check_dim(fp.e5_active_vector().len(), E5_DIM, Embedder::Causal)?;
     check_dim(fp.e7_code.len(), E7_DIM, Embedder::Code)?;
     check_dim(fp.e8_graph.len(), E8_DIM, Embedder::Emotional)?;
     check_dim(fp.e9_hdc.len(), E9_DIM, Embedder::Hdc)?;
@@ -751,7 +757,10 @@ mod tests {
         for (i, v) in fp.e4_temporal_positional.iter_mut().enumerate() {
             *v = (i as f32 / 512.0) * 2.0 - 1.0;
         }
-        for (i, v) in fp.e5_causal.iter_mut().enumerate() {
+        for (i, v) in fp.e5_causal_as_cause.iter_mut().enumerate() {
+            *v = (i as f32 / 768.0) * 2.0 - 1.0;
+        }
+        for (i, v) in fp.e5_causal_as_effect.iter_mut().enumerate() {
             *v = (i as f32 / 768.0) * 2.0 - 1.0;
         }
         for (i, v) in fp.e7_code.iter_mut().enumerate() {
@@ -977,7 +986,10 @@ mod tests {
         // Verify dimensions
         assert_eq!(recovered.e1_semantic.len(), E1_DIM);
         assert_eq!(recovered.e2_temporal_recent.len(), E2_DIM);
-        assert_eq!(recovered.e5_causal.len(), E5_DIM);
+        // E5 now uses dual vectors for asymmetric causal similarity
+        assert_eq!(recovered.e5_causal_as_cause.len(), E5_DIM);
+        assert_eq!(recovered.e5_causal_as_effect.len(), E5_DIM);
+        assert!(recovered.e5_causal.is_empty()); // Legacy field empty in new format
         assert_eq!(recovered.e7_code.len(), E7_DIM);
         assert_eq!(recovered.e12_late_interaction.len(), 10);
 
@@ -1061,9 +1073,10 @@ mod tests {
 
         // Check PQ-8 embeddings (E1, E5, E7, E10)
         // Note: PQ-8 with mean-based approximation has higher error
-        let pairs = [
+        // E5 now uses dual vectors for asymmetric causal similarity
+        let pairs: [(&str, &[f32], &[f32]); 4] = [
             ("E1", &fp.e1_semantic, &recovered.e1_semantic),
-            ("E5", &fp.e5_causal, &recovered.e5_causal),
+            ("E5", fp.e5_active_vector(), recovered.e5_active_vector()),
             ("E7", &fp.e7_code, &recovered.e7_code),
             ("E10", &fp.e10_multimodal, &recovered.e10_multimodal),
         ];

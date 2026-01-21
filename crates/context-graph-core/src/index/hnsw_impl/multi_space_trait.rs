@@ -154,7 +154,7 @@ impl MultiSpaceIndexManager for HnswMultiSpaceIndex {
             &fingerprint.e4_temporal_positional,
         )
         .await?;
-        self.add_vector(EmbedderIndex::E5Causal, memory_id, &fingerprint.e5_causal)
+        self.add_vector(EmbedderIndex::E5Causal, memory_id, fingerprint.e5_active_vector())
             .await?;
 
         // E7-E11

@@ -753,7 +753,10 @@ mod tests {
         assert_eq!(fp.e2_temporal_recent.len(), 512);
         assert_eq!(fp.e3_temporal_periodic.len(), 512);
         assert_eq!(fp.e4_temporal_positional.len(), 512);
-        assert_eq!(fp.e5_causal.len(), 768);
+        // E5 now uses dual vectors for asymmetric causal similarity
+        assert_eq!(fp.e5_causal_as_cause.len(), 768);
+        assert_eq!(fp.e5_causal_as_effect.len(), 768);
+        assert!(fp.e5_causal.is_empty()); // Legacy field empty in new format
         assert!(fp.e6_sparse.is_empty()); // Sparse starts empty
         assert_eq!(fp.e7_code.len(), 1536);
         assert_eq!(fp.e8_graph.len(), 384);
