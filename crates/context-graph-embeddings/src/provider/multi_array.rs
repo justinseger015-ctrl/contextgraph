@@ -58,11 +58,12 @@ use context_graph_core::traits::{
 };
 use context_graph_core::types::fingerprint::{
     SemanticFingerprint, SparseVector, E10_DIM, E11_DIM, E12_TOKEN_DIM, E1_DIM, E2_DIM, E3_DIM,
-    E4_DIM, E5_DIM, E7_DIM, E8_DIM, E9_DIM, NUM_EMBEDDERS,
+    E4_DIM, E7_DIM, E8_DIM, E9_DIM, NUM_EMBEDDERS,
 };
 
 use crate::config::GpuConfig;
 use crate::error::EmbeddingResult;
+use crate::models::pretrained::CausalModel;
 use crate::models::DefaultModelFactory;
 use crate::traits::{EmbeddingModel, ModelFactory, SingleModelConfig};
 use crate::types::{ModelId, ModelInput};
@@ -295,6 +296,69 @@ unsafe impl Send for TokenEmbedderAdapter {}
 unsafe impl Sync for TokenEmbedderAdapter {}
 
 // ============================================================================
+// CAUSAL DUAL EMBEDDER - Specialized adapter for E5 asymmetric embeddings
+// ============================================================================
+
+/// Adapter for E5 CausalModel that produces dual (cause, effect) embeddings.
+///
+/// Per ARCH-15: "E5 Causal MUST use asymmetric similarity with separate
+/// cause/effect vector encodings - cause→effect direction matters"
+///
+/// This adapter exposes the `embed_dual()` method from CausalModel, which
+/// produces genuinely different vectors for cause vs effect roles.
+struct CausalDualEmbedderAdapter {
+    /// Direct reference to CausalModel (not wrapped in EmbeddingModel trait)
+    model: Arc<CausalModel>,
+}
+
+impl CausalDualEmbedderAdapter {
+    /// Create a new CausalDualEmbedderAdapter.
+    ///
+    /// # Arguments
+    /// * `model` - CausalModel instance (must be loaded before use)
+    fn new(model: CausalModel) -> Self {
+        Self {
+            model: Arc::new(model),
+        }
+    }
+
+    /// Embed content as both cause and effect roles.
+    ///
+    /// Returns (cause_vector, effect_vector) where each is 768D.
+    /// The vectors are genuinely different due to instruction prefixes.
+    ///
+    /// # Errors
+    /// - `CoreError::Internal` if model not initialized
+    /// - `CoreError::Embedding` if embedding fails
+    async fn embed_dual(&self, content: &str) -> CoreResult<(Vec<f32>, Vec<f32>)> {
+        if content.is_empty() {
+            return Err(CoreError::ValidationError {
+                field: "content".to_string(),
+                message: "Content cannot be empty".to_string(),
+            });
+        }
+
+        if !self.model.is_initialized() {
+            return Err(CoreError::Internal(
+                "CausalModel not initialized for dual embedding".to_string(),
+            ));
+        }
+
+        self.model.embed_dual(content).await.map_err(|e| {
+            CoreError::Embedding(format!("E5 dual embedding failed: {}", e))
+        })
+    }
+
+    /// Check if the model is ready for embedding.
+    fn is_ready(&self) -> bool {
+        self.model.is_initialized()
+    }
+}
+
+unsafe impl Send for CausalDualEmbedderAdapter {}
+unsafe impl Sync for CausalDualEmbedderAdapter {}
+
+// ============================================================================
 // PRODUCTION MULTI-ARRAY PROVIDER
 // ============================================================================
 
@@ -326,8 +390,11 @@ pub struct ProductionMultiArrayProvider {
     e3_temporal_periodic: Arc<dyn SingleEmbedder>,
     /// E4: Temporal-Positional embedder (sinusoidal PE, 512D)
     e4_temporal_positional: Arc<dyn SingleEmbedder>,
-    /// E5: Causal embedder (Longformer, 768D)
-    e5_causal: Arc<dyn SingleEmbedder>,
+    /// E5: Causal embedder (Longformer, 768D) - DUAL embedder for asymmetric similarity
+    ///
+    /// Per ARCH-15: Uses CausalDualEmbedderAdapter to produce genuinely different
+    /// vectors for cause vs effect roles.
+    e5_causal: Arc<CausalDualEmbedderAdapter>,
     /// E6: Sparse embedder (SPLADE, variable sparse)
     e6_sparse: Arc<dyn SparseEmbedder>,
     /// E7: Code embedder (Qodo-Embed, 1536D)
@@ -377,15 +444,19 @@ impl ProductionMultiArrayProvider {
     /// ).await?;
     /// ```
     pub async fn new(models_dir: PathBuf, gpu_config: GpuConfig) -> EmbeddingResult<Self> {
-        let factory = DefaultModelFactory::new(models_dir, gpu_config);
+        let factory = DefaultModelFactory::new(models_dir.clone(), gpu_config);
         let config = SingleModelConfig::cuda_fp16();
 
         // Create all 13 models using the factory
+        // NOTE: E5 (Causal) is created directly for dual embedding support (ARCH-15)
         let e1_model = factory.create_model(ModelId::Semantic, &config)?;
         let e2_model = factory.create_model(ModelId::TemporalRecent, &config)?;
         let e3_model = factory.create_model(ModelId::TemporalPeriodic, &config)?;
         let e4_model = factory.create_model(ModelId::TemporalPositional, &config)?;
-        let e5_model = factory.create_model(ModelId::Causal, &config)?;
+
+        // E5: Create CausalModel directly for dual embedding support
+        let e5_causal_model = CausalModel::new(&models_dir.join("causal"), config.clone())?;
+
         let e6_model = factory.create_model(ModelId::Sparse, &config)?;
         let e7_model = factory.create_model(ModelId::Code, &config)?;
         let e8_model = factory.create_model(ModelId::Graph, &config)?;
@@ -403,7 +474,7 @@ impl ProductionMultiArrayProvider {
         e2_model.load().await?;
         e3_model.load().await?;
         e4_model.load().await?;
-        e5_model.load().await?;
+        e5_causal_model.load().await?; // E5 loaded directly
         e6_model.load().await?;
         e7_model.load().await?;
         e8_model.load().await?;
@@ -436,8 +507,10 @@ impl ProductionMultiArrayProvider {
             ModelId::TemporalPositional,
             E4_DIM,
         ));
-        let e5_causal: Arc<dyn SingleEmbedder> =
-            Arc::new(DenseEmbedderAdapter::new(e5_model, ModelId::Causal, E5_DIM));
+
+        // E5: Use CausalDualEmbedderAdapter for asymmetric embeddings (ARCH-15)
+        let e5_causal: Arc<CausalDualEmbedderAdapter> =
+            Arc::new(CausalDualEmbedderAdapter::new(e5_causal_model));
         let e6_sparse: Arc<dyn SparseEmbedder> =
             Arc::new(SparseEmbedderAdapter::new(e6_model, ModelId::Sparse));
         let e7_code: Arc<dyn SingleEmbedder> =
@@ -598,9 +671,9 @@ impl MultiArrayEmbeddingProvider for ProductionMultiArrayProvider {
                 let c = content_owned.clone();
                 async move { e4.embed(&c).await }
             }),
-            Self::timed_embed("E5_Causal", {
+            Self::timed_embed("E5_Causal_Dual", {
                 let c = content_owned.clone();
-                async move { e5.embed(&c).await }
+                async move { e5.embed_dual(&c).await }
             }),
             Self::timed_embed("E6_Sparse", {
                 let c = content_owned.clone();
@@ -641,7 +714,10 @@ impl MultiArrayEmbeddingProvider for ProductionMultiArrayProvider {
         let e2_vec = r2?;
         let e3_vec = r3?;
         let e4_vec = r4?;
-        let e5_vec = r5?;
+
+        // E5: embed_dual returns (cause_vec, effect_vec) for asymmetric similarity (ARCH-15)
+        let (e5_cause_vec, e5_effect_vec) = r5?;
+
         let e6_sparse = r6?;
         let e7_vec = r7?;
         let e8_vec = r8?;
@@ -653,19 +729,14 @@ impl MultiArrayEmbeddingProvider for ProductionMultiArrayProvider {
 
         let total_latency = start.elapsed();
 
-        // Construct fingerprint
-        // Note: For true asymmetric causal retrieval per CAWAI research, a dual-encoder
-        // model would produce different vectors for cause vs effect roles. Currently
-        // we use the same embedding for both, which is a valid placeholder until
-        // dual-encoder models are integrated. The asymmetric COMPARISON logic in
-        // similarity computation handles the directional semantics.
+        // Construct fingerprint with asymmetric E5 vectors
         let fingerprint = SemanticFingerprint {
             e1_semantic: e1_vec,
             e2_temporal_recent: e2_vec,
             e3_temporal_periodic: e3_vec,
             e4_temporal_positional: e4_vec,
-            e5_causal_as_cause: e5_vec.clone(),
-            e5_causal_as_effect: e5_vec,
+            e5_causal_as_cause: e5_cause_vec,
+            e5_causal_as_effect: e5_effect_vec,
             e5_causal: Vec::new(), // Empty - using new dual format
             e6_sparse,
             e7_code: e7_vec,

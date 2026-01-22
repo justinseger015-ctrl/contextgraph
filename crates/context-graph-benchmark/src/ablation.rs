@@ -202,6 +202,8 @@ fn embedder_to_name(embedder: EmbedderIndex) -> &'static str {
         EmbedderIndex::E3TemporalPeriodic => "E3_Temporal_Periodic",
         EmbedderIndex::E4TemporalPositional => "E4_Temporal_Positional",
         EmbedderIndex::E5Causal => "E5_Causal",
+        EmbedderIndex::E5CausalCause => "E5_Causal_Cause",
+        EmbedderIndex::E5CausalEffect => "E5_Causal_Effect",
         EmbedderIndex::E6Sparse => "E6_Sparse",
         EmbedderIndex::E7Code => "E7_Code",
         EmbedderIndex::E8Graph => "E8_Graph",

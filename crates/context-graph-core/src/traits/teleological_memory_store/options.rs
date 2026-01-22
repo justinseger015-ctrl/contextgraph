@@ -45,6 +45,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::causal::asymmetric::CausalDirection;
 use crate::code::CodeQueryType;
 use crate::fusion::FusionStrategy;
 use crate::types::fingerprint::SemanticFingerprint;
@@ -1228,6 +1229,29 @@ pub struct TeleologicalSearchOptions {
     /// Default: No temporal boost (pure semantic search).
     #[serde(default)]
     pub temporal_options: TemporalSearchOptions,
+
+    // =========================================================================
+    // Causal Search Options (ARCH-15)
+    // =========================================================================
+
+    /// Causal direction for asymmetric E5 retrieval.
+    ///
+    /// When set to `Cause` or `Effect`, enables direction-aware E5 similarity
+    /// computation during multi-space retrieval (not just post-retrieval reranking).
+    ///
+    /// Per ARCH-15 and AP-77:
+    /// - `Cause`: Query seeks causes (use query.e5_as_cause vs doc.e5_as_effect)
+    /// - `Effect`: Query seeks effects (use query.e5_as_effect vs doc.e5_as_cause)
+    /// - `Unknown`: Use symmetric E5 similarity (default, backward compatible)
+    ///
+    /// Direction modifiers are applied:
+    /// - cause→effect: 1.2x boost
+    /// - effect→cause: 0.8x dampening
+    /// - same direction: 1.0x (no change)
+    ///
+    /// Default: `Unknown` (symmetric similarity for backward compatibility)
+    #[serde(default)]
+    pub causal_direction: CausalDirection,
 }
 
 impl Default for TeleologicalSearchOptions {
@@ -1253,6 +1277,8 @@ impl Default for TeleologicalSearchOptions {
             code_query_type: None,
             // Temporal search options (ARCH-14) - No boost by default
             temporal_options: TemporalSearchOptions::default(),
+            // Causal search options (ARCH-15) - Unknown (symmetric) by default
+            causal_direction: CausalDirection::Unknown,
         }
     }
 }
@@ -1679,6 +1705,52 @@ impl TeleologicalSearchOptions {
     #[inline]
     pub fn has_temporal_boost(&self) -> bool {
         self.temporal_options.has_any_boost()
+    }
+
+    // =========================================================================
+    // Causal Search Builder Methods (ARCH-15)
+    // =========================================================================
+
+    /// Set the causal direction for asymmetric E5 retrieval.
+    ///
+    /// Per ARCH-15 and AP-77:
+    /// - `Cause`: Query seeks causes (e.g., "why did X fail")
+    /// - `Effect`: Query seeks effects (e.g., "what happens when X")
+    /// - `Unknown`: Symmetric similarity (default)
+    ///
+    /// When set, E5 similarity computation uses asymmetric vectors:
+    /// - Cause queries: query.e5_as_cause vs doc.e5_as_effect
+    /// - Effect queries: query.e5_as_effect vs doc.e5_as_cause
+    ///
+    /// Direction modifiers are applied:
+    /// - cause→effect: 1.2x boost
+    /// - effect→cause: 0.8x dampening
+    ///
+    /// # Arguments
+    ///
+    /// * `direction` - The causal direction of the query
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use context_graph_core::traits::TeleologicalSearchOptions;
+    /// use context_graph_core::causal::asymmetric::CausalDirection;
+    ///
+    /// let opts = TeleologicalSearchOptions::quick(10)
+    ///     .with_causal_direction(CausalDirection::Cause);
+    /// ```
+    #[inline]
+    pub fn with_causal_direction(mut self, direction: CausalDirection) -> Self {
+        self.causal_direction = direction;
+        self
+    }
+
+    /// Check if asymmetric E5 causal retrieval is active.
+    ///
+    /// Returns true if causal_direction is `Cause` or `Effect` (not `Unknown`).
+    #[inline]
+    pub fn has_causal_direction(&self) -> bool {
+        !matches!(self.causal_direction, CausalDirection::Unknown)
     }
 }
 

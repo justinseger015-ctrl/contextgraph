@@ -2,6 +2,11 @@
 //!
 //! This module contains the main CausalModel struct, its constructor,
 //! load/unload methods, embed methods, and the EmbeddingModel trait implementation.
+//!
+//! # Asymmetric Dual Embeddings
+//!
+//! The `embed_dual()` method produces genuinely different cause and effect vectors
+//! through marker detection, weighted pooling, and learned projections.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,9 +20,9 @@ use crate::traits::{EmbeddingModel, SingleModelConfig};
 use crate::types::{InputType, ModelEmbedding, ModelId, ModelInput};
 
 use super::config::DEFAULT_ATTENTION_WINDOW;
-use super::forward::gpu_forward;
+use super::forward::{gpu_forward, gpu_forward_dual};
 use super::loader::load_longformer_weights;
-use super::weights::LongformerWeights;
+use super::weights::{CausalProjectionWeights, LongformerWeights, CAUSAL_PROJECTION_SEED};
 
 /// Internal state that varies based on feature flags.
 #[allow(dead_code)]
@@ -29,6 +34,8 @@ pub(crate) enum ModelState {
     Loaded {
         /// Longformer model weights on GPU.
         weights: LongformerWeights,
+        /// Causal projection weights for asymmetric embeddings.
+        projection: CausalProjectionWeights,
         /// HuggingFace tokenizer for text encoding (boxed to reduce enum size).
         tokenizer: Box<Tokenizer>,
     },
@@ -93,6 +100,31 @@ pub struct CausalModel {
 }
 
 impl CausalModel {
+    // =========================================================================
+    // INSTRUCTION PREFIXES FOR ASYMMETRIC CAUSAL EMBEDDINGS
+    // =========================================================================
+    // Per ARCH-15: "E5 Causal MUST use asymmetric similarity with separate
+    // cause/effect vector encodings - cause→effect direction matters"
+    //
+    // These prefixes instruct the model to encode the text from different
+    // causal perspectives, producing genuinely different embeddings for
+    // cause vs effect roles.
+    // =========================================================================
+
+    /// Instruction prefix for encoding text as a potential CAUSE.
+    ///
+    /// When text is embedded with this prefix, the resulting vector is optimized
+    /// for finding effects that this text could produce.
+    pub const CAUSE_INSTRUCTION: &'static str =
+        "Represent this text as a cause that produces effects: ";
+
+    /// Instruction prefix for encoding text as a potential EFFECT.
+    ///
+    /// When text is embedded with this prefix, the resulting vector is optimized
+    /// for finding causes that could have produced this text.
+    pub const EFFECT_INSTRUCTION: &'static str =
+        "Represent this text as an effect produced by causes: ";
+
     /// Create a new CausalModel instance.
     ///
     /// Model is NOT loaded after construction. Call `load()` before `embed()`.
@@ -154,6 +186,7 @@ impl CausalModel {
     /// 2. Load config.json and tokenizer.json
     /// 3. Load model.safetensors
     /// 4. Transfer all weight tensors to GPU VRAM
+    /// 5. Initialize causal projection weights
     pub async fn load(&self) -> EmbeddingResult<()> {
         // Initialize GPU device
         let device = init_gpu().map_err(|e| EmbeddingError::GpuError {
@@ -178,8 +211,15 @@ impl CausalModel {
         // Load weights from safetensors
         let weights = load_longformer_weights(&self.model_path, device)?;
 
+        // Initialize causal projection weights for asymmetric embeddings
+        let projection = CausalProjectionWeights::initialize(
+            weights.config.hidden_size,
+            device,
+            CAUSAL_PROJECTION_SEED,
+        )?;
+
         tracing::info!(
-            "CausalModel loaded: {} layers, hidden_size={}",
+            "CausalModel loaded: {} layers, hidden_size={}, with causal projections",
             weights.config.num_hidden_layers,
             weights.config.hidden_size
         );
@@ -194,6 +234,7 @@ impl CausalModel {
 
         *state = ModelState::Loaded {
             weights,
+            projection,
             tokenizer: Box::new(tokenizer),
         };
         self.loaded.store(true, Ordering::SeqCst);
@@ -223,17 +264,159 @@ impl CausalModel {
 
     /// Embed a batch of inputs (more efficient than single embed).
     pub async fn embed_batch(&self, inputs: &[ModelInput]) -> EmbeddingResult<Vec<ModelEmbedding>> {
-        if !self.is_initialized() {
-            return Err(EmbeddingError::NotInitialized {
-                model_id: self.model_id(),
-            });
-        }
-
+        self.ensure_initialized()?;
         let mut results = Vec::with_capacity(inputs.len());
         for input in inputs {
             results.push(self.embed(input).await?);
         }
         Ok(results)
+    }
+
+    // =========================================================================
+    // ASYMMETRIC DUAL EMBEDDING METHODS (ARCH-15 Compliance)
+    // =========================================================================
+    //
+    // These methods produce genuinely different cause and effect vectors through:
+    // 1. Causal marker detection (cause/effect indicator tokens)
+    // 2. Marker-weighted pooling (2x weight on relevant markers)
+    // 3. Learned projections (W_cause, W_effect) initialized as perturbed identities
+    //
+    // This creates meaningful asymmetry for causal retrieval with:
+    // - Target asymmetry ratio: 1.2-2.0 (vs 1.00 with old rotation approach)
+    // - E5 contribution: >5% (vs 0% with old approach)
+    // =========================================================================
+
+    /// Embed text as a potential CAUSE in causal relationships.
+    ///
+    /// Uses marker-weighted pooling focused on cause indicators and
+    /// applies the W_cause projection matrix.
+    ///
+    /// # Arguments
+    /// * `content` - Text content to embed as a cause
+    ///
+    /// # Returns
+    /// 768D embedding vector with cause-role semantics
+    pub async fn embed_as_cause(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
+        let (cause_vec, _) = self.embed_dual(content).await?;
+        Ok(cause_vec)
+    }
+
+    /// Embed text as a potential EFFECT in causal relationships.
+    ///
+    /// Uses marker-weighted pooling focused on effect indicators and
+    /// applies the W_effect projection matrix.
+    ///
+    /// # Arguments
+    /// * `content` - Text content to embed as an effect
+    ///
+    /// # Returns
+    /// 768D embedding vector with effect-role semantics
+    pub async fn embed_as_effect(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
+        let (_, effect_vec) = self.embed_dual(content).await?;
+        Ok(effect_vec)
+    }
+
+    /// Embed text as BOTH cause and effect roles simultaneously.
+    ///
+    /// Produces two distinct 768D vectors from a single encoder pass:
+    /// - cause_vec: Pooled with cause-marker weights, projected by W_cause
+    /// - effect_vec: Pooled with effect-marker weights, projected by W_effect
+    ///
+    /// # Architecture
+    ///
+    /// ```text
+    /// Input Text
+    ///     |
+    /// [Tokenize + Detect Causal Markers]
+    ///     |
+    /// [Encoder (single pass)]
+    ///     |
+    ///     +------------------------+
+    ///     |                        |
+    /// [Cause-Weighted Pool]   [Effect-Weighted Pool]
+    ///     |                        |
+    /// [W_cause Projection]    [W_effect Projection]
+    ///     |                        |
+    /// [L2 Normalize]          [L2 Normalize]
+    ///     |                        |
+    /// cause_vec (768D)        effect_vec (768D)
+    /// ```
+    ///
+    /// # Arguments
+    /// * `content` - Text content to embed in both roles
+    ///
+    /// # Returns
+    /// Tuple of (cause_vector, effect_vector), each 768D
+    ///
+    /// # Performance
+    /// Single encoder forward pass + dual pooling + projection.
+    pub async fn embed_dual(&self, content: &str) -> EmbeddingResult<(Vec<f32>, Vec<f32>)> {
+        self.ensure_initialized()?;
+
+        let state = self
+            .model_state
+            .read()
+            .map_err(|e| EmbeddingError::InternalError {
+                message: format!("CausalModel failed to acquire read lock: {}", e),
+            })?;
+
+        match &*state {
+            ModelState::Loaded {
+                weights,
+                projection,
+                tokenizer,
+            } => {
+                let (cause_vec, effect_vec) =
+                    gpu_forward_dual(content, weights, projection, tokenizer)?;
+
+                // Validate dimensions (fail fast on implementation error)
+                if cause_vec.len() != 768 || effect_vec.len() != 768 {
+                    return Err(EmbeddingError::InternalError {
+                        message: format!(
+                            "E5 dual embedding dimension error: cause={}, effect={}, expected 768",
+                            cause_vec.len(),
+                            effect_vec.len()
+                        ),
+                    });
+                }
+
+                Ok((cause_vec, effect_vec))
+            }
+            ModelState::Unloaded => Err(EmbeddingError::NotInitialized {
+                model_id: ModelId::Causal,
+            }),
+        }
+    }
+
+    /// Ensure model is initialized, returning an error if not.
+    fn ensure_initialized(&self) -> EmbeddingResult<()> {
+        if !self.is_initialized() {
+            return Err(EmbeddingError::NotInitialized {
+                model_id: self.model_id(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Internal helper to embed text directly via GPU forward pass.
+    ///
+    /// Used by both standard embed() and the dual embedding methods.
+    async fn embed_text_internal(&self, text: &str) -> EmbeddingResult<Vec<f32>> {
+        let state = self
+            .model_state
+            .read()
+            .map_err(|e| EmbeddingError::InternalError {
+                message: format!("CausalModel failed to acquire read lock: {}", e),
+            })?;
+
+        match &*state {
+            ModelState::Loaded { weights, tokenizer, .. } => {
+                gpu_forward(text, weights, tokenizer)
+            }
+            ModelState::Unloaded => Err(EmbeddingError::NotInitialized {
+                model_id: ModelId::Causal,
+            }),
+        }
     }
 }
 
@@ -256,12 +439,7 @@ impl EmbeddingModel for CausalModel {
     }
 
     async fn embed(&self, input: &ModelInput) -> EmbeddingResult<ModelEmbedding> {
-        if !self.is_initialized() {
-            return Err(EmbeddingError::NotInitialized {
-                model_id: self.model_id(),
-            });
-        }
-
+        self.ensure_initialized()?;
         self.validate_input(input)?;
 
         let start = std::time::Instant::now();
@@ -294,7 +472,7 @@ impl EmbeddingModel for CausalModel {
             })?;
 
         match &*state {
-            ModelState::Loaded { weights, tokenizer } => {
+            ModelState::Loaded { weights, tokenizer, .. } => {
                 let vector = gpu_forward(&text_content, weights, tokenizer)?;
                 let latency_us = start.elapsed().as_micros() as u64;
                 Ok(ModelEmbedding::new(ModelId::Causal, vector, latency_us))

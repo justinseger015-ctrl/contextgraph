@@ -11,7 +11,7 @@ use super::embedder::EmbedderIndex;
 ///
 /// # Returns
 ///
-/// - `Some(HnswConfig)` for HNSW-compatible embedders (11 total)
+/// - `Some(HnswConfig)` for HNSW-compatible embedders (13 total)
 /// - `None` for E6Sparse, E12LateInteraction, E13Splade
 ///
 /// # Example
@@ -45,7 +45,17 @@ pub fn get_hnsw_config(index: EmbedderIndex) -> Option<HnswConfig> {
             E4_DIM,
             DistanceMetric::Cosine,
         )),
+        // E5 legacy (active vector) - kept for backward compatibility
         EmbedderIndex::E5Causal => Some(HnswConfig::default_for_dimension(
+            E5_DIM,
+            DistanceMetric::AsymmetricCosine,
+        )),
+        // E5 asymmetric indexes for direction-aware retrieval (ARCH-15, AP-77)
+        EmbedderIndex::E5CausalCause => Some(HnswConfig::default_for_dimension(
+            E5_DIM,
+            DistanceMetric::AsymmetricCosine,
+        )),
+        EmbedderIndex::E5CausalEffect => Some(HnswConfig::default_for_dimension(
             E5_DIM,
             DistanceMetric::AsymmetricCosine,
         )),
@@ -80,9 +90,10 @@ pub fn get_hnsw_config(index: EmbedderIndex) -> Option<HnswConfig> {
     }
 }
 
-/// Get all HNSW configs as a map. Returns 11 entries.
+/// Get all HNSW configs as a map. Returns 13 entries.
 ///
 /// Excludes E6Sparse, E12LateInteraction, E13Splade (non-HNSW).
+/// Includes E5CausalCause and E5CausalEffect for asymmetric retrieval (ARCH-15).
 ///
 /// # Example
 ///
@@ -90,7 +101,7 @@ pub fn get_hnsw_config(index: EmbedderIndex) -> Option<HnswConfig> {
 /// use context_graph_storage::teleological::indexes::{all_hnsw_configs, EmbedderIndex};
 ///
 /// let configs = all_hnsw_configs();
-/// assert_eq!(configs.len(), 11);
+/// assert_eq!(configs.len(), 13);
 /// assert!(configs.contains_key(&EmbedderIndex::E1Semantic));
 /// assert!(!configs.contains_key(&EmbedderIndex::E6Sparse));
 /// ```
@@ -144,8 +155,22 @@ mod tests {
 
     #[test]
     fn test_get_hnsw_config_e5_causal() {
+        // E5 legacy (active vector)
         let config = get_hnsw_config(EmbedderIndex::E5Causal).unwrap();
         assert_eq!(config.metric, DistanceMetric::AsymmetricCosine);
+        assert_eq!(config.dimension, 768);
+    }
+
+    #[test]
+    fn test_get_hnsw_config_e5_asymmetric() {
+        // E5 asymmetric indexes (ARCH-15, AP-77)
+        let cause_config = get_hnsw_config(EmbedderIndex::E5CausalCause).unwrap();
+        assert_eq!(cause_config.metric, DistanceMetric::AsymmetricCosine);
+        assert_eq!(cause_config.dimension, 768);
+
+        let effect_config = get_hnsw_config(EmbedderIndex::E5CausalEffect).unwrap();
+        assert_eq!(effect_config.metric, DistanceMetric::AsymmetricCosine);
+        assert_eq!(effect_config.dimension, 768);
     }
 
     #[test]
@@ -156,12 +181,16 @@ mod tests {
     }
 
     #[test]
-    fn test_all_hnsw_configs_returns_11() {
+    fn test_all_hnsw_configs_returns_13() {
+        // 11 original + 2 E5 asymmetric = 13 HNSW configs
         let configs = all_hnsw_configs();
-        assert_eq!(configs.len(), 11);
+        assert_eq!(configs.len(), 13);
 
         assert!(configs.contains_key(&EmbedderIndex::E1Semantic));
         assert!(configs.contains_key(&EmbedderIndex::E1Matryoshka128));
+        // E5 asymmetric indexes included
+        assert!(configs.contains_key(&EmbedderIndex::E5CausalCause));
+        assert!(configs.contains_key(&EmbedderIndex::E5CausalEffect));
 
         assert!(!configs.contains_key(&EmbedderIndex::E6Sparse));
         assert!(!configs.contains_key(&EmbedderIndex::E12LateInteraction));

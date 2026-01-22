@@ -89,11 +89,13 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "required": []
             }),
         ),
-        // search_graph - semantic search
+        // search_graph - semantic search with E5 causal asymmetric similarity (ARCH-15, AP-77)
         ToolDefinition::new(
             "search_graph",
-            "Search the knowledge graph using semantic similarity. \
-             Returns nodes matching the query with relevance scores.",
+            "Search the knowledge graph using multi-space semantic similarity. \
+             For causal queries ('why', 'what happens'), automatically applies \
+             asymmetric E5 similarity with direction modifiers (cause→effect 1.2x, \
+             effect→cause 0.8x). Returns nodes matching the query with relevance scores.",
             json!({
                 "type": "object",
                 "properties": {
@@ -124,6 +126,45 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "boolean",
                         "default": false,
                         "description": "Include content text in results"
+                    },
+                    "strategy": {
+                        "type": "string",
+                        "enum": ["e1_only", "multi_space", "pipeline"],
+                        "default": "e1_only",
+                        "description": "Search strategy: e1_only (fast), multi_space (balanced), pipeline (accurate)"
+                    },
+                    "weightProfile": {
+                        "type": "string",
+                        "enum": ["semantic_search", "causal_reasoning", "code_search", "fact_checking", "temporal_navigation", "category_weighted"],
+                        "description": "Weight profile for multi-space search (auto-selected for causal queries)"
+                    },
+                    "enableRerank": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Enable ColBERT E12 re-ranking (Stage 3)"
+                    },
+                    "enableAsymmetricE5": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Enable asymmetric E5 causal reranking for detected causal queries"
+                    },
+                    "causalDirection": {
+                        "type": "string",
+                        "enum": ["auto", "cause", "effect", "none"],
+                        "default": "auto",
+                        "description": "Causal direction: auto (detect from query), cause (seeking causes), effect (seeking effects), none (disable)"
+                    },
+                    "enableQueryExpansion": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Expand causal queries with related terms for better recall"
+                    },
+                    "temporalWeight": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "default": 0.0,
+                        "description": "Weight for temporal post-retrieval boost [0.0, 1.0]"
                     }
                 },
                 "required": ["query"]

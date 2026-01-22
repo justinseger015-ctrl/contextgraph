@@ -261,6 +261,9 @@ fn get_embedder_vector(fp: &SemanticFingerprint, embedder: EmbedderIndex) -> Opt
         EmbedderIndex::E3TemporalPeriodic => Some(&fp.e3_temporal_periodic),
         EmbedderIndex::E4TemporalPositional => Some(&fp.e4_temporal_positional),
         EmbedderIndex::E5Causal => Some(&fp.e5_causal),
+        // E5 asymmetric indexes (ARCH-15)
+        EmbedderIndex::E5CausalCause => Some(fp.get_e5_as_cause()),
+        EmbedderIndex::E5CausalEffect => Some(fp.get_e5_as_effect()),
         EmbedderIndex::E7Code => Some(&fp.e7_code),
         EmbedderIndex::E8Graph => Some(&fp.e8_graph),
         EmbedderIndex::E9HDC => Some(&fp.e9_hdc),

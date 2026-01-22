@@ -101,6 +101,85 @@ pub fn mean_pooling(hidden_states: &Tensor, attention_mask: &Tensor) -> Embeddin
         })
 }
 
+/// Marker-weighted pooling over sequence dimension.
+///
+/// Similar to mean pooling, but gives higher weight to marker tokens.
+/// This enables causal-aware pooling where cause or effect indicators
+/// contribute more to the final embedding.
+///
+/// # Arguments
+///
+/// * `hidden_states` - Hidden states tensor [batch, seq_len, hidden_size]
+/// * `attention_mask` - Attention mask [batch, seq_len]
+/// * `marker_weights` - Per-token weights [batch, seq_len], e.g., 1.0 for normal, 2.0 for markers
+///
+/// # Returns
+///
+/// Pooled tensor [batch, hidden_size]
+pub fn marker_weighted_pooling(
+    hidden_states: &Tensor,
+    attention_mask: &Tensor,
+    marker_weights: &Tensor,
+) -> EmbeddingResult<Tensor> {
+    // Expand mask to hidden dimension: [batch, seq_len] -> [batch, seq_len, hidden_size]
+    let mask_expanded = attention_mask
+        .unsqueeze(2)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool mask expand failed: {}", e),
+        })?
+        .broadcast_as(hidden_states.shape())
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool mask broadcast failed: {}", e),
+        })?;
+
+    // Expand marker weights: [batch, seq_len] -> [batch, seq_len, hidden_size]
+    let weights_expanded = marker_weights
+        .unsqueeze(2)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool weights expand failed: {}", e),
+        })?
+        .broadcast_as(hidden_states.shape())
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool weights broadcast failed: {}", e),
+        })?;
+
+    // Combined weights: attention_mask * marker_weights
+    let combined_weights = (mask_expanded * weights_expanded).map_err(|e| EmbeddingError::GpuError {
+        message: format!("CausalModel marker pool combine weights failed: {}", e),
+    })?;
+
+    // Weighted hidden states
+    let weighted_hidden =
+        (hidden_states * combined_weights.clone()).map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool apply weights failed: {}", e),
+        })?;
+
+    // Sum over sequence dimension
+    let sum_hidden = weighted_hidden.sum(1).map_err(|e| EmbeddingError::GpuError {
+        message: format!("CausalModel marker pool sum failed: {}", e),
+    })?;
+
+    // Sum of weights for normalization
+    let weight_sum = combined_weights
+        .sum(1)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool weight sum failed: {}", e),
+        })?;
+
+    // Avoid division by zero - take first element since all dims should be same after sum
+    let weight_sum_scalar = weight_sum
+        .sum_all()
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool weight scalar failed: {}", e),
+        })?;
+
+    sum_hidden
+        .broadcast_div(&weight_sum_scalar)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel marker pool div failed: {}", e),
+        })
+}
+
 /// L2 normalize a tensor.
 pub fn l2_normalize(tensor: &Tensor) -> EmbeddingResult<Tensor> {
     let norm = tensor

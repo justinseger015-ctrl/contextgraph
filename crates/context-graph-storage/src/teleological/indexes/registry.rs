@@ -13,7 +13,7 @@
 //! +----------------------------+
 //! | indexes: HashMap<          |
 //! |   EmbedderIndex,           |
-//! |   Arc<HnswEmbedderIndex>   |  (11 indexes)
+//! |   Arc<HnswEmbedderIndex>   |  (13 indexes)
 //! | >                          |
 //! +----------------------------+
 //!         |
@@ -73,7 +73,7 @@ pub struct EmbedderIndexRegistry {
 }
 
 impl EmbedderIndexRegistry {
-    /// Create new registry with all 11 HNSW indexes.
+    /// Create new registry with all 13 HNSW indexes.
     ///
     /// Initializes indexes for E1-E5, E7-E11, and Matryoshka.
     /// E6, E12, E13 are excluded (they use inverted/MaxSim indexes).
@@ -84,12 +84,12 @@ impl EmbedderIndexRegistry {
     /// use context_graph_storage::teleological::indexes::EmbedderIndexRegistry;
     ///
     /// let registry = EmbedderIndexRegistry::new();
-    /// assert_eq!(registry.len(), 11);
+    /// assert_eq!(registry.len(), 13);
     /// ```
     pub fn new() -> Self {
         let mut indexes = HashMap::new();
 
-        // Create all 11 HNSW-capable indexes
+        // Create all 13 HNSW-capable indexes
         for embedder in EmbedderIndex::all_hnsw() {
             let index = HnswEmbedderIndex::new(embedder);
             indexes.insert(embedder, Arc::new(index));
@@ -250,7 +250,7 @@ mod tests {
         let registry = EmbedderIndexRegistry::new();
 
         println!("AFTER: registry.len()={}", registry.len());
-        assert_eq!(registry.len(), 11);
+        assert_eq!(registry.len(), 13);
         assert!(!registry.is_empty());
 
         println!("RESULT: PASS");
@@ -403,20 +403,25 @@ mod tests {
             count += 1;
         }
 
-        assert_eq!(count, 11);
-        println!("RESULT: PASS - iterated over {} indexes", count);
+        assert_eq!(count, 13);
+        println!("RESULT: PASS - iterated over {} indexes (11 original + 2 E5 asymmetric)", count);
     }
 
     #[test]
     fn test_registry_embedders() {
         println!("=== TEST: Registry.embedders() returns all embedder types ===");
+        println!("  (13 total: 11 original + 2 E5 asymmetric per ARCH-15)");
 
         let registry = EmbedderIndexRegistry::new();
         let embedders = registry.embedders();
 
-        assert_eq!(embedders.len(), 11);
+        assert_eq!(embedders.len(), 13);
 
-        // Verify E6, E12, E13 are NOT in the list
+        // Verify E5 asymmetric indexes ARE in the list (ARCH-15)
+        assert!(embedders.contains(&EmbedderIndex::E5CausalCause));
+        assert!(embedders.contains(&EmbedderIndex::E5CausalEffect));
+
+        // Verify E6, E12, E13 are NOT in the list (non-HNSW)
         assert!(!embedders.contains(&EmbedderIndex::E6Sparse));
         assert!(!embedders.contains(&EmbedderIndex::E12LateInteraction));
         assert!(!embedders.contains(&EmbedderIndex::E13Splade));
@@ -491,7 +496,7 @@ mod tests {
         println!("=== TEST: Registry implements Default ===");
 
         let registry: EmbedderIndexRegistry = Default::default();
-        assert_eq!(registry.len(), 11);
+        assert_eq!(registry.len(), 13);
 
         println!("RESULT: PASS");
     }
@@ -538,12 +543,12 @@ mod tests {
 
         println!("Struct Verification:");
         println!("  - EmbedderIndexRegistry: HashMap<EmbedderIndex, Arc<HnswEmbedderIndex>>");
-        println!("  - 11 indexes (E1-E5, E7-E11, Matryoshka)");
+        println!("  - 13 indexes (E1-E5, E7-E11, Matryoshka)");
         println!("  - Excludes E6, E12, E13 (non-HNSW)");
 
         println!();
         println!("Method Verification:");
-        println!("  - new(): Creates all 11 indexes");
+        println!("  - new(): Creates all 13 indexes");
         println!("  - get(): Returns Option (None for E6/E12/E13)");
         println!("  - get_or_panic(): Panics for E6/E12/E13");
         println!("  - get_dyn(): Returns Arc<dyn EmbedderIndexOps>");
@@ -556,7 +561,7 @@ mod tests {
 
         println!();
         println!("Test Coverage:");
-        println!("  - Registry creation (11 indexes): PASS");
+        println!("  - Registry creation (13 indexes): PASS");
         println!("  - get() all HNSW embedders: PASS");
         println!("  - get() E6/E12/E13 returns None: PASS");
         println!("  - get_or_panic() HNSW: PASS");

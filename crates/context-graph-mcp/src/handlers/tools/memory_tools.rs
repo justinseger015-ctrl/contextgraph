@@ -9,15 +9,29 @@
 //! - `pipeline`: Full 3-stage retrieval
 //!
 //! Temporal embedders (E2-E4) have weight 0.0 in semantic search per AP-71.
+//!
+//! # E5 Causal Asymmetric Similarity (ARCH-15, AP-77)
+//!
+//! For causal queries ("why", "what happens"), asymmetric E5 reranking is applied:
+//! - Direction detection: Detects if query seeks causes or effects
+//! - Asymmetric vectors: Uses `query.e5_as_cause` vs `doc.e5_as_effect` (or reverse)
+//! - Direction modifiers: cause→effect (1.2x), effect→cause (0.8x)
+//! - Auto-profile selection: Causal queries auto-select "causal_reasoning" profile
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
+use context_graph_core::causal::asymmetric::{
+    compute_e5_asymmetric_fingerprint_similarity, detect_causal_query_intent,
+    direction_mod, CausalDirection,
+};
 use context_graph_core::teleological::matrix_search::embedder_names;
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions};
-use context_graph_core::types::fingerprint::{TeleologicalFingerprint, NUM_EMBEDDERS};
+use context_graph_core::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS};
 use context_graph_core::types::UtlContext;
+
+use crate::weights::get_weight_profile;
 
 use crate::protocol::JsonRpcId;
 use crate::protocol::JsonRpcResponse;
@@ -516,14 +530,94 @@ impl Handlers {
             })
             .unwrap_or(context_graph_core::traits::TemporalScale::Meso);
 
+        // =========================================================================
+        // E5 CAUSAL ASYMMETRIC PARAMETERS (ARCH-15, AP-77)
+        // =========================================================================
+
+        // Parse enableAsymmetricE5 (default: true)
+        // When enabled, asymmetric E5 reranking is applied for causal queries
+        let enable_asymmetric_e5 = args
+            .get("enableAsymmetricE5")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        // Parse causalDirection (auto, cause, effect, none)
+        // - auto: Auto-detect from query text (default)
+        // - cause: Force query as seeking causes (for "why" queries)
+        // - effect: Force query as seeking effects (for "what happens" queries)
+        // - none: Disable causal processing
+        let causal_direction_param = args
+            .get("causalDirection")
+            .and_then(|v| v.as_str())
+            .unwrap_or("auto");
+
+        // Parse enableQueryExpansion (default: false)
+        // When enabled, causal queries are expanded with related terms
+        let enable_query_expansion = args
+            .get("enableQueryExpansion")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        // =========================================================================
+        // PHASE 1: CAUSAL DIRECTION DETECTION
+        // =========================================================================
+
+        // Detect causal direction from query text or use user-specified direction
+        let causal_direction = match causal_direction_param {
+            "cause" => CausalDirection::Cause,
+            "effect" => CausalDirection::Effect,
+            "none" => CausalDirection::Unknown,
+            "auto" | _ => detect_causal_query_intent(query),
+        };
+
+        // Log causal detection for debugging/monitoring
+        if causal_direction != CausalDirection::Unknown {
+            info!(
+                direction = %causal_direction,
+                query_preview = %query.chars().take(100).collect::<String>(),
+                "Causal query detected - asymmetric E5 reranking will be applied"
+            );
+        }
+
+        // =========================================================================
+        // PHASE 5: QUERY EXPANSION (Optional)
+        // =========================================================================
+
+        // Expand causal queries with related terms for better recall
+        let search_query = if enable_query_expansion && causal_direction != CausalDirection::Unknown {
+            expand_causal_query(query, causal_direction)
+        } else {
+            query.to_string()
+        };
+
+        // Auto-select weight profile for causal queries (if user didn't specify)
+        // Per ARCH-15: E5 Causal should use asymmetric similarity with high E5 weight
+        let effective_weight_profile = match (&weight_profile, &causal_direction) {
+            (None, CausalDirection::Cause | CausalDirection::Effect) => {
+                debug!("Auto-selecting 'causal_reasoning' profile for causal query");
+                Some("causal_reasoning".to_string())
+            }
+            (Some(profile), _) => Some(profile.clone()),
+            (None, CausalDirection::Unknown) => weight_profile.clone(),
+        };
+
         // Build search options with multi-space parameters
-        let mut options = TeleologicalSearchOptions::quick(top_k)
+        // For causal queries, over-fetch candidates to allow for reranking
+        let fetch_multiplier = if enable_asymmetric_e5 && causal_direction != CausalDirection::Unknown {
+            3 // Fetch 3x candidates for asymmetric reranking
+        } else {
+            1
+        };
+        let fetch_top_k = top_k * fetch_multiplier;
+
+        let mut options = TeleologicalSearchOptions::quick(fetch_top_k)
             .with_min_similarity(min_similarity)
             .with_strategy(strategy)
-            .with_rerank(enable_rerank);
+            .with_rerank(enable_rerank)
+            .with_causal_direction(causal_direction); // ARCH-15, AP-77: Thread direction to retrieval
 
-        if let Some(profile) = weight_profile {
-            options = options.with_weight_profile(&profile);
+        if let Some(ref profile) = effective_weight_profile {
+            options = options.with_weight_profile(profile);
         }
 
         // Apply temporal options - handle both new temporalWeight and legacy recencyBoost
@@ -602,11 +696,13 @@ impl Handlers {
             recency_boost = recency_boost,
             enable_rerank = enable_rerank,
             temporal_weight = temporal_weight,
-            "search_graph: Multi-space and temporal options configured"
+            causal_direction = %causal_direction,
+            enable_asymmetric_e5 = enable_asymmetric_e5,
+            "search_graph: Multi-space, temporal, and causal options configured"
         );
 
-        // Generate query embedding
-        let query_embedding = match self.multi_array_provider.embed_all(query).await {
+        // Generate query embedding using potentially expanded query
+        let query_embedding = match self.multi_array_provider.embed_all(&search_query).await {
             Ok(output) => output.fingerprint,
             Err(e) => {
                 error!(error = %e, "search_graph: Query embedding FAILED");
@@ -619,7 +715,65 @@ impl Handlers {
             .search_semantic(&query_embedding, options)
             .await
         {
-            Ok(results) => {
+            Ok(mut results) => {
+                // =========================================================================
+                // PHASE 2: ASYMMETRIC E5 RERANKING
+                // =========================================================================
+                // Apply asymmetric E5 similarity for causal queries
+                // Per ARCH-15 and AP-77: E5 Causal MUST use asymmetric similarity
+
+                let asymmetric_applied = if enable_asymmetric_e5
+                    && causal_direction != CausalDirection::Unknown
+                    && !results.is_empty()
+                {
+                    // Get E5 weight from the effective profile (default to 0.45 for causal_reasoning)
+                    let e5_weight = get_e5_causal_weight(
+                        effective_weight_profile.as_deref().unwrap_or("causal_reasoning")
+                    );
+
+                    info!(
+                        results_count = results.len(),
+                        causal_direction = %causal_direction,
+                        e5_weight = e5_weight,
+                        "Applying asymmetric E5 reranking"
+                    );
+
+                    apply_asymmetric_e5_reranking(
+                        &mut results,
+                        &query_embedding,
+                        causal_direction,
+                        e5_weight,
+                    );
+                    true
+                } else {
+                    false
+                };
+
+                // =========================================================================
+                // PHASE 4: COLBERT LATE INTERACTION RERANKING
+                // =========================================================================
+                // Apply ColBERT reranking if enabled (Stage 3 of pipeline)
+                // This provides token-level precision for causal queries
+
+                let colbert_applied = if enable_rerank && !results.is_empty() {
+                    debug!(
+                        results_count = results.len(),
+                        "Applying ColBERT late interaction reranking"
+                    );
+
+                    apply_colbert_reranking(
+                        &mut results,
+                        &query_embedding,
+                        top_k,
+                    );
+                    true
+                } else {
+                    false
+                };
+
+                // Truncate to requested top_k after reranking
+                results.truncate(top_k);
+
                 // Collect IDs for batch operations
                 let ids: Vec<uuid::Uuid> = results.iter().map(|r| r.fingerprint.id).collect();
 
@@ -704,14 +858,32 @@ impl Handlers {
                     SearchStrategy::Pipeline => "pipeline",
                 };
 
-                self.tool_result_with_pulse(
-                    id,
-                    json!({
-                        "results": results_json,
-                        "count": results_json.len(),
-                        "searchStrategy": strategy_name
-                    }),
-                )
+                // Build response with causal metadata
+                let mut response = json!({
+                    "results": results_json,
+                    "count": results_json.len(),
+                    "searchStrategy": strategy_name
+                });
+
+                // Add causal search metadata for transparency and debugging
+                response["causal"] = json!({
+                    "direction": format!("{}", causal_direction),
+                    "asymmetricE5Applied": asymmetric_applied,
+                    "colbertApplied": colbert_applied,
+                    "queryExpanded": search_query != query
+                });
+
+                // Add expanded query if query expansion was used
+                if search_query != query {
+                    response["causal"]["expandedQuery"] = json!(search_query);
+                }
+
+                // Add effective weight profile for debugging
+                if let Some(ref profile) = effective_weight_profile {
+                    response["effectiveProfile"] = json!(profile);
+                }
+
+                self.tool_result_with_pulse(id, response)
             }
             Err(e) => {
                 error!(error = %e, "search_graph: Search FAILED");
@@ -719,6 +891,305 @@ impl Handlers {
             }
         }
     }
+}
+
+// =============================================================================
+// E5 CAUSAL HELPER FUNCTIONS
+// =============================================================================
+
+use context_graph_core::traits::TeleologicalSearchResult;
+
+/// Get E5 (causal) weight from a weight profile.
+///
+/// # Arguments
+/// * `profile_name` - Name of the weight profile
+///
+/// # Returns
+/// E5 weight (index 4) from the profile, or 0.45 if profile not found
+fn get_e5_causal_weight(profile_name: &str) -> f32 {
+    get_weight_profile(profile_name)
+        .map(|weights| weights[4]) // E5 is at index 4
+        .unwrap_or(0.45) // Default to causal_reasoning E5 weight
+}
+
+/// Apply asymmetric E5 reranking to search results.
+///
+/// This function implements Phase 2 of the causal integration:
+/// - Computes asymmetric E5 similarity between query and each result
+/// - Applies direction modifiers (1.2x cause→effect, 0.8x effect→cause)
+/// - Blends asymmetric E5 score with original similarity
+/// - Re-sorts results by adjusted score
+///
+/// # Arguments
+/// * `results` - Mutable reference to search results to rerank
+/// * `query_embedding` - Query's semantic fingerprint
+/// * `query_direction` - Detected causal direction of the query
+/// * `e5_weight` - Weight for E5 causal similarity (from profile)
+///
+/// # Formula
+/// ```text
+/// adjusted_sim = (1 - e5_weight) × original_sim + e5_weight × asymmetric_e5_sim × direction_mod
+/// ```
+fn apply_asymmetric_e5_reranking(
+    results: &mut [TeleologicalSearchResult],
+    query_embedding: &SemanticFingerprint,
+    query_direction: CausalDirection,
+    e5_weight: f32,
+) {
+    // Skip if no results or weight is zero
+    if results.is_empty() || e5_weight <= 0.0 {
+        return;
+    }
+
+    // Compute adjusted similarities for all results
+    for result in results.iter_mut() {
+        // Get result's causal direction by checking which E5 vector has higher similarity
+        let result_direction = infer_result_causal_direction(&result.fingerprint.semantic);
+
+        // Compute asymmetric E5 similarity
+        // Per CAWAI research: cause queries use query.e5_as_cause vs doc.e5_as_effect
+        let query_is_cause = matches!(query_direction, CausalDirection::Cause);
+        let asymmetric_e5_sim = compute_e5_asymmetric_fingerprint_similarity(
+            query_embedding,
+            &result.fingerprint.semantic,
+            query_is_cause,
+        );
+
+        // Get direction modifier
+        let direction_mod = get_direction_modifier(query_direction, result_direction);
+
+        // Blend original similarity with asymmetric E5 score
+        // Formula: (1 - e5_weight) × original + e5_weight × asymmetric × direction_mod
+        let original_weight = 1.0 - e5_weight;
+        let adjusted_sim = original_weight * result.similarity
+            + e5_weight * asymmetric_e5_sim * direction_mod;
+
+        // Update the result's similarity score
+        result.similarity = adjusted_sim.clamp(0.0, 1.5); // Allow slight amplification
+    }
+
+    // Re-sort results by adjusted similarity (descending)
+    results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
+}
+
+/// Get direction modifier for query→result comparison.
+///
+/// Uses the `direction_mod` module from asymmetric.rs (Constitution-compliant):
+/// - cause→effect: 1.2 (forward inference amplified)
+/// - effect→cause: 0.8 (backward inference dampened)
+/// - same direction or unknown: 1.0 (no modification)
+fn get_direction_modifier(query_direction: CausalDirection, result_direction: CausalDirection) -> f32 {
+    match (query_direction, result_direction) {
+        (CausalDirection::Cause, CausalDirection::Effect) => direction_mod::CAUSE_TO_EFFECT,
+        (CausalDirection::Effect, CausalDirection::Cause) => direction_mod::EFFECT_TO_CAUSE,
+        _ => direction_mod::SAME_DIRECTION,
+    }
+}
+
+/// Infer a document's causal direction by analyzing its E5 embeddings.
+///
+/// Documents that describe causes tend to have stronger "as_cause" vectors,
+/// while documents describing effects have stronger "as_effect" vectors.
+///
+/// # Arguments
+/// * `fingerprint` - Document's semantic fingerprint
+///
+/// # Returns
+/// Inferred causal direction of the document
+fn infer_result_causal_direction(fingerprint: &SemanticFingerprint) -> CausalDirection {
+    let cause_vec = fingerprint.get_e5_as_cause();
+    let effect_vec = fingerprint.get_e5_as_effect();
+
+    // Compare vector norms as a proxy for directional strength
+    let cause_norm: f32 = cause_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let effect_norm: f32 = effect_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+    // Require >10% difference to be confident in direction
+    let threshold = 0.1;
+    let diff_ratio = if effect_norm > f32::EPSILON {
+        (cause_norm - effect_norm) / effect_norm
+    } else if cause_norm > f32::EPSILON {
+        1.0 // All cause, no effect
+    } else {
+        0.0 // Both zero
+    };
+
+    if diff_ratio > threshold {
+        CausalDirection::Cause
+    } else if diff_ratio < -threshold {
+        CausalDirection::Effect
+    } else {
+        CausalDirection::Unknown
+    }
+}
+
+/// Expand a causal query with related terms for better recall.
+///
+/// # Arguments
+/// * `query` - Original query text
+/// * `direction` - Detected causal direction
+///
+/// # Returns
+/// Expanded query with additional causal terms
+fn expand_causal_query(query: &str, direction: CausalDirection) -> String {
+    // Optimization: compute lowercase once to avoid multiple allocations
+    let query_lower = query.to_lowercase();
+
+    match direction {
+        CausalDirection::Cause => {
+            // Add cause-seeking terms (only if not already present)
+            if !query_lower.contains("cause")
+                && !query_lower.contains("reason")
+                && !query_lower.contains("why")
+            {
+                format!("{} cause reason root source", query)
+            } else {
+                query.to_string()
+            }
+        }
+        CausalDirection::Effect => {
+            // Add effect-seeking terms (only if not already present)
+            if !query_lower.contains("effect")
+                && !query_lower.contains("result")
+                && !query_lower.contains("happen")
+            {
+                format!("{} effect result consequence outcome", query)
+            } else {
+                query.to_string()
+            }
+        }
+        CausalDirection::Unknown => query.to_string(),
+    }
+}
+
+// =============================================================================
+// PHASE 4: COLBERT LATE INTERACTION RERANKING
+// =============================================================================
+
+/// ColBERT MaxSim weight for blending with existing similarity.
+/// Per research: 10-20% contribution provides precision boost without dominating.
+const COLBERT_WEIGHT: f32 = 0.15;
+
+/// Compute ColBERT MaxSim score between query and document token embeddings.
+///
+/// MaxSim is the sum of maximum similarities per query token:
+/// ```text
+/// MaxSim(Q, D) = Σ_q max_d cos(q, d)
+/// ```
+///
+/// # Arguments
+/// * `query_tokens` - Query token embeddings (128D per token)
+/// * `doc_tokens` - Document token embeddings (128D per token)
+///
+/// # Returns
+/// Normalized MaxSim score in [0.0, 1.0]
+fn compute_colbert_maxsim(query_tokens: &[Vec<f32>], doc_tokens: &[Vec<f32>]) -> f32 {
+    if query_tokens.is_empty() || doc_tokens.is_empty() {
+        return 0.0;
+    }
+
+    let mut total_score = 0.0;
+
+    for query_token in query_tokens {
+        let mut max_sim = f32::NEG_INFINITY;
+
+        for doc_token in doc_tokens {
+            // Compute cosine similarity between tokens
+            let dot: f32 = query_token.iter().zip(doc_token.iter()).map(|(a, b)| a * b).sum();
+            let norm_q: f32 = query_token.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let norm_d: f32 = doc_token.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+            let sim = if norm_q > f32::EPSILON && norm_d > f32::EPSILON {
+                dot / (norm_q * norm_d)
+            } else {
+                0.0
+            };
+
+            if sim > max_sim {
+                max_sim = sim;
+            }
+        }
+
+        // Add max similarity for this query token
+        if max_sim > f32::NEG_INFINITY {
+            total_score += max_sim;
+        }
+    }
+
+    // Normalize by number of query tokens
+    let normalized = total_score / query_tokens.len() as f32;
+
+    // Clamp to [0.0, 1.0]
+    normalized.clamp(0.0, 1.0)
+}
+
+/// Apply ColBERT late interaction reranking to search results.
+///
+/// This function implements Phase 4 of the causal integration:
+/// - Uses E12 token-level embeddings for precise semantic matching
+/// - Computes MaxSim scores per document
+/// - Blends with existing similarity scores
+/// - Re-sorts results by combined score
+///
+/// # Arguments
+/// * `results` - Mutable reference to search results to rerank
+/// * `query_embedding` - Query's semantic fingerprint
+/// * `top_k` - Maximum results to rerank (ColBERT is expensive)
+///
+/// # Note
+/// ColBERT reranking is only applied when `enable_rerank=true` in the search options.
+fn apply_colbert_reranking(
+    results: &mut [TeleologicalSearchResult],
+    query_embedding: &SemanticFingerprint,
+    top_k: usize,
+) {
+    // Only rerank top-K candidates (ColBERT is computationally expensive)
+    let rerank_count = results.len().min(top_k);
+
+    if rerank_count == 0 {
+        return;
+    }
+
+    // Get query ColBERT tokens (E12) - direct field access
+    let query_tokens = &query_embedding.e12_late_interaction;
+    if query_tokens.is_empty() {
+        debug!("ColBERT reranking skipped: no query tokens");
+        return;
+    }
+
+    let mut reranked = 0;
+
+    for result in results.iter_mut().take(rerank_count) {
+        // Get document ColBERT tokens - direct field access
+        let doc_tokens = &result.fingerprint.semantic.e12_late_interaction;
+
+        if doc_tokens.is_empty() {
+            continue;
+        }
+
+        // Compute MaxSim score
+        let maxsim_score = compute_colbert_maxsim(query_tokens, doc_tokens);
+
+        // Blend ColBERT score with existing similarity
+        // Formula: new_sim = (1 - colbert_weight) × old_sim + colbert_weight × maxsim
+        result.similarity = result.similarity * (1.0 - COLBERT_WEIGHT)
+            + maxsim_score * COLBERT_WEIGHT;
+
+        reranked += 1;
+    }
+
+    // Re-sort after ColBERT reranking
+    results.sort_by(|a, b| {
+        b.similarity
+            .partial_cmp(&a.similarity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    debug!(
+        reranked = reranked,
+        colbert_weight = COLBERT_WEIGHT,
+        "ColBERT reranking applied"
+    );
 }
 
 #[cfg(test)]
@@ -809,5 +1280,244 @@ mod tests {
         let too_large_error = format!("topK must be at most {}, got {}", MAX_TOP_K, 500);
         assert!(too_large_error.contains(&MAX_TOP_K.to_string()));
         assert!(too_large_error.contains("500"));
+    }
+
+    // =========================================================================
+    // E5 CAUSAL INTEGRATION TESTS
+    // =========================================================================
+
+    use super::{
+        expand_causal_query, get_direction_modifier, get_e5_causal_weight,
+        CausalDirection, direction_mod,
+    };
+
+    #[test]
+    fn test_direction_modifier_cause_to_effect() {
+        // Per Constitution: cause→effect = 1.2 (forward inference amplified)
+        let modifier = get_direction_modifier(CausalDirection::Cause, CausalDirection::Effect);
+        assert_eq!(modifier, direction_mod::CAUSE_TO_EFFECT);
+        assert_eq!(modifier, 1.2);
+        println!("[VERIFIED] cause→effect direction_mod = 1.2");
+    }
+
+    #[test]
+    fn test_direction_modifier_effect_to_cause() {
+        // Per Constitution: effect→cause = 0.8 (backward inference dampened)
+        let modifier = get_direction_modifier(CausalDirection::Effect, CausalDirection::Cause);
+        assert_eq!(modifier, direction_mod::EFFECT_TO_CAUSE);
+        assert_eq!(modifier, 0.8);
+        println!("[VERIFIED] effect→cause direction_mod = 0.8");
+    }
+
+    #[test]
+    fn test_direction_modifier_same_direction() {
+        // Per Constitution: same_direction = 1.0 (no modification)
+        assert_eq!(
+            get_direction_modifier(CausalDirection::Cause, CausalDirection::Cause),
+            direction_mod::SAME_DIRECTION
+        );
+        assert_eq!(
+            get_direction_modifier(CausalDirection::Effect, CausalDirection::Effect),
+            direction_mod::SAME_DIRECTION
+        );
+        println!("[VERIFIED] same_direction direction_mod = 1.0");
+    }
+
+    #[test]
+    fn test_direction_modifier_unknown() {
+        // Unknown directions get no modification (1.0)
+        assert_eq!(
+            get_direction_modifier(CausalDirection::Unknown, CausalDirection::Cause),
+            direction_mod::SAME_DIRECTION
+        );
+        assert_eq!(
+            get_direction_modifier(CausalDirection::Effect, CausalDirection::Unknown),
+            direction_mod::SAME_DIRECTION
+        );
+        assert_eq!(
+            get_direction_modifier(CausalDirection::Unknown, CausalDirection::Unknown),
+            direction_mod::SAME_DIRECTION
+        );
+        println!("[VERIFIED] unknown directions get direction_mod = 1.0");
+    }
+
+    #[test]
+    fn test_get_e5_causal_weight_causal_reasoning() {
+        // causal_reasoning profile has E5 = 0.45
+        let weight = get_e5_causal_weight("causal_reasoning");
+        assert!((weight - 0.45).abs() < 0.01);
+        println!("[VERIFIED] causal_reasoning E5 weight = {}", weight);
+    }
+
+    #[test]
+    fn test_get_e5_causal_weight_semantic_search() {
+        // semantic_search profile has E5 = 0.15
+        let weight = get_e5_causal_weight("semantic_search");
+        assert!((weight - 0.15).abs() < 0.01);
+        println!("[VERIFIED] semantic_search E5 weight = {}", weight);
+    }
+
+    #[test]
+    fn test_get_e5_causal_weight_unknown_profile() {
+        // Unknown profile defaults to 0.45 (causal_reasoning default)
+        let weight = get_e5_causal_weight("nonexistent_profile");
+        assert!((weight - 0.45).abs() < 0.01);
+        println!("[VERIFIED] Unknown profile defaults to E5 weight = {}", weight);
+    }
+
+    #[test]
+    fn test_expand_causal_query_cause_direction() {
+        // Cause queries without existing cause terms should be expanded
+        let expanded = expand_causal_query("what happened to the server", CausalDirection::Cause);
+        assert!(expanded.contains("cause"));
+        assert!(expanded.contains("reason"));
+        assert!(expanded.contains("root"));
+        println!("[VERIFIED] Cause query expanded: {}", expanded);
+    }
+
+    #[test]
+    fn test_expand_causal_query_effect_direction() {
+        // Effect queries without existing effect terms should be expanded
+        let expanded = expand_causal_query("delete the file", CausalDirection::Effect);
+        assert!(expanded.contains("effect"));
+        assert!(expanded.contains("result"));
+        assert!(expanded.contains("consequence"));
+        println!("[VERIFIED] Effect query expanded: {}", expanded);
+    }
+
+    #[test]
+    fn test_expand_causal_query_no_double_expansion() {
+        // Queries already containing causal terms should not be expanded
+        let original = "why does this cause the error";
+        let expanded = expand_causal_query(original, CausalDirection::Cause);
+        assert_eq!(expanded, original);
+        println!("[VERIFIED] No double expansion for: {}", original);
+
+        let original = "what is the effect of this change";
+        let expanded = expand_causal_query(original, CausalDirection::Effect);
+        assert_eq!(expanded, original);
+        println!("[VERIFIED] No double expansion for: {}", original);
+    }
+
+    #[test]
+    fn test_expand_causal_query_unknown_direction() {
+        // Unknown direction should not expand
+        let original = "show me the code";
+        let expanded = expand_causal_query(original, CausalDirection::Unknown);
+        assert_eq!(expanded, original);
+        println!("[VERIFIED] Unknown direction not expanded");
+    }
+
+    #[test]
+    fn test_direction_modifiers_asymmetric() {
+        // The asymmetry ratio should be 1.2 / 0.8 = 1.5
+        let ratio = direction_mod::CAUSE_TO_EFFECT / direction_mod::EFFECT_TO_CAUSE;
+        assert!((ratio - 1.5).abs() < 0.01);
+        println!("[VERIFIED] Asymmetry ratio = {} (expected 1.5)", ratio);
+    }
+
+    #[test]
+    fn test_constitution_compliance_direction_modifiers() {
+        // Verify all direction modifiers match Constitution spec
+        assert_eq!(direction_mod::CAUSE_TO_EFFECT, 1.2, "Constitution: cause_to_effect must be 1.2");
+        assert_eq!(direction_mod::EFFECT_TO_CAUSE, 0.8, "Constitution: effect_to_cause must be 0.8");
+        assert_eq!(direction_mod::SAME_DIRECTION, 1.0, "Constitution: same_direction must be 1.0");
+        println!("[VERIFIED] All direction modifiers match Constitution specification");
+    }
+
+    // =========================================================================
+    // COLBERT MAXSIM TESTS
+    // =========================================================================
+
+    use super::{compute_colbert_maxsim, COLBERT_WEIGHT};
+
+    #[test]
+    fn test_colbert_maxsim_identical_tokens() {
+        // Identical query and doc should give score of 1.0
+        let query_tokens = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+        ];
+        let doc_tokens = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+        ];
+
+        let score = compute_colbert_maxsim(&query_tokens, &doc_tokens);
+        assert!((score - 1.0).abs() < 0.01, "Identical tokens should give ~1.0, got {}", score);
+        println!("[VERIFIED] ColBERT MaxSim with identical tokens = {}", score);
+    }
+
+    #[test]
+    fn test_colbert_maxsim_orthogonal_tokens() {
+        // Orthogonal query and doc tokens should give score of 0.0
+        let query_tokens = vec![
+            vec![1.0, 0.0, 0.0],
+        ];
+        let doc_tokens = vec![
+            vec![0.0, 1.0, 0.0],
+        ];
+
+        let score = compute_colbert_maxsim(&query_tokens, &doc_tokens);
+        assert!(score.abs() < 0.01, "Orthogonal tokens should give ~0.0, got {}", score);
+        println!("[VERIFIED] ColBERT MaxSim with orthogonal tokens = {}", score);
+    }
+
+    #[test]
+    fn test_colbert_maxsim_partial_match() {
+        // Mix of matching and non-matching tokens
+        let query_tokens = vec![
+            vec![1.0, 0.0, 0.0],  // Matches first doc token
+            vec![0.0, 0.0, 1.0],  // Doesn't match any doc token
+        ];
+        let doc_tokens = vec![
+            vec![1.0, 0.0, 0.0],  // Matches first query token
+            vec![0.0, 1.0, 0.0],  // Doesn't match any query token
+        ];
+
+        let score = compute_colbert_maxsim(&query_tokens, &doc_tokens);
+        // Expected: (1.0 + 0.0) / 2 = 0.5
+        assert!((score - 0.5).abs() < 0.01, "Partial match should give ~0.5, got {}", score);
+        println!("[VERIFIED] ColBERT MaxSim with partial match = {}", score);
+    }
+
+    #[test]
+    fn test_colbert_maxsim_empty_inputs() {
+        // Empty inputs should return 0.0
+        let score_empty_query = compute_colbert_maxsim(&[], &[vec![1.0, 0.0]]);
+        let score_empty_doc = compute_colbert_maxsim(&[vec![1.0, 0.0]], &[]);
+        let score_both_empty = compute_colbert_maxsim(&[], &[]);
+
+        assert_eq!(score_empty_query, 0.0);
+        assert_eq!(score_empty_doc, 0.0);
+        assert_eq!(score_both_empty, 0.0);
+        println!("[VERIFIED] Empty inputs give 0.0");
+    }
+
+    #[test]
+    fn test_colbert_weight_range() {
+        // ColBERT weight should be in reasonable range (10-20%)
+        assert!(COLBERT_WEIGHT >= 0.1, "ColBERT weight should be >= 0.1");
+        assert!(COLBERT_WEIGHT <= 0.2, "ColBERT weight should be <= 0.2");
+        println!("[VERIFIED] ColBERT weight = {} is in [0.1, 0.2]", COLBERT_WEIGHT);
+    }
+
+    #[test]
+    fn test_colbert_maxsim_normalization() {
+        // Verify score is normalized to [0, 1]
+        let query_tokens = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![2.0, 2.0, 2.0],
+            vec![3.0, 3.0, 3.0],
+        ];
+        let doc_tokens = vec![
+            vec![1.0, 1.0, 1.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+
+        let score = compute_colbert_maxsim(&query_tokens, &doc_tokens);
+        assert!(score >= 0.0, "Score should be >= 0.0");
+        assert!(score <= 1.0, "Score should be <= 1.0");
+        println!("[VERIFIED] ColBERT MaxSim normalized to [0, 1]: {}", score);
     }
 }

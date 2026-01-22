@@ -47,6 +47,7 @@ use uuid::Uuid;
 
 use context_graph_core::error::{CoreError, CoreResult};
 use context_graph_core::fusion::{EmbedderRanking, FusionStrategy, fuse_rankings};
+use context_graph_core::causal::asymmetric::CausalDirection;
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions, TeleologicalSearchResult};
 use context_graph_core::types::fingerprint::{SemanticFingerprint, SparseVector};
 
@@ -261,12 +262,22 @@ impl RocksDbTeleologicalStore {
                 let fp = deserialize_teleological_fingerprint(&data);
 
                 // Compute all 13 embedder scores with E7 query-type awareness (ARCH-16)
+                // and direction-aware E5 similarity (ARCH-15, AP-77)
                 let code_query_type = options.effective_code_query_type();
-                let embedder_scores = self.compute_embedder_scores_with_code_query_type(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                );
+                let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
+                    self.compute_embedder_scores_with_direction(
+                        query,
+                        &fp.semantic,
+                        code_query_type,
+                        options.causal_direction,
+                    )
+                } else {
+                    self.compute_embedder_scores_with_code_query_type(
+                        query,
+                        &fp.semantic,
+                        code_query_type,
+                    )
+                };
 
                 results.push(TeleologicalSearchResult::new(fp, similarity, embedder_scores));
             }
@@ -330,18 +341,26 @@ impl RocksDbTeleologicalStore {
             embedder_rankings.push(EmbedderRanking::new("E1", weights[0], e1_ranked));
         }
 
-        // E5 Causal (if available)
-        if let Some(e5_index) = self.index_registry.get(EmbedderIndex::E5Causal) {
-            if let Ok(e5_candidates) = e5_index.search(query.e5_active_vector(), k, None) {
-                let e5_ranked: Vec<(Uuid, f32)> = e5_candidates
-                    .into_iter()
-                    .filter(|(id, _)| options.include_deleted || !self.is_soft_deleted(id))
-                    .map(|(id, dist)| (id, 1.0 - dist.min(1.0)))
-                    .collect();
+        // E5 Causal with asymmetric retrieval (ARCH-15, AP-77)
+        // Direction-aware index selection:
+        // - Cause-seeking queries (why X?) -> search E5CausalEffect using query.e5_as_cause
+        // - Effect-seeking queries (what happens when X?) -> search E5CausalCause using query.e5_as_effect
+        // - Unknown direction -> use legacy E5Causal index with active vector
+        let e5_results = self.search_e5_asymmetric(query, options.causal_direction, k);
+        if let Ok(e5_candidates) = e5_results {
+            let e5_ranked: Vec<(Uuid, f32)> = e5_candidates
+                .into_iter()
+                .filter(|(id, _)| options.include_deleted || !self.is_soft_deleted(id))
+                .map(|(id, dist)| (id, 1.0 - dist.min(1.0)))
+                .collect();
 
-                if !e5_ranked.is_empty() && weights[4] > 0.0 {
-                    embedder_rankings.push(EmbedderRanking::new("E5", weights[4], e5_ranked));
-                }
+            if !e5_ranked.is_empty() && weights[4] > 0.0 {
+                let e5_label = match options.causal_direction {
+                    CausalDirection::Cause => "E5_Cause",
+                    CausalDirection::Effect => "E5_Effect",
+                    CausalDirection::Unknown => "E5",
+                };
+                embedder_rankings.push(EmbedderRanking::new(e5_label, weights[4], e5_ranked));
             }
         }
 
@@ -408,11 +427,21 @@ impl RocksDbTeleologicalStore {
                 let fp = deserialize_teleological_fingerprint(&data);
 
                 // Compute all 13 embedder scores with E7 query-type awareness (ARCH-16)
-                let embedder_scores = self.compute_embedder_scores_with_code_query_type(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                );
+                // and direction-aware E5 similarity (ARCH-15, AP-77)
+                let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
+                    self.compute_embedder_scores_with_direction(
+                        query,
+                        &fp.semantic,
+                        code_query_type,
+                        options.causal_direction,
+                    )
+                } else {
+                    self.compute_embedder_scores_with_code_query_type(
+                        query,
+                        &fp.semantic,
+                        code_query_type,
+                    )
+                };
 
                 // For WeightedSum strategy, use the legacy score computation
                 // For WeightedRRF, the fused_score is already the RRF score
@@ -574,11 +603,21 @@ impl RocksDbTeleologicalStore {
                 let fp = deserialize_teleological_fingerprint(&data);
 
                 // Compute all 13 embedder scores with E7 query-type awareness (ARCH-16)
-                let embedder_scores = self.compute_embedder_scores_with_code_query_type(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                );
+                // and direction-aware E5 similarity (ARCH-15, AP-77)
+                let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
+                    self.compute_embedder_scores_with_direction(
+                        query,
+                        &fp.semantic,
+                        code_query_type,
+                        options.causal_direction,
+                    )
+                } else {
+                    self.compute_embedder_scores_with_code_query_type(
+                        query,
+                        &fp.semantic,
+                        code_query_type,
+                    )
+                };
 
                 candidate_data.push((id, embedder_scores, fp.semantic.clone()));
             }
@@ -764,6 +803,90 @@ impl RocksDbTeleologicalStore {
             debug!("Weight profile specified but using defaults in storage layer");
         }
         DEFAULT_SEMANTIC_WEIGHTS
+    }
+
+    /// Search E5 with asymmetric index selection (ARCH-15, AP-77).
+    ///
+    /// Implements direction-aware retrieval:
+    /// - **Cause-seeking** (why X?): search E5CausalEffect index using query.e5_as_cause
+    ///   - We want documents whose *effect* matches our *cause* query
+    /// - **Effect-seeking** (what happens when X?): search E5CausalCause index using query.e5_as_effect
+    ///   - We want documents whose *cause* matches our *effect* query
+    /// - **Unknown direction**: use legacy E5Causal index with active vector
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Query semantic fingerprint
+    /// * `direction` - Detected causal direction of the query
+    /// * `k` - Number of candidates to retrieve
+    ///
+    /// # Returns
+    ///
+    /// List of (Uuid, distance) pairs from HNSW search
+    ///
+    /// # Index Selection Logic
+    ///
+    /// The key insight is that causal relationships are complementary:
+    /// - A cause-seeking query ("why did X happen?") should find documents that describe effects
+    /// - An effect-seeking query ("what happens when X?") should find documents that describe causes
+    ///
+    /// This is why we search the *opposite* index from the query direction.
+    fn search_e5_asymmetric(
+        &self,
+        query: &SemanticFingerprint,
+        direction: CausalDirection,
+        k: usize,
+    ) -> Result<Vec<(Uuid, f32)>, crate::teleological::indexes::IndexError> {
+        match direction {
+            CausalDirection::Cause => {
+                // Cause-seeking query: search Effect index using cause vector
+                // "Why X?" -> find documents whose effect matches our cause query
+                if let Some(effect_index) = self.index_registry.get(EmbedderIndex::E5CausalEffect) {
+                    let cause_vec = query.get_e5_as_cause();
+                    if !cause_vec.is_empty() {
+                        debug!(
+                            "E5 asymmetric search: Cause-seeking query, searching E5CausalEffect index with cause vector ({}D)",
+                            cause_vec.len()
+                        );
+                        return effect_index.search(cause_vec, k, None);
+                    } else {
+                        warn!("E5 asymmetric search: cause_vec is empty, falling back to legacy E5Causal");
+                    }
+                } else {
+                    debug!("E5 asymmetric search: E5CausalEffect index not available, using legacy E5Causal");
+                }
+            }
+            CausalDirection::Effect => {
+                // Effect-seeking query: search Cause index using effect vector
+                // "What happens when X?" -> find documents whose cause matches our effect query
+                if let Some(cause_index) = self.index_registry.get(EmbedderIndex::E5CausalCause) {
+                    let effect_vec = query.get_e5_as_effect();
+                    if !effect_vec.is_empty() {
+                        debug!(
+                            "E5 asymmetric search: Effect-seeking query, searching E5CausalCause index with effect vector ({}D)",
+                            effect_vec.len()
+                        );
+                        return cause_index.search(effect_vec, k, None);
+                    } else {
+                        warn!("E5 asymmetric search: effect_vec is empty, falling back to legacy E5Causal");
+                    }
+                } else {
+                    debug!("E5 asymmetric search: E5CausalCause index not available, using legacy E5Causal");
+                }
+            }
+            CausalDirection::Unknown => {
+                // Unknown direction: use legacy E5Causal index
+                debug!("E5 asymmetric search: Unknown direction, using legacy E5Causal index");
+            }
+        }
+
+        // Fallback to legacy E5Causal index
+        if let Some(e5_index) = self.index_registry.get(EmbedderIndex::E5Causal) {
+            e5_index.search(query.e5_active_vector(), k, None)
+        } else {
+            debug!("E5 asymmetric search: No E5 indexes available");
+            Ok(Vec::new())
+        }
     }
 
     /// Apply recency boost POST-retrieval.

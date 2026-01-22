@@ -19,8 +19,10 @@ use crate::teleological::Embedder;
 use crate::types::fingerprint::SemanticFingerprint;
 
 use super::config::SimilarityThresholds;
-use super::distance::compute_similarity_for_space;
+use super::distance::{compute_similarity_for_space, compute_similarity_for_space_with_direction};
 use super::similarity::{PerSpaceScores, SimilarityResult};
+
+use crate::causal::asymmetric::CausalDirection;
 
 /// Multi-space similarity computation service.
 ///
@@ -64,6 +66,35 @@ impl MultiSpaceSimilarity {
 
         for embedder in Embedder::all() {
             let sim = compute_similarity_for_space(embedder, query, memory);
+            scores.set_score(embedder, sim);
+        }
+
+        scores
+    }
+
+    /// Compute similarity scores with causal direction for E5.
+    ///
+    /// Like `compute_similarity()` but uses asymmetric E5 similarity when
+    /// a causal direction is provided (per ARCH-15 and AP-77).
+    ///
+    /// # Arguments
+    /// * `query` - Query fingerprint
+    /// * `memory` - Memory fingerprint
+    /// * `causal_direction` - Detected causal direction of the query
+    ///
+    /// # Returns
+    /// Per-space similarity scores with direction-aware E5 computation
+    pub fn compute_similarity_with_direction(
+        &self,
+        query: &SemanticFingerprint,
+        memory: &SemanticFingerprint,
+        causal_direction: CausalDirection,
+    ) -> PerSpaceScores {
+        let mut scores = PerSpaceScores::new();
+
+        for embedder in Embedder::all() {
+            let sim =
+                compute_similarity_for_space_with_direction(embedder, query, memory, causal_direction);
             scores.set_score(embedder, sim);
         }
 
@@ -173,6 +204,24 @@ impl MultiSpaceSimilarity {
         memory: &SemanticFingerprint,
     ) -> SimilarityResult {
         let scores = self.compute_similarity(query, memory);
+        let matching = self.matching_spaces(&scores);
+        let relevance = self.compute_relevance_score(&scores);
+
+        SimilarityResult::with_relevance(memory_id, scores, relevance, matching)
+    }
+
+    /// Compute complete SimilarityResult with causal direction.
+    ///
+    /// Like `compute_full_result()` but uses direction-aware E5 similarity
+    /// per ARCH-15 and AP-77.
+    pub fn compute_full_result_with_direction(
+        &self,
+        memory_id: Uuid,
+        query: &SemanticFingerprint,
+        memory: &SemanticFingerprint,
+        causal_direction: CausalDirection,
+    ) -> SimilarityResult {
+        let scores = self.compute_similarity_with_direction(query, memory, causal_direction);
         let matching = self.matching_spaces(&scores);
         let relevance = self.compute_relevance_score(&scores);
 
@@ -717,5 +766,116 @@ mod tests {
             );
         }
         println!("[PASS] All category weights match constitution");
+    }
+
+    // =========================================================================
+    // Direction-Aware Multi-Space Tests (ARCH-15, AP-77)
+    // =========================================================================
+
+    #[test]
+    fn test_compute_similarity_with_direction_unknown() {
+        let similarity = MultiSpaceSimilarity::with_defaults();
+        let query = SemanticFingerprint::zeroed();
+        let memory = SemanticFingerprint::zeroed();
+
+        // Unknown direction should match symmetric
+        let sym = similarity.compute_similarity(&query, &memory);
+        let asym = similarity.compute_similarity_with_direction(&query, &memory, CausalDirection::Unknown);
+
+        for embedder in Embedder::all() {
+            let s = sym.get_score(embedder);
+            let a = asym.get_score(embedder);
+            assert!(
+                (s - a).abs() < 1e-5,
+                "{:?}: sym={} != asym={}",
+                embedder,
+                s,
+                a
+            );
+        }
+        println!("[PASS] compute_similarity_with_direction(Unknown) matches symmetric");
+    }
+
+    #[test]
+    fn test_compute_similarity_with_direction_only_affects_e5() {
+        let similarity = MultiSpaceSimilarity::with_defaults();
+
+        let mut query = SemanticFingerprint::zeroed();
+        let mut memory = SemanticFingerprint::zeroed();
+
+        // Set non-E5 embeddings
+        query.e1_semantic = vec![1.0; 1024];
+        memory.e1_semantic = vec![1.0; 1024];
+
+        // Set E5 embeddings with clear direction
+        query.e5_causal_as_cause = vec![1.0; 768];
+        query.e5_causal_as_effect = vec![0.0; 768];
+        memory.e5_causal_as_cause = vec![0.1; 768];
+        memory.e5_causal_as_effect = vec![0.9; 768];
+
+        let sym = similarity.compute_similarity(&query, &memory);
+        let with_cause = similarity.compute_similarity_with_direction(&query, &memory, CausalDirection::Cause);
+        let with_effect = similarity.compute_similarity_with_direction(&query, &memory, CausalDirection::Effect);
+
+        // Non-E5 spaces should be identical across all directions
+        for embedder in Embedder::all() {
+            if !matches!(embedder, Embedder::Causal) {
+                let s = sym.get_score(embedder);
+                let c = with_cause.get_score(embedder);
+                let e = with_effect.get_score(embedder);
+                assert!(
+                    (s - c).abs() < 1e-5 && (s - e).abs() < 1e-5,
+                    "{:?} should be unchanged: sym={}, cause={}, effect={}",
+                    embedder,
+                    s,
+                    c,
+                    e
+                );
+            }
+        }
+        println!("[PASS] Direction only affects E5/Causal embedder");
+    }
+
+    #[test]
+    fn test_compute_full_result_with_direction() {
+        let similarity = MultiSpaceSimilarity::with_defaults();
+        let memory_id = Uuid::new_v4();
+        let query = SemanticFingerprint::zeroed();
+        let memory = SemanticFingerprint::zeroed();
+
+        let result =
+            similarity.compute_full_result_with_direction(memory_id, &query, &memory, CausalDirection::Cause);
+
+        assert_eq!(result.memory_id, memory_id);
+        assert!(result.relevance_score >= 0.0 && result.relevance_score <= 1.0);
+        println!("[PASS] compute_full_result_with_direction returns valid SimilarityResult");
+    }
+
+    #[test]
+    fn test_direction_aware_scores_in_range() {
+        let similarity = MultiSpaceSimilarity::with_defaults();
+
+        let mut query = SemanticFingerprint::zeroed();
+        let mut memory = SemanticFingerprint::zeroed();
+
+        query.e5_causal_as_cause = vec![0.8; 768];
+        query.e5_causal_as_effect = vec![0.2; 768];
+        memory.e5_causal_as_cause = vec![0.3; 768];
+        memory.e5_causal_as_effect = vec![0.9; 768];
+
+        for direction in [CausalDirection::Unknown, CausalDirection::Cause, CausalDirection::Effect] {
+            let scores = similarity.compute_similarity_with_direction(&query, &memory, direction);
+            for embedder in Embedder::all() {
+                let score = scores.get_score(embedder);
+                assert!(
+                    score >= 0.0 && score <= 1.0,
+                    "{:?} with {:?} direction out of range: {}",
+                    embedder,
+                    direction,
+                    score
+                );
+            }
+        }
+        println!("[PASS] All direction-aware scores are in [0, 1] range");
     }
 }

@@ -13,7 +13,10 @@
 use tracing::debug;
 use uuid::Uuid;
 
+use context_graph_core::causal::asymmetric::CausalDirection;
 use context_graph_core::code::{CodeQueryType, compute_e7_similarity_with_query_type};
+use context_graph_core::retrieval::distance::compute_similarity_for_space_with_direction;
+use context_graph_core::teleological::Embedder;
 use context_graph_core::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint};
 
 use crate::teleological::indexes::{EmbedderIndex, EmbedderIndexOps, IndexError};
@@ -55,6 +58,12 @@ impl RocksDbTeleologicalStore {
     ///
     /// Returns the appropriate vector slice for the given embedder index.
     ///
+    /// # ARCH-15, AP-77: E5 Asymmetric Indexes
+    ///
+    /// - E5CausalCause: Returns e5_causal_as_cause vector (for effect-seeking queries)
+    /// - E5CausalEffect: Returns e5_causal_as_effect vector (for cause-seeking queries)
+    /// - E5Causal: Returns active vector (legacy, for backward compatibility)
+    ///
     /// # FAIL FAST
     ///
     /// Panics for embedders that don't use HNSW:
@@ -74,7 +83,13 @@ impl RocksDbTeleologicalStore {
             EmbedderIndex::E2TemporalRecent => &semantic.e2_temporal_recent,
             EmbedderIndex::E3TemporalPeriodic => &semantic.e3_temporal_periodic,
             EmbedderIndex::E4TemporalPositional => &semantic.e4_temporal_positional,
+            // E5 legacy - uses active vector (whichever is populated)
             EmbedderIndex::E5Causal => semantic.e5_active_vector(),
+            // E5 asymmetric indexes (ARCH-15, AP-77)
+            // Cause index stores cause vectors - queried when seeking effects
+            EmbedderIndex::E5CausalCause => semantic.get_e5_as_cause(),
+            // Effect index stores effect vectors - queried when seeking causes
+            EmbedderIndex::E5CausalEffect => semantic.get_e5_as_effect(),
             EmbedderIndex::E6Sparse => {
                 panic!("FAIL FAST: E6 is sparse - use inverted index, not HNSW")
             }
@@ -94,7 +109,7 @@ impl RocksDbTeleologicalStore {
 
     /// Remove fingerprint from all per-embedder indexes.
     ///
-    /// Removes the ID from all 11 HNSW indexes.
+    /// Removes the ID from all 13 HNSW indexes (including E5CausalCause and E5CausalEffect).
     pub(crate) fn remove_from_indexes(&self, id: Uuid) -> Result<(), IndexError> {
         for (_embedder, index) in self.index_registry.iter() {
             // Remove returns bool (found or not), we ignore it
@@ -151,6 +166,78 @@ impl RocksDbTeleologicalStore {
                 &stored.e4_temporal_positional,
             ),
             compute_cosine_similarity(query.e5_active_vector(), stored.e5_active_vector()),
+            // E6: Sparse embedder - sparse cosine similarity
+            query.e6_sparse.cosine_similarity(&stored.e6_sparse),
+            // E7: Code embedder with query-type awareness (ARCH-16)
+            e7_score,
+            // E8-E11: Dense embedders - cosine similarity
+            compute_cosine_similarity(&query.e8_graph, &stored.e8_graph),
+            compute_cosine_similarity(&query.e9_hdc, &stored.e9_hdc),
+            compute_cosine_similarity(&query.e10_multimodal, &stored.e10_multimodal),
+            compute_cosine_similarity(&query.e11_entity, &stored.e11_entity),
+            // E12: Late-interaction - MaxSim over token embeddings
+            compute_maxsim_direct(&query.e12_late_interaction, &stored.e12_late_interaction),
+            // E13: SPLADE sparse - sparse cosine similarity
+            query.e13_splade.cosine_similarity(&stored.e13_splade),
+        ]
+    }
+
+    /// Compute similarity scores for all 13 embedders with direction-aware E5.
+    ///
+    /// Per ARCH-15 and AP-77: When causal direction is known, E5 uses asymmetric
+    /// similarity computation with direction modifiers (cause→effect 1.2x, effect→cause 0.8x).
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Query semantic fingerprint
+    /// * `stored` - Stored document semantic fingerprint
+    /// * `code_query_type` - Optional code query type for E7 adjustment
+    /// * `causal_direction` - Detected causal direction of the query
+    ///
+    /// # Direction-Aware E5 (ARCH-15, AP-77)
+    ///
+    /// * `Cause`: Query seeks causes (use asymmetric cause vs effect comparison)
+    /// * `Effect`: Query seeks effects (use asymmetric effect vs cause comparison)
+    /// * `Unknown`: Use symmetric E5 similarity (backward compatible)
+    ///
+    /// # ARCH-02 Compliance
+    /// All comparisons are apples-to-apples: E1<->E1, E6<->E6, etc.
+    pub(crate) fn compute_embedder_scores_with_direction(
+        &self,
+        query: &SemanticFingerprint,
+        stored: &SemanticFingerprint,
+        code_query_type: Option<CodeQueryType>,
+        causal_direction: CausalDirection,
+    ) -> [f32; 13] {
+        // E7 Code similarity with query-type awareness
+        let e7_score = match code_query_type {
+            Some(query_type) => {
+                compute_e7_similarity_with_query_type(&query.e7_code, &stored.e7_code, query_type)
+            }
+            None => {
+                compute_cosine_similarity(&query.e7_code, &stored.e7_code)
+            }
+        };
+
+        // E5 Causal with direction-aware asymmetric similarity (ARCH-15, AP-77)
+        let e5_score = compute_similarity_for_space_with_direction(
+            Embedder::Causal,
+            query,
+            stored,
+            causal_direction,
+        );
+
+        [
+            // E1-E4: Dense embedders - cosine similarity
+            compute_cosine_similarity(&query.e1_semantic, &stored.e1_semantic),
+            compute_cosine_similarity(&query.e2_temporal_recent, &stored.e2_temporal_recent),
+            compute_cosine_similarity(&query.e3_temporal_periodic, &stored.e3_temporal_periodic),
+            compute_cosine_similarity(
+                &query.e4_temporal_positional,
+                &stored.e4_temporal_positional,
+            ),
+            // E5: Causal with direction-aware asymmetric similarity (ARCH-15, AP-77)
+            e5_score,
             // E6: Sparse embedder - sparse cosine similarity
             query.e6_sparse.cosine_similarity(&stored.e6_sparse),
             // E7: Code embedder with query-type awareness (ARCH-16)

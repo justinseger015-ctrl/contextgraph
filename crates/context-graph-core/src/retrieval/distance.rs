@@ -199,6 +199,96 @@ pub fn compute_similarity_for_space(
     }
 }
 
+/// Compute similarity for a specific embedding space with causal direction.
+///
+/// This function extends `compute_similarity_for_space()` with direction-aware
+/// E5 similarity computation per ARCH-15 and AP-77.
+///
+/// When `causal_direction` is `Cause` or `Effect`, E5 similarity uses:
+/// - Asymmetric vectors: query.e5_as_cause vs doc.e5_as_effect (or reverse)
+/// - Direction modifiers: cause→effect (1.2x), effect→cause (0.8x)
+///
+/// For all other embedders and when direction is `Unknown`, behaves identically
+/// to `compute_similarity_for_space()`.
+///
+/// # Arguments
+/// * `embedder` - Which embedding space to compare
+/// * `query` - Query fingerprint
+/// * `memory` - Memory fingerprint
+/// * `causal_direction` - Detected causal direction of the query
+///
+/// # Returns
+/// Similarity in [0.0, 1.0], with direction modifier applied for E5 causal
+pub fn compute_similarity_for_space_with_direction(
+    embedder: Embedder,
+    query: &SemanticFingerprint,
+    memory: &SemanticFingerprint,
+    causal_direction: crate::causal::asymmetric::CausalDirection,
+) -> f32 {
+    use crate::causal::asymmetric::{
+        compute_e5_asymmetric_fingerprint_similarity, direction_mod, CausalDirection,
+    };
+
+    // Special handling for E5 Causal with known direction
+    if matches!(embedder, Embedder::Causal) && causal_direction != CausalDirection::Unknown {
+        let query_is_cause = matches!(causal_direction, CausalDirection::Cause);
+
+        // Compute asymmetric similarity using dual E5 vectors
+        let asym_sim = compute_e5_asymmetric_fingerprint_similarity(query, memory, query_is_cause);
+
+        // Infer result direction from document's E5 vectors
+        let result_direction = infer_direction_from_fingerprint(memory);
+
+        // Apply Constitution-specified direction modifier
+        let dir_mod = match (causal_direction, result_direction) {
+            (CausalDirection::Cause, CausalDirection::Effect) => direction_mod::CAUSE_TO_EFFECT,
+            (CausalDirection::Effect, CausalDirection::Cause) => direction_mod::EFFECT_TO_CAUSE,
+            _ => direction_mod::SAME_DIRECTION,
+        };
+
+        return (asym_sim * dir_mod).clamp(0.0, 1.0);
+    }
+
+    // Default: symmetric computation for all other embedders or unknown direction
+    compute_similarity_for_space(embedder, query, memory)
+}
+
+/// Infer causal direction from a stored fingerprint's E5 vectors.
+///
+/// Compares the magnitude of cause vs effect vectors to determine
+/// which direction the document emphasizes.
+///
+/// # Returns
+/// - `Cause` if cause vector magnitude > effect * 1.1
+/// - `Effect` if effect vector magnitude > cause * 1.1
+/// - `Unknown` if roughly equal (within 10%)
+fn infer_direction_from_fingerprint(
+    fp: &SemanticFingerprint,
+) -> crate::causal::asymmetric::CausalDirection {
+    use crate::causal::asymmetric::CausalDirection;
+
+    let cause_vec = fp.get_e5_as_cause();
+    let effect_vec = fp.get_e5_as_effect();
+
+    // Handle empty vectors
+    if cause_vec.is_empty() || effect_vec.is_empty() {
+        return CausalDirection::Unknown;
+    }
+
+    let cause_mag_sq: f32 = cause_vec.iter().map(|x| x * x).sum();
+    let effect_mag_sq: f32 = effect_vec.iter().map(|x| x * x).sum();
+
+    // Use 10% threshold for significance
+    if cause_mag_sq > effect_mag_sq * 1.21 {
+        // 1.1^2 = 1.21
+        CausalDirection::Cause
+    } else if effect_mag_sq > cause_mag_sq * 1.21 {
+        CausalDirection::Effect
+    } else {
+        CausalDirection::Unknown
+    }
+}
+
 /// Compute all 13 similarities between query and memory fingerprints.
 ///
 /// Returns an array indexed by Embedder::index().
@@ -213,6 +303,33 @@ pub fn compute_all_similarities(
 
     for embedder in Embedder::all() {
         scores[embedder.index()] = compute_similarity_for_space(embedder, query, memory);
+    }
+
+    scores
+}
+
+/// Compute all 13 similarities with causal direction for E5.
+///
+/// Like `compute_all_similarities()` but uses asymmetric E5 similarity
+/// when a causal direction is provided.
+///
+/// # Arguments
+/// * `query` - Query fingerprint
+/// * `memory` - Memory fingerprint
+/// * `causal_direction` - Detected causal direction of the query
+///
+/// # Returns
+/// Array of 13 similarity scores in [0.0, 1.0]
+pub fn compute_all_similarities_with_direction(
+    query: &SemanticFingerprint,
+    memory: &SemanticFingerprint,
+    causal_direction: crate::causal::asymmetric::CausalDirection,
+) -> [f32; 13] {
+    let mut scores = [0.0_f32; 13];
+
+    for embedder in Embedder::all() {
+        scores[embedder.index()] =
+            compute_similarity_for_space_with_direction(embedder, query, memory, causal_direction);
     }
 
     scores
@@ -734,5 +851,264 @@ mod tests {
             );
         }
         println!("[PASS] All 13 spaces handle zeroed fingerprints without NaN/Infinity");
+    }
+
+    // =========================================================================
+    // Direction-Aware Similarity Tests (ARCH-15, AP-77)
+    // =========================================================================
+
+    #[test]
+    fn test_direction_aware_unknown_matches_symmetric() {
+        // With Unknown direction, should behave identically to symmetric
+        use crate::causal::asymmetric::CausalDirection;
+
+        let mut query = SemanticFingerprint::zeroed();
+        let mut memory = SemanticFingerprint::zeroed();
+
+        // Set identical E5 causal vectors
+        query.e5_causal_as_cause = vec![1.0; 768];
+        query.e5_causal_as_effect = vec![0.5; 768];
+        memory.e5_causal_as_cause = vec![1.0; 768];
+        memory.e5_causal_as_effect = vec![0.5; 768];
+
+        let sym = compute_similarity_for_space(Embedder::Causal, &query, &memory);
+        let asym_unknown =
+            compute_similarity_for_space_with_direction(Embedder::Causal, &query, &memory, CausalDirection::Unknown);
+
+        assert!(
+            (sym - asym_unknown).abs() < 1e-5,
+            "Unknown direction should match symmetric: sym={}, asym_unknown={}",
+            sym,
+            asym_unknown
+        );
+        println!("[PASS] Direction-aware with Unknown matches symmetric: {:.6}", sym);
+    }
+
+    #[test]
+    fn test_direction_aware_non_causal_embedder() {
+        // Non-E5 embedders should use symmetric regardless of direction
+        use crate::causal::asymmetric::CausalDirection;
+
+        let mut query = SemanticFingerprint::zeroed();
+        let mut memory = SemanticFingerprint::zeroed();
+
+        query.e1_semantic = vec![1.0; 1024];
+        memory.e1_semantic = vec![1.0; 1024];
+
+        let sym = compute_similarity_for_space(Embedder::Semantic, &query, &memory);
+        let with_cause =
+            compute_similarity_for_space_with_direction(Embedder::Semantic, &query, &memory, CausalDirection::Cause);
+        let with_effect =
+            compute_similarity_for_space_with_direction(Embedder::Semantic, &query, &memory, CausalDirection::Effect);
+
+        assert!(
+            (sym - with_cause).abs() < 1e-5,
+            "E1 Semantic should ignore Cause direction"
+        );
+        assert!(
+            (sym - with_effect).abs() < 1e-5,
+            "E1 Semantic should ignore Effect direction"
+        );
+        println!("[PASS] Non-causal embedders ignore direction parameter");
+    }
+
+    #[test]
+    fn test_direction_aware_cause_seeking() {
+        // Cause-seeking query (why?) should use asymmetric E5
+        use crate::causal::asymmetric::CausalDirection;
+
+        let mut query = SemanticFingerprint::zeroed();
+        let mut memory = SemanticFingerprint::zeroed();
+
+        // Query is seeking causes (why did X happen?)
+        // Memory contains an effect (X happened because Y)
+        // Use orthogonal vectors to get lower base similarity that won't clamp to 1.0
+        query.e5_causal_as_cause = vec![1.0; 768];
+        query.e5_causal_as_effect = vec![0.0; 768];
+        // Memory effect vector orthogonal to query cause vector
+        memory.e5_causal_as_cause = vec![0.1; 768];  // Document emphasizes effect
+        memory.e5_causal_as_effect = vec![0.9; 768];
+
+        let sym = compute_similarity_for_space(Embedder::Causal, &query, &memory);
+        let asym_cause =
+            compute_similarity_for_space_with_direction(Embedder::Causal, &query, &memory, CausalDirection::Cause);
+
+        // Cause→Effect transition should get 1.2x boost per AP-77
+        // Asymmetric should either differ from symmetric, or both be at max (clamped)
+        // Note: when asymmetric * 1.2 > 1.0, it clamps to 1.0
+        assert!(
+            asym_cause >= 0.0 && asym_cause <= 1.0,
+            "Result should be clamped to [0, 1]: {}",
+            asym_cause
+        );
+
+        // Verify the 1.2x boost is applied (score should be >= symmetric score
+        // unless both are clamped to 1.0)
+        let score_ratio = if sym > 0.01 { asym_cause / sym } else { 1.0 };
+        assert!(
+            score_ratio >= 1.0 || (asym_cause - 1.0).abs() < 1e-5,
+            "Cause→Effect should boost score (got ratio {:.4})",
+            score_ratio
+        );
+        println!(
+            "[PASS] Cause-seeking asymmetric: sym={:.6}, asym={:.6}, ratio={:.4}",
+            sym, asym_cause, score_ratio
+        );
+    }
+
+    #[test]
+    fn test_direction_aware_effect_seeking() {
+        // Effect-seeking query (what happens when?) should use asymmetric E5
+        use crate::causal::asymmetric::CausalDirection;
+
+        let mut query = SemanticFingerprint::zeroed();
+        let mut memory = SemanticFingerprint::zeroed();
+
+        // Query is seeking effects (what happens when X?)
+        // Memory contains a cause (Y leads to...)
+        query.e5_causal_as_cause = vec![0.2; 768];
+        query.e5_causal_as_effect = vec![0.9; 768];
+        memory.e5_causal_as_cause = vec![0.85; 768];  // Document emphasizes cause
+        memory.e5_causal_as_effect = vec![0.3; 768];
+
+        let sym = compute_similarity_for_space(Embedder::Causal, &query, &memory);
+        let asym_effect =
+            compute_similarity_for_space_with_direction(Embedder::Causal, &query, &memory, CausalDirection::Effect);
+
+        // Effect→Cause transition should get 0.8x dampening per AP-77
+        // So asymmetric score should differ from symmetric
+        assert!(
+            asym_effect != sym,
+            "Asymmetric effect-seeking should differ from symmetric"
+        );
+        assert!(
+            asym_effect >= 0.0 && asym_effect <= 1.0,
+            "Result should be clamped to [0, 1]: {}",
+            asym_effect
+        );
+        println!(
+            "[PASS] Effect-seeking asymmetric: sym={:.6}, asym={:.6}",
+            sym, asym_effect
+        );
+    }
+
+    #[test]
+    fn test_compute_all_similarities_with_direction() {
+        use crate::causal::asymmetric::CausalDirection;
+
+        let query = SemanticFingerprint::zeroed();
+        let memory = SemanticFingerprint::zeroed();
+
+        let scores_unknown = compute_all_similarities_with_direction(&query, &memory, CausalDirection::Unknown);
+        let scores_cause = compute_all_similarities_with_direction(&query, &memory, CausalDirection::Cause);
+        let scores_effect = compute_all_similarities_with_direction(&query, &memory, CausalDirection::Effect);
+
+        // All should return 13 valid scores
+        assert_eq!(scores_unknown.len(), 13);
+        assert_eq!(scores_cause.len(), 13);
+        assert_eq!(scores_effect.len(), 13);
+
+        for scores in [&scores_unknown, &scores_cause, &scores_effect] {
+            for (i, score) in scores.iter().enumerate() {
+                assert!(
+                    *score >= 0.0 && *score <= 1.0,
+                    "Score {} for embedder {} out of range: {}",
+                    i,
+                    Embedder::from_index(i).unwrap().name(),
+                    score
+                );
+                assert!(!score.is_nan(), "NaN in scores");
+            }
+        }
+        println!("[PASS] compute_all_similarities_with_direction returns valid scores for all directions");
+    }
+
+    #[test]
+    fn test_infer_direction_from_fingerprint() {
+        use crate::causal::asymmetric::CausalDirection;
+
+        // Test cause-dominant fingerprint
+        let mut cause_doc = SemanticFingerprint::zeroed();
+        cause_doc.e5_causal_as_cause = vec![1.0; 768];  // High cause magnitude
+        cause_doc.e5_causal_as_effect = vec![0.1; 768]; // Low effect magnitude
+        let dir = infer_direction_from_fingerprint(&cause_doc);
+        assert!(
+            matches!(dir, CausalDirection::Cause),
+            "Expected Cause for cause-dominant fingerprint, got {:?}",
+            dir
+        );
+
+        // Test effect-dominant fingerprint
+        let mut effect_doc = SemanticFingerprint::zeroed();
+        effect_doc.e5_causal_as_cause = vec![0.1; 768];  // Low cause magnitude
+        effect_doc.e5_causal_as_effect = vec![1.0; 768]; // High effect magnitude
+        let dir = infer_direction_from_fingerprint(&effect_doc);
+        assert!(
+            matches!(dir, CausalDirection::Effect),
+            "Expected Effect for effect-dominant fingerprint, got {:?}",
+            dir
+        );
+
+        // Test balanced fingerprint (within 10% threshold)
+        let mut balanced_doc = SemanticFingerprint::zeroed();
+        balanced_doc.e5_causal_as_cause = vec![1.0; 768];
+        balanced_doc.e5_causal_as_effect = vec![1.0; 768]; // Same magnitude
+        let dir = infer_direction_from_fingerprint(&balanced_doc);
+        assert!(
+            matches!(dir, CausalDirection::Unknown),
+            "Expected Unknown for balanced fingerprint, got {:?}",
+            dir
+        );
+
+        println!("[PASS] infer_direction_from_fingerprint correctly categorizes documents");
+    }
+
+    #[test]
+    fn test_direction_aware_empty_e5_vectors() {
+        // Edge case: Empty E5 vectors should not crash
+        use crate::causal::asymmetric::CausalDirection;
+
+        let query = SemanticFingerprint::zeroed();
+        let memory = SemanticFingerprint::zeroed();
+
+        let result =
+            compute_similarity_for_space_with_direction(Embedder::Causal, &query, &memory, CausalDirection::Cause);
+
+        assert!(!result.is_nan(), "Empty E5 vectors should not produce NaN");
+        assert!(result >= 0.0 && result <= 1.0, "Result out of range: {}", result);
+        println!("[PASS] Empty E5 vectors handled gracefully: {:.6}", result);
+    }
+
+    #[test]
+    fn test_direction_modifier_values_match_constitution() {
+        // Verify our direction modifiers match AP-77 spec
+        use crate::causal::asymmetric::direction_mod;
+
+        assert!(
+            (direction_mod::CAUSE_TO_EFFECT - 1.2).abs() < 1e-5,
+            "CAUSE_TO_EFFECT should be 1.2 per AP-77"
+        );
+        assert!(
+            (direction_mod::EFFECT_TO_CAUSE - 0.8).abs() < 1e-5,
+            "EFFECT_TO_CAUSE should be 0.8 per AP-77"
+        );
+        assert!(
+            (direction_mod::SAME_DIRECTION - 1.0).abs() < 1e-5,
+            "SAME_DIRECTION should be 1.0"
+        );
+
+        // Verify asymmetry ratio = 1.5
+        let ratio = direction_mod::CAUSE_TO_EFFECT / direction_mod::EFFECT_TO_CAUSE;
+        assert!(
+            (ratio - 1.5).abs() < 1e-5,
+            "Asymmetry ratio should be 1.5, got {}",
+            ratio
+        );
+        println!(
+            "[PASS] Direction modifiers match Constitution: C→E={}, E→C={}, ratio={}",
+            direction_mod::CAUSE_TO_EFFECT,
+            direction_mod::EFFECT_TO_CAUSE,
+            ratio
+        );
     }
 }

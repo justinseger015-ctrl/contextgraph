@@ -20,6 +20,7 @@
 //! - `embeddings_loader`: Embedding layer weight loading
 //! - `encoder_loader`: Encoder layer weight loading (attention + FFN)
 //! - `forward`: Neural network forward pass
+//! - `marker_detection`: Causal marker detection for global attention
 //! - `model`: Main CausalModel struct and trait implementation
 
 mod config;
@@ -27,6 +28,7 @@ mod embeddings_loader;
 mod encoder_loader;
 mod forward;
 mod loader;
+mod marker_detection;
 mod model;
 mod weights;
 

@@ -388,6 +388,43 @@ async fn main() {
         e5_as_cause_count, e5_as_effect_count, has_asymmetric_e5
     );
 
+    // Verify E5 cause and effect vectors are actually different (ARCH-15 compliance)
+    println!();
+    println!("  E5 Vector Asymmetry Verification:");
+
+    let (identical_count, high_similarity_count, total_e5_pairs, similarity_sum) =
+        verify_e5_asymmetry(&embedded);
+
+    let vector_distinctness = if total_e5_pairs > 0 {
+        100.0 * (1.0 - identical_count as f64 / total_e5_pairs as f64)
+    } else {
+        0.0
+    };
+
+    let avg_cause_effect_similarity = if total_e5_pairs > 0 {
+        similarity_sum / total_e5_pairs as f64
+    } else {
+        0.0
+    };
+
+    println!("    Total E5 vector pairs: {}", total_e5_pairs);
+    println!("    Identical vectors (sim > 0.999): {}", identical_count);
+    println!("    High similarity vectors (sim > 0.95): {}", high_similarity_count);
+    println!("    Vector distinctness: {:.1}% different", vector_distinctness);
+    println!("    Avg cause-effect similarity: {:.4}", avg_cause_effect_similarity);
+
+    // Fail fast if asymmetry is broken
+    if identical_count > total_e5_pairs / 2 {
+        eprintln!("\n[CRITICAL] >50% of E5 vectors are identical ({}/{})!",
+            identical_count, total_e5_pairs);
+        eprintln!("CausalModel.embed_dual() is not producing different embeddings.");
+        std::process::exit(1);
+    }
+
+    if vector_distinctness < 80.0 && total_e5_pairs > 0 {
+        eprintln!("\n[WARNING] E5 vector distinctness is low: {:.1}% (target: >95%)", vector_distinctness);
+    }
+
     // Phase 3: Run causal benchmarks
     println!();
     println!("Phase 3: Running causal benchmarks");
@@ -630,9 +667,11 @@ fn run_asymmetric_retrieval(
             }
 
             // Cause→Effect: query_as_cause vs doc_as_effect
+            // This measures: "if query is the cause, how similar is doc as an effect?"
             let sim_c2e = cosine_similarity(query_fp.get_e5_as_cause(), doc_fp.get_e5_as_effect());
 
             // Effect→Cause: query_as_effect vs doc_as_cause
+            // This measures: "if query is the effect, how similar is doc as a cause?"
             let sim_e2c = cosine_similarity(query_fp.get_e5_as_effect(), doc_fp.get_e5_as_cause());
 
             // Symmetric E1 baseline
@@ -906,6 +945,37 @@ fn run_e5_contribution_analysis(
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/// Verify E5 asymmetry by comparing cause and effect vectors.
+/// Returns (identical_count, high_similarity_count, total_pairs, similarity_sum).
+fn verify_e5_asymmetry(embedded: &EmbeddedDataset) -> (usize, usize, usize, f64) {
+    let mut identical_count = 0usize;
+    let mut high_similarity_count = 0usize;
+    let mut total_e5_pairs = 0usize;
+    let mut similarity_sum = 0.0f64;
+
+    for fp in embedded.fingerprints.values() {
+        let cause = fp.get_e5_as_cause();
+        let effect = fp.get_e5_as_effect();
+
+        if cause.is_empty() || effect.is_empty() {
+            continue;
+        }
+
+        total_e5_pairs += 1;
+        let sim = cosine_similarity(cause, effect);
+        similarity_sum += sim as f64;
+
+        if sim > 0.999 {
+            identical_count += 1;
+        }
+        if sim > 0.95 {
+            high_similarity_count += 1;
+        }
+    }
+
+    (identical_count, high_similarity_count, total_e5_pairs, similarity_sum)
+}
 
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.is_empty() || b.is_empty() || a.len() != b.len() {

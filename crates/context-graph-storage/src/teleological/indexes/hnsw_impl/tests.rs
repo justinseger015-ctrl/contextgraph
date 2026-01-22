@@ -346,10 +346,11 @@ mod tests {
 
     #[test]
     fn test_all_hnsw_embedders() {
-        println!("=== TEST: All 11 HNSW embedders can create indexes ===");
+        println!("=== TEST: All 13 HNSW embedders can create indexes ===");
+        println!("  (11 original + 2 E5 asymmetric indexes per ARCH-15)");
 
         let embedders = EmbedderIndex::all_hnsw();
-        assert_eq!(embedders.len(), 11);
+        assert_eq!(embedders.len(), 13);
 
         for embedder in &embedders {
             let index = HnswEmbedderIndex::new(*embedder);
@@ -358,7 +359,7 @@ mod tests {
             assert!(dim >= 1);
         }
 
-        println!("RESULT: PASS - all 11 HNSW embedders create valid indexes");
+        println!("RESULT: PASS - all 13 HNSW embedders create valid indexes");
     }
 
     #[test]

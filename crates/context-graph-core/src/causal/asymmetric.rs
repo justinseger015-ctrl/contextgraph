@@ -487,11 +487,8 @@ pub fn compute_e5_asymmetric_full(
 pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
     let query_lower = query.to_lowercase();
 
-    // Cause-seeking indicators (user wants to find WHY something happened)
-    // When asking "why", the user has an effect and wants the cause
-    // So query represents what the user is investigating as an effect
-    //
-    // Expanded from 14 to ~35 patterns for better direction detection (target: >85%)
+    // Cause-seeking indicators: user has an effect and wants the cause
+    // Expanded in Phase 3 for >40-50% detection rate on real data
     let cause_indicators = [
         // Original patterns
         "why ",
@@ -535,12 +532,51 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "etiology",
         "pathogenesis",
         "root of",
+        // ===== Phase 3 Additions: Scientific/Technical Cause Patterns =====
+        // Attribution/causation verbs (passive voice patterns)
+        "is attributed to",
+        "is driven by",
+        "is mediated by",
+        "contributes to",
+        "accounts for",
+        "determines the",
+        "influences the",
+        "regulates the",
+        // Passive causation patterns (document text patterns, not queries)
+        "was caused by",
+        "resulted from",
+        "stems from",
+        "arises from",
+        "originates from",
+        "derives from",
+        "emerged from",
+        // Root cause analysis patterns
+        "factor in",
+        "factors in",
+        "root of the",
+        "basis of",
+        "basis for",
+        "driving force",
+        "primary driver",
+        "key driver",
+        // Dependency patterns
+        "depends on",
+        "dependent on",
+        "contingent on",
+        "conditional on",
+        "prerequisite for",
+        // Academic/scientific patterns
+        "causation",
+        "causal mechanism",
+        "causal factor",
+        "antecedent",
+        "precursor",
+        "precipitating factor",
+        "determinant of",
     ];
 
-    // Effect-seeking indicators (user wants to find WHAT HAPPENS)
-    // When asking "what happens", the user has a cause and wants effects
-    //
-    // Expanded from 16 to ~30 patterns for better direction detection
+    // Effect-seeking indicators: user has a cause and wants the effects
+    // Expanded in Phase 3 for >40-50% detection rate on real data
     let effect_indicators = [
         // Original patterns
         "what happen",
@@ -580,6 +616,48 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "prognosis",
         "complications",
         "sequelae",
+        // ===== Phase 3 Additions: Scientific/Technical Effect Patterns =====
+        // Outcome/result patterns (document text patterns)
+        "results in",
+        "causes an increase",
+        "causes a decrease",
+        "produces a decrease",
+        "induces changes",
+        "initiates the process",
+        // Consequence patterns
+        "as a consequence",
+        "as a result",
+        "consequently",
+        "therefore",
+        "hence",
+        "thus",
+        "accordingly",
+        // Causative action patterns
+        "brings about",
+        "gives rise to",
+        "culminates in",
+        "eventuates in",
+        "manifests as",
+        // Scientific effect patterns
+        "correlation with",
+        "associated with",
+        "linked to",
+        "related outcome",
+        "secondary effect",
+        "tertiary effect",
+        "downstream effect",
+        // Future outcome patterns
+        "will lead to",
+        "will result in",
+        "would cause",
+        "could result",
+        "might lead to",
+        "likely to cause",
+        // Impact assessment patterns
+        "implications of",
+        "repercussions of",
+        "aftermath of",
+        "fallout from",
     ];
 
     // Score-based detection for disambiguation
@@ -1314,5 +1392,205 @@ mod tests {
             CausalDirection::Effect
         );
         println!("[VERIFIED] Score-based detection handles multiple indicators");
+    }
+
+    // ============================================================================
+    // Phase 3 Addition: Scientific/Technical Pattern Tests
+    // ============================================================================
+
+    #[test]
+    fn test_detect_scientific_cause_patterns() {
+        // Attribution/causation verbs
+        assert_eq!(
+            detect_causal_query_intent("this is attributed to environmental factors"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the result is driven by market conditions"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the response is mediated by hormones"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("genetic factors contributes to the disease"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("this accounts for 80% of the variance"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] Scientific cause attribution patterns detected");
+    }
+
+    #[test]
+    fn test_detect_passive_causation_patterns() {
+        // Passive causation patterns
+        assert_eq!(
+            detect_causal_query_intent("the failure was caused by a memory leak"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the crash resulted from a null pointer"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("this behavior stems from legacy code"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the problem arises from improper initialization"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("this pattern originates from the original design"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] Passive causation patterns detected as Cause");
+    }
+
+    #[test]
+    fn test_detect_dependency_patterns() {
+        // Dependency patterns
+        assert_eq!(
+            detect_causal_query_intent("this feature depends on the database being online"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the outcome is dependent on initial conditions"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the result is contingent on proper configuration"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("this is a prerequisite for the next step"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] Dependency patterns detected as Cause");
+    }
+
+    #[test]
+    fn test_detect_scientific_effect_patterns() {
+        // Outcome/result patterns
+        assert_eq!(
+            detect_causal_query_intent("this mutation results in protein misfolding"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the treatment causes an increase in dopamine"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the drug produces a decrease in blood pressure"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the stimulus induces changes in gene expression"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] Scientific effect patterns detected");
+    }
+
+    #[test]
+    fn test_detect_consequence_connectors() {
+        // Consequence patterns
+        assert_eq!(
+            detect_causal_query_intent("as a consequence of the change"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("as a result of the optimization"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("consequently the system failed"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("therefore we need to restart"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("hence the performance improved"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] Consequence connector patterns detected as Effect");
+    }
+
+    #[test]
+    fn test_detect_future_outcome_patterns() {
+        // Future outcome patterns
+        assert_eq!(
+            detect_causal_query_intent("this will lead to data corruption"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the change will result in faster queries"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("this would cause a deadlock"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the modification could result in errors"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("this might lead to memory exhaustion"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] Future outcome patterns detected as Effect");
+    }
+
+    #[test]
+    fn test_detect_academic_cause_patterns() {
+        // Academic/scientific cause patterns
+        assert_eq!(
+            detect_causal_query_intent("the causal mechanism involves protein binding"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("this is a causal factor in the outcome"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the antecedent condition was met"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("the precursor event triggered the cascade"),
+            CausalDirection::Cause
+        );
+        assert_eq!(
+            detect_causal_query_intent("this is a determinant of success"),
+            CausalDirection::Cause
+        );
+        println!("[VERIFIED] Academic cause patterns detected");
+    }
+
+    #[test]
+    fn test_detect_impact_assessment_patterns() {
+        // Impact assessment patterns
+        assert_eq!(
+            detect_causal_query_intent("what are the implications of this change?"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the repercussions of the decision"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("in the aftermath of the incident"),
+            CausalDirection::Effect
+        );
+        assert_eq!(
+            detect_causal_query_intent("the fallout from the data breach"),
+            CausalDirection::Effect
+        );
+        println!("[VERIFIED] Impact assessment patterns detected as Effect");
     }
 }

@@ -370,3 +370,238 @@ fn test_constants_are_correct() {
     assert_eq!(CAUSAL_LATENCY_BUDGET_MS, 8);
     assert_eq!(DEFAULT_ATTENTION_WINDOW, 512);
 }
+
+// =============================================================================
+// Dual Embedding Tests (ARCH-15 Compliance)
+// =============================================================================
+
+#[test]
+fn test_cause_instruction_constant() {
+    assert!(!CausalModel::CAUSE_INSTRUCTION.is_empty());
+    assert!(CausalModel::CAUSE_INSTRUCTION.contains("cause"));
+    assert_ne!(
+        CausalModel::CAUSE_INSTRUCTION,
+        CausalModel::EFFECT_INSTRUCTION,
+        "Instruction prefixes must be different"
+    );
+}
+
+#[test]
+fn test_effect_instruction_constant() {
+    assert!(!CausalModel::EFFECT_INSTRUCTION.is_empty());
+    assert!(CausalModel::EFFECT_INSTRUCTION.contains("effect"));
+}
+
+#[tokio::test]
+async fn test_embed_as_cause_before_load_fails() {
+    let result = create_test_model().embed_as_cause("test content").await;
+    assert!(
+        matches!(result, Err(EmbeddingError::NotInitialized { .. })),
+        "embed_as_cause should fail before model is loaded"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_as_effect_before_load_fails() {
+    let result = create_test_model().embed_as_effect("test content").await;
+    assert!(
+        matches!(result, Err(EmbeddingError::NotInitialized { .. })),
+        "embed_as_effect should fail before model is loaded"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_dual_before_load_fails() {
+    let result = create_test_model().embed_dual("test content").await;
+    assert!(
+        matches!(result, Err(EmbeddingError::NotInitialized { .. })),
+        "embed_dual should fail before model is loaded"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_as_cause_returns_768d_vector() {
+    let model = create_and_load_model().await;
+    let embedding = model
+        .embed_as_cause("The pressure increase causes temperature rise")
+        .await
+        .expect("embed_as_cause should succeed");
+    assert_eq!(
+        embedding.len(),
+        CAUSAL_DIMENSION,
+        "Cause embedding must be 768D"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_as_effect_returns_768d_vector() {
+    let model = create_and_load_model().await;
+    let embedding = model
+        .embed_as_effect("Temperature rose due to pressure increase")
+        .await
+        .expect("embed_as_effect should succeed");
+    assert_eq!(
+        embedding.len(),
+        CAUSAL_DIMENSION,
+        "Effect embedding must be 768D"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_dual_returns_two_768d_vectors() {
+    let model = create_and_load_model().await;
+    let (cause_vec, effect_vec) = model
+        .embed_dual("Climate change affects global weather patterns")
+        .await
+        .expect("embed_dual should succeed");
+
+    assert_eq!(cause_vec.len(), CAUSAL_DIMENSION, "Cause vector must be 768D");
+    assert_eq!(
+        effect_vec.len(),
+        CAUSAL_DIMENSION,
+        "Effect vector must be 768D"
+    );
+}
+
+/// CRITICAL TEST: Verify that cause and effect vectors are DIFFERENT.
+///
+/// This is the core assertion for ARCH-15 compliance - if vectors are identical,
+/// asymmetric similarity CANNOT function.
+#[tokio::test]
+async fn test_embed_dual_produces_different_vectors() {
+    let model = create_and_load_model().await;
+    let content = "Smoking causes lung cancer";
+    let (cause_vec, effect_vec) = model.embed_dual(content).await.expect("embed_dual");
+
+    // Calculate cosine similarity between cause and effect vectors
+    let dot: f32 = cause_vec
+        .iter()
+        .zip(effect_vec.iter())
+        .map(|(a, b)| a * b)
+        .sum();
+    let norm_cause: f32 = cause_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_effect: f32 = effect_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let cosine_sim = dot / (norm_cause * norm_effect);
+
+    // Vectors should be similar (same content) but NOT identical
+    // We expect similarity < 0.999 (identical vectors would have similarity ~1.0)
+    assert!(
+        cosine_sim < 0.999,
+        "Cause and effect vectors must be different! \
+         Cosine similarity = {} (vectors are too similar). \
+         ARCH-15 requires asymmetric embeddings for cause vs effect roles.",
+        cosine_sim
+    );
+
+    // They should still be reasonably similar (same content, different perspective)
+    // If similarity is too low, something is wrong with the instruction prefix approach
+    assert!(
+        cosine_sim > 0.5,
+        "Cause and effect vectors should still be related! \
+         Cosine similarity = {} is too low.",
+        cosine_sim
+    );
+
+    println!(
+        "[VERIFIED] Cause-Effect cosine similarity: {:.4} (target: 0.5-0.99)",
+        cosine_sim
+    );
+}
+
+#[tokio::test]
+async fn test_embed_dual_deterministic() {
+    let model = create_and_load_model().await;
+    let content = "Exercise improves cardiovascular health";
+
+    let (cause1, effect1) = model.embed_dual(content).await.expect("embed_dual 1");
+    let (cause2, effect2) = model.embed_dual(content).await.expect("embed_dual 2");
+
+    assert_eq!(
+        cause1, cause2,
+        "Cause embeddings must be deterministic for same input"
+    );
+    assert_eq!(
+        effect1, effect2,
+        "Effect embeddings must be deterministic for same input"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_as_cause_matches_dual_cause() {
+    let model = create_and_load_model().await;
+    let content = "Deforestation leads to habitat loss";
+
+    let cause_vec = model.embed_as_cause(content).await.expect("embed_as_cause");
+    let (dual_cause, _) = model.embed_dual(content).await.expect("embed_dual");
+
+    assert_eq!(
+        cause_vec, dual_cause,
+        "embed_as_cause must produce same vector as embed_dual cause component"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_as_effect_matches_dual_effect() {
+    let model = create_and_load_model().await;
+    let content = "Global warming results from greenhouse gas emissions";
+
+    let effect_vec = model
+        .embed_as_effect(content)
+        .await
+        .expect("embed_as_effect");
+    let (_, dual_effect) = model.embed_dual(content).await.expect("embed_dual");
+
+    assert_eq!(
+        effect_vec, dual_effect,
+        "embed_as_effect must produce same vector as embed_dual effect component"
+    );
+}
+
+#[tokio::test]
+async fn test_embed_dual_vectors_are_normalized() {
+    let model = create_and_load_model().await;
+    let (cause_vec, effect_vec) = model
+        .embed_dual("Water scarcity threatens agriculture")
+        .await
+        .expect("embed_dual");
+
+    let cause_norm: f32 = cause_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let effect_norm: f32 = effect_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+    assert!(
+        (cause_norm - 1.0).abs() < 0.001,
+        "Cause vector should be L2 normalized, got norm = {}",
+        cause_norm
+    );
+    assert!(
+        (effect_norm - 1.0).abs() < 0.001,
+        "Effect vector should be L2 normalized, got norm = {}",
+        effect_norm
+    );
+}
+
+#[tokio::test]
+async fn test_embed_dual_no_nan_or_inf() {
+    let model = create_and_load_model().await;
+    let (cause_vec, effect_vec) = model
+        .embed_dual("Economic policy affects employment rates")
+        .await
+        .expect("embed_dual");
+
+    assert!(
+        !cause_vec.iter().any(|x| x.is_nan()),
+        "Cause vector must not contain NaN"
+    );
+    assert!(
+        !cause_vec.iter().any(|x| x.is_infinite()),
+        "Cause vector must not contain Inf"
+    );
+    assert!(
+        !effect_vec.iter().any(|x| x.is_nan()),
+        "Effect vector must not contain NaN"
+    );
+    assert!(
+        !effect_vec.iter().any(|x| x.is_infinite()),
+        "Effect vector must not contain Inf"
+    );
+}

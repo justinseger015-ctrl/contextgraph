@@ -7,14 +7,24 @@ use super::distance::DistanceMetric;
 
 /// Embedder index enum matching constitution.yaml embedder list.
 ///
-/// 14 variants total:
+/// 16 variants total:
 /// - E1-E13: Core embedders (13)
 /// - E1Matryoshka128: E1 truncated to 128D for Stage 2 fast filtering
+/// - E5CausalCause: E5 cause vector for asymmetric retrieval (ARCH-15)
+/// - E5CausalEffect: E5 effect vector for asymmetric retrieval (ARCH-15)
 ///
 /// # Non-HNSW Embedders
 /// - E6Sparse: Inverted index (legacy sparse slot)
 /// - E12LateInteraction: ColBERT MaxSim (token-level)
 /// - E13Splade: Inverted index with BM25 (Stage 1 recall)
+///
+/// # Asymmetric E5 Indexes (ARCH-15, AP-77)
+///
+/// E5CausalCause and E5CausalEffect enable direction-aware retrieval:
+/// - Cause-seeking queries search E5CausalEffect index using query.e5_as_cause
+/// - Effect-seeking queries search E5CausalCause index using query.e5_as_effect
+///
+/// This ensures complementary vectors are compared (cause→effect, effect→cause).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EmbedderIndex {
     /// E1: 1024D semantic (e5-large-v2, Matryoshka-capable)
@@ -28,7 +38,14 @@ pub enum EmbedderIndex {
     /// E4: 512D temporal positional (sinusoidal PE)
     E4TemporalPositional,
     /// E5: 768D causal (Longformer SCM, asymmetric similarity)
+    /// Legacy index using active vector - prefer E5CausalCause/E5CausalEffect
     E5Causal,
+    /// E5 Causal Cause: 768D cause vector (ARCH-15)
+    /// Search this index when query seeks effects (what happens when X?)
+    E5CausalCause,
+    /// E5 Causal Effect: 768D effect vector (ARCH-15)
+    /// Search this index when query seeks causes (why does X happen?)
+    E5CausalEffect,
     /// E6: ~30K sparse (inverted index, NOT HNSW)
     E6Sparse,
     /// E7: 1536D code (Qodo-Embed-1-1.5B)
@@ -81,9 +98,12 @@ impl EmbedderIndex {
         }
     }
 
-    /// Get 0-12 index from embedder. Returns None for E1Matryoshka128.
+    /// Get 0-12 index from embedder. Returns None for special indexes.
     ///
-    /// E1Matryoshka128 is a special embedder not part of the core 13-embedder array.
+    /// Returns None for:
+    /// - E1Matryoshka128: Special fast-filter variant
+    /// - E5CausalCause: Asymmetric index (not part of core 13-array)
+    /// - E5CausalEffect: Asymmetric index (not part of core 13-array)
     pub fn to_index(&self) -> Option<usize> {
         match self {
             Self::E1Semantic => Some(0),
@@ -99,7 +119,10 @@ impl EmbedderIndex {
             Self::E11Entity => Some(10),
             Self::E12LateInteraction => Some(11),
             Self::E13Splade => Some(12),
+            // Special indexes not part of core 13-array
             Self::E1Matryoshka128 => None,
+            Self::E5CausalCause => None,
+            Self::E5CausalEffect => None,
         }
     }
 
@@ -109,6 +132,8 @@ impl EmbedderIndex {
     /// - E6Sparse (inverted index)
     /// - E12LateInteraction (MaxSim token-level)
     /// - E13Splade (inverted index with BM25)
+    ///
+    /// Returns true for E5CausalCause and E5CausalEffect (asymmetric HNSW indexes).
     #[inline]
     pub fn uses_hnsw(&self) -> bool {
         !matches!(
@@ -127,9 +152,11 @@ impl EmbedderIndex {
 
     /// Get all HNSW-capable embedder indexes.
     ///
-    /// Returns 11 entries (excludes E6, E12, E13):
+    /// Returns 13 entries (excludes E6, E12, E13):
     /// - 10 dense embedders (E1-E5, E7-E11)
     /// - E1Matryoshka128 (Stage 2 fast filter)
+    /// - E5CausalCause (asymmetric cause index, ARCH-15)
+    /// - E5CausalEffect (asymmetric effect index, ARCH-15)
     pub fn all_hnsw() -> Vec<Self> {
         vec![
             Self::E1Semantic,
@@ -138,6 +165,8 @@ impl EmbedderIndex {
             Self::E3TemporalPeriodic,
             Self::E4TemporalPositional,
             Self::E5Causal,
+            Self::E5CausalCause,
+            Self::E5CausalEffect,
             Self::E7Code,
             Self::E8Graph,
             Self::E9HDC,
@@ -157,7 +186,9 @@ impl EmbedderIndex {
             Self::E3TemporalPeriodic => Some(E3_DIM),
             Self::E4TemporalPositional => Some(E4_DIM),
             Self::E5Causal => Some(E5_DIM),
-            Self::E6Sparse => None, // Inverted index
+            Self::E5CausalCause => Some(E5_DIM),   // 768D cause vector
+            Self::E5CausalEffect => Some(E5_DIM), // 768D effect vector
+            Self::E6Sparse => None,               // Inverted index
             Self::E7Code => Some(E7_DIM),
             Self::E8Graph => Some(E8_DIM),
             Self::E9HDC => Some(E9_DIM),
@@ -169,9 +200,13 @@ impl EmbedderIndex {
     }
 
     /// Get the recommended distance metric for this embedder.
+    ///
+    /// E5 variants use AsymmetricCosine per ARCH-15, AP-77.
     pub fn recommended_metric(&self) -> Option<DistanceMetric> {
         match self {
-            Self::E5Causal => Some(DistanceMetric::AsymmetricCosine),
+            Self::E5Causal | Self::E5CausalCause | Self::E5CausalEffect => {
+                Some(DistanceMetric::AsymmetricCosine)
+            }
             Self::E6Sparse | Self::E13Splade => None, // Inverted index
             Self::E12LateInteraction => Some(DistanceMetric::MaxSim),
             _ => Some(DistanceMetric::Cosine),
@@ -207,6 +242,9 @@ mod tests {
     fn test_embedder_uses_hnsw() {
         assert!(EmbedderIndex::E1Semantic.uses_hnsw());
         assert!(EmbedderIndex::E1Matryoshka128.uses_hnsw());
+        // E5 asymmetric indexes use HNSW (ARCH-15)
+        assert!(EmbedderIndex::E5CausalCause.uses_hnsw());
+        assert!(EmbedderIndex::E5CausalEffect.uses_hnsw());
 
         assert!(!EmbedderIndex::E6Sparse.uses_hnsw());
         assert!(!EmbedderIndex::E12LateInteraction.uses_hnsw());
@@ -220,22 +258,58 @@ mod tests {
 
         assert!(!EmbedderIndex::E1Semantic.uses_inverted_index());
         assert!(!EmbedderIndex::E12LateInteraction.uses_inverted_index());
+        // E5 asymmetric indexes do NOT use inverted index
+        assert!(!EmbedderIndex::E5CausalCause.uses_inverted_index());
+        assert!(!EmbedderIndex::E5CausalEffect.uses_inverted_index());
     }
 
     #[test]
-    fn test_all_hnsw_count_is_11() {
+    fn test_all_hnsw_count_is_13() {
+        // 11 original + 2 E5 asymmetric = 13 HNSW indexes
         let hnsw_embedders = EmbedderIndex::all_hnsw();
-        assert_eq!(hnsw_embedders.len(), 11);
+        assert_eq!(hnsw_embedders.len(), 13);
+        // Verify E5 asymmetric indexes are included
+        assert!(hnsw_embedders.contains(&EmbedderIndex::E5CausalCause));
+        assert!(hnsw_embedders.contains(&EmbedderIndex::E5CausalEffect));
     }
 
     #[test]
     fn test_to_index_special_embedders() {
+        // E1Matryoshka128 is not part of core 13-array
         assert_eq!(EmbedderIndex::E1Matryoshka128.to_index(), None);
+        // E5 asymmetric indexes are not part of core 13-array
+        assert_eq!(EmbedderIndex::E5CausalCause.to_index(), None);
+        assert_eq!(EmbedderIndex::E5CausalEffect.to_index(), None);
     }
 
     #[test]
     fn test_max_index_is_12() {
         let idx = EmbedderIndex::from_index(12);
         assert_eq!(idx, EmbedderIndex::E13Splade);
+    }
+
+    #[test]
+    fn test_e5_asymmetric_dimensions() {
+        // Both E5 asymmetric indexes have 768D (same as E5Causal)
+        assert_eq!(EmbedderIndex::E5CausalCause.dimension(), Some(E5_DIM));
+        assert_eq!(EmbedderIndex::E5CausalEffect.dimension(), Some(E5_DIM));
+        assert_eq!(EmbedderIndex::E5Causal.dimension(), Some(E5_DIM));
+    }
+
+    #[test]
+    fn test_e5_asymmetric_metric() {
+        // All E5 variants use AsymmetricCosine per ARCH-15, AP-77
+        assert_eq!(
+            EmbedderIndex::E5Causal.recommended_metric(),
+            Some(DistanceMetric::AsymmetricCosine)
+        );
+        assert_eq!(
+            EmbedderIndex::E5CausalCause.recommended_metric(),
+            Some(DistanceMetric::AsymmetricCosine)
+        );
+        assert_eq!(
+            EmbedderIndex::E5CausalEffect.recommended_metric(),
+            Some(DistanceMetric::AsymmetricCosine)
+        );
     }
 }
