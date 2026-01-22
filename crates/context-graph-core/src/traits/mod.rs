@@ -34,9 +34,10 @@ mod teleological_memory_store_tests;
 pub use graph_index::GraphIndex;
 
 // Multi-array embedding provider (13 embeddings) - TASK-F007
+// E4-FIX: Added EmbeddingMetadata for session sequence support
 pub use multi_array_embedding::{
-    MultiArrayEmbeddingOutput, MultiArrayEmbeddingProvider, SingleEmbedder, SparseEmbedder,
-    TokenEmbedder,
+    EmbeddingMetadata, MultiArrayEmbeddingOutput, MultiArrayEmbeddingProvider, SingleEmbedder,
+    SparseEmbedder, TokenEmbedder,
 };
 
 // Nervous system layer trait

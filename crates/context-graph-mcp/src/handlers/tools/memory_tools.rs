@@ -27,9 +27,9 @@ use context_graph_core::causal::asymmetric::{
     direction_mod, CausalDirection,
 };
 use context_graph_core::teleological::matrix_search::embedder_names;
-use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions};
+use context_graph_core::traits::{EmbeddingMetadata, SearchStrategy, TeleologicalSearchOptions};
 use context_graph_core::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint, NUM_EMBEDDERS};
-use context_graph_core::types::UtlContext;
+use context_graph_core::types::{SourceMetadata, SourceType, UtlContext};
 
 use crate::weights::get_weight_profile;
 
@@ -98,8 +98,34 @@ impl Handlers {
             .map(|v| v as f32)
             .unwrap_or(TeleologicalFingerprint::DEFAULT_IMPORTANCE);
 
+        // E4-FIX: Get session sequence for E4 (V_ordering) embedding
+        let session_sequence = self.get_next_sequence();
+        // SESSION-ID-FIX: Priority: tool argument > env var > stored session_id
+        let session_id = args
+            .get("sessionId")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .or_else(|| self.get_session_id());
+
+        let metadata = EmbeddingMetadata {
+            session_id: session_id.clone(),
+            session_sequence: Some(session_sequence),
+            timestamp: Some(chrono::Utc::now()),
+        };
+
+        debug!(
+            session_sequence = session_sequence,
+            session_id = ?session_id,
+            "inject_context: Using session sequence for E4 embedding"
+        );
+
         // STEP 1: Generate all 13 embeddings FIRST (needed for UTL reference lookup)
-        let embedding_output = match self.multi_array_provider.embed_all(&content).await {
+        // E4-FIX: Use embed_all_with_metadata to pass sequence number to E4
+        let embedding_output = match self
+            .multi_array_provider
+            .embed_all_with_metadata(&content, metadata)
+            .await
+        {
             Ok(output) => output,
             Err(e) => {
                 error!(error = %e, "inject_context: Multi-array embedding FAILED");
@@ -227,6 +253,41 @@ impl Handlers {
             );
         }
 
+        // E4-FIX Phase 1: Persist session metadata for E4 sequence retrieval
+        // This enables proper before/after queries by storing session_sequence
+        let source_metadata = SourceMetadata {
+            source_type: SourceType::Manual,
+            session_id: session_id.clone(),
+            session_sequence: Some(session_sequence),
+            file_path: None,
+            chunk_index: None,
+            total_chunks: None,
+            start_line: None,
+            end_line: None,
+            hook_type: None,
+            tool_name: None,
+        };
+
+        if let Err(e) = self
+            .teleological_store
+            .store_source_metadata(fingerprint_id, &source_metadata)
+            .await
+        {
+            warn!(
+                fingerprint_id = %fingerprint_id,
+                error = %e,
+                session_sequence = session_sequence,
+                "inject_context: Failed to store source metadata (fingerprint saved successfully). \
+                 E4 sequence retrieval may fall back to timestamp-based ordering."
+            );
+        } else {
+            debug!(
+                fingerprint_id = %fingerprint_id,
+                session_sequence = session_sequence,
+                "inject_context: Source metadata stored for E4 sequence retrieval"
+            );
+        }
+
         self.tool_result_with_pulse(
             id,
             json!({
@@ -267,8 +328,34 @@ impl Handlers {
             .map(|v| v as f32)
             .unwrap_or(TeleologicalFingerprint::DEFAULT_IMPORTANCE);
 
+        // E4-FIX: Get session sequence for E4 (V_ordering) embedding
+        let session_sequence = self.get_next_sequence();
+        // SESSION-ID-FIX: Priority: tool argument > env var > stored session_id
+        let session_id = args
+            .get("sessionId")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .or_else(|| self.get_session_id());
+
+        let metadata = EmbeddingMetadata {
+            session_id: session_id.clone(),
+            session_sequence: Some(session_sequence),
+            timestamp: Some(chrono::Utc::now()),
+        };
+
+        debug!(
+            session_sequence = session_sequence,
+            session_id = ?session_id,
+            "store_memory: Using session sequence for E4 embedding"
+        );
+
         // Generate all 13 embeddings using MultiArrayEmbeddingProvider
-        let embedding_output = match self.multi_array_provider.embed_all(&content).await {
+        // E4-FIX: Use embed_all_with_metadata to pass sequence number to E4
+        let embedding_output = match self
+            .multi_array_provider
+            .embed_all_with_metadata(&content, metadata)
+            .await
+        {
             Ok(output) => output,
             Err(e) => {
                 error!(error = %e, "store_memory: Multi-array embedding FAILED");
@@ -332,6 +419,41 @@ impl Handlers {
                         fingerprint_id = %fingerprint_id,
                         content_size = content.len(),
                         "store_memory: Content text stored successfully"
+                    );
+                }
+
+                // E4-FIX Phase 1: Persist session metadata for E4 sequence retrieval
+                // This enables proper before/after queries by storing session_sequence
+                let source_metadata = SourceMetadata {
+                    source_type: SourceType::Manual,
+                    session_id: session_id.clone(),
+                    session_sequence: Some(session_sequence),
+                    file_path: None,
+                    chunk_index: None,
+                    total_chunks: None,
+                    start_line: None,
+                    end_line: None,
+                    hook_type: None,
+                    tool_name: None,
+                };
+
+                if let Err(e) = self
+                    .teleological_store
+                    .store_source_metadata(fingerprint_id, &source_metadata)
+                    .await
+                {
+                    warn!(
+                        fingerprint_id = %fingerprint_id,
+                        error = %e,
+                        session_sequence = session_sequence,
+                        "store_memory: Failed to store source metadata (fingerprint saved successfully). \
+                         E4 sequence retrieval may fall back to timestamp-based ordering."
+                    );
+                } else {
+                    debug!(
+                        fingerprint_id = %fingerprint_id,
+                        session_sequence = session_sequence,
+                        "store_memory: Source metadata stored for E4 sequence retrieval"
                     );
                 }
 
@@ -531,6 +653,35 @@ impl Handlers {
             .unwrap_or(context_graph_core::traits::TemporalScale::Meso);
 
         // =========================================================================
+        // CONVERSATION CONTEXT PARAMETERS (E4 Sequence Integration)
+        // =========================================================================
+
+        // Parse conversationContext convenience wrapper
+        let conversation_context = args.get("conversationContext");
+        let anchor_to_current_turn = conversation_context
+            .and_then(|c| c.get("anchorToCurrentTurn"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let turns_back = conversation_context
+            .and_then(|c| c.get("turnsBack"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(10) as u32;
+        let turns_forward = conversation_context
+            .and_then(|c| c.get("turnsForward"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+
+        // Parse sessionScope (current, all, recent)
+        let session_scope = args
+            .get("sessionScope")
+            .and_then(|v| v.as_str())
+            .unwrap_or("all");
+
+        // Auto-select sequence_navigation profile if conversationContext is used
+        // This ensures E4 (V_ordering) is prioritized for sequence-based retrieval
+        let use_conversation_context = conversation_context.is_some() && anchor_to_current_turn;
+
+        // =========================================================================
         // E5 CAUSAL ASYMMETRIC PARAMETERS (ARCH-15, AP-77)
         // =========================================================================
 
@@ -590,15 +741,23 @@ impl Handlers {
             query.to_string()
         };
 
-        // Auto-select weight profile for causal queries (if user didn't specify)
-        // Per ARCH-15: E5 Causal should use asymmetric similarity with high E5 weight
-        let effective_weight_profile = match (&weight_profile, &causal_direction) {
-            (None, CausalDirection::Cause | CausalDirection::Effect) => {
+        // Auto-select weight profile based on query type
+        // Priority: user-specified > causal > conversation_context > default
+        let effective_weight_profile = match (&weight_profile, &causal_direction, use_conversation_context) {
+            // User specified a profile - always use it
+            (Some(profile), _, _) => Some(profile.clone()),
+            // Causal query detected - use causal_reasoning
+            (None, CausalDirection::Cause | CausalDirection::Effect, _) => {
                 debug!("Auto-selecting 'causal_reasoning' profile for causal query");
                 Some("causal_reasoning".to_string())
             }
-            (Some(profile), _) => Some(profile.clone()),
-            (None, CausalDirection::Unknown) => weight_profile.clone(),
+            // Conversation context enabled - use conversation_history for balanced E1+E4
+            (None, CausalDirection::Unknown, true) => {
+                debug!("Auto-selecting 'conversation_history' profile for conversation context");
+                Some("conversation_history".to_string())
+            }
+            // No special case - use default
+            (None, CausalDirection::Unknown, false) => weight_profile.clone(),
         };
 
         // Build search options with multi-space parameters
@@ -658,9 +817,30 @@ impl Handlers {
             options = options.with_last_days(days);
         }
 
-        // Apply session filter
-        if let Some(ref sid) = session_id {
-            options = options.with_session_filter(sid);
+        // =========================================================================
+        // SESSION SCOPE HANDLING (Phase 2 Enhancement)
+        // =========================================================================
+        // sessionScope takes precedence over explicit sessionId for convenience
+        match session_scope {
+            "current" => {
+                // Filter to current session only
+                if let Some(sid) = self.get_session_id() {
+                    options = options.with_session_filter(&sid);
+                    debug!(session_id = %sid, "Applying 'current' session scope");
+                }
+            }
+            "recent" => {
+                // Filter to last 24 hours across sessions
+                options = options.with_last_hours(24);
+                debug!("Applying 'recent' session scope (last 24h)");
+            }
+            "all" | _ => {
+                // No session filtering - search all memories
+                // But still allow explicit sessionId to override
+                if let Some(ref sid) = session_id {
+                    options = options.with_session_filter(sid);
+                }
+            }
         }
 
         // Apply periodic boost if configured
@@ -680,13 +860,43 @@ impl Handlers {
             options.temporal_options.periodic_options = Some(periodic);
         }
 
-        // Apply sequence anchor if configured
-        if let Some(anchor_id) = sequence_anchor {
-            let seq_opts = context_graph_core::traits::SequenceOptions {
-                anchor_id,
-                direction: sequence_direction,
-                ..Default::default()
+        // =========================================================================
+        // CONVERSATION CONTEXT HANDLING (Phase 2 Enhancement)
+        // =========================================================================
+        // conversationContext provides a convenience wrapper for E4 sequence-based retrieval
+        // It auto-anchors to current turn and sets up sequence options
+        if use_conversation_context {
+            // Get current sequence number for anchoring
+            let current_seq = self.current_sequence();
+
+            // Determine sequence direction based on turns_back/turns_forward
+            let conv_direction = match (turns_back > 0, turns_forward > 0) {
+                (true, true) => context_graph_core::traits::SequenceDirection::Both,
+                (true, false) => context_graph_core::traits::SequenceDirection::Before,
+                (false, true) => context_graph_core::traits::SequenceDirection::After,
+                (false, false) => context_graph_core::traits::SequenceDirection::Both, // Default
             };
+
+            // Use the new from_sequence constructor for sequence-based anchoring
+            let max_dist = std::cmp::max(turns_back, turns_forward);
+            let seq_opts = context_graph_core::traits::SequenceOptions::from_sequence(
+                current_seq,
+                conv_direction,
+                max_dist,
+            );
+            options.temporal_options.sequence_options = Some(seq_opts);
+
+            debug!(
+                current_seq = current_seq,
+                turns_back = turns_back,
+                turns_forward = turns_forward,
+                direction = ?conv_direction,
+                "Applying conversationContext with auto-anchor"
+            );
+        } else if let Some(anchor_id) = sequence_anchor {
+            // Fall back to explicit sequenceAnchor if provided
+            let seq_opts = context_graph_core::traits::SequenceOptions::around(anchor_id)
+                .with_direction(sequence_direction);
             options.temporal_options.sequence_options = Some(seq_opts);
         }
 
@@ -846,6 +1056,17 @@ impl Handlers {
                                 "hook_type": metadata.hook_type,
                                 "tool_name": metadata.tool_name
                             });
+
+                            // Include sequenceInfo for session-based queries (Phase 2 enhancement)
+                            if let Some(seq) = metadata.session_sequence {
+                                let current_seq = self.current_sequence();
+                                let position_label = compute_position_label(seq, current_seq);
+                                entry["sequenceInfo"] = json!({
+                                    "sessionId": metadata.session_id,
+                                    "sessionSequence": seq,
+                                    "positionLabel": position_label
+                                });
+                            }
                         }
                         entry
                     })
@@ -1190,6 +1411,43 @@ fn apply_colbert_reranking(
         colbert_weight = COLBERT_WEIGHT,
         "ColBERT reranking applied"
     );
+}
+
+// =============================================================================
+// SEQUENCE POSITION LABEL HELPER
+// =============================================================================
+
+/// Compute human-readable position label for sequence numbers.
+///
+/// Returns labels like:
+/// - "current turn" (same sequence)
+/// - "previous turn" (1 turn ago)
+/// - "2 turns ago" (2 turns ago)
+/// - "N turns ago" (N turns ago)
+/// - "future" (if result_seq > current_seq)
+///
+/// # Arguments
+/// * `result_seq` - The session sequence of the result
+/// * `current_seq` - The current session sequence
+fn compute_position_label(result_seq: u64, current_seq: u64) -> String {
+    if result_seq == current_seq {
+        "current turn".to_string()
+    } else if result_seq < current_seq {
+        let turns_ago = current_seq - result_seq;
+        if turns_ago == 1 {
+            "previous turn".to_string()
+        } else {
+            format!("{} turns ago", turns_ago)
+        }
+    } else {
+        // Future turn (shouldn't normally happen, but handle gracefully)
+        let turns_ahead = result_seq - current_seq;
+        if turns_ahead == 1 {
+            "next turn".to_string()
+        } else {
+            format!("{} turns ahead", turns_ahead)
+        }
+    }
 }
 
 #[cfg(test)]

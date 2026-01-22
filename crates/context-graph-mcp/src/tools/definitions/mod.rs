@@ -1,17 +1,20 @@
-//! Tool definitions per PRD v6 Section 10 (18 tools total).
+//! Tool definitions per PRD v6 Section 10 (22 tools total).
+//!
+//! Includes 18 original tools plus 4 new sequence tools for E4 integration.
 
 pub(crate) mod core;
 pub(crate) mod curation;
 pub(crate) mod dream;
 pub(crate) mod file_watcher;
 pub(crate) mod merge;
+pub(crate) mod sequence;
 pub(crate) mod topic;
 
 use crate::tools::types::ToolDefinition;
 
 /// Get all tool definitions for the `tools/list` response.
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(18);
+    let mut tools = Vec::with_capacity(22);
 
     // Core tools (5)
     tools.extend(core::definitions());
@@ -31,6 +34,9 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     // File watcher tools (4)
     tools.extend(file_watcher::definitions());
 
+    // Sequence tools (4) - E4 integration
+    tools.extend(sequence::definitions());
+
     tools
 }
 
@@ -40,7 +46,7 @@ mod tests {
 
     #[test]
     fn test_total_tool_count() {
-        assert_eq!(get_tool_definitions().len(), 18);
+        assert_eq!(get_tool_definitions().len(), 22);
     }
 
     #[test]
@@ -73,6 +79,11 @@ mod tests {
             "get_file_watcher_stats",
             "delete_file_content",
             "reconcile_files",
+            // Sequence tools (4) - E4 integration
+            "get_conversation_context",
+            "get_session_timeline",
+            "traverse_memory_chain",
+            "compare_session_states",
         ];
 
         for name in expected {
@@ -114,5 +125,6 @@ mod tests {
         assert_eq!(topic::definitions().len(), 4);
         assert_eq!(dream::definitions().len(), 2);
         assert_eq!(file_watcher::definitions().len(), 4);
+        assert_eq!(sequence::definitions().len(), 4);
     }
 }

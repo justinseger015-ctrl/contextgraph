@@ -670,6 +670,15 @@ fn run_e4_mode(args: &CliConfig) -> String {
     eprintln!("  Before accuracy: {:.3}", results.before_accuracy);
     eprintln!("  After accuracy: {:.3}", results.after_accuracy);
     eprintln!("  Combined: {:.3}", results.before_after_accuracy);
+
+    // Check direction symmetry - large asymmetry indicates timestamp-based bias
+    let asymmetry = (results.before_accuracy - results.after_accuracy).abs();
+    if asymmetry > 0.2 {
+        eprintln!("  ⚠️  WARNING: High direction asymmetry ({:.3})", asymmetry);
+        eprintln!("     This may indicate sequence-based comparison is not working correctly.");
+    } else {
+        eprintln!("  ✓ Direction symmetry OK (asymmetry: {:.3})", asymmetry);
+    }
     eprintln!();
     eprintln!("Chain Length Scaling:");
     for point in &results.chain_length_scaling {

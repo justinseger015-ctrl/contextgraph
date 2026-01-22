@@ -15,6 +15,7 @@ pub mod divergence;
 pub mod performance;
 pub mod retrieval;
 pub mod temporal;
+pub mod temporal_realdata;
 
 pub use causal::CausalMetrics;
 pub use clustering::ClusteringMetrics;
@@ -22,6 +23,7 @@ pub use divergence::DivergenceMetrics;
 pub use performance::PerformanceMetrics;
 pub use retrieval::RetrievalMetrics;
 pub use temporal::TemporalMetrics;
+pub use temporal_realdata::TemporalRealdataMetrics;
 
 /// Combined metrics for a single benchmark run.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]

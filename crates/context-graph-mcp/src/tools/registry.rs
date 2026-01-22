@@ -93,7 +93,7 @@ impl Default for ToolRegistry {
 ///
 /// Uses existing definitions from tools/definitions/ modules.
 ///
-/// Per PRD v6, 18 tools are exposed (14 core + 4 file watcher):
+/// 22 tools are exposed:
 ///
 /// | Category | Count | Source |
 /// |----------|-------|--------|
@@ -103,6 +103,7 @@ impl Default for ToolRegistry {
 /// | Topic | 4 | definitions/topic.rs |
 /// | Dream | 2 | definitions/dream.rs |
 /// | File Watcher | 4 | definitions/file_watcher.rs |
+/// | Sequence | 4 | definitions/sequence.rs (E4 integration) |
 pub fn register_all_tools() -> ToolRegistry {
     use super::definitions;
 
@@ -138,11 +139,16 @@ pub fn register_all_tools() -> ToolRegistry {
         registry.register(tool);
     }
 
-    // Verify expected tool count (PRD v6: 14 core + 4 file watcher = 18 total)
+    // Register sequence tools (4): get_conversation_context, get_session_timeline, traverse_memory_chain, compare_session_states
+    for tool in definitions::sequence::definitions() {
+        registry.register(tool);
+    }
+
+    // Verify expected tool count (18 original + 4 sequence = 22 total)
     let actual_count = registry.len();
     assert_eq!(
-        actual_count, 18,
-        "Expected 18 tools (14 core + 4 file watcher), got {}. Check definitions modules.",
+        actual_count, 22,
+        "Expected 22 tools (18 original + 4 sequence), got {}. Check definitions modules.",
         actual_count
     );
 
@@ -164,8 +170,8 @@ mod tests {
     #[test]
     fn test_register_all_tools_count() {
         let registry = register_all_tools();
-        // 14 core tools (PRD v6) + 4 file watcher tools = 18 total
-        assert_eq!(registry.len(), 18, "Must have exactly 18 tools (14 core + 4 file watcher)");
+        // 18 original tools + 4 sequence tools = 22 total
+        assert_eq!(registry.len(), 22, "Must have exactly 22 tools (18 original + 4 sequence)");
     }
 
     #[test]
@@ -194,8 +200,8 @@ mod tests {
     fn test_list_returns_all_tools_sorted() {
         let registry = register_all_tools();
         let tools = registry.list();
-        // 14 core tools + 4 file watcher tools = 18 total
-        assert_eq!(tools.len(), 18);
+        // 18 original tools + 4 sequence tools = 22 total
+        assert_eq!(tools.len(), 22);
 
         for i in 1..tools.len() {
             assert!(tools[i - 1].name <= tools[i].name);
@@ -203,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn test_all_18_tools_registered() {
+    fn test_all_22_tools_registered() {
         let registry = register_all_tools();
         let expected_tools = [
             // Core (5)
@@ -230,6 +236,11 @@ mod tests {
             "get_file_watcher_stats",
             "delete_file_content",
             "reconcile_files",
+            // Sequence (4) - E4 integration
+            "get_conversation_context",
+            "get_session_timeline",
+            "traverse_memory_chain",
+            "compare_session_states",
         ];
 
         for name in expected_tools {

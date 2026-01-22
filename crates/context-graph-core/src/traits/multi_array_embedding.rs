@@ -58,6 +58,7 @@
 //! ```
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use std::time::Duration;
 
 use crate::error::CoreResult;
@@ -210,6 +211,97 @@ impl MultiArrayEmbeddingOutput {
     }
 }
 
+/// Metadata for temporal embedding models (E2-E4).
+///
+/// Provides explicit context for temporal embedders rather than relying on
+/// implicit time extraction. This is particularly important for E4 (V_ordering)
+/// which should encode session sequence positions, not Unix timestamps.
+///
+/// # E4-FIX
+///
+/// This struct was added to fix E4 sequence embedding. Previously, E4 used
+/// Unix timestamps (same as E2), making it a duplicate. With this metadata,
+/// E4 now receives proper session sequence numbers.
+///
+/// # Usage
+///
+/// ```ignore
+/// let metadata = EmbeddingMetadata {
+///     session_id: Some("session-123".to_string()),
+///     session_sequence: Some(42),  // 43rd memory in this session
+///     timestamp: Some(Utc::now()),
+/// };
+///
+/// let output = provider.embed_all_with_metadata(content, metadata).await?;
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct EmbeddingMetadata {
+    /// Session ID for session-scoped operations.
+    ///
+    /// Used to scope sequence numbers within a session.
+    pub session_id: Option<String>,
+
+    /// Session sequence number for E4 (V_ordering).
+    ///
+    /// Monotonically increasing within a session (0, 1, 2, ...).
+    /// This is used by E4 instead of Unix timestamps to enable proper
+    /// "before/after" queries within a session.
+    pub session_sequence: Option<u64>,
+
+    /// Explicit timestamp for E2 (V_freshness) and E3 (V_periodicity).
+    ///
+    /// If not provided, defaults to `Utc::now()`.
+    pub timestamp: Option<DateTime<Utc>>,
+}
+
+impl EmbeddingMetadata {
+    /// Create metadata with session sequence (preferred for E4).
+    ///
+    /// # Arguments
+    /// * `session_id` - Session identifier
+    /// * `sequence` - Sequence number within the session
+    #[must_use]
+    pub fn with_sequence(session_id: impl Into<String>, sequence: u64) -> Self {
+        Self {
+            session_id: Some(session_id.into()),
+            session_sequence: Some(sequence),
+            timestamp: Some(Utc::now()),
+        }
+    }
+
+    /// Create metadata with explicit timestamp (for backward compatibility).
+    #[must_use]
+    pub fn with_timestamp(timestamp: DateTime<Utc>) -> Self {
+        Self {
+            session_id: None,
+            session_sequence: None,
+            timestamp: Some(timestamp),
+        }
+    }
+
+    /// Format E4 instruction string for sequence mode.
+    ///
+    /// Returns "sequence:N" if session_sequence is set, otherwise falls back
+    /// to "epoch:N" for timestamp mode.
+    #[must_use]
+    pub fn e4_instruction(&self) -> String {
+        if let Some(seq) = self.session_sequence {
+            format!("sequence:{}", seq)
+        } else if let Some(ts) = self.timestamp {
+            format!("epoch:{}", ts.timestamp())
+        } else {
+            format!("epoch:{}", Utc::now().timestamp())
+        }
+    }
+
+    /// Format E2/E3 instruction string (always uses timestamp).
+    #[must_use]
+    pub fn temporal_instruction(&self) -> String {
+        let ts = self.timestamp.unwrap_or_else(Utc::now);
+        format!("epoch:{}", ts.timestamp())
+    }
+}
+
 /// Multi-Array Embedding Provider trait.
 ///
 /// Orchestrates 13 individual embedders to produce a complete [`SemanticFingerprint`].
@@ -284,6 +376,37 @@ pub trait MultiArrayEmbeddingProvider: Send + Sync {
     ///
     /// Target latency: <30ms for all 13 embeddings (constitution.yaml)
     async fn embed_all(&self, content: &str) -> CoreResult<MultiArrayEmbeddingOutput>;
+
+    /// Generate complete 13-embedding fingerprint with explicit metadata.
+    ///
+    /// This method allows passing explicit session sequence numbers for E4
+    /// (V_ordering) embeddings, enabling proper "before/after" queries within
+    /// a session.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - Text content to embed (must be non-empty)
+    /// * `metadata` - Metadata for temporal embedders (E2-E4)
+    ///
+    /// # E4-FIX
+    ///
+    /// This method was added to fix E4 sequence embedding. The default
+    /// implementation delegates to `embed_all()` for backward compatibility,
+    /// but implementations should override this to use metadata.session_sequence
+    /// for E4 embeddings.
+    ///
+    /// # Default Implementation
+    ///
+    /// Delegates to `embed_all()`, ignoring metadata. Override to use metadata.
+    async fn embed_all_with_metadata(
+        &self,
+        content: &str,
+        _metadata: EmbeddingMetadata,
+    ) -> CoreResult<MultiArrayEmbeddingOutput> {
+        // Default: ignore metadata and delegate to embed_all
+        // Implementations should override to use metadata for E4
+        self.embed_all(content).await
+    }
 
     /// Generate fingerprints for multiple contents in batch.
     ///

@@ -122,7 +122,8 @@ pub async fn execute(args: PostToolArgs) -> HookResult<HookOutput> {
     // 6. Capture tool response as memory if appropriate
     //    This stores valuable context from tool execution into the knowledge graph.
     //    Per CLAUDE.md: PostToolUse captures tool description as HookDescription memory.
-    capture_tool_memory(&tool_name, &tool_response, tool_success).await;
+    // SESSION-ID-FIX: Pass session_id for proper session-scoped storage
+    capture_tool_memory(&tool_name, &tool_response, tool_success, &args.session_id).await;
 
     // 7. Build output structures
     let coherence_state = build_coherence_state(&snapshot);
@@ -353,10 +354,11 @@ fn build_coherence_state(snapshot: &SessionSnapshot) -> CoherenceState {
 /// * `tool_name` - Name of the tool that was executed
 /// * `tool_response` - The response from tool execution
 /// * `tool_success` - Whether the tool executed successfully
+/// * `session_id` - Session ID for session-scoped storage (SESSION-ID-FIX)
 ///
 /// # Note
 /// Failure is non-fatal - we log and continue rather than failing the hook.
-async fn capture_tool_memory(tool_name: &str, tool_response: &str, tool_success: bool) {
+async fn capture_tool_memory(tool_name: &str, tool_response: &str, tool_success: bool, session_id: &str) {
     // Only capture successful tool executions from high-value tools
     if !tool_success {
         debug!(tool_name, "POST_TOOL: Skipping memory capture for failed tool");
@@ -415,7 +417,8 @@ async fn capture_tool_memory(tool_name: &str, tool_response: &str, tool_success:
     );
 
     // Store via MCP inject_context (importance 0.4 - moderate, can be boosted later)
-    match client.inject_context(&content, &rationale, 0.4).await {
+    // SESSION-ID-FIX: Pass session_id for proper session-scoped storage
+    match client.inject_context(&content, &rationale, 0.4, Some(session_id)).await {
         Ok(result) => {
             let fingerprint_id = result
                 .get("fingerprintId")

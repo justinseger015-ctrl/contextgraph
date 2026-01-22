@@ -216,6 +216,7 @@ impl McpClient {
     /// - `importance`: Importance score [0.0, 1.0]
     /// - `modality`: Content type (text, code, etc.)
     /// - `tags`: Optional tags for categorization
+    /// - `session_id`: Optional session ID for session-scoped storage
     ///
     /// # Returns
     ///
@@ -226,21 +227,30 @@ impl McpClient {
         importance: f64,
         modality: &str,
         tags: Option<Vec<String>>,
+        session_id: Option<&str>,
     ) -> Result<serde_json::Value, McpClientError> {
+        let mut arguments = json!({
+            "content": content,
+            "importance": importance,
+            "modality": modality,
+            "tags": tags.unwrap_or_default()
+        });
+
+        // SESSION-ID-FIX: Add sessionId if provided
+        if let Some(sid) = session_id {
+            arguments["sessionId"] = json!(sid);
+        }
+
         let params = json!({
             "name": "store_memory",
-            "arguments": {
-                "content": content,
-                "importance": importance,
-                "modality": modality,
-                "tags": tags.unwrap_or_default()
-            }
+            "arguments": arguments
         });
 
         info!(
             content_len = content.len(),
             importance,
             modality,
+            session_id,
             "Calling MCP store_memory"
         );
 
@@ -256,6 +266,7 @@ impl McpClient {
     /// - `content`: Context content to inject
     /// - `rationale`: Reason for storing this context
     /// - `importance`: Importance score [0.0, 1.0]
+    /// - `session_id`: Optional session ID for session-scoped storage
     ///
     /// # Returns
     ///
@@ -265,19 +276,28 @@ impl McpClient {
         content: &str,
         rationale: &str,
         importance: f64,
+        session_id: Option<&str>,
     ) -> Result<serde_json::Value, McpClientError> {
+        let mut arguments = json!({
+            "content": content,
+            "rationale": rationale,
+            "importance": importance
+        });
+
+        // SESSION-ID-FIX: Add sessionId if provided
+        if let Some(sid) = session_id {
+            arguments["sessionId"] = json!(sid);
+        }
+
         let params = json!({
             "name": "inject_context",
-            "arguments": {
-                "content": content,
-                "rationale": rationale,
-                "importance": importance
-            }
+            "arguments": arguments
         });
 
         info!(
             content_len = content.len(),
             importance,
+            session_id,
             "Calling MCP inject_context"
         );
 
@@ -389,6 +409,46 @@ impl McpClient {
         debug!(
             lookback_hours = lookback_hours.unwrap_or(2),
             "Calling MCP get_divergence_alerts (fast path)"
+        );
+
+        self.call_tool_fast(params).await
+    }
+
+    /// Fast-path get_conversation_context for recent session turns.
+    ///
+    /// Uses shorter timeouts to ensure the hook completes within budget.
+    /// Returns memories around the current conversation turn with position labels.
+    ///
+    /// # Arguments
+    ///
+    /// - `direction`: "before", "after", or "both" (default: "before")
+    /// - `window_size`: Number of turns to retrieve (1-50, default: 5)
+    /// - `include_content`: Include full text in results (default: true)
+    ///
+    /// # Returns
+    ///
+    /// The MCP tool result with memories and sequence info including position labels.
+    pub async fn get_conversation_context_fast(
+        &self,
+        direction: Option<&str>,
+        window_size: Option<u32>,
+        include_content: bool,
+    ) -> Result<serde_json::Value, McpClientError> {
+        let params = json!({
+            "name": "get_conversation_context",
+            "arguments": {
+                "direction": direction.unwrap_or("before"),
+                "windowSize": window_size.unwrap_or(5),
+                "sessionOnly": true,
+                "includeContent": include_content
+            }
+        });
+
+        debug!(
+            direction = direction.unwrap_or("before"),
+            window_size = window_size.unwrap_or(5),
+            include_content,
+            "Calling MCP get_conversation_context (fast path)"
         );
 
         self.call_tool_fast(params).await

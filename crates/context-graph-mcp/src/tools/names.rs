@@ -39,3 +39,9 @@ pub const LIST_WATCHED_FILES: &str = "list_watched_files";
 pub const GET_FILE_WATCHER_STATS: &str = "get_file_watcher_stats";
 pub const DELETE_FILE_CONTENT: &str = "delete_file_content";
 pub const RECONCILE_FILES: &str = "reconcile_files";
+
+// ========== SEQUENCE TOOLS (E4 Integration - Phase 1) ==========
+pub const GET_CONVERSATION_CONTEXT: &str = "get_conversation_context";
+pub const GET_SESSION_TIMELINE: &str = "get_session_timeline";
+pub const TRAVERSE_MEMORY_CHAIN: &str = "traverse_memory_chain";
+pub const COMPARE_SESSION_STATES: &str = "compare_session_states";

@@ -7,12 +7,17 @@ pub mod causal;
 pub mod generator;
 pub mod ground_truth;
 pub mod temporal;
+pub mod temporal_sessions;
 pub mod topic_clusters;
 
 pub use causal::{CausalBenchmarkDataset, CausalDatasetConfig, CausalDatasetGenerator, CausalDomain};
 pub use generator::{DatasetGenerator, GeneratorConfig};
 pub use ground_truth::GroundTruth;
 pub use temporal::{TemporalBenchmarkDataset, TemporalDatasetConfig, TemporalDatasetGenerator};
+pub use temporal_sessions::{
+    BoundaryQuery, ChainQuery, DirectionQuery, SequenceDirection, SequenceGroundTruth,
+    SessionChunk, SessionGenerator, SessionGeneratorConfig, TemporalSession,
+};
 pub use topic_clusters::{TopicCluster, TopicGenerator};
 
 use std::collections::{HashMap, HashSet};

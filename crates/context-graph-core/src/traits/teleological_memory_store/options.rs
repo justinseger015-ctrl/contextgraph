@@ -433,6 +433,21 @@ pub struct SequenceOptions {
     /// Default: true (exponential is recommended)
     #[serde(default = "SequenceOptions::default_use_exponential")]
     pub use_exponential_fallback: bool,
+
+    /// Anchor's session_sequence (populated during search setup).
+    ///
+    /// When set, enables sequence-based direction filtering using session
+    /// sequence numbers instead of timestamps. This provides more accurate
+    /// "before/after" queries within a session.
+    #[serde(skip)]
+    pub anchor_sequence: Option<u64>,
+
+    /// Anchor's session_id (for same-session validation).
+    ///
+    /// When set, can be used to ensure sequence comparisons only happen
+    /// between memories from the same session.
+    #[serde(skip)]
+    pub anchor_session_id: Option<String>,
 }
 
 impl SequenceOptions {
@@ -458,6 +473,8 @@ impl SequenceOptions {
             max_distance: Self::default_max_distance(),
             weight: Self::default_weight(),
             use_exponential_fallback: Self::default_use_exponential(),
+            anchor_sequence: None,
+            anchor_session_id: None,
         }
     }
 
@@ -471,6 +488,8 @@ impl SequenceOptions {
             max_distance: Self::default_max_distance(),
             weight: Self::default_weight(),
             use_exponential_fallback: Self::default_use_exponential(),
+            anchor_sequence: None,
+            anchor_session_id: None,
         }
     }
 
@@ -484,7 +503,39 @@ impl SequenceOptions {
             max_distance: Self::default_max_distance(),
             weight: Self::default_weight(),
             use_exponential_fallback: Self::default_use_exponential(),
+            anchor_sequence: None,
+            anchor_session_id: None,
         }
+    }
+
+    /// Create sequence options to anchor by sequence number directly.
+    ///
+    /// This is useful for anchoring to the current conversation turn without
+    /// having a specific memory UUID. Uses Uuid::nil() as a sentinel.
+    ///
+    /// # Arguments
+    /// * `sequence` - The session sequence number to anchor to
+    /// * `direction` - Direction to search (before, after, both)
+    /// * `max_dist` - Maximum distance in sequence positions
+    pub fn from_sequence(sequence: u64, direction: SequenceDirection, max_dist: u32) -> Self {
+        Self {
+            anchor_id: Uuid::nil(), // Sentinel value - sequence takes priority
+            additional_anchors: Vec::new(),
+            multi_anchor_mode: MultiAnchorMode::default(),
+            direction,
+            max_distance: max_dist as usize,
+            weight: Self::default_weight(),
+            use_exponential_fallback: Self::default_use_exponential(),
+            anchor_sequence: Some(sequence),
+            anchor_session_id: None,
+        }
+    }
+
+    /// Check if this sequence options is anchored by sequence number.
+    ///
+    /// Returns true if anchor_sequence is set (regardless of anchor_id).
+    pub fn is_sequence_anchored(&self) -> bool {
+        self.anchor_sequence.is_some()
     }
 
     /// Create sequence options to find memories between two anchors.
@@ -500,6 +551,8 @@ impl SequenceOptions {
             max_distance: Self::default_max_distance(),
             weight: Self::default_weight(),
             use_exponential_fallback: Self::default_use_exponential(),
+            anchor_sequence: None,
+            anchor_session_id: None,
         }
     }
 
@@ -541,6 +594,30 @@ impl SequenceOptions {
         self.multi_anchor_mode = mode;
         self
     }
+
+    /// Set the anchor's session sequence number.
+    ///
+    /// When set, enables sequence-based direction filtering using session
+    /// sequence numbers instead of timestamps.
+    pub fn with_anchor_sequence(mut self, sequence: u64) -> Self {
+        self.anchor_sequence = Some(sequence);
+        self
+    }
+
+    /// Set the anchor's session ID.
+    ///
+    /// When set, can be used to ensure sequence comparisons only happen
+    /// between memories from the same session.
+    pub fn with_anchor_session_id(mut self, session_id: String) -> Self {
+        self.anchor_session_id = Some(session_id);
+        self
+    }
+
+    /// Set the sequence direction (before, after, both).
+    pub fn with_direction(mut self, direction: SequenceDirection) -> Self {
+        self.direction = direction;
+        self
+    }
 }
 
 impl Default for SequenceOptions {
@@ -553,6 +630,8 @@ impl Default for SequenceOptions {
             max_distance: Self::default_max_distance(),
             weight: Self::default_weight(),
             use_exponential_fallback: Self::default_use_exponential(),
+            anchor_sequence: None,
+            anchor_session_id: None,
         }
     }
 }

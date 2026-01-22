@@ -3,7 +3,9 @@
 //! PRD v6 Section 10 - Handlers for all 14 MCP tools.
 //!
 //! TASK-INTEG-TOPIC: Added clustering dependencies for topic tools integration.
+//! E4-FIX: Added session sequence counter for proper E4 (V_ordering) embeddings.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -45,6 +47,15 @@ pub struct Handlers {
     /// Topic stability tracker for portfolio-level stability metrics.
     /// TASK-INTEG-TOPIC: Added for topic tools integration.
     pub(in crate::handlers) stability_tracker: Arc<RwLock<TopicStabilityTracker>>,
+
+    /// Session sequence counter for E4 (V_ordering) embeddings.
+    /// Monotonically increasing within a session, used to track memory ordering.
+    /// E4-FIX: Added to fix E4 sequence embedding.
+    session_sequence_counter: Arc<AtomicU64>,
+
+    /// Current session ID for session-scoped operations.
+    /// E4-FIX: Added to track session context for E4 embeddings.
+    current_session_id: Arc<RwLock<Option<String>>>,
 }
 
 impl Handlers {
@@ -73,6 +84,9 @@ impl Handlers {
             layer_status_provider,
             cluster_manager,
             stability_tracker,
+            // E4-FIX: Initialize session sequence counter and session ID
+            session_sequence_counter: Arc::new(AtomicU64::new(0)),
+            current_session_id: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -102,7 +116,59 @@ impl Handlers {
             layer_status_provider,
             cluster_manager: Arc::new(RwLock::new(cluster_manager)),
             stability_tracker: Arc::new(RwLock::new(stability_tracker)),
+            // E4-FIX: Initialize session sequence counter and session ID
+            session_sequence_counter: Arc::new(AtomicU64::new(0)),
+            current_session_id: Arc::new(RwLock::new(None)),
         }
+    }
+
+    // =========================================================================
+    // Session Sequence Management (E4-FIX)
+    // =========================================================================
+
+    /// Get the next session sequence number and atomically increment the counter.
+    ///
+    /// Returns a monotonically increasing sequence number within the current session.
+    /// Used by memory tools to generate E4 (V_ordering) embeddings.
+    ///
+    /// # Returns
+    /// The current sequence number before incrementing.
+    pub fn get_next_sequence(&self) -> u64 {
+        self.session_sequence_counter.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Reset the session sequence counter to 0.
+    ///
+    /// Should be called at the start of a new session.
+    pub fn reset_sequence(&self) {
+        self.session_sequence_counter.store(0, Ordering::SeqCst);
+    }
+
+    /// Get the current session ID.
+    ///
+    /// Priority order:
+    /// 1. CLAUDE_SESSION_ID environment variable
+    /// 2. Previously stored session ID
+    /// 3. None if no session ID is available
+    pub fn get_session_id(&self) -> Option<String> {
+        std::env::var("CLAUDE_SESSION_ID")
+            .ok()
+            .or_else(|| self.current_session_id.read().clone())
+    }
+
+    /// Set the current session ID.
+    ///
+    /// Also resets the sequence counter for the new session.
+    pub fn set_session_id(&self, session_id: Option<String>) {
+        *self.current_session_id.write() = session_id;
+        self.reset_sequence();
+    }
+
+    /// Get the current sequence number without incrementing.
+    ///
+    /// Useful for debugging and status reporting.
+    pub fn current_sequence(&self) -> u64 {
+        self.session_sequence_counter.load(Ordering::SeqCst)
     }
 
     /// Handle MCP initialize request.

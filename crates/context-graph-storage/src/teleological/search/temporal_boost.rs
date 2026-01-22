@@ -424,6 +424,146 @@ pub fn compute_sequence_proximity_exponential(
     ((-distance_secs / characteristic).exp() as f32).clamp(0.0, 1.0)
 }
 
+/// Compute E4 sequence score using session_sequence when available.
+///
+/// E4-FIX: This function prefers session sequence numbers over timestamps
+/// for direction filtering. This enables proper "before/after" queries
+/// within a session, where sequence order matters more than calendar time.
+///
+/// # Arguments
+///
+/// * `anchor_e4` - Anchor memory's E4 positional embedding
+/// * `memory_e4` - Memory E4 positional embedding
+/// * `memory_seq` - Memory's session sequence number (if available)
+/// * `anchor_seq` - Anchor's session sequence number (if available)
+/// * `memory_ts` - Memory timestamp (milliseconds) - fallback
+/// * `anchor_ts` - Anchor timestamp (milliseconds) - fallback
+/// * `direction` - Search direction (Before, After, Both)
+///
+/// # Returns
+///
+/// Similarity score [0.0, 1.0], 0.0 if direction constraint not met
+///
+/// # Behavior
+///
+/// - If both memory and anchor have session_sequence: Use sequence for direction
+/// - Otherwise: Fall back to timestamp-based direction filtering
+///
+/// # Example
+///
+/// ```ignore
+/// // Memory at sequence 5, anchor at sequence 10
+/// // Direction::Before -> 5 < 10 = true -> compute similarity
+/// // Direction::After -> 5 > 10 = false -> return 0.0
+/// ```
+pub fn compute_e4_sequence_score_v2(
+    anchor_e4: &[f32],
+    memory_e4: &[f32],
+    memory_seq: Option<u64>,
+    anchor_seq: Option<u64>,
+    memory_ts: i64,
+    anchor_ts: i64,
+    direction: SequenceDirection,
+) -> f32 {
+    // E4-FIX: Prefer sequence-based ordering when both available
+    let passes_direction = match (memory_seq, anchor_seq) {
+        (Some(m_seq), Some(a_seq)) => {
+            // Use session sequence for direction filtering
+            match direction {
+                SequenceDirection::Before => m_seq < a_seq,
+                SequenceDirection::After => m_seq > a_seq,
+                SequenceDirection::Both => true,
+            }
+        }
+        _ => {
+            // Fall back to timestamp-based direction filtering
+            match direction {
+                SequenceDirection::Before => memory_ts < anchor_ts,
+                SequenceDirection::After => {
+                    // 1ms tolerance for edge cases
+                    memory_ts > anchor_ts + 1
+                }
+                SequenceDirection::Both => true,
+            }
+        }
+    };
+
+    // If direction constraint not met, return 0.0
+    if !passes_direction {
+        return 0.0;
+    }
+
+    // Compute E4 cosine similarity
+    cosine_similarity(anchor_e4, memory_e4)
+}
+
+/// Compute sequence proximity using session_sequence when available.
+///
+/// E4-FIX: Fallback function when E4 embeddings are not available.
+/// Uses session sequence numbers for distance calculation when available.
+///
+/// # Arguments
+///
+/// * `memory_seq` - Memory's session sequence number (if available)
+/// * `anchor_seq` - Anchor's session sequence number (if available)
+/// * `memory_ts` - Memory timestamp (milliseconds) - fallback
+/// * `anchor_ts` - Anchor timestamp (milliseconds) - fallback
+/// * `direction` - Search direction
+/// * `max_distance` - Maximum distance for scoring (positions or seconds)
+/// * `use_exponential` - Whether to use exponential decay
+///
+/// # Returns
+///
+/// Proximity score [0.0, 1.0], 0.0 if direction constraint not met
+pub fn compute_sequence_proximity_v2(
+    memory_seq: Option<u64>,
+    anchor_seq: Option<u64>,
+    memory_ts: i64,
+    anchor_ts: i64,
+    direction: SequenceDirection,
+    max_distance: u64,
+    use_exponential: bool,
+) -> f32 {
+    // E4-FIX: Prefer sequence-based ordering when both available
+    let (passes_direction, distance) = match (memory_seq, anchor_seq) {
+        (Some(m_seq), Some(a_seq)) => {
+            // Use session sequence for direction filtering and distance
+            let passes = match direction {
+                SequenceDirection::Before => m_seq < a_seq,
+                SequenceDirection::After => m_seq > a_seq,
+                SequenceDirection::Both => true,
+            };
+            let dist = (m_seq as i64 - a_seq as i64).unsigned_abs();
+            (passes, dist)
+        }
+        _ => {
+            // Fall back to timestamp-based
+            let passes = match direction {
+                SequenceDirection::Before => memory_ts < anchor_ts,
+                SequenceDirection::After => memory_ts > anchor_ts + 1,
+                SequenceDirection::Both => true,
+            };
+            let dist = (memory_ts - anchor_ts).unsigned_abs() / 1000; // Convert ms to secs
+            (passes, dist)
+        }
+    };
+
+    if !passes_direction {
+        return 0.0;
+    }
+
+    // Compute proximity score
+    if use_exponential {
+        let characteristic = max_distance as f64 / 3.0;
+        let decay = -(distance as f64) / characteristic;
+        (decay.exp() as f32).clamp(0.0, 1.0)
+    } else {
+        // Linear decay
+        let proximity = 1.0 - (distance.min(max_distance) as f32 / max_distance as f32);
+        proximity.max(0.0)
+    }
+}
+
 // =============================================================================
 // TIME WINDOW FILTERING
 // =============================================================================
@@ -709,6 +849,202 @@ pub fn apply_temporal_boosts(
     boost_data
 }
 
+/// Apply all temporal boosts POST-retrieval with sequence support (E4-FIX Phase 2).
+///
+/// This is the v2 version that properly uses session_sequence for E4 direction filtering.
+/// The key difference from `apply_temporal_boosts` is that this function:
+/// 1. Takes `sequences` map with session_sequence for each memory
+/// 2. Takes `anchor_seq` for the anchor memory's sequence
+/// 3. Uses `compute_e4_sequence_score_v2` which prefers sequence-based direction filtering
+///
+/// # Arguments
+///
+/// * `results` - Search results to boost (modified in place)
+/// * `query_fp` - Query semantic fingerprint (for embedding comparisons)
+/// * `options` - Temporal search options
+/// * `fingerprints` - Map of memory IDs to their fingerprints
+/// * `timestamps` - Map of memory IDs to their timestamps (ms)
+/// * `sequences` - Map of memory IDs to their session_sequence (if available)
+/// * `anchor_fp` - Optional anchor fingerprint for sequence queries
+/// * `anchor_ts` - Optional anchor timestamp for sequence queries
+/// * `anchor_seq` - Optional anchor session_sequence for sequence queries (E4-FIX)
+///
+/// # Returns
+///
+/// Map of memory IDs to their temporal boost data (for debugging/logging)
+pub fn apply_temporal_boosts_v2(
+    results: &mut Vec<TeleologicalSearchResult>,
+    query_fp: &SemanticFingerprint,
+    options: &TemporalSearchOptions,
+    fingerprints: &HashMap<Uuid, SemanticFingerprint>,
+    timestamps: &HashMap<Uuid, i64>,
+    sequences: &HashMap<Uuid, Option<u64>>,
+    anchor_fp: Option<&SemanticFingerprint>,
+    anchor_ts: Option<i64>,
+    anchor_seq: Option<u64>,
+) -> HashMap<Uuid, TemporalBoostData> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let temporal_weight = options.temporal_weight;
+
+    // If no temporal weight, skip all processing
+    if temporal_weight <= 0.0 {
+        return HashMap::new();
+    }
+
+    let mut boost_data: HashMap<Uuid, TemporalBoostData> = HashMap::new();
+
+    // Compute individual component weights from configured weights
+    // Only include weights for active components, then normalize
+    let has_recency = options.decay_function.is_active();
+    let has_periodic = options.periodic_options.is_some();
+    let has_sequence = options.sequence_options.is_some();
+
+    if !has_recency && !has_periodic && !has_sequence {
+        return HashMap::new();
+    }
+
+    // Use configured weights (default: 0.50/0.15/0.35 from benchmark optimization)
+    let (w_recency, w_periodic, w_sequence) = options.component_weights;
+
+    // Zero out weights for inactive components
+    let raw_recency = if has_recency { w_recency } else { 0.0 };
+    let raw_periodic = if has_periodic { w_periodic } else { 0.0 };
+    let raw_sequence = if has_sequence { w_sequence } else { 0.0 };
+
+    // Normalize active weights to sum to 1.0
+    let total_weight = raw_recency + raw_periodic + raw_sequence;
+    let (recency_weight, periodic_weight, sequence_weight) = if total_weight > f32::EPSILON {
+        (
+            raw_recency / total_weight,
+            raw_periodic / total_weight,
+            raw_sequence / total_weight,
+        )
+    } else {
+        // Fallback: equal among active
+        let active_count = has_recency as u8 + has_periodic as u8 + has_sequence as u8;
+        let w = 1.0 / active_count.max(1) as f32;
+        (
+            if has_recency { w } else { 0.0 },
+            if has_periodic { w } else { 0.0 },
+            if has_sequence { w } else { 0.0 },
+        )
+    };
+
+    debug!(
+        "Temporal boost v2 weights: recency={:.2}, periodic={:.2}, sequence={:.2}, master={:.2}",
+        recency_weight, periodic_weight, sequence_weight, temporal_weight
+    );
+
+    for result in results.iter_mut() {
+        let id = result.fingerprint.id;
+        let memory_fp = fingerprints.get(&id);
+        let memory_ts = timestamps.get(&id).copied().unwrap_or(0);
+        let memory_seq = sequences.get(&id).copied().flatten();
+
+        let mut data = TemporalBoostData::default();
+
+        // E2 Recency
+        if has_recency {
+            if let Some(fp) = memory_fp {
+                // Prefer embedding-based similarity if query has E2
+                if !query_fp.e2_temporal_recent.is_empty() && !fp.e2_temporal_recent.is_empty() {
+                    data.recency_score = compute_e2_embedding_similarity(
+                        &query_fp.e2_temporal_recent,
+                        &fp.e2_temporal_recent,
+                    );
+                } else {
+                    // Fall back to timestamp-based decay
+                    data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
+                }
+            } else {
+                data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
+            }
+        }
+
+        // E3 Periodic
+        if let Some(ref periodic_opts) = options.periodic_options {
+            if let Some(fp) = memory_fp {
+                // Prefer embedding-based similarity
+                if !query_fp.e3_temporal_periodic.is_empty() && !fp.e3_temporal_periodic.is_empty() {
+                    data.periodic_score = compute_e3_periodic_score(
+                        &query_fp.e3_temporal_periodic,
+                        &fp.e3_temporal_periodic,
+                    );
+                } else {
+                    // Fall back to hour/day matching using chrono
+                    let (memory_hour, memory_dow) = extract_temporal_components(memory_ts);
+                    data.periodic_score = compute_periodic_match_fallback(
+                        periodic_opts.effective_hour(),
+                        memory_hour,
+                        periodic_opts.effective_day_of_week(),
+                        memory_dow,
+                    );
+                }
+            }
+        }
+
+        // E4 Sequence - E4-FIX: Use v2 functions with sequence support
+        if let Some(ref sequence_opts) = options.sequence_options {
+            if let (Some(anchor), Some(anchor_time)) = (anchor_fp, anchor_ts) {
+                if let Some(fp) = memory_fp {
+                    // Prefer embedding-based similarity with v2 sequence logic
+                    if !anchor.e4_temporal_positional.is_empty() && !fp.e4_temporal_positional.is_empty() {
+                        // E4-FIX: Use v2 function that prefers sequence-based direction
+                        data.sequence_score = compute_e4_sequence_score_v2(
+                            &anchor.e4_temporal_positional,
+                            &fp.e4_temporal_positional,
+                            memory_seq,
+                            anchor_seq,
+                            memory_ts,
+                            anchor_time,
+                            sequence_opts.direction,
+                        );
+                    } else {
+                        // E4-FIX: Fall back to v2 proximity function with sequence support
+                        let max_distance = sequence_opts.max_distance as u64;
+                        data.sequence_score = compute_sequence_proximity_v2(
+                            memory_seq,
+                            anchor_seq,
+                            memory_ts,
+                            anchor_time,
+                            sequence_opts.direction,
+                            max_distance * 60, // Convert positions to seconds for timestamp fallback
+                            sequence_opts.use_exponential_fallback,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Combine component scores
+        data.combined_score =
+            data.recency_score * recency_weight +
+            data.periodic_score * periodic_weight +
+            data.sequence_score * sequence_weight;
+
+        // Apply temporal boost to final similarity
+        // formula: final = semantic * (1 - weight) + temporal * weight
+        let original = result.similarity;
+        result.similarity = original * (1.0 - temporal_weight) + data.combined_score * temporal_weight;
+
+        debug!(
+            "Temporal boost v2 for {}: {} -> {} (recency={:.3}, periodic={:.3}, sequence={:.3}, mem_seq={:?}, anchor_seq={:?})",
+            id, original, result.similarity,
+            data.recency_score, data.periodic_score, data.sequence_score,
+            memory_seq, anchor_seq
+        );
+
+        boost_data.insert(id, data);
+    }
+
+    // Re-sort results by boosted similarity
+    results.sort_by(|a, b| {
+        b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    boost_data
+}
+
 // =============================================================================
 // TESTS
 // =============================================================================
@@ -876,5 +1212,155 @@ mod tests {
 
         assert!((compute_e2_embedding_similarity(&query, &same) - 1.0).abs() < 0.01);
         assert!(compute_e2_embedding_similarity(&query, &orthogonal) < 0.01);
+    }
+
+    // =============================================================================
+    // E4-FIX v2 TESTS - Sequence-based direction filtering
+    // =============================================================================
+
+    #[test]
+    fn test_e4_sequence_score_v2_with_sequences() {
+        // E4-FIX: Test that v2 function prefers sequence over timestamp
+        let anchor_e4 = vec![1.0; 512];
+        let memory_e4 = vec![1.0; 512]; // Perfect match
+
+        // Memory at seq=5, anchor at seq=10
+        // With Before direction: 5 < 10 = true -> should pass
+        let score = compute_e4_sequence_score_v2(
+            &anchor_e4, &memory_e4,
+            Some(5),   // memory_seq
+            Some(10),  // anchor_seq
+            1000,      // memory_ts (higher, but should be ignored)
+            500,       // anchor_ts (lower, but should be ignored)
+            SequenceDirection::Before,
+        );
+        assert!(score > 0.9, "Sequence-based Before should pass: got {}", score);
+
+        // With After direction: 5 > 10 = false -> should fail
+        let score = compute_e4_sequence_score_v2(
+            &anchor_e4, &memory_e4,
+            Some(5),   // memory_seq
+            Some(10),  // anchor_seq
+            1000,      // memory_ts
+            500,       // anchor_ts
+            SequenceDirection::After,
+        );
+        assert_eq!(score, 0.0, "Sequence-based After should fail for memory before anchor");
+    }
+
+    #[test]
+    fn test_e4_sequence_score_v2_fallback_to_timestamp() {
+        // E4-FIX: When sequences not available, falls back to timestamp
+        let anchor_e4 = vec![1.0; 512];
+        let memory_e4 = vec![1.0; 512];
+
+        // No sequences, using timestamps: memory_ts=500 < anchor_ts=1000
+        let score = compute_e4_sequence_score_v2(
+            &anchor_e4, &memory_e4,
+            None,  // memory_seq (not available)
+            None,  // anchor_seq (not available)
+            500,   // memory_ts
+            1000,  // anchor_ts
+            SequenceDirection::Before,
+        );
+        assert!(score > 0.9, "Timestamp fallback Before should pass");
+
+        // After direction with timestamp fallback
+        let score = compute_e4_sequence_score_v2(
+            &anchor_e4, &memory_e4,
+            None,
+            None,
+            500,
+            1000,
+            SequenceDirection::After,
+        );
+        assert_eq!(score, 0.0, "Timestamp fallback After should fail for earlier memory");
+    }
+
+    #[test]
+    fn test_e4_sequence_score_v2_symmetry() {
+        // E4-FIX: Critical test - verify symmetric behavior for before/after
+        let anchor_e4 = vec![1.0; 512];
+        let memory_e4 = vec![1.0; 512];
+
+        // Memory at seq=5, anchor at seq=10 (memory BEFORE anchor)
+        let before_score = compute_e4_sequence_score_v2(
+            &anchor_e4, &memory_e4,
+            Some(5), Some(10),
+            0, 0,
+            SequenceDirection::Before,
+        );
+
+        // Memory at seq=15, anchor at seq=10 (memory AFTER anchor)
+        let after_score = compute_e4_sequence_score_v2(
+            &anchor_e4, &memory_e4,
+            Some(15), Some(10),
+            0, 0,
+            SequenceDirection::After,
+        );
+
+        // Both should pass with high scores (symmetric)
+        assert!(before_score > 0.9, "Before query should match: {}", before_score);
+        assert!(after_score > 0.9, "After query should match: {}", after_score);
+
+        // Symmetry: |before - after| should be small
+        let symmetry_diff = (before_score - after_score).abs();
+        assert!(symmetry_diff < 0.1, "Scores should be symmetric: diff={}", symmetry_diff);
+    }
+
+    #[test]
+    fn test_sequence_proximity_v2_linear() {
+        // E4-FIX: Test linear proximity using sequences
+        let max_distance = 10u64;
+
+        // Memory at seq=5, anchor at seq=10, direction=Before
+        let score = compute_sequence_proximity_v2(
+            Some(5), Some(10),
+            0, 0,
+            SequenceDirection::Before,
+            max_distance,
+            false, // linear
+        );
+        // Distance = 5, max = 10, linear = 1.0 - 5/10 = 0.5
+        assert!((score - 0.5).abs() < 0.01, "Expected ~0.5, got {}", score);
+
+        // Memory at seq=8, anchor at seq=10, direction=Before
+        let score = compute_sequence_proximity_v2(
+            Some(8), Some(10),
+            0, 0,
+            SequenceDirection::Before,
+            max_distance,
+            false,
+        );
+        // Distance = 2, max = 10, linear = 1.0 - 2/10 = 0.8
+        assert!((score - 0.8).abs() < 0.01, "Expected ~0.8, got {}", score);
+    }
+
+    #[test]
+    fn test_sequence_proximity_v2_direction_rejection() {
+        // E4-FIX: Test direction rejection with sequences
+        let max_distance = 10u64;
+
+        // Memory at seq=15, anchor at seq=10, direction=Before
+        // 15 < 10 = false -> should return 0.0
+        let score = compute_sequence_proximity_v2(
+            Some(15), Some(10),
+            0, 0,
+            SequenceDirection::Before,
+            max_distance,
+            false,
+        );
+        assert_eq!(score, 0.0, "After memory should fail Before direction");
+
+        // Memory at seq=5, anchor at seq=10, direction=After
+        // 5 > 10 = false -> should return 0.0
+        let score = compute_sequence_proximity_v2(
+            Some(5), Some(10),
+            0, 0,
+            SequenceDirection::After,
+            max_distance,
+            false,
+        );
+        assert_eq!(score, 0.0, "Before memory should fail After direction");
     }
 }

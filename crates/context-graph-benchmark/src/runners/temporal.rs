@@ -1445,30 +1445,50 @@ fn compute_direction_accuracy(dataset: &TemporalBenchmarkDataset) -> (f64, f64) 
     let mut after_scores = Vec::new();
 
     for query in &dataset.sequence_queries {
+        let anchor_seq = query.anchor_sequence;
         let anchor_ts = query.anchor_timestamp.timestamp_millis();
 
-        // Score and sort by temporal proximity (closer to anchor = higher score)
+        // Score and sort by sequence proximity when available, otherwise timestamp
+        // Build lookup for chain memories with their sequence positions
+        let chain_id = query.chain_id;
         let mut scored: Vec<_> = dataset
             .memories
             .iter()
-            .filter(|m| m.id != query.anchor_id)
+            .filter(|m| m.id != query.anchor_id && m.chain_id == Some(chain_id))
             .map(|m| {
-                let ts = m.timestamp.timestamp_millis();
-                let distance = (ts - anchor_ts).abs() as f64;
-                let score = 1.0 / (1.0 + distance / 1000.0);
-                (m.id, ts, score)
+                // Use sequence-based distance when available
+                let (distance, seq) = match (m.chain_position, anchor_seq) {
+                    (Some(m_seq), Some(a_seq)) => {
+                        let d = (m_seq as i64 - a_seq as i64).abs() as f64;
+                        (d, Some(m_seq))
+                    }
+                    _ => {
+                        // Fallback to timestamp-based distance
+                        let ts = m.timestamp.timestamp_millis();
+                        let d = (ts - anchor_ts).abs() as f64 / 1000.0;
+                        (d, None)
+                    }
+                };
+                let score = 1.0 / (1.0 + distance);
+                (m.id, m.chain_position, m.timestamp.timestamp_millis(), score, seq)
             })
             .collect();
 
         // Sort by score descending (closest items first)
-        scored.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
 
         match query.direction.as_str() {
             "before" => {
                 let correct = scored
                     .iter()
                     .take(10)
-                    .filter(|(_, ts, _)| *ts < anchor_ts)
+                    .filter(|(_, chain_pos, ts, _, _)| {
+                        // Use sequence-based comparison when available
+                        match (chain_pos, anchor_seq) {
+                            (Some(m_seq), Some(a_seq)) => *m_seq < a_seq,
+                            _ => *ts < anchor_ts,
+                        }
+                    })
                     .count();
                 let k = 10.0_f64.min(scored.len() as f64);
                 before_scores.push(correct as f64 / k.max(1.0));
@@ -1477,7 +1497,13 @@ fn compute_direction_accuracy(dataset: &TemporalBenchmarkDataset) -> (f64, f64) 
                 let correct = scored
                     .iter()
                     .take(10)
-                    .filter(|(_, ts, _)| *ts > anchor_ts)
+                    .filter(|(_, chain_pos, ts, _, _)| {
+                        // Use sequence-based comparison when available
+                        match (chain_pos, anchor_seq) {
+                            (Some(m_seq), Some(a_seq)) => *m_seq > a_seq,
+                            _ => *ts > anchor_ts,
+                        }
+                    })
                     .count();
                 let k = 10.0_f64.min(scored.len() as f64);
                 after_scores.push(correct as f64 / k.max(1.0));
@@ -2487,10 +2513,19 @@ mod tests {
 
     #[test]
     fn test_e4_sequence_benchmark() {
+        // Use fewer, longer chains for meaningful sequence testing.
+        // With 200 memories and 10 chains, each chain has ~20 items on average.
         let dataset_config = TemporalDatasetConfig {
-            num_memories: 100,
-            num_queries: 20,
+            num_memories: 200,
+            num_queries: 30,
             seed: 42,
+            sequence_config: SequenceChainConfig {
+                num_chains: 10,
+                avg_chain_length: 15,
+                length_variance: 5,
+                avg_gap_minutes: 5,
+                session_gap_hours: 4,
+            },
             ..Default::default()
         };
         let settings = SequenceBenchmarkSettings::default();
@@ -2499,6 +2534,20 @@ mod tests {
 
         assert!(results.before_after_accuracy >= 0.0);
         assert!(results.sequence_accuracy >= 0.0);
+
+        // Symmetry assertion: before and after accuracy should be roughly balanced
+        // when using sequence-based comparison (not timestamp-only which was biased).
+        // A large asymmetry indicates the comparison is using timestamps incorrectly.
+        // Note: With small test datasets, some variance is expected.
+        let asymmetry = (results.before_accuracy - results.after_accuracy).abs();
+        assert!(
+            asymmetry < 0.5,
+            "Direction accuracy asymmetry too high: before={:.3}, after={:.3}, diff={:.3}. \
+             This may indicate sequence-based comparison is not being used correctly.",
+            results.before_accuracy,
+            results.after_accuracy,
+            asymmetry
+        );
     }
 
     #[test]

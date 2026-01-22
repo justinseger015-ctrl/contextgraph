@@ -1,11 +1,21 @@
 //! Embedder for real dataset chunks.
 //!
 //! Generates 13-embedder fingerprints from text chunks.
+//!
+//! ## E4 Sequence-Aware Embedding
+//!
+//! This module supports sequence-aware embedding for E4 (V_ordering) via
+//! `embed_with_sequences()`. When embedding chunks that belong to sessions
+//! with known sequence positions, this method passes "sequence:N" instructions
+//! to E4, enabling proper "before/after" queries within sessions.
 
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use context_graph_core::types::fingerprint::SemanticFingerprint;
+
+#[cfg(feature = "real-embeddings")]
+use context_graph_core::traits::EmbeddingMetadata;
 
 #[cfg(feature = "real-embeddings")]
 use super::loader::RealDataset;
@@ -332,6 +342,171 @@ impl RealDataEmbedder {
         })
     }
 
+    /// Embed session chunks with sequence positions for E4 benchmarking.
+    ///
+    /// This method embeds a collection of session chunks, passing the sequence
+    /// position to E4 via `embed_all_with_metadata()`. This enables E4 to encode
+    /// proper session ordering (not just timestamps).
+    ///
+    /// # Arguments
+    ///
+    /// * `sessions` - Sessions containing chunks with sequence positions
+    ///
+    /// # Returns
+    ///
+    /// Map of chunk UUID to fingerprint, where E4 encodings reflect sequence positions.
+    #[cfg(feature = "real-embeddings")]
+    pub async fn embed_with_sequences(
+        &self,
+        sessions: &[crate::datasets::TemporalSession],
+    ) -> Result<HashMap<Uuid, SemanticFingerprint>, EmbedError> {
+        use context_graph_embeddings::{get_warm_provider, initialize_global_warm_provider};
+        use std::time::Instant;
+
+        // Initialize the warm provider (loads all 13 models to GPU)
+        initialize_global_warm_provider()
+            .await
+            .map_err(|e| EmbedError::Pipeline(e.to_string()))?;
+
+        let provider = get_warm_provider()
+            .map_err(|e| EmbedError::Pipeline(e.to_string()))?;
+
+        let total: usize = sessions.iter().map(|s| s.len()).sum();
+        let mut fingerprints = HashMap::with_capacity(total);
+        let start_time = Instant::now();
+        let mut processed = 0;
+
+        for session in sessions {
+            for chunk in &session.chunks {
+                if self.config.show_progress && processed % 100 == 0 {
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    let rate = if processed > 0 {
+                        processed as f64 / elapsed
+                    } else {
+                        0.0
+                    };
+                    let eta = if rate > 0.0 {
+                        (total - processed) as f64 / rate
+                    } else {
+                        0.0
+                    };
+                    eprint!(
+                        "\rEmbedding sequences: {}/{} ({:.1}%) | {:.1} chunks/s | ETA: {:.0}s",
+                        processed, total,
+                        processed as f64 / total as f64 * 100.0,
+                        rate, eta
+                    );
+                }
+
+                // Create metadata with session sequence for E4
+                let metadata = EmbeddingMetadata::with_sequence(
+                    session.session_id.clone(),
+                    chunk.sequence_position as u64,
+                );
+
+                // Embed using the warm provider with sequence metadata
+                let output = provider
+                    .embed_all_with_metadata(&chunk.text, metadata)
+                    .await
+                    .map_err(|e| EmbedError::Embedding(e.to_string()))?;
+
+                fingerprints.insert(chunk.id, output.fingerprint);
+                processed += 1;
+            }
+        }
+
+        if self.config.show_progress {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let rate = processed as f64 / elapsed;
+            eprintln!(
+                "\rSequence embedding complete: {} chunks | {:.1} chunks/s | {:.1}s total",
+                total, rate, elapsed
+            );
+        }
+
+        Ok(fingerprints)
+    }
+
+    /// Embed session chunks with parallel batching for maximum throughput.
+    ///
+    /// This is an optimized version of `embed_with_sequences()` that processes
+    /// multiple chunks in parallel batches while still preserving sequence metadata.
+    #[cfg(feature = "real-embeddings")]
+    pub async fn embed_sessions_batched(
+        &self,
+        sessions: &[crate::datasets::TemporalSession],
+    ) -> Result<HashMap<Uuid, SemanticFingerprint>, EmbedError> {
+        use context_graph_embeddings::{get_warm_provider, initialize_global_warm_provider};
+        use std::time::Instant;
+
+        // Initialize the warm provider (loads all 13 models to GPU)
+        initialize_global_warm_provider()
+            .await
+            .map_err(|e| EmbedError::Pipeline(e.to_string()))?;
+
+        let provider = get_warm_provider()
+            .map_err(|e| EmbedError::Pipeline(e.to_string()))?;
+
+        // Flatten sessions into (chunk, session_id, sequence) tuples
+        let all_chunks: Vec<_> = sessions
+            .iter()
+            .flat_map(|session| {
+                session.chunks.iter().map(move |chunk| {
+                    (chunk, session.session_id.clone(), chunk.sequence_position)
+                })
+            })
+            .collect();
+
+        let total = all_chunks.len();
+        let batch_size = self.config.batch_size;
+        let mut fingerprints = HashMap::with_capacity(total);
+        let start_time = Instant::now();
+        let mut processed = 0;
+
+        // Process in batches
+        for batch in all_chunks.chunks(batch_size) {
+            // Embed each chunk in the batch
+            for (chunk, session_id, sequence_pos) in batch {
+                if self.config.show_progress && processed % 100 == 0 && processed > 0 {
+                    let elapsed = start_time.elapsed().as_secs_f64();
+                    let rate = processed as f64 / elapsed;
+                    let eta = (total - processed) as f64 / rate;
+                    eprint!(
+                        "\rEmbedding sessions: {}/{} ({:.1}%) | {:.1} chunks/s | ETA: {:.0}s",
+                        processed, total,
+                        processed as f64 / total as f64 * 100.0,
+                        rate, eta
+                    );
+                }
+
+                // Create metadata with session sequence for E4
+                let metadata = EmbeddingMetadata::with_sequence(
+                    session_id.clone(),
+                    *sequence_pos as u64,
+                );
+
+                // Embed using the warm provider with sequence metadata
+                let output = provider
+                    .embed_all_with_metadata(&chunk.text, metadata)
+                    .await
+                    .map_err(|e| EmbedError::Embedding(e.to_string()))?;
+
+                fingerprints.insert(chunk.id, output.fingerprint);
+                processed += 1;
+            }
+        }
+
+        if self.config.show_progress {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let rate = processed as f64 / elapsed;
+            eprintln!(
+                "\rSession embedding complete: {} chunks | {:.1} chunks/s | {:.1}s total",
+                total, rate, elapsed
+            );
+        }
+
+        Ok(fingerprints)
+    }
 }
 
 impl Default for RealDataEmbedder {

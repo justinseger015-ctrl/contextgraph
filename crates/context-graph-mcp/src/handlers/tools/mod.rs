@@ -9,6 +9,7 @@
 //! - forget_concept, boost_importance (curation_tools.rs)
 //! - trigger_dream, get_dream_status (dream_tools.rs)
 //! - list_watched_files, get_file_watcher_stats, delete_file_content, reconcile_files (file_watcher_tools.rs)
+//! - get_conversation_context, get_session_timeline, traverse_memory_chain, compare_session_states (sequence_tools.rs)
 
 mod consolidation;
 mod curation_tools;
@@ -17,6 +18,7 @@ mod dream_tools;
 mod file_watcher_tools;
 mod helpers;
 mod memory_tools;
+mod sequence_tools;
 mod status_tools;
 mod topic_tools;
 

@@ -935,6 +935,11 @@ impl RocksDbTeleologicalStore {
     /// * `results` - Search results to boost (modified in place)
     /// * `query` - Query semantic fingerprint
     /// * `options` - Search options with temporal configuration
+    ///
+    /// # E4-FIX
+    ///
+    /// This method now uses `apply_temporal_boosts_v2` which properly fetches
+    /// session_sequence from SourceMetadata for accurate before/after filtering.
     async fn apply_full_temporal_boosts(
         &self,
         results: &mut Vec<TeleologicalSearchResult>,
@@ -961,45 +966,71 @@ impl RocksDbTeleologicalStore {
             timestamps.insert(id, result.fingerprint.created_at.timestamp_millis());
         }
 
-        // If sequence options are set, fetch the anchor fingerprint
-        let (anchor_fp, anchor_ts) = if let Some(ref seq_opts) = options.temporal_options.sequence_options {
+        // E4-FIX Phase 4: Batch fetch sequences for all results from SourceMetadata
+        let result_ids: Vec<Uuid> = results.iter().map(|r| r.fingerprint.id).collect();
+        let source_metadata_batch = self.get_source_metadata_batch_async(&result_ids).await?;
+
+        let mut sequences: HashMap<Uuid, Option<u64>> = HashMap::new();
+        for (id, maybe_meta) in result_ids.iter().zip(source_metadata_batch.into_iter()) {
+            let seq = maybe_meta.and_then(|m| m.session_sequence);
+            sequences.insert(*id, seq);
+        }
+
+        // If sequence options are set, fetch the anchor fingerprint and sequence
+        let (anchor_fp, anchor_ts, anchor_seq) = if let Some(ref seq_opts) = options.temporal_options.sequence_options {
             if !seq_opts.anchor_id.is_nil() {
                 // Try to fetch anchor fingerprint from storage
                 match self.get_fingerprint_raw(seq_opts.anchor_id) {
                     Ok(Some(data)) => {
                         let anchor = deserialize_teleological_fingerprint(&data);
                         let ts = anchor.created_at.timestamp_millis();
-                        (Some(anchor.semantic), Some(ts))
+
+                        // E4-FIX Phase 3: Also fetch anchor's sequence from SourceMetadata
+                        let seq = match self.get_source_metadata_async(seq_opts.anchor_id).await {
+                            Ok(Some(meta)) => meta.session_sequence,
+                            _ => {
+                                debug!(
+                                    "Temporal boost: Could not fetch anchor source metadata {}, using timestamp fallback",
+                                    seq_opts.anchor_id
+                                );
+                                None
+                            }
+                        };
+
+                        (Some(anchor.semantic), Some(ts), seq)
                     }
                     _ => {
                         warn!(
                             "Temporal boost: Could not fetch anchor fingerprint {}, skipping sequence boost",
                             seq_opts.anchor_id
                         );
-                        (None, None)
+                        (None, None, None)
                     }
                 }
             } else {
-                (None, None)
+                (None, None, None)
             }
         } else {
-            (None, None)
+            (None, None, None)
         };
 
-        // Apply temporal boosts using the temporal_boost module
-        let _boost_data = temporal_boost::apply_temporal_boosts(
+        // E4-FIX: Apply temporal boosts using the v2 function with sequence support
+        let _boost_data = temporal_boost::apply_temporal_boosts_v2(
             results,
             query,
             &options.temporal_options,
             &fingerprints,
             &timestamps,
+            &sequences,
             anchor_fp.as_ref(),
             anchor_ts,
+            anchor_seq,
         );
 
         debug!(
-            "Temporal boosts applied to {} results",
-            results.len()
+            "Temporal boosts v2 applied to {} results (anchor_seq={:?})",
+            results.len(),
+            anchor_seq
         );
 
         Ok(())

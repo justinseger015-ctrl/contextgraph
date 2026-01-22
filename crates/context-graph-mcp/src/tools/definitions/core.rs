@@ -38,6 +38,10 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "maximum": 1,
                         "default": 0.5,
                         "description": "Importance score for the memory [0.0, 1.0]"
+                    },
+                    "sessionId": {
+                        "type": "string",
+                        "description": "Session ID for session-scoped storage. If omitted, uses CLAUDE_SESSION_ID env var."
                     }
                 },
                 "required": ["content", "rationale"]
@@ -71,6 +75,10 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "array",
                         "items": { "type": "string" },
                         "description": "Optional tags for categorization"
+                    },
+                    "sessionId": {
+                        "type": "string",
+                        "description": "Session ID for session-scoped storage. If omitted, uses CLAUDE_SESSION_ID env var."
                     }
                 },
                 "required": ["content"]
@@ -135,8 +143,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     },
                     "weightProfile": {
                         "type": "string",
-                        "enum": ["semantic_search", "causal_reasoning", "code_search", "fact_checking", "temporal_navigation", "category_weighted"],
-                        "description": "Weight profile for multi-space search (auto-selected for causal queries)"
+                        "enum": ["semantic_search", "causal_reasoning", "code_search", "fact_checking", "temporal_navigation", "category_weighted", "sequence_navigation", "conversation_history"],
+                        "description": "Weight profile for multi-space search (auto-selected for causal queries). sequence_navigation (E4 primary) for explicit sequence traversal, conversation_history (E1+E4 balanced) for contextual recall."
                     },
                     "enableRerank": {
                         "type": "boolean",
@@ -165,6 +173,37 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "maximum": 1,
                         "default": 0.0,
                         "description": "Weight for temporal post-retrieval boost [0.0, 1.0]"
+                    },
+                    "conversationContext": {
+                        "type": "object",
+                        "description": "Convenience wrapper for sequence-based retrieval. Auto-anchors to current conversation turn.",
+                        "properties": {
+                            "anchorToCurrentTurn": {
+                                "type": "boolean",
+                                "default": true,
+                                "description": "Auto-anchor to current session sequence (overrides sequenceAnchor)"
+                            },
+                            "turnsBack": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 100,
+                                "default": 10,
+                                "description": "Number of turns to look back from anchor"
+                            },
+                            "turnsForward": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 100,
+                                "default": 0,
+                                "description": "Number of turns to look forward from anchor"
+                            }
+                        }
+                    },
+                    "sessionScope": {
+                        "type": "string",
+                        "enum": ["current", "all", "recent"],
+                        "default": "all",
+                        "description": "Session scope: current (this session only), all (any session), recent (last 24h across sessions)"
                     }
                 },
                 "required": ["query"]

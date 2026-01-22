@@ -229,7 +229,20 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
         "PROMPT_SUBMIT: memories retrieved from knowledge graph"
     );
 
-    // 8. Check for divergence alerts (potential contradictions)
+    // 8. Fetch recent conversation context (last N turns with position labels)
+    //    Uses the new get_conversation_context MCP tool for E4-based sequence retrieval
+    let recent_turns = if mcp_available {
+        fetch_recent_conversation_context_with_client(&client).await
+    } else {
+        Vec::new()
+    };
+
+    debug!(
+        turn_count = recent_turns.len(),
+        "PROMPT_SUBMIT: recent conversation turns retrieved"
+    );
+
+    // 9. Check for divergence alerts (potential contradictions)
     //    Only if MCP is available and we have enough time budget remaining
     //    Divergence alerts are lower priority than memory retrieval
     let elapsed_so_far_ms = start.elapsed().as_millis() as u64;
@@ -261,16 +274,17 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
         );
     }
 
-    // 9. Generate context injection string with memories and divergence alerts
+    // 10. Generate context injection string with memories, recent turns, and divergence alerts
     let context_injection = generate_context_injection(
         &snapshot,
         identity_marker,
         &context_summary,
         &retrieved_memories,
+        &recent_turns,
         &divergence_alerts,
     );
 
-    // 10. Build output structures
+    // 11. Build output structures
     let coherence = compute_coherence(&snapshot);
     let coherence_state = build_coherence_state(&snapshot);
     let stability_classification = StabilityClassification::from_value(coherence);
@@ -530,6 +544,20 @@ pub struct DivergenceAlert {
     pub description: String,
 }
 
+/// A recent conversation turn from the session timeline.
+/// Includes position label for user clarity (e.g., "2 turns ago").
+#[derive(Debug, Clone)]
+pub struct RecentConversationTurn {
+    /// Memory ID
+    pub id: String,
+    /// Content text (summary or full)
+    pub content: Option<String>,
+    /// Source type (HookDescription, ClaudeResponse, etc.)
+    pub source_type: String,
+    /// Position label (e.g., "previous turn", "2 turns ago")
+    pub position_label: String,
+}
+
 /// Search the knowledge graph for memories relevant to the user's prompt.
 ///
 /// Uses the MCP server's search_graph tool with includeContent=true to retrieve
@@ -706,6 +734,97 @@ async fn fetch_divergence_alerts_with_client(client: &McpClient) -> Vec<Divergen
     }
 }
 
+// ============================================================================
+// Recent Conversation Context via MCP
+// ============================================================================
+
+/// Number of recent conversation turns to auto-inject for context.
+/// Per plan: "Automatically inject last 5 turns as context"
+const RECENT_TURNS_TO_INJECT: u32 = 5;
+
+/// Fetch recent conversation context using the get_conversation_context MCP tool.
+///
+/// Returns the last N conversation turns with position labels (e.g., "2 turns ago").
+/// This provides sequential context from the current session.
+///
+/// # Arguments
+/// * `client` - MCP client to use for the request
+///
+/// # Returns
+/// Vector of recent conversation turns, empty if fetch fails or no turns found.
+async fn fetch_recent_conversation_context_with_client(
+    client: &McpClient,
+) -> Vec<RecentConversationTurn> {
+    debug!("PROMPT_SUBMIT: Fetching recent conversation context via MCP (fast path)");
+
+    match client
+        .get_conversation_context_fast(Some("before"), Some(RECENT_TURNS_TO_INJECT), true)
+        .await
+    {
+        Ok(result) => parse_conversation_context(&result),
+        Err(e) => {
+            warn!(error = %e, "PROMPT_SUBMIT: Conversation context fetch failed, continuing without recent turns");
+            Vec::new()
+        }
+    }
+}
+
+/// Parse MCP get_conversation_context results into RecentConversationTurn structs.
+fn parse_conversation_context(result: &serde_json::Value) -> Vec<RecentConversationTurn> {
+    let Some(memories) = result.get("memories").and_then(|v| v.as_array()) else {
+        debug!("PROMPT_SUBMIT: No memories array in conversation context response");
+        return Vec::new();
+    };
+
+    let mut turns = Vec::new();
+
+    for item in memories {
+        let id = item
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let content = item
+            .get("content")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        // Extract source type from source object
+        let source_type = item
+            .get("source")
+            .and_then(|s| s.get("type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
+        // Extract position label from sequence info
+        let position_label = item
+            .get("sequenceInfo")
+            .and_then(|s| s.get("positionLabel"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown position")
+            .to_string();
+
+        turns.push(RecentConversationTurn {
+            id,
+            content,
+            source_type,
+            position_label,
+        });
+    }
+
+    if !turns.is_empty() {
+        info!(
+            turn_count = turns.len(),
+            "PROMPT_SUBMIT: Parsed {} recent conversation turns",
+            turns.len()
+        );
+    }
+
+    turns
+}
+
 /// Parse MCP get_divergence_alerts results into DivergenceAlert structs.
 fn parse_divergence_alerts(result: &serde_json::Value) -> Vec<DivergenceAlert> {
     let mut alerts = Vec::new();
@@ -826,12 +945,14 @@ fn parse_divergence_alerts(result: &serde_json::Value) -> Vec<DivergenceAlert> {
 // Context Injection Generation
 // ============================================================================
 
-/// Generate context injection string based on coherence state, prompt analysis, memories, and divergence alerts.
+/// Generate context injection string based on coherence state, prompt analysis, memories,
+/// recent conversation turns, and divergence alerts.
 fn generate_context_injection(
     snapshot: &SessionSnapshot,
     identity_marker: IdentityMarkerType,
     context_summary: &ContextSummary,
     retrieved_memories: &[RetrievedMemory],
+    recent_turns: &[RecentConversationTurn],
     divergence_alerts: &[DivergenceAlert],
 ) -> String {
     let coherence = compute_coherence(snapshot);
@@ -905,6 +1026,33 @@ fn generate_context_injection(
                 injection.push_str("\n\n");
             } else {
                 injection.push_str(&format!("ID: {} (content not available)\n\n", memory.id));
+            }
+        }
+
+        injection.push_str("---\n");
+    }
+
+    // Add recent conversation turns (E4-based sequential context)
+    // These provide temporal/conversational continuity from the session
+    if !recent_turns.is_empty() {
+        injection.push_str("\n## Recent Session Context (Sequential)\n\n");
+
+        for turn in recent_turns {
+            // Format: position label + source type + content preview
+            injection.push_str(&format!(
+                "**{}** [{}]:\n",
+                turn.position_label, turn.source_type
+            ));
+
+            if let Some(ref content) = turn.content {
+                // Truncate to keep context injection compact
+                let truncated = if content.len() > 200 {
+                    format!("{}...", &content[..200])
+                } else {
+                    content.clone()
+                };
+                injection.push_str(&truncated);
+                injection.push_str("\n\n");
             }
         }
 

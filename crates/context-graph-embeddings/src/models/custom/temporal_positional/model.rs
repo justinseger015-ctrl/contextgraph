@@ -1,4 +1,7 @@
-//! Core Temporal-Positional embedding model implementation.
+//! Core Temporal-Positional embedding model implementation (E4).
+//!
+//! E4 encodes session sequence positions to enable "before/after" queries within a session.
+//! This is distinct from E2 (V_freshness) which encodes Unix timestamps.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -10,25 +13,36 @@ use crate::traits::EmbeddingModel;
 use crate::types::{InputType, ModelEmbedding, ModelId, ModelInput};
 
 use super::constants::{DEFAULT_BASE, MAX_BASE, MIN_BASE, TEMPORAL_POSITIONAL_DIMENSION};
-use super::encoding::compute_positional_encoding;
-use super::timestamp::{extract_timestamp, parse_timestamp};
+use super::encoding::{compute_positional_encoding, compute_positional_encoding_from_position};
+use super::timestamp::{extract_position, extract_timestamp, parse_position, parse_timestamp};
 
-/// Temporal-Positional embedding model (E4).
+/// Temporal-Positional embedding model (E4 - V_ordering).
 ///
-/// Encodes absolute time positions using transformer-style sinusoidal encoding.
-/// This is a custom model with no pretrained weights - it computes embeddings
-/// from timestamps using the standard transformer PE formula.
+/// Encodes **session sequence positions** to enable "before/after" queries within a session.
+/// This is distinct from E2 (V_freshness) which encodes Unix timestamps for recency.
+///
+/// # Position Types (Priority Order)
+///
+/// 1. **Sequence number** (preferred): `sequence:N` - Session-local ordering (0, 1, 2, ...)
+/// 2. **ISO timestamp**: `timestamp:2024-01-15T10:30:00Z`
+/// 3. **Unix epoch**: `epoch:1705315800`
+/// 4. **Current time**: Falls back to `Utc::now()` if no instruction provided
 ///
 /// # Algorithm
 ///
-/// For position pos (Unix timestamp in seconds) and dimension index i:
+/// Uses transformer-style sinusoidal positional encoding:
 ///   - PE(pos, 2i) = sin(pos / base^(2i/d_model))
 ///   - PE(pos, 2i+1) = cos(pos / base^(2i/d_model))
 ///
-/// This produces unique encodings for each timestamp that:
-///   - Are deterministic for the same timestamp
-///   - Can represent relative positions through attention
-///   - Scale gracefully for far-future timestamps
+/// For sequence mode (small position values), uses a smaller effective base
+/// to ensure consecutive positions have distinct encodings.
+///
+/// # Purpose
+///
+/// E4 enables queries like:
+/// - "What happened before X in this session?"
+/// - "What came after Y?"
+/// - "Order these memories by when they occurred in the session"
 ///
 /// # Construction
 ///
@@ -105,23 +119,52 @@ impl TemporalPositionalModel {
         self.base
     }
 
+    /// Compute the positional encoding for a given position.
+    ///
+    /// # Arguments
+    /// * `position` - The position value (sequence number or Unix timestamp)
+    /// * `is_sequence` - True if position is a session sequence number
+    fn compute_positional_encoding_from_pos(
+        &self,
+        position: i64,
+        is_sequence: bool,
+    ) -> Vec<f32> {
+        compute_positional_encoding_from_position(position, self.base, self.d_model, is_sequence)
+    }
+
     /// Compute the transformer-style positional encoding for a given timestamp.
+    ///
+    /// Legacy method for backward compatibility.
     fn compute_positional_encoding(&self, timestamp: DateTime<Utc>) -> Vec<f32> {
         compute_positional_encoding(timestamp, self.base, self.d_model)
     }
 
     /// Extract timestamp from ModelInput.
+    ///
+    /// Legacy method for backward compatibility.
     fn extract_timestamp(&self, input: &ModelInput) -> DateTime<Utc> {
         extract_timestamp(input)
     }
 
-    /// Parse timestamp from instruction string.
+    /// Parse timestamp from instruction string (legacy API).
     ///
     /// Supports formats:
     /// - ISO 8601: "timestamp:2024-01-15T10:30:00Z"
     /// - Unix epoch: "epoch:1705315800"
+    ///
+    /// For new code, prefer `parse_position()` which also supports sequence numbers.
     pub fn parse_timestamp(instruction: &str) -> Option<DateTime<Utc>> {
         parse_timestamp(instruction)
+    }
+
+    /// Parse position from instruction string.
+    ///
+    /// Supports formats (priority order):
+    /// - Sequence: "sequence:123" (preferred for E4)
+    /// - ISO 8601: "timestamp:2024-01-15T10:30:00Z"
+    /// - Unix epoch: "epoch:1705315800"
+    pub fn parse_position(instruction: &str) -> Option<super::timestamp::PositionInfo> {
+        parse_position(instruction)
     }
 }
 
@@ -152,11 +195,14 @@ impl EmbeddingModel for TemporalPositionalModel {
 
         let start = std::time::Instant::now();
 
-        // 2. Extract timestamp from input
-        let timestamp = self.extract_timestamp(input);
+        // 2. Extract position from input (prefers sequence: over timestamp:/epoch:)
+        let position_info = extract_position(input);
 
-        // 3. Compute positional encoding
-        let vector = self.compute_positional_encoding(timestamp);
+        // 3. Compute positional encoding using position value and mode
+        let vector = self.compute_positional_encoding_from_pos(
+            position_info.position,
+            position_info.is_sequence,
+        );
 
         let latency_us = start.elapsed().as_micros() as u64;
 

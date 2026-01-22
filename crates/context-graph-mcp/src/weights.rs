@@ -24,8 +24,6 @@
 //!
 //! FAIL FAST: Invalid weights return detailed error immediately.
 
-#![allow(dead_code)]
-
 use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
 
 /// Predefined weight profiles per query type.
@@ -171,6 +169,56 @@ pub const WEIGHT_PROFILES: &[(&str, [f32; NUM_EMBEDDERS])] = &[
         ],
     ),
 
+    // =========================================================================
+    // SEQUENCE NAVIGATION PROFILES - E4 focused
+    // =========================================================================
+
+    // Sequence Navigation: For explicit sequence traversal queries
+    // Use for: "What did we discuss before X?", "Previous message", "Next turn"
+    // E4 (V_ordering) is PRIMARY - 55% weight for document/conversation ordering
+    // Research: MemoriesDB (2025), TG-RAG temporal ordering
+    (
+        "sequence_navigation",
+        [
+            0.20, // E1_Semantic (semantic backup)
+            0.05, // E2_Temporal_Recent (mild recency signal)
+            0.0,  // E3_Temporal_Periodic (no periodic patterns for sequence)
+            0.55, // E4_Temporal_Positional (PRIMARY - sequence ordering)
+            0.03, // E5_Causal
+            0.02, // E6_Sparse
+            0.03, // E7_Code
+            0.02, // E8_Graph
+            0.03, // E9_HDC
+            0.03, // E10_Multimodal
+            0.02, // E11_Entity
+            0.0,  // E12_Late_Interaction (pipeline stage only)
+            0.02, // E13_SPLADE
+        ],
+    ),
+
+    // Conversation History: Balanced E4 + E1 for contextual recall
+    // Use for: "What did we discuss about X?", "Earlier in our conversation"
+    // Combines semantic similarity with sequence ordering
+    // Research: Memoria Framework session-level + Episodic Memory RAG
+    (
+        "conversation_history",
+        [
+            0.30, // E1_Semantic (topic matching)
+            0.05, // E2_Temporal_Recent (recent context helps)
+            0.0,  // E3_Temporal_Periodic
+            0.35, // E4_Temporal_Positional (conversation ordering)
+            0.10, // E5_Causal (causal chains in conversation)
+            0.03, // E6_Sparse
+            0.05, // E7_Code
+            0.02, // E8_Graph
+            0.0,  // E9_HDC
+            0.05, // E10_Multimodal
+            0.03, // E11_Entity
+            0.0,  // E12_Late_Interaction (pipeline stage only)
+            0.02, // E13_SPLADE
+        ],
+    ),
+
     // Category-Weighted: Constitution-compliant weights per CLAUDE.md and ARCH-13
     // SEMANTIC (E1,E5,E6,E7,E10): weight 1.0
     // TEMPORAL (E2,E3,E4): weight 0.0 per AP-60
@@ -223,7 +271,7 @@ pub fn get_weight_profile(name: &str) -> Option<[f32; NUM_EMBEDDERS]> {
 }
 
 /// Get all available profile names.
-pub fn get_profile_names() -> Vec<&'static str> {
+pub(crate) fn get_profile_names() -> Vec<&'static str> {
     WEIGHT_PROFILES.iter().map(|(n, _)| *n).collect()
 }
 
@@ -231,7 +279,7 @@ pub fn get_profile_names() -> Vec<&'static str> {
 ///
 /// # FAIL FAST
 /// Returns detailed error on validation failure.
-pub fn validate_weights(weights: &[f32; NUM_EMBEDDERS]) -> Result<(), WeightValidationError> {
+pub(crate) fn validate_weights(weights: &[f32; NUM_EMBEDDERS]) -> Result<(), WeightValidationError> {
     // Check each weight is in range
     for (i, &w) in weights.iter().enumerate() {
         if !(0.0..=1.0).contains(&w) {
@@ -257,7 +305,7 @@ pub fn validate_weights(weights: &[f32; NUM_EMBEDDERS]) -> Result<(), WeightVali
 }
 
 /// Get space name by index.
-pub fn space_name(idx: usize) -> &'static str {
+pub(crate) fn space_name(idx: usize) -> &'static str {
     match idx {
         0 => "E1_Semantic",
         1 => "E2_Temporal_Recent",
@@ -277,7 +325,7 @@ pub fn space_name(idx: usize) -> &'static str {
 }
 
 /// Get snake_case key name for JSON serialization.
-pub fn space_json_key(idx: usize) -> &'static str {
+pub(crate) fn space_json_key(idx: usize) -> &'static str {
     match idx {
         0 => "e1_semantic",
         1 => "e2_temporal_recent",
@@ -300,7 +348,7 @@ pub fn space_json_key(idx: usize) -> &'static str {
 ///
 /// Provides detailed context for FAIL FAST error handling.
 #[derive(Debug, Clone)]
-pub enum WeightValidationError {
+pub(crate) enum WeightValidationError {
     /// A weight is outside the valid range [0.0, 1.0].
     OutOfRange {
         space_index: usize,
@@ -315,6 +363,12 @@ pub enum WeightValidationError {
     },
     /// Wrong number of weights provided.
     WrongCount { expected: usize, actual: usize },
+    /// Invalid weight value (not a number).
+    InvalidValue {
+        index: usize,
+        space_name: &'static str,
+        value: serde_json::Value,
+    },
 }
 
 impl std::fmt::Display for WeightValidationError {
@@ -345,6 +399,13 @@ impl std::fmt::Display for WeightValidationError {
             Self::WrongCount { expected, actual } => {
                 write!(f, "Expected {} weights, got {}", expected, actual)
             }
+            Self::InvalidValue { index, space_name, value } => {
+                write!(
+                    f,
+                    "Invalid weight at index {} ({}): {:?} is not a number",
+                    index, space_name, value
+                )
+            }
         }
     }
 }
@@ -359,11 +420,12 @@ impl std::error::Error for WeightValidationError {}
 /// # Returns
 /// Validated weight array.
 ///
-/// # Errors
+/// # Errors (FAIL FAST)
 /// - `WrongCount`: Array has wrong number of elements
+/// - `InvalidValue`: A value is not a number (NO SILENT 0.0 FALLBACK)
 /// - `OutOfRange`: A weight is outside [0.0, 1.0]
 /// - `InvalidSum`: Weights don't sum to 1.0
-pub fn parse_weights_from_json(
+pub(crate) fn parse_weights_from_json(
     arr: &[serde_json::Value],
 ) -> Result<[f32; NUM_EMBEDDERS], WeightValidationError> {
     if arr.len() != NUM_EMBEDDERS {
@@ -375,7 +437,13 @@ pub fn parse_weights_from_json(
 
     let mut weights = [0.0f32; NUM_EMBEDDERS];
     for (i, v) in arr.iter().enumerate() {
-        weights[i] = v.as_f64().unwrap_or(0.0) as f32;
+        // FAIL FAST: Reject non-numeric values instead of silently using 0.0
+        weights[i] = v.as_f64()
+            .ok_or_else(|| WeightValidationError::InvalidValue {
+                index: i,
+                space_name: space_name(i),
+                value: v.clone(),
+            })? as f32;
     }
 
     validate_weights(&weights)?;
@@ -634,5 +702,140 @@ mod tests {
             _ => panic!("Expected WrongCount error"),
         }
         println!("[VERIFIED] Wrong count fails with clear error");
+    }
+
+    // =========================================================================
+    // SEQUENCE NAVIGATION PROFILE TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_sequence_navigation_profile_exists() {
+        let weights = get_weight_profile("sequence_navigation");
+        assert!(
+            weights.is_some(),
+            "sequence_navigation profile should exist"
+        );
+        println!("[VERIFIED] sequence_navigation profile exists");
+    }
+
+    #[test]
+    fn test_sequence_navigation_e4_is_primary() {
+        // E4 should be the PRIMARY embedder for sequence navigation
+        let weights = get_weight_profile("sequence_navigation").unwrap();
+
+        // E4 should be >= 0.50 (dominant)
+        assert!(
+            weights[3] >= 0.50,
+            "E4 should be >= 0.50 in sequence_navigation (got {})",
+            weights[3]
+        );
+
+        // E4 should be the highest weighted embedder
+        let max_weight = weights.iter().cloned().fold(0.0f32, f32::max);
+        assert!(
+            (weights[3] - max_weight).abs() < 0.001,
+            "E4 should be highest weighted in sequence_navigation"
+        );
+
+        println!(
+            "[VERIFIED] sequence_navigation has E4={:.2} as primary",
+            weights[3]
+        );
+    }
+
+    #[test]
+    fn test_sequence_navigation_pipeline_stage_excluded() {
+        // E12 (rerank) and E13 (recall) should be excluded per ARCH-13
+        let weights = get_weight_profile("sequence_navigation").unwrap();
+
+        // E12 should be 0.0 (used only for reranking)
+        assert_eq!(
+            weights[11], 0.0,
+            "E12 should be 0.0 in sequence_navigation per ARCH-13"
+        );
+
+        println!("[VERIFIED] sequence_navigation excludes pipeline-stage E12");
+    }
+
+    #[test]
+    fn test_conversation_history_profile_exists() {
+        let weights = get_weight_profile("conversation_history");
+        assert!(
+            weights.is_some(),
+            "conversation_history profile should exist"
+        );
+        println!("[VERIFIED] conversation_history profile exists");
+    }
+
+    #[test]
+    fn test_conversation_history_balanced_e1_e4() {
+        // conversation_history should balance E1 (semantic) and E4 (sequence)
+        let weights = get_weight_profile("conversation_history").unwrap();
+
+        // E1 should be significant (>= 0.25)
+        assert!(
+            weights[0] >= 0.25,
+            "E1 should be >= 0.25 in conversation_history (got {})",
+            weights[0]
+        );
+
+        // E4 should be significant (>= 0.30)
+        assert!(
+            weights[3] >= 0.30,
+            "E4 should be >= 0.30 in conversation_history (got {})",
+            weights[3]
+        );
+
+        // Combined E1 + E4 should be >= 0.60 (they're the primary pair)
+        let combined = weights[0] + weights[3];
+        assert!(
+            combined >= 0.60,
+            "E1 + E4 should be >= 0.60 in conversation_history (got {})",
+            combined
+        );
+
+        println!(
+            "[VERIFIED] conversation_history has E1={:.2} + E4={:.2} = {:.2}",
+            weights[0], weights[3], combined
+        );
+    }
+
+    #[test]
+    fn test_conversation_history_pipeline_stage_excluded() {
+        // E12 (rerank) and E13 (recall) should be excluded per ARCH-13
+        let weights = get_weight_profile("conversation_history").unwrap();
+
+        // E12 should be 0.0
+        assert_eq!(
+            weights[11], 0.0,
+            "E12 should be 0.0 in conversation_history per ARCH-13"
+        );
+
+        println!("[VERIFIED] conversation_history excludes pipeline-stage E12");
+    }
+
+    #[test]
+    fn test_sequence_profiles_sum_to_one() {
+        let sequence_profiles = ["sequence_navigation", "conversation_history"];
+
+        for profile_name in sequence_profiles {
+            let weights = get_weight_profile(profile_name).expect(&format!(
+                "Profile '{}' should exist",
+                profile_name
+            ));
+
+            let sum: f32 = weights.iter().sum();
+            assert!(
+                (sum - 1.0).abs() < 0.01,
+                "Profile '{}' weights sum to {} (expected ~1.0)",
+                profile_name,
+                sum
+            );
+
+            println!(
+                "[VERIFIED] Profile '{}' sums to {:.4}",
+                profile_name, sum
+            );
+        }
     }
 }

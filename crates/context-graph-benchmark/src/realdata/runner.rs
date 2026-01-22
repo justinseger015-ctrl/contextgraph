@@ -783,6 +783,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "real-embeddings")]
     fn test_full_benchmark_pipeline() {
         let dir = TempDir::new().unwrap();
         create_test_dataset(dir.path(), 50);

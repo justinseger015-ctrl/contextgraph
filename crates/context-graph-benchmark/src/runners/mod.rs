@@ -8,6 +8,7 @@ pub mod comparative;
 pub mod retrieval;
 pub mod scaling;
 pub mod temporal;
+pub mod temporal_realdata;
 pub mod topic;
 
 pub use causal::{
@@ -35,5 +36,9 @@ pub use temporal::{
     ScalingConfig, ScalingBenchmarkResults, ScalingPoint, DegradationCurves,
     // Regression types
     RegressionConfig, RegressionBenchmarkResults, RegressionFailure, TemporalBaseline,
+};
+pub use temporal_realdata::{
+    TemporalRealdataBenchmarkConfig, TemporalRealdataBenchmarkResults, TemporalRealdataBenchmarkRunner,
+    TimestampBaselineResults, TemporalBenchmarkTimings, TemporalDatasetStats,
 };
 pub use topic::TopicRunner;

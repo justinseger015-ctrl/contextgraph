@@ -262,6 +262,9 @@ pub struct SequenceQuery {
     /// Anchor timestamp.
     pub anchor_timestamp: DateTime<Utc>,
 
+    /// Anchor's position in the chain (session sequence).
+    pub anchor_sequence: Option<usize>,
+
     /// Direction: "before", "after", "both".
     pub direction: String,
 
@@ -603,6 +606,7 @@ impl TemporalDatasetGenerator {
                 id: Uuid::new_v4(),
                 anchor_id: anchor.id,
                 anchor_timestamp: anchor.timestamp,
+                anchor_sequence: anchor.chain_position,
                 direction: direction.to_string(),
                 expected_ids,
                 chain_id: chain_idx,

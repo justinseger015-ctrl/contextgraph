@@ -96,6 +96,20 @@ impl Handlers {
             tool_names::DELETE_FILE_CONTENT => self.call_delete_file_content(id, arguments).await,
             tool_names::RECONCILE_FILES => self.call_reconcile_files(id, arguments).await,
 
+            // ========== SEQUENCE TOOLS (E4 Integration - Phase 1) ==========
+            tool_names::GET_CONVERSATION_CONTEXT => {
+                self.call_get_conversation_context(id, arguments).await
+            }
+            tool_names::GET_SESSION_TIMELINE => {
+                self.call_get_session_timeline(id, arguments).await
+            }
+            tool_names::TRAVERSE_MEMORY_CHAIN => {
+                self.call_traverse_memory_chain(id, arguments).await
+            }
+            tool_names::COMPARE_SESSION_STATES => {
+                self.call_compare_session_states(id, arguments).await
+            }
+
             // Unknown tool
             _ => JsonRpcResponse::error(
                 id,

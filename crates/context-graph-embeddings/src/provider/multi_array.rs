@@ -53,8 +53,8 @@ use tokio::sync::RwLock;
 
 use context_graph_core::error::{CoreError, CoreResult};
 use context_graph_core::traits::{
-    MultiArrayEmbeddingOutput, MultiArrayEmbeddingProvider, SingleEmbedder, SparseEmbedder,
-    TokenEmbedder,
+    EmbeddingMetadata, MultiArrayEmbeddingOutput, MultiArrayEmbeddingProvider, SingleEmbedder,
+    SparseEmbedder, TokenEmbedder,
 };
 use context_graph_core::types::fingerprint::{
     SemanticFingerprint, SparseVector, E10_DIM, E11_DIM, E12_TOKEN_DIM, E1_DIM, E2_DIM, E3_DIM,
@@ -89,17 +89,15 @@ impl DenseEmbedderAdapter {
     }
 }
 
-#[async_trait]
-impl SingleEmbedder for DenseEmbedderAdapter {
-    fn dimension(&self) -> usize {
-        self.dimension
-    }
-
-    fn model_id(&self) -> &str {
-        self.model_id.as_str()
-    }
-
-    async fn embed(&self, content: &str) -> CoreResult<Vec<f32>> {
+impl DenseEmbedderAdapter {
+    /// Embed content with a custom instruction for the model.
+    ///
+    /// E4-FIX: Used for passing sequence numbers to E4 via "sequence:N" instruction.
+    async fn embed_with_instruction(
+        &self,
+        content: &str,
+        instruction: Option<&str>,
+    ) -> CoreResult<Vec<f32>> {
         if content.is_empty() {
             return Err(CoreError::ValidationError {
                 field: "content".to_string(),
@@ -115,16 +113,41 @@ impl SingleEmbedder for DenseEmbedderAdapter {
             )));
         }
 
-        let input = ModelInput::text(content).map_err(|e| CoreError::ValidationError {
-            field: "content".to_string(),
-            message: e.to_string(),
-        })?;
+        let input = match instruction {
+            Some(inst) => {
+                ModelInput::text_with_instruction(content, inst).map_err(|e| {
+                    CoreError::ValidationError {
+                        field: "content".to_string(),
+                        message: e.to_string(),
+                    }
+                })?
+            }
+            None => ModelInput::text(content).map_err(|e| CoreError::ValidationError {
+                field: "content".to_string(),
+                message: e.to_string(),
+            })?,
+        };
 
         let embedding = model.embed(&input).await.map_err(|e| {
             CoreError::Embedding(format!("Embedding failed for {:?}: {}", self.model_id, e))
         })?;
 
         Ok(embedding.into_vec())
+    }
+}
+
+#[async_trait]
+impl SingleEmbedder for DenseEmbedderAdapter {
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    fn model_id(&self) -> &str {
+        self.model_id.as_str()
+    }
+
+    async fn embed(&self, content: &str) -> CoreResult<Vec<f32>> {
+        self.embed_with_instruction(content, None).await
     }
 
     fn is_ready(&self) -> bool {
@@ -389,7 +412,10 @@ pub struct ProductionMultiArrayProvider {
     /// E3: Temporal-Periodic embedder (Fourier, 512D)
     e3_temporal_periodic: Arc<dyn SingleEmbedder>,
     /// E4: Temporal-Positional embedder (sinusoidal PE, 512D)
-    e4_temporal_positional: Arc<dyn SingleEmbedder>,
+    ///
+    /// E4-FIX: Stored as concrete type to allow `embed_with_instruction()` calls
+    /// for passing sequence numbers via "sequence:N" instruction.
+    e4_temporal_positional: Arc<DenseEmbedderAdapter>,
     /// E5: Causal embedder (Longformer, 768D) - DUAL embedder for asymmetric similarity
     ///
     /// Per ARCH-15: Uses CausalDualEmbedderAdapter to produce genuinely different
@@ -502,7 +528,8 @@ impl ProductionMultiArrayProvider {
             ModelId::TemporalPeriodic,
             E3_DIM,
         ));
-        let e4_temporal_positional: Arc<dyn SingleEmbedder> = Arc::new(DenseEmbedderAdapter::new(
+        // E4-FIX: Store as concrete type for embed_with_instruction() access
+        let e4_temporal_positional: Arc<DenseEmbedderAdapter> = Arc::new(DenseEmbedderAdapter::new(
             e4_model,
             ModelId::TemporalPositional,
             E4_DIM,
@@ -716,6 +743,176 @@ impl MultiArrayEmbeddingProvider for ProductionMultiArrayProvider {
         let e4_vec = r4?;
 
         // E5: embed_dual returns (cause_vec, effect_vec) for asymmetric similarity (ARCH-15)
+        let (e5_cause_vec, e5_effect_vec) = r5?;
+
+        let e6_sparse = r6?;
+        let e7_vec = r7?;
+        let e8_vec = r8?;
+        let e9_vec = r9?;
+        let e10_vec = r10?;
+        let e11_vec = r11?;
+        let e12_tokens = r12?;
+        let e13_sparse = r13?;
+
+        let total_latency = start.elapsed();
+
+        // Construct fingerprint with asymmetric E5 vectors
+        let fingerprint = SemanticFingerprint {
+            e1_semantic: e1_vec,
+            e2_temporal_recent: e2_vec,
+            e3_temporal_periodic: e3_vec,
+            e4_temporal_positional: e4_vec,
+            e5_causal_as_cause: e5_cause_vec,
+            e5_causal_as_effect: e5_effect_vec,
+            e5_causal: Vec::new(), // Empty - using new dual format
+            e6_sparse,
+            e7_code: e7_vec,
+            e8_graph: e8_vec,
+            e9_hdc: e9_vec,
+            e10_multimodal: e10_vec,
+            e11_entity: e11_vec,
+            e12_late_interaction: e12_tokens,
+            e13_splade: e13_sparse,
+        };
+
+        let per_embedder_latency = [d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13];
+
+        Ok(MultiArrayEmbeddingOutput {
+            fingerprint,
+            total_latency,
+            per_embedder_latency,
+            model_ids: self.model_ids.clone(),
+        })
+    }
+
+    /// Generate complete 13-embedding fingerprint with explicit metadata.
+    ///
+    /// E4-FIX: This override passes session sequence numbers to E4 via
+    /// "sequence:N" instruction, enabling proper session ordering.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - Text content to embed (must be non-empty)
+    /// * `metadata` - Metadata for temporal embedders (E2-E4)
+    ///
+    /// # Behavior
+    ///
+    /// - E4: Uses `metadata.e4_instruction()` to pass "sequence:N" or "epoch:N"
+    /// - E2/E3: Currently use default behavior (could be extended to use metadata.timestamp)
+    /// - All other embedders: Unchanged
+    async fn embed_all_with_metadata(
+        &self,
+        content: &str,
+        metadata: EmbeddingMetadata,
+    ) -> CoreResult<MultiArrayEmbeddingOutput> {
+        if content.is_empty() {
+            return Err(CoreError::ValidationError {
+                field: "content".to_string(),
+                message: "Content cannot be empty".to_string(),
+            });
+        }
+
+        let start = Instant::now();
+
+        // Clone Arc references for parallel execution
+        let e1 = Arc::clone(&self.e1_semantic);
+        let e2 = Arc::clone(&self.e2_temporal_recent);
+        let e3 = Arc::clone(&self.e3_temporal_periodic);
+        let e4 = Arc::clone(&self.e4_temporal_positional);
+        let e5 = Arc::clone(&self.e5_causal);
+        let e6 = Arc::clone(&self.e6_sparse);
+        let e7 = Arc::clone(&self.e7_code);
+        let e8 = Arc::clone(&self.e8_graph);
+        let e9 = Arc::clone(&self.e9_hdc);
+        let e10 = Arc::clone(&self.e10_multimodal);
+        let e11 = Arc::clone(&self.e11_entity);
+        let e12 = Arc::clone(&self.e12_late_interaction);
+        let e13 = Arc::clone(&self.e13_splade);
+
+        let content_owned = content.to_string();
+
+        // E4-FIX: Generate E4 instruction from metadata
+        let e4_instruction = metadata.e4_instruction();
+
+        // Run all 13 embedders in parallel
+        let (
+            (r1, d1),
+            (r2, d2),
+            (r3, d3),
+            (r4, d4),
+            (r5, d5),
+            (r6, d6),
+            (r7, d7),
+            (r8, d8),
+            (r9, d9),
+            (r10, d10),
+            (r11, d11),
+            (r12, d12),
+            (r13, d13),
+        ) = tokio::join!(
+            Self::timed_embed("E1_Semantic", {
+                let c = content_owned.clone();
+                async move { e1.embed(&c).await }
+            }),
+            Self::timed_embed("E2_TemporalRecent", {
+                let c = content_owned.clone();
+                async move { e2.embed(&c).await }
+            }),
+            Self::timed_embed("E3_TemporalPeriodic", {
+                let c = content_owned.clone();
+                async move { e3.embed(&c).await }
+            }),
+            // E4-FIX: Use embed_with_instruction to pass sequence number
+            Self::timed_embed("E4_TemporalPositional", {
+                let c = content_owned.clone();
+                let inst = e4_instruction.clone();
+                async move { e4.embed_with_instruction(&c, Some(&inst)).await }
+            }),
+            Self::timed_embed("E5_Causal_Dual", {
+                let c = content_owned.clone();
+                async move { e5.embed_dual(&c).await }
+            }),
+            Self::timed_embed("E6_Sparse", {
+                let c = content_owned.clone();
+                async move { e6.embed_sparse(&c).await }
+            }),
+            Self::timed_embed("E7_Code", {
+                let c = content_owned.clone();
+                async move { e7.embed(&c).await }
+            }),
+            Self::timed_embed("E8_Graph", {
+                let c = content_owned.clone();
+                async move { e8.embed(&c).await }
+            }),
+            Self::timed_embed("E9_HDC", {
+                let c = content_owned.clone();
+                async move { e9.embed(&c).await }
+            }),
+            Self::timed_embed("E10_Multimodal", {
+                let c = content_owned.clone();
+                async move { e10.embed(&c).await }
+            }),
+            Self::timed_embed("E11_Entity", {
+                let c = content_owned.clone();
+                async move { e11.embed(&c).await }
+            }),
+            Self::timed_embed("E12_LateInteraction", {
+                let c = content_owned.clone();
+                async move { e12.embed_tokens(&c).await }
+            }),
+            Self::timed_embed("E13_SPLADE", {
+                let c = content_owned.clone();
+                async move { e13.embed_sparse(&c).await }
+            }),
+        );
+
+        // Collect results, failing fast on any error
+        let e1_vec = r1?;
+        let e2_vec = r2?;
+        let e3_vec = r3?;
+        let e4_vec = r4?;
+
+        // E5: embed_dual returns (cause_vec, effect_vec) for asymmetric similarity
         let (e5_cause_vec, e5_effect_vec) = r5?;
 
         let e6_sparse = r6?;
