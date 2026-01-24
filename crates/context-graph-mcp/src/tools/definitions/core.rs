@@ -136,6 +136,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "default": false,
                         "description": "Include content text in results"
                     },
+                    "enrichMode": {
+                        "type": "string",
+                        "enum": ["off", "light", "full"],
+                        "default": "light",
+                        "description": "Autonomous multi-embedder enrichment mode. 'off' = E1 only (legacy), 'light' = E1 + 1-2 enhancers with agreement metrics (default), 'full' = all relevant embedders with blind spot detection."
+                    },
                     "strategy": {
                         "type": "string",
                         "enum": ["e1_only", "multi_space", "pipeline"],

@@ -317,6 +317,56 @@ Native Claude Code hooks via `.claude/settings.json`:
 | E12 | Precision | Exact phrase matches - token-level precision |
 | E13 | Expansion | Term expansion - synonyms, related terms |
 
+### 8.5 Autonomous Multi-Embedder Enrichment
+
+The enrichment system automatically selects and combines multiple embedders based on query characteristics, providing richer insights without requiring separate tool calls.
+
+#### Philosophy
+- **E1 is foundation** - All retrieval starts with E1 (ARCH-12)
+- **Enhancers find what E1 misses** - E5 finds causal chains, E7 finds code patterns, E11 finds entity knowledge
+- **Combined = superior answers** - Agreement across embedders indicates confidence
+
+#### Enrichment Modes
+
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `off` | E1 only (legacy) | Backwards compatibility |
+| `light` | E1 + 1-2 enhancers, basic agreement metrics | Default - balanced |
+| `full` | All relevant embedders, full metrics, blind spot detection | Maximum insight |
+
+#### Query Type Detection
+
+| Type | Pattern Examples | Selected Embedders |
+|------|------------------|-------------------|
+| CAUSAL | "why", "caused by", "led to" | E5 (asymmetric causal) |
+| CODE | function names, imports, `fn`, `class` | E7 (code patterns) |
+| ENTITY | Capitalized names, known entities | E11 (KEPLER entity knowledge) |
+| INTENT | "goal", "purpose", "trying to" | E10 (intent alignment) |
+| KEYWORD | Quoted terms, technical jargon | E6, E13 (sparse keyword) |
+| TEMPORAL | "before", "after", "yesterday" | E2-E4 (post-retrieval only) |
+
+#### Output Enrichment
+
+Each result includes:
+- **ScoringBreakdown**: E1 score, enhancer scores, RRF final score
+- **AgreementMetrics**: Which embedders agree, weighted agreement (topic threshold: 2.5)
+- **BlindSpotAlert**: Results found by enhancers but missed by E1 (E1 score < 0.3)
+
+#### Example Usage
+
+```json
+{
+  "query": "why did the authentication fail",
+  "enrichMode": "light"
+}
+```
+
+Response includes:
+- Detected types: `["CAUSAL"]`
+- E5 asymmetric causal search applied
+- Agreement metrics showing E1/E5 alignment
+- Blind spots: entities E11 found that E1 missed
+
 ---
 
 ## 9. PERFORMANCE BUDGETS (GPU-Accelerated)

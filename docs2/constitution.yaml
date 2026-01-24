@@ -289,6 +289,80 @@ retrieval:
   use_E6_E13: "Keyword queries (exact terms, jargon)"
 
 # ═══════════════════════════════════════════════════════════════
+# AUTONOMOUS MULTI-EMBEDDER ENRICHMENT
+# ═══════════════════════════════════════════════════════════════
+# Simplify tool calls: system auto-detects query type and selects embedders.
+# Fewer calls needed, richer results per call.
+
+autonomous_enrichment:
+  philosophy: |
+    Each of the 13 embedders looks at a query from its unique angle.
+    E1 (semantic) is foundation but has blind spots. Other embedders find what E1 misses:
+    - E5: "the bug that caused the crash" (causal relationships)
+    - E7: structural code patterns (not just word similarity)
+    - E10: same goal, different words (intent alignment)
+    - E11: "Diesel" = database ORM (entity knowledge E1 lacks)
+
+    Combined: Better answers than any single embedder alone.
+
+  modes:
+    Off: "E1-only search (legacy behavior)"
+    Light: "E1 + 1-2 enhancers, basic agreement metrics (default)"
+    Full: "All relevant embedders, full metrics, blind spot detection"
+
+  query_type_detection:
+    # System auto-detects query type from patterns
+    CAUSAL: ["why", "caused", "because", "led to", "root cause"]
+    CODE: ["::", "->", "fn ", "function", "impl", ".await"]
+    ENTITY: ["what is", "works with", "related to", capitalized_names]
+    INTENT: ["goal", "purpose", "trying to", "accomplish"]
+    KEYWORD: [quoted_terms, "exact", "error:", "v2."]
+    TEMPORAL: ["yesterday", "before", "after", "recently"]
+
+  embedder_selection:
+    CAUSAL: [E5, E8]       # E5 causal + E8 for causal chains
+    CODE: [E7, E6]         # E7 code + E6 keywords for function names
+    ENTITY: [E11, E6]      # E11 entity + E6 keywords
+    INTENT: [E10, E5]      # E10 intent + E5 often overlap
+    KEYWORD: [E6, E13]     # E6 sparse + E13 SPLADE expansion
+    TEMPORAL: []           # E2-E4 are POST-RETRIEVAL only (ARCH-25)
+
+  output_enrichment:
+    scoring_breakdown:
+      - e1_score: "E1 (semantic) similarity"
+      - enhancer_scores: "Per-enhancer scores {e5: 0.8, e7: 0.6}"
+      - rrf_final: "Weighted RRF fusion score (per ARCH-21)"
+      - e10_boost: "E10 multiplicative boost if applied"
+    agreement_metrics:
+      - embedders_agree: "[E1, E5, E11]"
+      - agreement_score: "0.6 (3 of 5 embedders)"
+      - weighted_agreement: "2.5 (topic threshold)"
+    blind_spot_alert:
+      - node_id: "Memory found by enhancer but missed by E1"
+      - found_by: "[E11]"
+      - e1_score: "0.05 (E1 missed this)"
+      - enhancer_score: "0.85 (E11 found it)"
+      - explanation: "E11 knows Diesel IS a database ORM"
+
+  arch_rules:
+    ARCH-ENRICH-01: "Query type detection happens before search"
+    ARCH-ENRICH-02: "E1 always runs first (per ARCH-12)"
+    ARCH-ENRICH-03: "Enhancers run in parallel via tokio::join!"
+    ARCH-ENRICH-04: "Fusion uses Weighted RRF (per ARCH-21)"
+    ARCH-ENRICH-05: "Blind spots: enhancer > 0.5 AND E1 < 0.3"
+    ARCH-ENRICH-06: "Light mode: max 2 enhancers, Full mode: max 6"
+
+  performance_budget:
+    Light: "<500ms total"
+    Full: "<800ms total"
+    breakdown:
+      e1_search: "~100ms"
+      parallel_enhancers: "~150ms (run in parallel)"
+      rrf_fusion: "~50ms"
+      agreement_calc: "~50ms"
+      buffer: "~150ms"
+
+# ═══════════════════════════════════════════════════════════════
 # MEMORY SOURCES
 # ═══════════════════════════════════════════════════════════════
 memory_sources:

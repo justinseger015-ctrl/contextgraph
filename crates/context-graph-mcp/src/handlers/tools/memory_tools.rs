@@ -17,10 +17,25 @@
 //! - Asymmetric vectors: Uses `query.e5_as_cause` vs `doc.e5_as_effect` (or reverse)
 //! - Direction modifiers: cause→effect (1.2x), effect→cause (0.8x)
 //! - Auto-profile selection: Causal queries auto-select "causal_reasoning" profile
+//!
+//! # Autonomous Multi-Embedder Enrichment (ARCH-12, ARCH-21)
+//!
+//! When enrichMode is enabled, the system autonomously:
+//! - Detects query types (causal, code, entity, intent, keyword)
+//! - Selects appropriate enhancer embedders
+//! - Runs E1 foundation + parallel enhancer searches
+//! - Combines results via Weighted RRF
+//! - Reports agreement metrics and blind spots
+
+use std::sync::Arc;
 
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, info, warn};
+
+use super::enrichment_dtos::EnrichmentMode;
+use super::enrichment_pipeline::EnrichmentPipeline;
+use super::query_type_detector::build_enrichment_config;
 
 use context_graph_core::causal::asymmetric::{
     compute_e5_asymmetric_fingerprint_similarity, detect_causal_query_intent,
@@ -661,6 +676,24 @@ impl Handlers {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // =========================================================================
+        // AUTONOMOUS MULTI-EMBEDDER ENRICHMENT (ARCH-12, ARCH-21)
+        // =========================================================================
+        // Parse enrichMode parameter (default: Light for enhanced search)
+        // - Off: E1-only search (legacy behavior)
+        // - Light: E1 + 1-2 enhancers, basic agreement metrics
+        // - Full: All relevant embedders, blind spot detection
+        let enrich_mode = args
+            .get("enrichMode")
+            .and_then(|v| v.as_str())
+            .and_then(EnrichmentMode::from_str)
+            .unwrap_or(EnrichmentMode::Light);
+
+        debug!(
+            enrich_mode = ?enrich_mode,
+            "search_graph: Enrichment mode configured"
+        );
+
         // TASK-MULTISPACE: Parse search strategy (default: e1_only for backward compatibility)
         let strategy = args
             .get("strategy")
@@ -1102,6 +1135,57 @@ impl Handlers {
             }
         };
 
+        // =========================================================================
+        // ENRICHMENT PIPELINE PATH (when enrichMode is enabled)
+        // =========================================================================
+        // When enrichMode != Off, use the autonomous multi-embedder enrichment pipeline.
+        // This provides: query type detection, parallel enhancer searches, RRF fusion,
+        // agreement metrics, and blind spot detection.
+        if enrich_mode.is_enabled() {
+            let enrichment_config = build_enrichment_config(&search_query, enrich_mode);
+
+            debug!(
+                enrich_mode = ?enrich_mode,
+                detected_types = ?enrichment_config.detected_types,
+                selected_embedders = ?enrichment_config.selected_embedders,
+                "search_graph: Using enrichment pipeline"
+            );
+
+            let pipeline = EnrichmentPipeline::new(Arc::clone(&self.teleological_store));
+
+            match pipeline
+                .execute(&query_embedding, &enrichment_config, options, include_content)
+                .await
+            {
+                Ok(mut enriched_response) => {
+                    // Set the query in the response
+                    enriched_response.query = query.to_string();
+
+                    // Serialize the enriched response
+                    let response_json = match serde_json::to_value(&enriched_response) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            error!(error = %e, "search_graph: Enriched response serialization FAILED");
+                            return self.tool_error_with_pulse(
+                                id,
+                                &format!("Response serialization failed: {}", e),
+                            );
+                        }
+                    };
+
+                    return self.tool_result_with_pulse(id, response_json);
+                }
+                Err(e) => {
+                    error!(error = %e, "search_graph: Enrichment pipeline FAILED");
+                    return self.tool_error_with_pulse(id, &format!("Enrichment failed: {}", e));
+                }
+            }
+        }
+
+        // =========================================================================
+        // LEGACY PATH (enrichMode = Off)
+        // =========================================================================
+        // Original E1-based search with optional asymmetric reranking.
         match self
             .teleological_store
             .search_semantic(&query_embedding, options)
