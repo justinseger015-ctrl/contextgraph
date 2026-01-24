@@ -823,6 +823,97 @@ impl McpClient {
     pub fn server_address(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
+
+    // =========================================================================
+    // E11 ENTITY TOOLS - KEPLER Integration
+    // Per E11_KEPLER_INTEGRATION_PLAN.md Phase 2: UserPromptSubmit Hook
+    // =========================================================================
+
+    /// Fast-path extract_entities for time-critical hooks.
+    ///
+    /// Extracts and canonicalizes entities from text using E11 (KEPLER) knowledge.
+    /// Detects programming languages, frameworks, databases, cloud services, etc.
+    ///
+    /// # Arguments
+    ///
+    /// - `text`: Text to extract entities from
+    /// - `include_unknown`: Include entities not in KB (default: true)
+    ///
+    /// # Returns
+    ///
+    /// Extracted entities with canonical IDs and types.
+    pub async fn extract_entities_fast(
+        &self,
+        text: &str,
+        include_unknown: bool,
+    ) -> Result<serde_json::Value, McpClientError> {
+        let params = json!({
+            "name": "extract_entities",
+            "arguments": {
+                "text": text,
+                "includeUnknown": include_unknown,
+                "groupByType": false
+            }
+        });
+
+        debug!(
+            text_len = text.len(),
+            include_unknown,
+            "Calling MCP extract_entities (fast path)"
+        );
+
+        self.call_tool_fast(params).await
+    }
+
+    /// Fast-path search_by_entities for time-critical hooks.
+    ///
+    /// Multi-embedder discovery: searches E1 AND E11 in parallel, returns UNION.
+    /// E11 finds what E1 misses (e.g., "Diesel ORM" when searching for "database").
+    ///
+    /// # Arguments
+    ///
+    /// - `entities`: Entity names to search for (will be canonicalized)
+    /// - `match_mode`: "any" (match any entity) or "all" (match all entities)
+    /// - `top_k`: Maximum results to return (1-50, default: 5)
+    /// - `include_content`: Include full memory content in results
+    ///
+    /// # Returns
+    ///
+    /// Memories found by E1 OR E11 (E11 surfaces things E1 missed!).
+    ///
+    /// # Constitution Compliance
+    ///
+    /// - ARCH-12: E1 is semantic foundation
+    /// - E11 DISCOVERS candidates E1 misses (not just boosts E1's scores)
+    pub async fn search_by_entities_fast(
+        &self,
+        entities: &[String],
+        match_mode: &str,
+        top_k: u32,
+        include_content: bool,
+    ) -> Result<serde_json::Value, McpClientError> {
+        let params = json!({
+            "name": "search_by_entities",
+            "arguments": {
+                "entities": entities,
+                "matchMode": match_mode,
+                "topK": top_k,
+                "minScore": 0.2,
+                "includeContent": include_content,
+                "boostExactMatch": 1.3
+            }
+        });
+
+        debug!(
+            entities = ?entities,
+            match_mode,
+            top_k,
+            include_content,
+            "Calling MCP search_by_entities (fast path) - E11 multi-embedder discovery"
+        );
+
+        self.call_tool_fast(params).await
+    }
 }
 
 // =============================================================================

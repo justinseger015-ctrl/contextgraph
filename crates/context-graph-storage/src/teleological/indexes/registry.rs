@@ -523,7 +523,7 @@ mod tests {
             (EmbedderIndex::E8Graph, 384),
             (EmbedderIndex::E9HDC, 1024),
             (EmbedderIndex::E10Multimodal, 768),
-            (EmbedderIndex::E11Entity, 384),
+            (EmbedderIndex::E11Entity, 768),
             (EmbedderIndex::E1Matryoshka128, 128),
         ];
 

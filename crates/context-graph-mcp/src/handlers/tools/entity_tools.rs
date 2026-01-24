@@ -56,7 +56,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use context_graph_core::entity::{
-    detect_entities, entity_jaccard_similarity, EntityLink, EntityMetadata, EntityType,
+    entity_jaccard_similarity, EntityLink, EntityMetadata, EntityType,
 };
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions};
 
@@ -74,6 +74,70 @@ use super::entity_dtos::{
 };
 
 use super::super::Handlers;
+
+// ============================================================================
+// SIMPLE ENTITY MENTION EXTRACTION
+// ============================================================================
+
+/// Extract potential entity mentions from text.
+///
+/// This is a simple extraction that identifies potential entity mentions:
+/// - Capitalized words (proper nouns)
+/// - Known technical patterns
+///
+/// KEPLER embeddings handle the actual entity relationship discovery.
+/// This function just identifies candidate mentions for display/API purposes.
+fn extract_entity_mentions(text: &str) -> EntityMetadata {
+    let mut entities = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Split on whitespace and extract potential entities
+    for word in text.split_whitespace() {
+        // Clean punctuation
+        let clean = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+        if clean.len() < 2 {
+            continue;
+        }
+
+        // Check if it looks like an entity (capitalized or technical term)
+        let first_char = clean.chars().next().unwrap_or('a');
+        let is_capitalized = first_char.is_uppercase();
+        let is_all_caps = clean.len() > 1 && clean.chars().all(|c| c.is_uppercase() || c.is_numeric());
+        let has_special = clean.contains('_') || clean.contains('-');
+
+        if (is_capitalized || is_all_caps || has_special) && !is_common_word(clean) {
+            let canonical = clean.to_lowercase();
+            if !seen.contains(&canonical) {
+                seen.insert(canonical.clone());
+                entities.push(EntityLink {
+                    surface_form: clean.to_string(),
+                    canonical_id: canonical,
+                    entity_type: EntityType::Unknown,
+                });
+            }
+        }
+    }
+
+    EntityMetadata::from_entities(entities)
+}
+
+/// Check if a word is a common English word (not likely an entity).
+fn is_common_word(word: &str) -> bool {
+    const COMMON: &[&str] = &[
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "must", "can", "to", "of", "in", "for", "on",
+        "with", "at", "by", "from", "up", "about", "into", "over", "after",
+        "this", "that", "these", "those", "then", "than", "when", "where",
+        "why", "how", "all", "each", "every", "both", "few", "more", "most",
+        "other", "some", "such", "no", "not", "only", "same", "so", "and",
+        "but", "if", "or", "because", "as", "until", "while", "it", "its",
+        "they", "them", "their", "he", "she", "him", "her", "his", "i", "me",
+        "my", "we", "us", "our", "you", "your", "here", "there", "now", "use",
+        "using", "used", "new", "also", "just", "get", "make", "like", "time",
+    ];
+    COMMON.contains(&word.to_lowercase().as_str())
+}
 
 // ============================================================================
 // KNOWN RELATIONS FOR TRANSE INFERENCE
@@ -224,7 +288,7 @@ impl Handlers {
         );
 
         // Step 1: Detect entities using KB-based detection
-        let entity_metadata: EntityMetadata = detect_entities(text);
+        let entity_metadata: EntityMetadata = extract_entity_mentions(text);
 
         // Step 2: Filter Unknown entities if requested
         let filtered_entities: Vec<_> = if include_unknown {
@@ -376,7 +440,7 @@ impl Handlers {
 
         // Step 1: Detect and canonicalize query entities
         let query_entity_text = entities.join(" ");
-        let query_entities = detect_entities(&query_entity_text);
+        let query_entities = extract_entity_mentions(&query_entity_text);
 
         let query_entity_dtos: Vec<EntityLinkDto> = query_entities
             .entities
@@ -444,8 +508,22 @@ impl Handlers {
         {
             Ok(results) => results,
             Err(e) => {
-                warn!(error = %e, "search_by_entities: E11 search failed, using E1 only");
-                Vec::new() // Graceful degradation
+                // FAIL FAST: E11 is required for entity search - no graceful degradation
+                // Per user requirement: if E11 fails, error out with robust logging
+                error!(
+                    error = %e,
+                    query = %query_entity_text,
+                    "search_by_entities: E11 search FAILED - this is a critical error. \
+                     E11 (KEPLER) is required for entity-aware search. \
+                     Check: 1) KEPLER model loaded, 2) E11 index initialized, 3) GPU available"
+                );
+                return self.tool_error_with_pulse(
+                    id,
+                    &format!(
+                        "E11 entity search failed: {}. E11 is required for search_by_entities - no fallback.",
+                        e
+                    ),
+                );
             }
         };
 
@@ -518,7 +596,7 @@ impl Handlers {
 
             // Extract entities from candidate content
             let cand_entities = if let Some(ref text) = content {
-                detect_entities(text)
+                extract_entity_mentions(text)
             } else {
                 EntityMetadata::empty()
             };
@@ -765,8 +843,8 @@ impl Handlers {
             .collect();
 
         // Detect entities from head/tail for proper EntityLinkDto
-        let head_entities = detect_entities(head_entity);
-        let tail_entities = detect_entities(tail_entity);
+        let head_entities = extract_entity_mentions(head_entity);
+        let tail_entities = extract_entity_mentions(tail_entity);
 
         let head_dto = head_entities
             .entities
@@ -954,7 +1032,7 @@ impl Handlers {
                 let content = contents.get(i).and_then(|c| c.clone());
 
                 if let Some(text) = content {
-                    let detected = detect_entities(&text);
+                    let detected = extract_entity_mentions(&text);
                     let cand_e11 = &candidate.fingerprint.semantic.e11_entity;
 
                     for entity_link in detected.entities {
@@ -1019,61 +1097,12 @@ impl Handlers {
                     memory_ids: Some(memory_ids),
                 });
             }
-        } else {
-            // No memory search - just return known KB entities with predicted scores
-            // Get entities from our KB and score them
-            let kb = context_graph_core::entity::get_entity_kb();
-            let mut kb_entities: Vec<_> = Vec::new();
-
-            for (surface, (canonical, entity_type)) in kb.iter() {
-                // Filter by entity type if specified
-                if let Some(ref filter_type) = request.entity_type {
-                    let type_str = super::entity_dtos::entity_type_to_string(*entity_type);
-                    if type_str.to_lowercase() != filter_type.to_lowercase() {
-                        continue;
-                    }
-                }
-
-                // Embed entity and compute TransE score
-                if let Ok(output) = self.multi_array_provider.embed_all(*surface).await {
-                    let target_e11 = &output.fingerprint.e11_entity;
-                    let score = KeplerModel::transe_score(entity_e11, relation_e11, target_e11);
-
-                    // Apply minimum score filter
-                    if let Some(min) = min_score {
-                        if score < min {
-                            continue;
-                        }
-                    }
-
-                    kb_entities.push((
-                        EntityLinkDto {
-                            surface_form: surface.to_string(),
-                            canonical_id: canonical.to_string(),
-                            entity_type: super::entity_dtos::entity_type_to_string(*entity_type),
-                            confidence: Some(1.0),
-                        },
-                        score,
-                    ));
-                }
-            }
-
-            kb_entities
-                .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            kb_entities.truncate(top_k);
-
-            for (dto, score) in kb_entities {
-                related_entities.push(RelatedEntity {
-                    entity: dto,
-                    transe_score: score,
-                    found_in_memories: false,
-                    memory_ids: None,
-                });
-            }
         }
+        // If no memories to search, related_entities remains empty
+        // KEPLER embeddings require stored memories to find relationships
 
         // Build source entity DTO
-        let source_entities = detect_entities(entity);
+        let source_entities = extract_entity_mentions(entity);
         let source_dto = source_entities
             .entities
             .first()
@@ -1268,8 +1297,8 @@ impl Handlers {
         }
 
         // Build entity DTOs
-        let subject_entities = detect_entities(subject);
-        let object_entities = detect_entities(object);
+        let subject_entities = extract_entity_mentions(subject);
+        let object_entities = extract_entity_mentions(object);
 
         let subject_dto = subject_entities
             .entities
@@ -1458,7 +1487,7 @@ impl Handlers {
         for (i, _memory) in memories.iter().enumerate() {
             let memory_id = memory_ids[i];
             if let Some(Some(text)) = contents.get(i) {
-                let detected = detect_entities(text);
+                let detected = extract_entity_mentions(text);
 
                 // Collect entities for this memory
                 let mut memory_entities: Vec<String> = Vec::new();
@@ -1576,7 +1605,7 @@ impl Handlers {
 
         // Build center entity DTO if provided
         let center_entity_dto = request.center_entity.as_ref().map(|center| {
-            let center_entities = detect_entities(center);
+            let center_entities = extract_entity_mentions(center);
             center_entities
                 .entities
                 .first()

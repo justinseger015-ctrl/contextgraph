@@ -177,13 +177,13 @@ mod tests {
     #[test]
     fn test_batch_insert() {
         println!("=== TEST: Batch insert ===");
-        println!("BEFORE: Creating E11 index (384D), batch inserting 100 vectors");
+        println!("BEFORE: Creating E11 index (768D), batch inserting 100 vectors");
 
         let index = HnswEmbedderIndex::new(EmbedderIndex::E11Entity);
         let items: Vec<(Uuid, Vec<f32>)> = (0..100)
             .map(|i| {
                 let id = Uuid::new_v4();
-                let vector: Vec<f32> = (0..384).map(|j| ((i + j) as f32) / 1000.0).collect();
+                let vector: Vec<f32> = (0..768).map(|j| ((i + j) as f32) / 1000.0).collect();
                 (id, vector)
             })
             .collect();

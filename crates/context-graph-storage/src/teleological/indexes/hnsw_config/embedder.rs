@@ -71,7 +71,7 @@ pub enum EmbedderIndex {
     /// E10 Multimodal Context: 768D context vector (ARCH-15)
     /// Search this index when query seeks intents/goals (what intent does context Y serve?)
     E10MultimodalContext,
-    /// E11: 384D entity (MiniLM)
+    /// E11: 768D entity (KEPLER)
     E11Entity,
     /// E12: 128D per-token ColBERT (MaxSim, NOT HNSW)
     E12LateInteraction,

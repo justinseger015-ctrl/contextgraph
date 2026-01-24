@@ -30,7 +30,7 @@
 //! | emb_7 | E8_Graph quantized (Float8) | UUID (16 bytes) | ~384 bytes |
 //! | emb_8 | E9_HDC quantized (Binary) | UUID (16 bytes) | ~1250 bytes |
 //! | emb_9 | E10_Multimodal quantized (PQ-8) | UUID (16 bytes) | ~8 bytes |
-//! | emb_10 | E11_Entity quantized (Float8) | UUID (16 bytes) | ~384 bytes |
+//! | emb_10 | E11_Entity quantized (PQ8) | UUID (16 bytes) | ~768 bytes |
 //! | emb_11 | E12_LateInteraction quantized (TokenPruning) | UUID (16 bytes) | ~2KB |
 //! | emb_12 | E13_SPLADE quantized (SparseNative) | UUID (16 bytes) | ~2KB |
 //!

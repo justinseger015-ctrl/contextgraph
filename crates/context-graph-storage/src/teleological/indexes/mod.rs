@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(E8_DIM, 384);
         assert_eq!(E9_DIM, 1024); // HDC projected dimension
         assert_eq!(E10_DIM, 768);
-        assert_eq!(E11_DIM, 384);
+        assert_eq!(E11_DIM, 768);
         assert_eq!(E12_TOKEN_DIM, 128);
         assert_eq!(E13_SPLADE_VOCAB, 30_522);
         assert_eq!(NUM_EMBEDDERS, 13);
@@ -593,7 +593,7 @@ mod tests {
             (EmbedderIndex::E8Graph, 384),
             (EmbedderIndex::E9HDC, 1024),
             (EmbedderIndex::E10Multimodal, 768),
-            (EmbedderIndex::E11Entity, 384),
+            (EmbedderIndex::E11Entity, 768),
         ];
 
         println!("Verifying 13 HNSW indexes:");

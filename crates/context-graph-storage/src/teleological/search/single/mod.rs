@@ -16,7 +16,7 @@
 //! | E8Graph | 384D | Sentiment |
 //! | E9HDC | 1024D | Structure |
 //! | E10Multimodal | 768D | Intent |
-//! | E11Entity | 384D | Multi-modal |
+//! | E11Entity | 768D | Multi-modal |
 //!
 //! # NOT Supported (different algorithms)
 //!

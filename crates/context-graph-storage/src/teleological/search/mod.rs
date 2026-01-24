@@ -23,7 +23,7 @@
 //! - E8Graph (384D) - Graph structure embeddings
 //! - E9HDC (1024D) - Hyperdimensional computing
 //! - E10Multimodal (768D) - Cross-modal embeddings
-//! - E11Entity (384D) - Named entity embeddings
+//! - E11Entity (768D) - Named entity embeddings
 //!
 //! # NOT Supported (Different Algorithms)
 //!

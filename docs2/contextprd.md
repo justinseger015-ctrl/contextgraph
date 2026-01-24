@@ -50,7 +50,8 @@ Each embedder finds what OTHERS MISS. Combined = superior answers.
 | E5 | 768 | Asymmetric KNN | Direction matters (cause→effect 1.2x) |
 | E6 | ~30K sparse | Jaccard | 5% active dimensions |
 | E7 | 1536 | Cosine | AST-aware |
-| E8, E11 | 384 | TransE | ||h + r - t|| |
+| E8 | 384 | TransE | ||h + r - t|| |
+| E11 | 768 | TransE | KEPLER (RoBERTa-base + TransE on Wikidata5M) |
 | E9 | 1024 | Hamming | HDC (10K→1024) |
 | E10 | 768 | Cosine | Multiplicative boost on E1 |
 | E12 | 128D/token | MaxSim | Reranking ONLY |

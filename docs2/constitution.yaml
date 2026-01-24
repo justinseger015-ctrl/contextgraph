@@ -28,7 +28,7 @@ embedders:
 
   # RELATIONAL ENHANCERS (topic_weight: 0.5)
   E8: { name: V_connectivity, dim: 384, finds: "Graph structure (X imports Y)" }
-  E11: { name: V_factuality, dim: 384, finds: "Entity knowledge (Diesel=database ORM)" }
+  E11: { name: V_factuality, dim: 768, finds: "Entity knowledge (Diesel=database ORM)", model: "KEPLER (RoBERTa-base + TransE)" }
 
   # TEMPORAL CONTEXT (topic_weight: 0.0, POST-RETRIEVAL ONLY)
   E2: { name: V_freshness, dim: 512, finds: "Recency" }
@@ -112,6 +112,7 @@ mcp_tools:
   causal: [get_causal_chain, search_causes]
   graph: [get_graph_path, search_connections]
   intent: [search_by_intent, find_contextual_matches, detect_intent_drift]
+  entity: [extract_entities, search_by_entities, infer_relationship, find_related_entities, validate_knowledge, get_entity_graph]
   maintenance: [trigger_consolidation, trigger_dream, merge_concepts, forget_concept]
 
   search_strategies:

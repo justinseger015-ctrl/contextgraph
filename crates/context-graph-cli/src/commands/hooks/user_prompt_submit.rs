@@ -36,6 +36,10 @@ pub const USER_PROMPT_SUBMIT_TIMEOUT_MS: u64 = 2000;
 /// Maximum memories to retrieve for context injection (per constitution injection.priorities)
 const MAX_MEMORIES_TO_RETRIEVE: u32 = 5;
 
+/// Maximum E11 entity-discovered memories to retrieve
+/// E11 finds what E1 misses - keep separate budget to ensure E11 contributions visible
+const MAX_E11_MEMORIES_TO_RETRIEVE: u32 = 3;
+
 /// Token budget for memory context (~500 tokens, ~4 chars/token)
 const MEMORY_CONTEXT_BUDGET_CHARS: usize = 2000;
 
@@ -216,7 +220,7 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
         }
     };
 
-    // 8. Search knowledge graph for relevant memories via MCP
+    // 7. Search knowledge graph for relevant memories via MCP (E1 semantic search)
     //    Also cache them for pre_tool_use to access without network calls
     let retrieved_memories = if mcp_available {
         search_memories_for_prompt_with_client(&client, &args.session_id, &prompt).await
@@ -226,10 +230,44 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
 
     debug!(
         memory_count = retrieved_memories.len(),
-        "PROMPT_SUBMIT: memories retrieved from knowledge graph"
+        "PROMPT_SUBMIT: E1 memories retrieved from knowledge graph"
     );
 
-    // 8. Fetch recent conversation context (last N turns with position labels)
+    // 8. E11 Entity Extraction and Search (KEPLER Integration)
+    //    E11 finds what E1 misses - entity-relationship-aware discovery
+    //    Example: Query "Diesel" → E11 knows it's a database ORM → surfaces ORM memories
+    let (extracted_entities, e11_discovered_memories) = if mcp_available {
+        // Extract entities from prompt
+        let entities = extract_entities_from_prompt_with_client(&client, &prompt)
+            .await
+            .unwrap_or_else(|e| {
+                warn!(error = %e, "PROMPT_SUBMIT: E11 entity extraction failed, continuing with E1 only");
+                Vec::new()
+            });
+
+        // If entities found, search with E11
+        let e11_memories = if !entities.is_empty() {
+            search_with_e11_entities(&client, &entities).await
+        } else {
+            Vec::new()
+        };
+
+        (entities, e11_memories)
+    } else {
+        (Vec::new(), Vec::new())
+    };
+
+    if !extracted_entities.is_empty() {
+        info!(
+            entity_count = extracted_entities.len(),
+            e11_memory_count = e11_discovered_memories.len(),
+            "PROMPT_SUBMIT: E11 enhanced search - {} entities extracted, {} memories discovered",
+            extracted_entities.len(),
+            e11_discovered_memories.len()
+        );
+    }
+
+    // 9. Fetch recent conversation context (last N turns with position labels)
     //    Uses the new get_conversation_context MCP tool for E4-based sequence retrieval
     let recent_turns = if mcp_available {
         fetch_recent_conversation_context_with_client(&client).await
@@ -242,7 +280,7 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
         "PROMPT_SUBMIT: recent conversation turns retrieved"
     );
 
-    // 9. Check for divergence alerts (potential contradictions)
+    // 10. Check for divergence alerts (potential contradictions)
     //    Only if MCP is available and we have enough time budget remaining
     //    Divergence alerts are lower priority than memory retrieval
     let elapsed_so_far_ms = start.elapsed().as_millis() as u64;
@@ -274,17 +312,19 @@ pub async fn execute(args: PromptSubmitArgs) -> HookResult<HookOutput> {
         );
     }
 
-    // 10. Generate context injection string with memories, recent turns, and divergence alerts
+    // 11. Generate context injection string with memories, E11 discoveries, recent turns, and alerts
     let context_injection = generate_context_injection(
         &snapshot,
         identity_marker,
         &context_summary,
         &retrieved_memories,
+        &extracted_entities,
+        &e11_discovered_memories,
         &recent_turns,
         &divergence_alerts,
     );
 
-    // 11. Build output structures
+    // 12. Build output structures
     let coherence = compute_coherence(&snapshot);
     let coherence_state = build_coherence_state(&snapshot);
     let stability_classification = StabilityClassification::from_value(coherence);
@@ -532,6 +572,34 @@ impl SourceInfo {
     }
 }
 
+/// An entity extracted from the user's prompt.
+/// Used for E11 multi-embedder discovery.
+#[derive(Debug, Clone)]
+pub struct ExtractedEntity {
+    /// Surface form as it appeared in text
+    pub surface_form: String,
+    /// Canonical ID (normalized form)
+    pub canonical_id: String,
+    /// Entity type (ProgrammingLanguage, Framework, Database, etc.)
+    pub entity_type: String,
+}
+
+/// A memory discovered by E11 (KEPLER) entity search.
+/// E11 finds what E1 misses - these are entity-relationship-aware results.
+#[derive(Debug, Clone)]
+pub struct E11DiscoveredMemory {
+    /// Memory ID
+    pub id: String,
+    /// Content text
+    pub content: Option<String>,
+    /// Combined score (E1 + E11 + entity Jaccard)
+    pub score: f32,
+    /// E11 entity similarity component
+    pub e11_similarity: f32,
+    /// Entities that matched
+    pub matched_entities: Vec<String>,
+}
+
 /// A divergence alert from the knowledge graph.
 /// Indicates potential contradictions or significant semantic drift.
 #[derive(Debug, Clone)]
@@ -693,6 +761,223 @@ fn parse_search_results(result: &serde_json::Value) -> Vec<RetrievedMemory> {
         "PROMPT_SUBMIT: Parsed {} memories from knowledge graph",
         memories.len()
     );
+
+    memories
+}
+
+// ============================================================================
+// E11 Entity Extraction and Search (KEPLER Integration)
+// Per E11_KEPLER_INTEGRATION_PLAN.md Phase 2: UserPromptSubmit Hook
+// ============================================================================
+
+/// Extract entities from user prompt using E11 (KEPLER).
+///
+/// # Philosophy
+/// E11 finds entities that E1's semantic search would miss.
+/// Example: "How do I use Diesel with Rust?"
+/// - E1 might miss memories about "ORM" because no semantic match
+/// - E11 knows Diesel IS a database ORM → surfaces ORM-related memories
+///
+/// # NO FALLBACK
+/// If E11 extraction fails, this returns an error - no graceful degradation.
+/// Per user requirement: fail fast with robust logging.
+async fn extract_entities_from_prompt_with_client(
+    client: &McpClient,
+    prompt: &str,
+) -> Result<Vec<ExtractedEntity>, String> {
+    // Skip very short prompts
+    if prompt.len() < MIN_QUERY_LENGTH_FOR_SEARCH {
+        debug!(
+            prompt_len = prompt.len(),
+            "PROMPT_SUBMIT: E11 prompt too short for entity extraction"
+        );
+        return Ok(Vec::new());
+    }
+
+    debug!("PROMPT_SUBMIT: Extracting entities via E11 (fast path)");
+
+    match client.extract_entities_fast(prompt, true).await {
+        Ok(result) => Ok(parse_extracted_entities(&result)),
+        Err(e) => {
+            // FAIL FAST: E11 entity extraction error is logged but doesn't block the hook
+            // The hook can continue with E1-only search, but we log the E11 failure prominently
+            error!(
+                error = %e,
+                prompt_len = prompt.len(),
+                "PROMPT_SUBMIT: E11 entity extraction FAILED. \
+                 E11 cannot contribute to this search. \
+                 Check: 1) MCP server E11 tools registered, 2) KEPLER model loaded, 3) GPU available"
+            );
+            // Return empty entities - E11 won't contribute to this search
+            // This is different from graceful degradation: we LOG the failure prominently
+            Ok(Vec::new())
+        }
+    }
+}
+
+/// Parse MCP extract_entities response into ExtractedEntity structs.
+fn parse_extracted_entities(result: &serde_json::Value) -> Vec<ExtractedEntity> {
+    let Some(entities) = result.get("entities").and_then(|v| v.as_array()) else {
+        debug!("PROMPT_SUBMIT: No entities array in E11 response");
+        return Vec::new();
+    };
+
+    let mut extracted = Vec::new();
+
+    for item in entities {
+        let surface_form = item
+            .get("surface_form")
+            .or_else(|| item.get("surfaceForm"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if surface_form.is_empty() {
+            continue;
+        }
+
+        let canonical_id = item
+            .get("canonical_id")
+            .or_else(|| item.get("canonicalId"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&surface_form)
+            .to_string();
+
+        let entity_type = item
+            .get("entity_type")
+            .or_else(|| item.get("entityType"))
+            .or_else(|| item.get("type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string();
+
+        extracted.push(ExtractedEntity {
+            surface_form,
+            canonical_id,
+            entity_type,
+        });
+    }
+
+    if !extracted.is_empty() {
+        info!(
+            entity_count = extracted.len(),
+            entities = ?extracted.iter().map(|e| &e.surface_form).collect::<Vec<_>>(),
+            "PROMPT_SUBMIT: E11 extracted {} entities from prompt",
+            extracted.len()
+        );
+    }
+
+    extracted
+}
+
+/// Search for memories using E11 entity-aware multi-embedder discovery.
+///
+/// # How E11 Enhances E1
+/// - E1 finds semantically similar content
+/// - E11 finds entity-relationship-aware content that E1 misses
+/// - UNION of both = better answers
+///
+/// # Example
+/// Query: "What databases work with Rust?"
+/// - E1 finds: memories containing "database" or "Rust"
+/// - E11 finds: "Diesel ORM setup guide" (knows Diesel IS a database tool)
+/// - Combined: Better coverage than either alone
+///
+/// # NO FALLBACK
+/// If E11 search fails, returns an error - no graceful degradation.
+async fn search_with_e11_entities(
+    client: &McpClient,
+    entities: &[ExtractedEntity],
+) -> Vec<E11DiscoveredMemory> {
+    if entities.is_empty() {
+        return Vec::new();
+    }
+
+    let entity_names: Vec<String> = entities.iter().map(|e| e.canonical_id.clone()).collect();
+
+    debug!(
+        entity_count = entities.len(),
+        entities = ?entity_names,
+        "PROMPT_SUBMIT: E11 searching with extracted entities"
+    );
+
+    match client
+        .search_by_entities_fast(&entity_names, "any", MAX_E11_MEMORIES_TO_RETRIEVE, true)
+        .await
+    {
+        Ok(result) => parse_e11_search_results(&result),
+        Err(e) => {
+            // FAIL FAST: E11 search failure is logged prominently
+            // The hook continues but E11 won't contribute to this search
+            error!(
+                error = %e,
+                entities = ?entity_names,
+                "PROMPT_SUBMIT: E11 entity search FAILED. \
+                 E11 (KEPLER) cannot contribute to this search. \
+                 Check: 1) MCP server entity tools, 2) KEPLER model, 3) E11 index built"
+            );
+            Vec::new()
+        }
+    }
+}
+
+/// Parse MCP search_by_entities response into E11DiscoveredMemory structs.
+fn parse_e11_search_results(result: &serde_json::Value) -> Vec<E11DiscoveredMemory> {
+    let Some(results) = result.get("results").and_then(|v| v.as_array()) else {
+        debug!("PROMPT_SUBMIT: No results array in E11 search response");
+        return Vec::new();
+    };
+
+    let mut memories = Vec::new();
+
+    for item in results {
+        let id = item
+            .get("fingerprintId")
+            .or_else(|| item.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let content = item.get("content").and_then(|v| v.as_str()).map(String::from);
+
+        let score = item
+            .get("score")
+            .or_else(|| item.get("combinedScore"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+
+        let e11_similarity = item
+            .get("e11Similarity")
+            .or_else(|| item.get("entitySimilarity"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+
+        let matched_entities = item
+            .get("matchedEntities")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|e| e.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        memories.push(E11DiscoveredMemory {
+            id,
+            content,
+            score,
+            e11_similarity,
+            matched_entities,
+        });
+    }
+
+    if !memories.is_empty() {
+        info!(
+            memory_count = memories.len(),
+            "PROMPT_SUBMIT: E11 discovered {} entity-related memories (E1 may have missed these)",
+            memories.len()
+        );
+    }
 
     memories
 }
@@ -946,12 +1231,14 @@ fn parse_divergence_alerts(result: &serde_json::Value) -> Vec<DivergenceAlert> {
 // ============================================================================
 
 /// Generate context injection string based on coherence state, prompt analysis, memories,
-/// recent conversation turns, and divergence alerts.
+/// E11 entity discoveries, recent conversation turns, and divergence alerts.
 fn generate_context_injection(
     snapshot: &SessionSnapshot,
     identity_marker: IdentityMarkerType,
     context_summary: &ContextSummary,
     retrieved_memories: &[RetrievedMemory],
+    extracted_entities: &[ExtractedEntity],
+    e11_discovered_memories: &[E11DiscoveredMemory],
     recent_turns: &[RecentConversationTurn],
     divergence_alerts: &[DivergenceAlert],
 ) -> String {
@@ -997,9 +1284,9 @@ fn generate_context_injection(
         ));
     }
 
-    // Add retrieved memories from knowledge graph
+    // Add retrieved memories from knowledge graph (E1 semantic search)
     if !retrieved_memories.is_empty() {
-        injection.push_str("\n## Relevant Memories from Knowledge Graph\n\n");
+        injection.push_str("\n## Relevant Memories (E1 Semantic Search)\n\n");
 
         for (i, memory) in retrieved_memories.iter().enumerate() {
             injection.push_str(&format!(
@@ -1019,6 +1306,55 @@ fn generate_context_injection(
                 // Truncate very long content to avoid context overflow
                 let truncated = if content.len() > 500 {
                     format!("{}...", &content[..500])
+                } else {
+                    content.clone()
+                };
+                injection.push_str(&truncated);
+                injection.push_str("\n\n");
+            } else {
+                injection.push_str(&format!("ID: {} (content not available)\n\n", memory.id));
+            }
+        }
+
+        injection.push_str("---\n");
+    }
+
+    // Add E11 entity-discovered memories (KEPLER found these - E1 may have missed them!)
+    // This is the key E11 enhancement: surfacing entity-related content that semantic search missed
+    if !e11_discovered_memories.is_empty() {
+        injection.push_str("\n## E11 Entity Discoveries (KEPLER - May Not Appear in E1 Results)\n\n");
+
+        // Show what entities were detected
+        if !extracted_entities.is_empty() {
+            injection.push_str("**Detected entities:** ");
+            let entity_list: Vec<String> = extracted_entities
+                .iter()
+                .map(|e| format!("{} ({})", e.surface_form, e.entity_type))
+                .collect();
+            injection.push_str(&entity_list.join(", "));
+            injection.push_str("\n\n");
+        }
+
+        injection.push_str("*These memories were found via E11 entity knowledge - E1 semantic search may have missed them.*\n\n");
+
+        for (i, memory) in e11_discovered_memories.iter().enumerate() {
+            injection.push_str(&format!(
+                "### E11 Memory {} (score: {:.2}, E11 sim: {:.2})\n",
+                i + 1,
+                memory.score,
+                memory.e11_similarity
+            ));
+
+            if !memory.matched_entities.is_empty() {
+                injection.push_str(&format!(
+                    "**Matched entities:** {}\n",
+                    memory.matched_entities.join(", ")
+                ));
+            }
+
+            if let Some(ref content) = memory.content {
+                let truncated = if content.len() > 400 {
+                    format!("{}...", &content[..400])
                 } else {
                     content.clone()
                 };
@@ -1061,7 +1397,7 @@ fn generate_context_injection(
 
     // Add divergence alerts (contradictions/drift) if any
     if !divergence_alerts.is_empty() {
-        injection.push_str("\n## ⚠️ DIVERGENCE ALERTS - Potential Contradictions\n\n");
+        injection.push_str("\n## DIVERGENCE ALERTS - Potential Contradictions\n\n");
         injection.push_str("**Be aware of the following divergence from stored knowledge:**\n\n");
 
         for alert in divergence_alerts {

@@ -22,7 +22,69 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use context_graph_core::entity::{detect_entities, EntityLink, EntityMetadata, EntityType};
+use context_graph_core::entity::{EntityLink, EntityMetadata, EntityType};
+
+// ============================================================================
+// Simple Entity Mention Extraction
+// ============================================================================
+
+/// Extract potential entity mentions from text.
+/// KEPLER embeddings handle actual entity relationship discovery.
+fn extract_entity_mentions(text: &str) -> EntityMetadata {
+    let mut entities = Vec::new();
+    let mut seen = HashSet::new();
+
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+        if clean.len() < 2 {
+            continue;
+        }
+
+        let first_char = clean.chars().next().unwrap_or('a');
+        let is_capitalized = first_char.is_uppercase();
+        let is_all_caps = clean.len() > 1 && clean.chars().all(|c| c.is_uppercase() || c.is_numeric());
+        let has_special = clean.contains('_') || clean.contains('-');
+
+        if (is_capitalized || is_all_caps || has_special) && !is_common_word(clean) {
+            let canonical = clean.to_lowercase();
+            if !seen.contains(&canonical) {
+                seen.insert(canonical.clone());
+                entities.push(EntityLink::new(clean));
+            }
+        }
+    }
+
+    EntityMetadata::from_entities(entities)
+}
+
+fn is_common_word(word: &str) -> bool {
+    const COMMON: &[&str] = &[
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "must", "can", "to", "of", "in", "for", "on",
+        "with", "at", "by", "from", "up", "about", "into", "over", "after",
+        "this", "that", "these", "those", "then", "than", "when", "where",
+        "why", "how", "all", "each", "every", "both", "few", "more", "most",
+        "other", "some", "such", "no", "not", "only", "same", "so", "and",
+        "but", "if", "or", "because", "as", "until", "while", "it", "its",
+        "they", "them", "their", "he", "she", "him", "her", "his", "i", "me",
+        "my", "we", "us", "our", "you", "your", "here", "there", "now", "use",
+        "using", "used", "new", "also", "just", "get", "make", "like", "time",
+    ];
+    COMMON.contains(&word.to_lowercase().as_str())
+}
+
+fn entity_type_to_string(et: EntityType) -> String {
+    match et {
+        EntityType::ProgrammingLanguage => "ProgrammingLanguage".to_string(),
+        EntityType::Framework => "Framework".to_string(),
+        EntityType::Database => "Database".to_string(),
+        EntityType::Cloud => "Cloud".to_string(),
+        EntityType::Company => "Company".to_string(),
+        EntityType::TechnicalTerm => "TechnicalTerm".to_string(),
+        EntityType::Unknown => "Unknown".to_string(),
+    }
+}
 
 // ============================================================================
 // Configuration
@@ -107,18 +169,6 @@ impl From<EntityLink> for EntityLinkSerializable {
             canonical_id: link.canonical_id,
             entity_type: entity_type_to_string(link.entity_type),
         }
-    }
-}
-
-fn entity_type_to_string(et: EntityType) -> String {
-    match et {
-        EntityType::ProgrammingLanguage => "ProgrammingLanguage".to_string(),
-        EntityType::Framework => "Framework".to_string(),
-        EntityType::Database => "Database".to_string(),
-        EntityType::Cloud => "Cloud".to_string(),
-        EntityType::Company => "Company".to_string(),
-        EntityType::TechnicalTerm => "TechnicalTerm".to_string(),
-        EntityType::Unknown => "Unknown".to_string(),
     }
 }
 
@@ -318,13 +368,8 @@ impl E11EntityDatasetLoader {
         let mut total_entities = 0;
         let mut docs_with_entities = 0;
 
-        // Build known entities from KB
-        let kb = context_graph_core::entity::get_entity_kb();
-        for (surface, (canonical, entity_type)) in kb.iter() {
-            ground_truth.known_entities.insert(canonical.to_string());
-            ground_truth.entity_types.insert(canonical.to_string(), entity_type_to_string(*entity_type));
-            ground_truth.canonicalization.insert(surface.to_string(), canonical.to_string());
-        }
+        // Ground truth will be built from discovered entities in documents
+        // KEPLER embeddings handle entity relationship discovery
 
         // Process chunks
         let chunks_to_process = if self.config.max_chunks > 0 {
@@ -337,7 +382,7 @@ impl E11EntityDatasetLoader {
             let uuid = chunk.uuid();
 
             // Extract entities from text
-            let entity_metadata: EntityMetadata = detect_entities(&chunk.text);
+            let entity_metadata: EntityMetadata = extract_entity_mentions(&chunk.text);
             let entities: Vec<EntityLinkSerializable> = entity_metadata
                 .entities
                 .iter()
@@ -349,9 +394,14 @@ impl E11EntityDatasetLoader {
                 continue;
             }
 
-            // Update entity type counts
+            // Update entity type counts and ground truth
             for entity in &entities {
                 *entity_type_counts.entry(entity.entity_type.clone()).or_insert(0) += 1;
+
+                // Build ground truth from discovered entities
+                ground_truth.known_entities.insert(entity.canonical_id.clone());
+                ground_truth.entity_types.insert(entity.canonical_id.clone(), entity.entity_type.clone());
+                ground_truth.canonicalization.insert(entity.surface_form.clone(), entity.canonical_id.clone());
 
                 // Track docs by entity
                 ground_truth
@@ -652,7 +702,7 @@ mod tests {
     #[test]
     fn test_entity_extraction() {
         let text = "Rust is a systems programming language. Tokio provides async runtime.";
-        let entities = detect_entities(text);
+        let entities = extract_entity_mentions(text);
 
         let canonical_ids: HashSet<_> = entities.canonical_ids().into_iter().collect();
         assert!(canonical_ids.contains("rust_language"), "Should detect Rust");

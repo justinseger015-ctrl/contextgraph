@@ -29,7 +29,53 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
-use context_graph_core::entity::{detect_entities, EntityMetadata};
+use context_graph_core::entity::{EntityLink, EntityMetadata};
+use std::collections::HashSet;
+
+/// Extract potential entity mentions from text.
+fn extract_entity_mentions(text: &str) -> EntityMetadata {
+    let mut entities = Vec::new();
+    let mut seen = HashSet::new();
+
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '_' && c != '-');
+        if clean.len() < 2 {
+            continue;
+        }
+
+        let first_char = clean.chars().next().unwrap_or('a');
+        let is_capitalized = first_char.is_uppercase();
+        let is_all_caps = clean.len() > 1 && clean.chars().all(|c| c.is_uppercase() || c.is_numeric());
+        let has_special = clean.contains('_') || clean.contains('-');
+
+        if (is_capitalized || is_all_caps || has_special) && !is_common_word(clean) {
+            let canonical = clean.to_lowercase();
+            if !seen.contains(&canonical) {
+                seen.insert(canonical.clone());
+                entities.push(EntityLink::new(clean));
+            }
+        }
+    }
+
+    EntityMetadata::from_entities(entities)
+}
+
+fn is_common_word(word: &str) -> bool {
+    const COMMON: &[&str] = &[
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "do", "does", "did", "will", "would", "could",
+        "should", "may", "might", "must", "can", "to", "of", "in", "for", "on",
+        "with", "at", "by", "from", "up", "about", "into", "over", "after",
+        "this", "that", "these", "those", "then", "than", "when", "where",
+        "why", "how", "all", "each", "every", "both", "few", "more", "most",
+        "other", "some", "such", "no", "not", "only", "same", "so", "and",
+        "but", "if", "or", "because", "as", "until", "while", "it", "its",
+        "they", "them", "their", "he", "she", "him", "her", "his", "i", "me",
+        "my", "we", "us", "our", "you", "your", "here", "there", "now", "use",
+        "using", "used", "new", "also", "just", "get", "make", "like", "time",
+    ];
+    COMMON.contains(&word.to_lowercase().as_str())
+}
 
 #[cfg(feature = "real-embeddings")]
 use std::sync::Arc;
@@ -522,7 +568,7 @@ impl E11EntityBenchmarkRunner {
 
         for doc in &dataset.documents {
             // Re-extract entities from text
-            let extracted: EntityMetadata = detect_entities(&doc.text);
+            let extracted: EntityMetadata = extract_entity_mentions(&doc.text);
             let predicted: Vec<String> = extracted
                 .entities
                 .iter()
@@ -565,7 +611,7 @@ impl E11EntityBenchmarkRunner {
         let mut total_canonicalizations = 0;
 
         for (surface, expected_canonical) in &dataset.ground_truth.canonicalization {
-            let detected = detect_entities(surface);
+            let detected = extract_entity_mentions(surface);
             if let Some(entity) = detected.entities.first() {
                 total_canonicalizations += 1;
                 if &entity.canonical_id == expected_canonical {
@@ -663,7 +709,7 @@ impl E11EntityBenchmarkRunner {
             e11_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
             // Compute hybrid scores (E1 + E11 + entity Jaccard)
-            let query_entities = detect_entities(&query_doc.text);
+            let query_entities = extract_entity_mentions(&query_doc.text);
             let mut hybrid_scores: Vec<(usize, f32)> = doc_fingerprints
                 .iter()
                 .enumerate()
@@ -673,7 +719,7 @@ impl E11EntityBenchmarkRunner {
                         .unwrap_or(0.0);
                     let e11_sim = cosine_similarity(&query_fingerprint.e11_entity, &fp.e11_entity)
                         .unwrap_or(0.0);
-                    let doc_entities = detect_entities(&dataset.documents[i].text);
+                    let doc_entities = extract_entity_mentions(&dataset.documents[i].text);
                     let jaccard = entity_jaccard_similarity(&query_entities, &doc_entities);
 
                     // Hybrid: 0.5 * E1 + 0.3 * E11 + 0.2 * Jaccard
