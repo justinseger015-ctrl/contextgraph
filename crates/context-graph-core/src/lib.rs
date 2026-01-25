@@ -6,7 +6,7 @@
 //! Context Graph Core Library
 //!
 //! Provides core domain types, traits, and stub implementations for the
-//! Ultimate Context Graph system implementing UTL (Unified Theory of Learning).
+//! 13-Embedder Context Graph system for semantic memory retrieval.
 //!
 //! # Architecture
 //!
@@ -33,7 +33,6 @@ pub mod causal;
 pub mod clustering;
 pub mod code;
 pub mod config;
-pub mod dream;
 pub mod embeddings;
 pub mod entity;
 pub mod error;
