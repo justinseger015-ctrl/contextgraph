@@ -442,7 +442,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize LLM with Hermes 2 Pro and GBNF grammar constraints
     let config = LlmConfig {
         model_path: model_dir.join("Hermes-2-Pro-Mistral-7B.Q5_K_M.gguf"),
-        n_gpu_layers: -1, // Full GPU offload
+        causal_grammar_path: model_dir.join("causal_analysis.gbnf"),
+        graph_grammar_path: model_dir.join("graph_relationship.gbnf"),
+        validation_grammar_path: model_dir.join("validation.gbnf"),
+        n_gpu_layers: u32::MAX, // Full GPU offload
         temperature: 0.0, // Deterministic for reliable JSON output
         max_tokens: 256,
         ..Default::default()

@@ -11,7 +11,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use context_graph_causal_agent::llm::{CausalDiscoveryLLM, InferencePrecision, LlmConfig};
+use context_graph_causal_agent::llm::{CausalDiscoveryLLM, LlmConfig};
 use context_graph_causal_agent::CausalLinkDirection;
 use serde::{Deserialize, Serialize};
 
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let data_dir = workspace_root.join("data/beir_scifact");
-    let model_dir = workspace_root.join("models/causal-discovery/qwen2.5-3b-instruct");
+    let model_dir = workspace_root.join("models/hermes-2-pro");
 
     println!("Data directory: {:?}", data_dir);
     println!("Model directory: {:?}", model_dir);
@@ -136,14 +136,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pairs = &pairs[..pairs.len().min(max_pairs)];
     println!("Running benchmark on {} pairs (set BENCHMARK_PAIRS env to change)\n", pairs.len());
 
-    // Initialize LLM
+    // Initialize LLM with Hermes 2 Pro and GBNF grammar constraints
     let config = LlmConfig {
-        model_id: "Qwen/Qwen2.5-3B-Instruct".to_string(),
-        model_dir,
-        precision: InferencePrecision::BF16,
-        use_cuda: true,
-        temperature: 0.1,
-        top_p: 0.9,
+        model_path: model_dir.join("Hermes-2-Pro-Mistral-7B.Q5_K_M.gguf"),
+        causal_grammar_path: model_dir.join("causal_analysis.gbnf"),
+        graph_grammar_path: model_dir.join("graph_relationship.gbnf"),
+        validation_grammar_path: model_dir.join("validation.gbnf"),
+        n_gpu_layers: u32::MAX, // Full GPU offload
+        temperature: 0.0, // Deterministic
         max_tokens: 256,
         ..Default::default()
     };

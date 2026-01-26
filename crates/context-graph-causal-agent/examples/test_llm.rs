@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use context_graph_causal_agent::llm::{CausalDiscoveryLLM, InferencePrecision, LlmConfig};
+use context_graph_causal_agent::llm::{CausalDiscoveryLLM, LlmConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!("╔═══════════════════════════════════════════════════════════════╗");
-    println!("║       Causal Discovery LLM Integration Test (RTX 5090)        ║");
+    println!("║    Causal Discovery LLM Integration Test (Hermes 2 Pro)       ║");
     println!("╚═══════════════════════════════════════════════════════════════╝\n");
 
     // Find workspace root
@@ -25,24 +25,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let model_dir = workspace_root.join("models/causal-discovery/qwen2.5-3b-instruct");
+    let model_dir = workspace_root.join("models/hermes-2-pro");
 
     let config = LlmConfig {
-        model_id: "Qwen/Qwen2.5-3B-Instruct".to_string(),
-        model_dir: model_dir.clone(),
-        precision: InferencePrecision::BF16,
-        use_cuda: true,
-        temperature: 0.1,
-        top_p: 0.9,
+        model_path: model_dir.join("Hermes-2-Pro-Mistral-7B.Q5_K_M.gguf"),
+        causal_grammar_path: model_dir.join("causal_analysis.gbnf"),
+        graph_grammar_path: model_dir.join("graph_relationship.gbnf"),
+        validation_grammar_path: model_dir.join("validation.gbnf"),
+        n_gpu_layers: u32::MAX, // Full GPU offload
+        temperature: 0.0, // Deterministic
         max_tokens: 256,
         ..Default::default()
     };
 
     println!("Configuration:");
-    println!("  Model: {}", config.model_id);
-    println!("  Model Dir: {:?}", model_dir);
-    println!("  Precision: {:?}", config.precision);
-    println!("  CUDA: {}", config.use_cuda);
+    println!("  Model: {:?}", config.model_path);
+    println!("  GPU Layers: {} (MAX = all)", config.n_gpu_layers);
     println!("  Temperature: {}", config.temperature);
     println!("  Max Tokens: {}", config.max_tokens);
     println!();

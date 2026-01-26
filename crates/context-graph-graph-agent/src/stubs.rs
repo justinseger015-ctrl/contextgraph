@@ -53,6 +53,9 @@ pub fn create_stub_graph_discovery_service() -> Arc<GraphDiscoveryService> {
     // This is safe - model files are only validated during load()
     let config = LlmConfig {
         model_path: PathBuf::from("/nonexistent/model/path/for/testing.gguf"),
+        causal_grammar_path: PathBuf::from("/nonexistent/causal.gbnf"),
+        graph_grammar_path: PathBuf::from("/nonexistent/graph.gbnf"),
+        validation_grammar_path: PathBuf::from("/nonexistent/validation.gbnf"),
         n_gpu_layers: 0, // CPU mode for stub
         context_size: 512, // Small context for stub
         ..Default::default()

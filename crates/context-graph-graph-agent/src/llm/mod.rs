@@ -1,23 +1,19 @@
 //! LLM wrapper for graph relationship analysis.
 //!
 //! This module provides the LLM integration for graph relationship detection.
-//! It shares the underlying Qwen2.5-3B model with the causal-agent crate
+//! It shares the underlying Hermes 2 Pro model with the causal-agent crate
 //! via `Arc<CausalDiscoveryLLM>`.
 //!
-//! ## NO FALLBACK POLICY
+//! ## Grammar-Constrained Output
 //!
-//! This module follows a strict "no fallback" policy:
-//! - JSON parsing fails explicitly on malformed LLM output
-//! - Required fields must be present - no defaults
-//! - Raw LLM response is included in errors for debugging
-//!
-//! This ensures problems are visible and fixable, rather than silently
-//! producing incorrect results.
+//! This module uses GBNF grammar constraints for 100% valid JSON output.
+//! The graph relationship grammar is separate from the causal analysis grammar.
 
 pub mod prompt;
 
 use std::sync::Arc;
 
+use context_graph_causal_agent::llm::GrammarType;
 use context_graph_causal_agent::CausalDiscoveryLLM;
 use serde_json::Value;
 
@@ -29,7 +25,7 @@ use prompt::GraphPromptBuilder;
 /// Graph relationship analyzer using shared LLM.
 ///
 /// This wraps the `CausalDiscoveryLLM` from causal-agent to share
-/// the same Qwen2.5-3B model instance, avoiding duplicate VRAM usage.
+/// the same Hermes 2 Pro model instance, avoiding duplicate VRAM usage.
 pub struct GraphRelationshipLLM {
     /// Shared LLM from causal-agent.
     llm: Arc<CausalDiscoveryLLM>,
@@ -80,16 +76,16 @@ impl GraphRelationshipLLM {
 
         let prompt = self.prompt_builder.build_analysis_prompt(memory_a, memory_b);
 
-        // Use the shared LLM for inference
+        // Use the shared LLM with graph grammar for inference
         let response = self
             .llm
-            .generate_text(&prompt)
+            .generate_with_grammar(&prompt, GrammarType::Graph)
             .await
             .map_err(|e| GraphAgentError::LlmInferenceError {
                 message: format!("Graph LLM inference failed: {}", e),
             })?;
 
-        // Parse the response - NO FALLBACK
+        // Parse the response - grammar guarantees valid JSON
         self.parse_analysis_response(&response)
     }
 
@@ -112,26 +108,12 @@ impl GraphRelationshipLLM {
             return Ok(Vec::new());
         }
 
-        // For small batches, process individually for better results
-        if pairs.len() <= 3 {
-            let mut results = Vec::with_capacity(pairs.len());
-            for (a, b) in pairs {
-                results.push(self.analyze_relationship(a, b).await?);
-            }
-            return Ok(results);
+        // Process individually for better results with grammar constraints
+        let mut results = Vec::with_capacity(pairs.len());
+        for (a, b) in pairs {
+            results.push(self.analyze_relationship(a, b).await?);
         }
-
-        let prompt = self.prompt_builder.build_batch_prompt(pairs);
-
-        let response = self
-            .llm
-            .generate_text(&prompt)
-            .await
-            .map_err(|e| GraphAgentError::LlmInferenceError {
-                message: format!("Graph LLM batch inference failed: {}", e),
-            })?;
-
-        self.parse_batch_response(&response, pairs.len())
+        Ok(results)
     }
 
     /// Validate a specific relationship between two memories.
@@ -159,7 +141,7 @@ impl GraphRelationshipLLM {
 
         let response = self
             .llm
-            .generate_text(&prompt)
+            .generate_with_grammar(&prompt, GrammarType::Validation)
             .await
             .map_err(|e| GraphAgentError::LlmInferenceError {
                 message: format!("Graph LLM validation failed: {}", e),
@@ -170,32 +152,13 @@ impl GraphRelationshipLLM {
 
     /// Parse single analysis response from LLM.
     ///
-    /// NO FALLBACK: Returns error if JSON is malformed. This ensures
-    /// we can diagnose and fix LLM output issues instead of silently
-    /// returning incorrect results.
+    /// With grammar constraints, JSON is guaranteed to be valid.
     fn parse_analysis_response(&self, response: &str) -> GraphAgentResult<GraphAnalysisResult> {
-        // Model generates complete JSON - find and extract it
-        let trimmed = response.trim();
-
-        // Look for JSON object in the response
-        let json_str = if let Some(start) = trimmed.find('{') {
-            if let Some(end) = trimmed.rfind('}') {
-                &trimmed[start..=end]
-            } else {
-                trimmed
-            }
-        } else {
-            trimmed
-        };
-
-        // Apply common JSON repairs before parsing
-        let repaired = self.repair_json(json_str);
-
-        // Parse as JSON - fail explicitly on malformed output
-        let value: Value = serde_json::from_str(&repaired).map_err(|e| {
+        // Parse as JSON - grammar guarantees valid structure
+        let value: Value = serde_json::from_str(response.trim()).map_err(|e| {
             GraphAgentError::LlmResponseParseError {
                 message: format!(
-                    "LLM returned malformed JSON. Parse error: {}. Raw response: {}",
+                    "JSON parse failed (unexpected with grammar): {}. Raw response: {}",
                     e, response
                 ),
             }
@@ -204,103 +167,7 @@ impl GraphRelationshipLLM {
         self.extract_analysis_from_json(&value, response)
     }
 
-    /// Repair common JSON issues from LLM output.
-    ///
-    /// This fixes issues like:
-    /// - Spaces in numbers: "0. 0" -> "0.0"
-    /// - Trailing commas before }
-    /// - Spaces in field names: "confidence ": -> "confidence":
-    ///
-    /// Uses pure string manipulation - no regex.
-    fn repair_json(&self, json: &str) -> String {
-        let chars: Vec<char> = json.chars().collect();
-        let mut result = String::with_capacity(json.len());
-        let mut i = 0;
-
-        while i < chars.len() {
-            let c = chars[i];
-
-            // Fix spaces around decimal points in numbers
-            // Pattern: digit + optional_spaces + . + optional_spaces + digit
-            if c.is_ascii_digit() {
-                result.push(c);
-                i += 1;
-
-                // Look ahead for pattern: spaces? + . + spaces? + digit
-                let mut lookahead = i;
-                while lookahead < chars.len() && chars[lookahead] == ' ' {
-                    lookahead += 1;
-                }
-                if lookahead < chars.len() && chars[lookahead] == '.' {
-                    lookahead += 1;
-                    while lookahead < chars.len() && chars[lookahead] == ' ' {
-                        lookahead += 1;
-                    }
-                    if lookahead < chars.len() && chars[lookahead].is_ascii_digit() {
-                        // Found pattern - emit dot directly, skip spaces
-                        result.push('.');
-                        i = lookahead; // Continue from digit after dot
-                    }
-                }
-                continue;
-            }
-
-            // Fix trailing comma before }
-            // Pattern: , + spaces + }
-            if c == ',' {
-                let mut lookahead = i + 1;
-                while lookahead < chars.len() && chars[lookahead].is_whitespace() {
-                    lookahead += 1;
-                }
-                if lookahead < chars.len() && chars[lookahead] == '}' {
-                    // Skip the comma, let } be added later
-                    i += 1;
-                    continue;
-                }
-            }
-
-            // Fix spaces before colon in field names
-            // Pattern: "field ": -> "field":
-            if c == '"' {
-                result.push(c);
-                i += 1;
-
-                // Copy string content until closing quote
-                while i < chars.len() && chars[i] != '"' {
-                    // Skip trailing spaces before the closing quote
-                    if chars[i] == ' ' {
-                        // Look ahead to see if this is trailing space before "
-                        let mut j = i;
-                        while j < chars.len() && chars[j] == ' ' {
-                            j += 1;
-                        }
-                        if j < chars.len() && chars[j] == '"' {
-                            // Skip trailing spaces in field name
-                            i = j;
-                            continue;
-                        }
-                    }
-                    result.push(chars[i]);
-                    i += 1;
-                }
-                if i < chars.len() {
-                    result.push(chars[i]); // closing quote
-                    i += 1;
-                }
-                continue;
-            }
-
-            result.push(c);
-            i += 1;
-        }
-
-        result
-    }
-
     /// Extract analysis result from parsed JSON.
-    ///
-    /// NO DEFAULTS: Returns error if required fields are missing. This ensures
-    /// we can diagnose LLM output issues instead of silently returning incorrect results.
     fn extract_analysis_from_json(
         &self,
         value: &Value,
@@ -370,45 +237,13 @@ impl GraphRelationshipLLM {
         })
     }
 
-    /// Parse batch response from LLM.
-    ///
-    /// NO FALLBACK: Returns error if JSON is malformed.
-    fn parse_batch_response(
-        &self,
-        response: &str,
-        _expected_count: usize,
-    ) -> GraphAgentResult<Vec<GraphAnalysisResult>> {
-        // Complete the JSON array
-        let full_json = format!("[{{\"has_connection\":{}", response.trim());
-
-        // Parse as JSON array - fail explicitly on malformed output
-        let values: Vec<Value> = serde_json::from_str(&full_json).map_err(|e| {
-            GraphAgentError::LlmResponseParseError {
-                message: format!(
-                    "LLM returned malformed JSON array. Parse error: {}. Raw response: {}",
-                    e, response
-                ),
-            }
-        })?;
-
-        let mut results = Vec::with_capacity(values.len());
-        for value in values {
-            results.push(self.extract_analysis_from_json(&value, response)?);
-        }
-        Ok(results)
-    }
-
     /// Parse validation response from LLM.
-    ///
-    /// NO FALLBACK: Returns error if JSON is malformed.
     fn parse_validation_response(&self, response: &str) -> GraphAgentResult<(bool, f32, String)> {
-        let full_json = format!("{{\"valid\":{}", response.trim());
-
-        // Parse as JSON - fail explicitly on malformed output
-        let value: Value = serde_json::from_str(&full_json).map_err(|e| {
+        // Parse as JSON - grammar guarantees valid structure
+        let value: Value = serde_json::from_str(response.trim()).map_err(|e| {
             GraphAgentError::LlmResponseParseError {
                 message: format!(
-                    "LLM returned malformed validation JSON. Parse error: {}. Raw response: {}",
+                    "Validation JSON parse failed (unexpected with grammar): {}. Raw response: {}",
                     e, response
                 ),
             }
@@ -454,8 +289,7 @@ mod tests {
 
     /// Helper to test JSON parsing without LLM
     fn parse_json_response(response: &str) -> GraphAgentResult<GraphAnalysisResult> {
-        let full_json = format!("{{\"has_connection\":{}", response.trim());
-        let value: Value = serde_json::from_str(&full_json).map_err(|e| {
+        let value: Value = serde_json::from_str(response.trim()).map_err(|e| {
             GraphAgentError::LlmResponseParseError {
                 message: format!("Parse error: {}", e),
             }
@@ -515,9 +349,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_json_with_connection() {
-        // Simulates LLM output after prompt prefix "{\"has_connection\":"
-        let response =
-            r#" true, "direction": "a_connects_b", "relationship_type": "imports", "confidence": 0.85, "description": "A imports B"}"#;
+        let response = r#"{"has_connection": true, "direction": "a_to_b", "relationship_type": "imports", "confidence": 0.85, "description": "A imports B"}"#;
 
         let result = parse_json_response(response).unwrap();
 
@@ -530,8 +362,7 @@ mod tests {
 
     #[test]
     fn test_parse_valid_json_no_connection() {
-        let response =
-            r#" false, "direction": "none", "relationship_type": "none", "confidence": 0.1, "description": "No relationship"}"#;
+        let response = r#"{"has_connection": false, "direction": "none", "relationship_type": "none", "confidence": 0.1, "description": "No relationship"}"#;
 
         let result = parse_json_response(response).unwrap();
 
@@ -543,8 +374,7 @@ mod tests {
 
     #[test]
     fn test_parse_malformed_json_fails() {
-        // Malformed JSON should fail - NO FALLBACK
-        let response = r#" true, direction: a_connects_b"#; // Missing quotes
+        let response = r#"{"has_connection": true, direction: "a_to_b"}"#; // Missing quotes
 
         let result = parse_json_response(response);
         assert!(result.is_err());
@@ -552,9 +382,8 @@ mod tests {
 
     #[test]
     fn test_parse_missing_required_field_fails() {
-        // Missing confidence field should fail - NO DEFAULTS
-        let response =
-            r#" true, "direction": "a_connects_b", "relationship_type": "imports", "description": "A imports B"}"#;
+        // Missing confidence field
+        let response = r#"{"has_connection": true, "direction": "a_to_b", "relationship_type": "imports", "description": "A imports B"}"#;
 
         let result = parse_json_response(response);
         assert!(result.is_err());
@@ -562,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_parse_implements_relationship() {
-        let response = r#" true, "direction": "a_connects_b", "relationship_type": "implements", "confidence": 0.92, "description": "A implements trait B"}"#;
+        let response = r#"{"has_connection": true, "direction": "a_to_b", "relationship_type": "implements", "confidence": 0.92, "description": "A implements trait B"}"#;
 
         let result = parse_json_response(response).unwrap();
 
@@ -573,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_parse_bidirectional_relationship() {
-        let response = r#" true, "direction": "bidirectional", "relationship_type": "references", "confidence": 0.75, "description": "Mutual reference"}"#;
+        let response = r#"{"has_connection": true, "direction": "bidirectional", "relationship_type": "references", "confidence": 0.75, "description": "Mutual reference"}"#;
 
         let result = parse_json_response(response).unwrap();
 

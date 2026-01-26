@@ -24,10 +24,8 @@ mod prompt;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use llama_cpp_2::context::params::LlamaContextParams;
-use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
@@ -35,7 +33,7 @@ use llama_cpp_2::model::{AddBos, LlamaModel, Special};
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use parking_lot::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::{CausalAgentError, CausalAgentResult};
 use crate::types::{CausalAnalysisResult, CausalLinkDirection};
@@ -57,10 +55,10 @@ pub struct LlmConfig {
     /// Maximum tokens to generate per response.
     pub max_tokens: usize,
 
-    /// Number of GPU layers to offload (-1 = all).
-    pub n_gpu_layers: i32,
+    /// Number of GPU layers to offload (0xFFFF_FFFF = all).
+    pub n_gpu_layers: u32,
 
-    /// Seed for reproducibility.
+    /// Seed for reproducibility (not used in current llama-cpp-2 version).
     pub seed: u32,
 
     /// Path to GBNF grammar file for causal analysis.
@@ -83,7 +81,7 @@ impl Default for LlmConfig {
             context_size: 4096,
             temperature: 0.0, // Deterministic for analysis
             max_tokens: 256,
-            n_gpu_layers: -1, // Full GPU offload
+            n_gpu_layers: u32::MAX, // Full GPU offload
             seed: 42,
             causal_grammar_path: PathBuf::from("models/hermes-2-pro/causal_analysis.gbnf"),
             graph_grammar_path: PathBuf::from("models/hermes-2-pro/graph_relationship.gbnf"),
@@ -395,8 +393,7 @@ ws ::= [ \t\n\r]*"#
 
         // Create context for this generation
         let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(std::num::NonZeroU32::new(self.config.context_size).unwrap())
-            .with_seed(self.config.seed);
+            .with_n_ctx(Some(std::num::NonZeroU32::new(self.config.context_size).unwrap()));
 
         let mut ctx = model
             .new_context(backend, ctx_params)
@@ -441,7 +438,7 @@ ws ::= [ \t\n\r]*"#
         };
 
         // Create sampler chain with grammar constraint
-        let sampler = LlamaSampler::chain_simple([
+        let mut sampler = LlamaSampler::chain_simple([
             LlamaSampler::grammar(model, grammar_str, "root")
                 .map_err(|e| CausalAgentError::LlmInferenceError {
                     message: format!("Failed to create grammar sampler: {}", e),
@@ -452,10 +449,11 @@ ws ::= [ \t\n\r]*"#
 
         // Generate tokens
         let mut generated_tokens: Vec<LlamaToken> = Vec::new();
-        let mut current_pos = prompt_len as i32;
+        let mut current_pos = prompt_len;
 
         for _ in 0..self.config.max_tokens {
             // Sample next token with grammar constraint
+            // -1 means use last logits from batch
             let token = sampler.sample(&ctx, -1);
 
             // Check for end of generation
@@ -469,7 +467,7 @@ ws ::= [ \t\n\r]*"#
             // Prepare next iteration
             batch.clear();
             batch
-                .add(token, current_pos, &[0], true)
+                .add(token, current_pos as i32, &[0], true)
                 .map_err(|e| CausalAgentError::LlmInferenceError {
                     message: format!("Failed to add token: {}", e),
                 })?;
@@ -577,7 +575,7 @@ mod tests {
         let config = LlmConfig::default();
         assert_eq!(config.context_size, 4096);
         assert_eq!(config.temperature, 0.0); // Deterministic
-        assert_eq!(config.n_gpu_layers, -1); // Full GPU
+        assert_eq!(config.n_gpu_layers, u32::MAX); // Full GPU
     }
 
     #[test]

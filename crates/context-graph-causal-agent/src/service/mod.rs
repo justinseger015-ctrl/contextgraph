@@ -53,13 +53,10 @@ pub struct CausalDiscoveryConfig {
     /// Minimum LLM confidence to accept a relationship.
     pub min_confidence: f32,
 
-    /// HuggingFace model ID (e.g., "Qwen/Qwen2.5-3B-Instruct").
-    pub model_id: String,
-
     /// Whether to skip already-analyzed pairs.
     pub skip_analyzed: bool,
 
-    /// LLM configuration.
+    /// LLM configuration (includes model path).
     pub llm_config: LlmConfig,
 
     /// Scanner configuration.
@@ -75,7 +72,6 @@ impl Default for CausalDiscoveryConfig {
             interval: Duration::from_secs(3600), // 1 hour
             batch_size: 50,
             min_confidence: 0.7,
-            model_id: "Qwen/Qwen2.5-3B-Instruct".to_string(),
             skip_analyzed: true,
             llm_config: LlmConfig::default(),
             scanner_config: ScannerConfig::default(),
@@ -181,11 +177,8 @@ pub struct CausalDiscoveryService {
 impl CausalDiscoveryService {
     /// Create a new service with the given configuration.
     pub async fn new(config: CausalDiscoveryConfig) -> CausalAgentResult<Self> {
-        // Create LLM with model ID from config
-        let mut llm_config = config.llm_config.clone();
-        llm_config.model_id = config.model_id.clone();
-
-        let llm = CausalDiscoveryLLM::with_config(llm_config)?;
+        // Create LLM from config
+        let llm = CausalDiscoveryLLM::with_config(config.llm_config.clone())?;
         let llm = Arc::new(llm);
 
         // Create causal graph
@@ -501,13 +494,17 @@ mod tests {
             }
         }
 
-        let model_dir = workspace_root.join("models/causal-discovery/qwen2.5-3b-instruct");
+        let model_dir = workspace_root.join("models/hermes-2-pro");
 
-        let mut llm_config = crate::llm::LlmConfig::default();
-        llm_config.model_dir = model_dir;
+        let llm_config = crate::llm::LlmConfig {
+            model_path: model_dir.join("Hermes-2-Pro-Mistral-7B.Q5_K_M.gguf"),
+            causal_grammar_path: model_dir.join("causal_analysis.gbnf"),
+            graph_grammar_path: model_dir.join("graph_relationship.gbnf"),
+            validation_grammar_path: model_dir.join("validation.gbnf"),
+            ..Default::default()
+        };
 
         CausalDiscoveryConfig {
-            model_id: "Qwen/Qwen2.5-3B-Instruct".to_string(),
             interval: Duration::from_secs(1),
             batch_size: 10,
             min_confidence: 0.6,
@@ -541,10 +538,10 @@ mod tests {
         let config = create_test_config();
 
         // Skip test if model not available (e.g., in CI)
-        if !config.llm_config.model_dir.join("config.json").exists() {
+        if !config.llm_config.model_path.exists() {
             eprintln!(
                 "Skipping test_discovery_cycle: model not found at {:?}",
-                config.llm_config.model_dir
+                config.llm_config.model_path
             );
             return;
         }
