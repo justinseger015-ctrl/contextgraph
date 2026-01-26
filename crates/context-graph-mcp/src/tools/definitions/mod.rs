@@ -1,8 +1,9 @@
-//! Tool definitions per PRD v6 Section 10 (43 tools total).
+//! Tool definitions per PRD v6 Section 10 (45 tools total).
 //!
 //! Includes 17 original tools (inject_context merged into store_memory)
 //! plus 4 sequence tools for E4 integration
 //! plus 2 causal tools for E5 Priority 1 enhancement
+//! plus 2 causal discovery tools for E5 LLM-based relationship discovery
 //! plus 1 keyword tool for E6 keyword search enhancement
 //! plus 1 code tool for E7 code search enhancement
 //! plus 2 graph tools for E8 upgrade (Phase 4)
@@ -14,6 +15,7 @@
 //! plus 4 graph linking tools (get_memory_neighbors, get_typed_edges, traverse_graph, get_unified_neighbors).
 
 pub(crate) mod causal;
+pub(crate) mod causal_discovery;
 pub(crate) mod code;
 pub(crate) mod core;
 pub(crate) mod curation;
@@ -34,7 +36,7 @@ use crate::tools::types::ToolDefinition;
 
 /// Get all tool definitions for the `tools/list` response.
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(43);
+    let mut tools = Vec::with_capacity(45);
 
     // Core tools (4 - inject_context merged into store_memory)
     tools.extend(core::definitions());
@@ -56,6 +58,9 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 
     // Causal tools (2) - E5 Priority 1 enhancement
     tools.extend(causal::definitions());
+
+    // Causal discovery tools (2) - E5 LLM-based relationship discovery
+    tools.extend(causal_discovery::definitions());
 
     // Keyword tools (1) - E6 keyword search enhancement
     tools.extend(keyword::definitions());
@@ -93,9 +98,9 @@ mod tests {
 
     #[test]
     fn test_total_tool_count() {
-        // 43 tools: 32 base + 4 embedder-first + 2 temporal + 1 robustness + 4 graph linking
+        // 45 tools: 32 base + 4 embedder-first + 2 temporal + 1 robustness + 4 graph linking + 2 causal discovery
         // (Note: find_contextual_matches merged into search_by_intent, inject_context merged into store_memory)
-        assert_eq!(get_tool_definitions().len(), 43);
+        assert_eq!(get_tool_definitions().len(), 45);
     }
 
     #[test]
@@ -132,6 +137,9 @@ mod tests {
             // Causal tools (2) - E5 Priority 1 enhancement
             "search_causes",
             "get_causal_chain",
+            // Causal discovery tools (2) - E5 LLM-based relationship discovery
+            "trigger_causal_discovery",
+            "get_causal_discovery_status",
             // Keyword tools (1) - E6 keyword search enhancement
             "search_by_keywords",
             // Code tools (1) - E7 code search enhancement
@@ -205,6 +213,7 @@ mod tests {
         assert_eq!(file_watcher::definitions().len(), 4);
         assert_eq!(sequence::definitions().len(), 4);
         assert_eq!(causal::definitions().len(), 2);
+        assert_eq!(causal_discovery::definitions().len(), 2); // E5 LLM-based relationship discovery
         assert_eq!(keyword::definitions().len(), 1);
         assert_eq!(code::definitions().len(), 1);
         assert_eq!(graph::definitions().len(), 2);
