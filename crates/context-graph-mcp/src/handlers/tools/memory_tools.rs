@@ -406,6 +406,10 @@ impl Handlers {
                     hook_type: None,
                     tool_name: None,
                     causal_direction: Some(causal_direction.clone()),
+                    source_fingerprint_id: None,
+                    causal_relationship_id: None,
+                    mechanism_type: None,
+                    confidence: None,
                 };
 
                 if let Err(e) = self

@@ -586,6 +586,19 @@ impl MemoryCaptureService {
             MemorySource::ClaudeResponse { response_type: _ } => {
                 SourceMetadata::claude_response()
             }
+            MemorySource::CausalExplanation {
+                source_fingerprint_id,
+                causal_relationship_id,
+                mechanism_type,
+                confidence,
+            } => {
+                SourceMetadata::causal_explanation(
+                    *source_fingerprint_id,
+                    *causal_relationship_id,
+                    mechanism_type.clone(),
+                    *confidence,
+                )
+            }
         }
     }
 }

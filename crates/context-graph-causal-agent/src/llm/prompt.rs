@@ -231,9 +231,9 @@ CONFIDENCE:
     /// Unlike single-text analysis which returns ONE hint, this extracts
     /// every distinct cause-effect relationship from the content.
     const fn default_multi_relationship_system_prompt() -> &'static str {
-        r#"You analyze text for ALL cause-effect relationships and generate explanatory paragraphs.
+        r#"You analyze text for ALL cause-effect relationships and generate explanatory paragraphs with source provenance.
 
-TASK: Extract every distinct cause-effect relationship from the text.
+TASK: Extract every distinct cause-effect relationship from the text with exact source locations.
 
 OUTPUT FORMAT (JSON):
 {
@@ -243,11 +243,59 @@ OUTPUT FORMAT (JSON):
       "effect": "Brief statement of the effect",
       "explanation": "1-2 paragraph explanation of HOW and WHY this causal link exists",
       "confidence": 0.0-1.0,
-      "mechanism_type": "direct" | "mediated" | "feedback" | "temporal"
+      "mechanism_type": "direct" | "mediated" | "feedback" | "temporal",
+      "source_spans": [
+        {
+          "start_char": 0,
+          "end_char": 100,
+          "text_excerpt": "...exact text from input...",
+          "span_type": "full" | "cause" | "effect"
+        }
+      ]
     }
   ],
   "has_causal_content": true/false
 }
+
+SOURCE SPAN EXTRACTION (CRITICAL - READ CAREFULLY):
+
+RULE: text_excerpt MUST be EXACT CHARACTER-FOR-CHARACTER COPY from input.
+DO NOT paraphrase. DO NOT summarize. DO NOT change ANY words.
+
+CORRECT EXAMPLE:
+Input: "High cortisol from chronic stress damages hippocampal neurons, leading to memory problems."
+        ^                                         ^
+        position 0                                position 56
+
+Output span:
+{
+  "start_char": 0,
+  "end_char": 56,
+  "text_excerpt": "High cortisol from chronic stress damages hippocampal neurons",
+  "span_type": "full"
+}
+✓ CORRECT - text_excerpt equals input[0:56] exactly
+
+WRONG EXAMPLE (DO NOT DO THIS):
+{
+  "start_char": 0,
+  "end_char": 56,
+  "text_excerpt": "Elevated cortisol damages neurons",
+  "span_type": "full"
+}
+✗ WRONG - "Elevated cortisol damages neurons" is NOT at positions 0-56
+
+HOW TO EXTRACT:
+1. Find exact start position in input
+2. Find exact end position in input
+3. Copy EXACTLY those characters: text_excerpt = input[start_char:end_char]
+
+ADDITIONAL RULES:
+- span_type indicates which part: "full" (entire relationship), "cause", or "effect"
+- Each relationship MUST have at least one source_span
+- Verify character offsets are accurate before outputting
+- If relationship spans multiple sentences, use span_type "full"
+- Truncate text_excerpt to 200 characters if needed
 
 EXPLANATION REQUIREMENTS (CRITICAL):
 - Paragraph 1: State the relationship clearly. "X causes Y because..."
@@ -283,14 +331,30 @@ Output:
       "effect": "Elevated cortisol damages hippocampal neurons",
       "explanation": "Chronic psychological stress triggers sustained activation of the HPA axis, resulting in persistently elevated cortisol levels.\n\nThis glucocorticoid excess causes oxidative stress and reduces synaptic plasticity in hippocampal neurons.",
       "confidence": 0.85,
-      "mechanism_type": "mediated"
+      "mechanism_type": "mediated",
+      "source_spans": [
+        {
+          "start_char": 0,
+          "end_char": 56,
+          "text_excerpt": "High cortisol from chronic stress damages hippocampal neurons",
+          "span_type": "full"
+        }
+      ]
     },
     {
       "cause": "Hippocampal neuron damage",
       "effect": "Memory impairment",
       "explanation": "The hippocampus is critical for memory formation and consolidation. When neurons in this region are damaged by cortisol exposure, memory encoding becomes impaired.\n\nThis manifests as difficulty forming new memories and retrieving recent ones.",
       "confidence": 0.90,
-      "mechanism_type": "direct"
+      "mechanism_type": "direct",
+      "source_spans": [
+        {
+          "start_char": 32,
+          "end_char": 89,
+          "text_excerpt": "damages hippocampal neurons, leading to memory problems",
+          "span_type": "full"
+        }
+      ]
     }
   ],
   "has_causal_content": true

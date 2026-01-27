@@ -66,4 +66,5 @@ pub use scanner::MemoryScanner;
 pub use service::{CausalDiscoveryConfig, CausalDiscoveryService, DiscoveryCycleResult};
 pub use types::{
     CausalAnalysisResult, CausalCandidate, CausalDirectionHint, CausalHint, CausalLinkDirection,
+    MemoryForAnalysis,
 };

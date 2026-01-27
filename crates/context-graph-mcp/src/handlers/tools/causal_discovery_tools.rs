@@ -21,6 +21,9 @@
 use serde_json::json;
 use tracing::{debug, error, info, warn};
 
+use context_graph_core::traits::{CausalDirectionHint, CausalHint, EmbeddingMetadata};
+use context_graph_core::types::fingerprint::TeleologicalFingerprint;
+use context_graph_core::types::SourceMetadata;
 use context_graph_graph_agent::MemoryForGraphAnalysis;
 
 use crate::protocol::{JsonRpcId, JsonRpcResponse};
@@ -423,29 +426,25 @@ impl Handlers {
             }
         };
 
-        // Get list of indexed files as source of memories
-        let indexed_files = match self.teleological_store.list_indexed_files().await {
-            Ok(files) => files,
+        // Get ALL memories from storage (not just file-indexed ones)
+        // This includes both file chunks AND manually stored memories via store_memory
+        let all_fingerprints = match self
+            .teleological_store
+            .scan_fingerprints_for_clustering(Some(max_memories))
+            .await
+        {
+            Ok(fps) => fps,
             Err(e) => {
-                warn!(error = %e, "trigger_causal_discovery_extract: Could not list indexed files");
-                Vec::new()
+                error!(error = %e, "trigger_causal_discovery_extract: Failed to scan fingerprints");
+                return self.tool_error(
+                    id,
+                    &format!("Failed to scan fingerprints for causal analysis: {}", e),
+                );
             }
         };
 
-        // Collect memory IDs from indexed files
-        let mut memory_ids: Vec<uuid::Uuid> = Vec::new();
-        for file in indexed_files.iter().take(max_memories * 2) {
-            if let Ok(ids) = self
-                .teleological_store
-                .get_fingerprints_for_file(&file.file_path)
-                .await
-            {
-                memory_ids.extend(ids);
-                if memory_ids.len() >= max_memories {
-                    break;
-                }
-            }
-        }
+        // Extract memory IDs from fingerprints
+        let memory_ids: Vec<uuid::Uuid> = all_fingerprints.iter().map(|(id, _)| *id).collect();
 
         if memory_ids.is_empty() {
             return self.tool_result(
@@ -455,13 +454,11 @@ impl Handlers {
                     "mode": "extract",
                     "memoriesAnalyzed": 0,
                     "relationshipsFound": 0,
-                    "message": "No memories found for analysis",
+                    "message": "No memories found for analysis - storage is empty",
                     "dryRun": dry_run
                 }),
             );
         }
-
-        memory_ids.truncate(max_memories);
 
         info!(
             memory_count = memory_ids.len(),
@@ -579,8 +576,104 @@ impl Handlers {
                             causal_id = %causal_id,
                             source_id = %memory_id,
                             cause = %causal_rel.cause_statement,
-                            "trigger_causal_discovery_extract: Stored relationship"
+                            "trigger_causal_discovery_extract: Stored CausalRelationship"
                         );
+
+                        // NEW: Generate full 13-embedder fingerprint for the explanation
+                        // E5+LLM is the ONLY embedder pair that GENERATES new knowledge.
+                        // This knowledge deserves full 13-embedder treatment.
+                        let metadata = EmbeddingMetadata::default().with_causal_hint(CausalHint {
+                            is_causal: true,
+                            direction_hint: CausalDirectionHint::Neutral, // Explanation contains both cause and effect
+                            confidence: relationship.confidence,
+                            key_phrases: vec![
+                                relationship.cause.clone(),
+                                relationship.effect.clone(),
+                            ],
+                            description: Some(relationship.explanation.clone()),
+                        });
+
+                        match self
+                            .multi_array_provider
+                            .embed_all_with_metadata(&relationship.explanation, metadata)
+                            .await
+                        {
+                            Ok(embedding_output) => {
+                                // Compute SHA-256 hash of the explanation content
+                                use sha2::{Sha256, Digest};
+                                let mut hasher = Sha256::new();
+                                hasher.update(relationship.explanation.as_bytes());
+                                let content_hash: [u8; 32] = hasher.finalize().into();
+
+                                // Create TeleologicalFingerprint with CausalExplanation source
+                                let fingerprint = TeleologicalFingerprint::new(
+                                    embedding_output.fingerprint,
+                                    content_hash,
+                                );
+
+                                // Create source metadata linking to both original memory and causal relationship
+                                let source_metadata = SourceMetadata::causal_explanation(
+                                    *memory_id,
+                                    causal_id,
+                                    relationship.mechanism_type.as_str().to_string(),
+                                    relationship.confidence,
+                                );
+
+                                // Store the full 13-embedder fingerprint
+                                match self.teleological_store.store(fingerprint.clone()).await {
+                                    Ok(fp_id) => {
+                                        // Store the content
+                                        if let Err(e) = self
+                                            .teleological_store
+                                            .store_content(fp_id, &relationship.explanation)
+                                            .await
+                                        {
+                                            warn!(
+                                                fp_id = %fp_id,
+                                                error = %e,
+                                                "Failed to store explanation content"
+                                            );
+                                        }
+
+                                        // Store source metadata
+                                        if let Err(e) = self
+                                            .teleological_store
+                                            .store_source_metadata(fp_id, &source_metadata)
+                                            .await
+                                        {
+                                            warn!(
+                                                fp_id = %fp_id,
+                                                error = %e,
+                                                "Failed to store source metadata"
+                                            );
+                                        }
+
+                                        debug!(
+                                            fp_id = %fp_id,
+                                            causal_id = %causal_id,
+                                            "trigger_causal_discovery_extract: Stored 13-embedder fingerprint"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            causal_id = %causal_id,
+                                            error = %e,
+                                            "Failed to store 13-embedder fingerprint"
+                                        );
+                                        // Don't count as error - CausalRelationship was stored
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!(
+                                    causal_id = %causal_id,
+                                    error = %e,
+                                    "Failed to generate 13-embedder fingerprint for explanation"
+                                );
+                                // Don't count as error - CausalRelationship was stored
+                            }
+                        }
+
                         total_relationships += 1;
                     }
                     Err(e) => {

@@ -204,7 +204,7 @@ impl Handlers {
             "search_causal_relationships: Search complete"
         );
 
-        // Step 3: Fetch full causal relationships and build response
+        // Step 3: Fetch full causal relationships and build response with provenance
         let mut results = Vec::with_capacity(search_results.len());
 
         for (causal_id, similarity) in search_results {
@@ -229,6 +229,44 @@ impl Handlers {
                     // Include source content if requested
                     if include_source {
                         result["sourceContent"] = json!(rel.source_content);
+                    }
+
+                    // Fetch source metadata for provenance tracking
+                    if let Ok(Some(source_meta)) = self
+                        .teleological_store
+                        .get_source_metadata(rel.source_fingerprint_id)
+                        .await
+                    {
+                        // Build provenance object with file path and line numbers
+                        let provenance = json!({
+                            "sourceType": format!("{}", source_meta.source_type),
+                            "filePath": source_meta.file_path,
+                            "startLine": source_meta.start_line,
+                            "endLine": source_meta.end_line,
+                            "chunkIndex": source_meta.chunk_index,
+                            "totalChunks": source_meta.total_chunks,
+                            "hookType": source_meta.hook_type,
+                            "toolName": source_meta.tool_name,
+                            "displayString": source_meta.display_string(),
+                        });
+                        result["provenance"] = provenance;
+                    }
+
+                    // Include extraction spans for fine-grained provenance
+                    if !rel.source_spans.is_empty() {
+                        let extraction_spans: Vec<serde_json::Value> = rel
+                            .source_spans
+                            .iter()
+                            .map(|s| {
+                                json!({
+                                    "startChar": s.start_char,
+                                    "endChar": s.end_char,
+                                    "textExcerpt": s.text_excerpt,
+                                    "spanType": s.span_type,
+                                })
+                            })
+                            .collect();
+                        result["extractionSpans"] = json!(extraction_spans);
                     }
 
                     results.push(result);

@@ -110,3 +110,102 @@ Neither mode detected bidirectional relationships in the SciFact dataset. This i
 - Full results: `benchmark_results/causal_benchmark_enhanced.json`
 - Benchmark code: `crates/context-graph-causal-agent/examples/benchmark_causal_enhanced.rs`
 - GBNF Grammar: `models/hermes-2-pro/causal_analysis.gbnf`
+
+---
+
+# CausalExplanation Provenance Tracking Benchmarks
+
+## Overview
+
+Three benchmarks test the provenance tracking system that traces causal explanations back to their exact source locations (file path, line numbers, text spans).
+
+## Benchmark Suite
+
+### 1. Basic Provenance Benchmark (`causal-provenance-bench`)
+
+Tests core provenance type system functionality.
+
+| Metric | Result | Target | Status |
+|--------|--------|--------|--------|
+| Span Populated | 100% | >95% | ✅ PASS |
+| Span Accuracy | 100% | >95% | ✅ PASS |
+| Offset Valid | 100% | 100% | ✅ PASS |
+| Source Link Valid | 100% | 100% | ✅ PASS |
+| Provenance Display | 100% | 100% | ✅ PASS |
+
+**Result:** All infrastructure targets met.
+
+### 2. E2E Simulation Benchmark (`causal-provenance-e2e-bench`)
+
+Full pipeline test with simulated LLM extraction.
+
+| Metric | Result | Target | Status |
+|--------|--------|--------|--------|
+| Span Populated Rate | 100% | >95% | ✅ PASS |
+| Offset Valid Rate | 100% | >95% | ✅ PASS |
+| Text Match Rate | 100% | >85% | ✅ PASS |
+| Storage Success | 100% | 100% | ✅ PASS |
+| Provenance Chain Complete | 100% | >95% | ✅ PASS |
+| MCP Provenance Display | 100% | >95% | ✅ PASS |
+| Search Precision@5 | 85% | >70% | ✅ PASS |
+
+**Key Findings:**
+- 20 relationships extracted from 20 documents (18 causal, 2 control)
+- E5 dual embedding rate: 100%
+- Complete provenance chain functional
+
+### 3. Real LLM Benchmark (`causal-provenance-llm-bench`)
+
+Tests actual Hermes 2 Pro with GBNF grammar constraints.
+
+| Metric | Result | Target | Status |
+|--------|--------|--------|--------|
+| JSON Parse Success | 100% | >95% | ✅ PASS |
+| Span Populated Rate | 100% | >80% | ✅ PASS |
+| Offset Valid Rate | 100% | >90% | ✅ PASS |
+| Text Match Rate | 0% | >70% | ❌ FAIL |
+
+**Key Findings:**
+- GBNF grammar works correctly (100% JSON parse success)
+- Only 1/10 documents yielded relationships (conservative extraction)
+- Text excerpts are paraphrased, not verbatim (known LLM behavior)
+- Average extraction time: 3,899ms per document
+
+## Root Cause Analysis
+
+### Text Match Failure (0%)
+
+The LLM paraphrases text_excerpt instead of copying verbatim. The GBNF grammar ensures valid JSON and offsets, but cannot enforce exact text copying.
+
+**Solutions:**
+1. Add few-shot examples showing exact verbatim copying
+2. Use stronger prompt language: "COPY VERBATIM - do not paraphrase"
+3. Post-processing: Use valid offsets to slice original source text
+
+### Low Extraction Rate (10%)
+
+The LLM is being conservative about identifying causal content.
+
+**Solutions:**
+1. Reduce confidence threshold
+2. Adjust prompt to be less restrictive
+3. Domain-specific fine-tuning
+
+## Overall Assessment
+
+| Component | Status |
+|-----------|--------|
+| Provenance Type System | ✅ Fully Operational |
+| GBNF Grammar Constraints | ✅ Working Correctly |
+| Storage & Retrieval Chain | ✅ Functional |
+| MCP Display | ✅ Showing Provenance |
+| LLM Text Extraction | ⚠️ Needs Prompt Refinement |
+
+## Benchmark Files
+
+- `benchmark_results/causal_provenance_bench.json` - Basic provenance validation
+- `benchmark_results/causal_provenance_e2e_bench.json` - E2E simulation results
+- `benchmark_results/causal_provenance_llm_bench.json` - Real LLM results
+- `crates/context-graph-benchmark/src/bin/causal_provenance_bench.rs`
+- `crates/context-graph-benchmark/src/bin/causal_provenance_e2e_bench.rs`
+- `crates/context-graph-benchmark/src/bin/causal_provenance_llm_bench.rs`

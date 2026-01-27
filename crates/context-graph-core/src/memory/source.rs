@@ -5,6 +5,7 @@
 //! - Hook types per .claude/settings.json native hook architecture
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Discriminated source type for Memory origin.
 ///
@@ -12,7 +13,8 @@ use serde::{Deserialize, Serialize};
 /// - HookDescription: From Claude Code hook events
 /// - ClaudeResponse: From session end/stop captured responses
 /// - MDFileChunk: From markdown file watcher chunks
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// - CausalExplanation: LLM-generated causal explanation (E5+LLM knowledge generation)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MemorySource {
     /// Memory captured from a Claude Code hook event.
     HookDescription {
@@ -34,6 +36,22 @@ pub enum MemorySource {
         chunk_index: u32,
         /// Total number of chunks from the file.
         total_chunks: u32,
+    },
+    /// Memory created from LLM-generated causal explanation.
+    ///
+    /// E5+LLM is the ONLY embedder pair that GENERATES new knowledge.
+    /// Other embedders just encode existing text - E5+LLM discovers and
+    /// articulates causal relationships that weren't explicitly stated.
+    /// This generated explanation IS knowledge and deserves full 13-embedder treatment.
+    CausalExplanation {
+        /// UUID of the original memory that was analyzed.
+        source_fingerprint_id: Uuid,
+        /// Link to the associated CausalRelationship (for dual lookup).
+        causal_relationship_id: Uuid,
+        /// Type of causal mechanism: "direct", "mediated", "feedback", "temporal"
+        mechanism_type: String,
+        /// LLM confidence score [0.0, 1.0].
+        confidence: f32,
     },
 }
 
@@ -121,6 +139,18 @@ impl std::fmt::Display for MemorySource {
                     "MDFileChunk({file_path}, {}/{})",
                     chunk_index + 1,
                     total_chunks
+                )
+            }
+            MemorySource::CausalExplanation {
+                source_fingerprint_id,
+                causal_relationship_id,
+                mechanism_type,
+                confidence,
+            } => {
+                write!(
+                    f,
+                    "CausalExplanation(source={}, rel={}, type={}, conf={:.2})",
+                    source_fingerprint_id, causal_relationship_id, mechanism_type, confidence
                 )
             }
         }

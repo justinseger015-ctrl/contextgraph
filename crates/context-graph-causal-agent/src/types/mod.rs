@@ -188,6 +188,104 @@ impl MechanismType {
 }
 
 // ============================================================================
+// SOURCE SPAN TYPES (Provenance Tracking)
+// ============================================================================
+
+/// A span in the source text where a causal relationship was found.
+///
+/// Provides provenance tracking by recording exact character offsets
+/// into the input text from which a causal relationship was extracted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceSpan {
+    /// Character offset from start of input text (0-based).
+    pub start_char: usize,
+
+    /// Character offset for end of span (exclusive).
+    pub end_char: usize,
+
+    /// The exact text excerpt (truncated to 200 chars).
+    /// This MUST be copied exactly from the input, not paraphrased.
+    pub text_excerpt: String,
+
+    /// What this span represents: "cause", "effect", or "full".
+    pub span_type: SpanType,
+}
+
+impl SourceSpan {
+    /// Create a new source span with validation.
+    pub fn new(
+        start_char: usize,
+        end_char: usize,
+        text_excerpt: impl Into<String>,
+        span_type: SpanType,
+    ) -> Self {
+        let excerpt = text_excerpt.into();
+        // Truncate to 200 chars if needed
+        let truncated = if excerpt.chars().count() > 200 {
+            excerpt.chars().take(200).collect::<String>() + "..."
+        } else {
+            excerpt
+        };
+        Self {
+            start_char,
+            end_char,
+            text_excerpt: truncated,
+            span_type,
+        }
+    }
+
+    /// Check if the offsets are within bounds of a given text length.
+    pub fn is_valid_for(&self, text_len: usize) -> bool {
+        self.start_char < self.end_char && self.end_char <= text_len
+    }
+
+    /// Validate that text_excerpt matches the source text at the given offsets.
+    ///
+    /// Returns false if offsets are out of bounds or cross unicode boundaries.
+    pub fn matches_source(&self, source_text: &str) -> bool {
+        // Use .get() to handle invalid byte boundaries gracefully
+        let Some(actual) = source_text.get(self.start_char..self.end_char) else {
+            return false;
+        };
+        // Allow for truncation - check if excerpt starts with actual or vice versa
+        self.text_excerpt.trim() == actual.trim()
+            || actual.starts_with(self.text_excerpt.trim_end_matches("..."))
+    }
+}
+
+/// Type of span in source text.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SpanType {
+    /// Span containing the cause portion of the relationship.
+    Cause,
+    /// Span containing the effect portion of the relationship.
+    Effect,
+    /// Span containing the full relationship context.
+    Full,
+}
+
+impl SpanType {
+    /// Parse from string representation.
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "cause" => Self::Cause,
+            "effect" => Self::Effect,
+            _ => Self::Full,
+        }
+    }
+
+    /// Convert to string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Cause => "cause",
+            Self::Effect => "effect",
+            Self::Full => "full",
+        }
+    }
+}
+
+// ============================================================================
 // MULTI-RELATIONSHIP EXTRACTION TYPES
 // ============================================================================
 
@@ -213,6 +311,11 @@ pub struct ExtractedCausalRelationship {
 
     /// Type of causal mechanism.
     pub mechanism_type: MechanismType,
+
+    /// Source spans indicating where in the input text this relationship was found.
+    /// Each relationship should have at least one span for provenance tracking.
+    #[serde(default)]
+    pub source_spans: Vec<SourceSpan>,
 }
 
 impl ExtractedCausalRelationship {
@@ -230,12 +333,53 @@ impl ExtractedCausalRelationship {
             explanation,
             confidence: confidence.clamp(0.0, 1.0),
             mechanism_type,
+            source_spans: Vec::new(),
         }
+    }
+
+    /// Create a new extracted relationship with source spans.
+    pub fn new_with_spans(
+        cause: String,
+        effect: String,
+        explanation: String,
+        confidence: f32,
+        mechanism_type: MechanismType,
+        source_spans: Vec<SourceSpan>,
+    ) -> Self {
+        Self {
+            cause,
+            effect,
+            explanation,
+            confidence: confidence.clamp(0.0, 1.0),
+            mechanism_type,
+            source_spans,
+        }
+    }
+
+    /// Add source spans to this relationship.
+    pub fn with_source_spans(mut self, spans: Vec<SourceSpan>) -> Self {
+        self.source_spans = spans;
+        self
     }
 
     /// Check if this relationship meets the minimum confidence threshold.
     pub fn is_confident(&self, threshold: f32) -> bool {
         self.confidence >= threshold
+    }
+
+    /// Check if this relationship has provenance tracking.
+    pub fn has_provenance(&self) -> bool {
+        !self.source_spans.is_empty()
+    }
+
+    /// Validate source spans against the original source text.
+    pub fn validate_spans(&self, source_text: &str) -> bool {
+        if self.source_spans.is_empty() {
+            return false;
+        }
+        self.source_spans.iter().all(|span| {
+            span.is_valid_for(source_text.len()) && span.matches_source(source_text)
+        })
     }
 }
 

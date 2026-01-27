@@ -486,15 +486,35 @@ pub struct CauseSearchResult {
 }
 
 /// Source information for a search result.
+///
+/// Provides provenance information for tracking where a result came from.
+/// For MDFileChunk sources, includes file path and line numbers for precise
+/// location tracking. For HookDescription sources, includes hook type and tool name.
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceInfo {
-    /// Source type (MDFileChunk, HookDescription, etc.)
+    /// Source type (MDFileChunk, HookDescription, ClaudeResponse, etc.)
     #[serde(rename = "type")]
     pub source_type: String,
 
     /// File path for MDFileChunk sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_path: Option<String>,
+
+    /// Start line number for MDFileChunk sources (1-based).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_line: Option<u32>,
+
+    /// End line number for MDFileChunk sources (1-based, inclusive).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<u32>,
+
+    /// Chunk index for MDFileChunk sources (0-based).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_index: Option<u32>,
+
+    /// Total number of chunks for MDFileChunk sources.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_chunks: Option<u32>,
 
     /// Hook type for HookDescription sources.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -503,6 +523,92 @@ pub struct SourceInfo {
     /// Tool name for tool-related hook sources.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
+
+    /// Display string for user-friendly provenance output.
+    /// Example: "/docs/guide.md:15-42 (chunk 3/5)"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_string: Option<String>,
+}
+
+impl SourceInfo {
+    /// Create SourceInfo for an MDFileChunk source with line numbers.
+    pub fn from_md_file(
+        file_path: String,
+        start_line: Option<u32>,
+        end_line: Option<u32>,
+        chunk_index: Option<u32>,
+        total_chunks: Option<u32>,
+    ) -> Self {
+        let display = Self::format_display_string(
+            &file_path,
+            start_line,
+            end_line,
+            chunk_index,
+            total_chunks,
+        );
+
+        Self {
+            source_type: "MDFileChunk".to_string(),
+            file_path: Some(file_path),
+            start_line,
+            end_line,
+            chunk_index,
+            total_chunks,
+            hook_type: None,
+            tool_name: None,
+            display_string: Some(display),
+        }
+    }
+
+    /// Create SourceInfo for a HookDescription source.
+    pub fn from_hook(hook_type: String, tool_name: Option<String>) -> Self {
+        let display = match &tool_name {
+            Some(tool) => format!("hook:{}:{}", hook_type, tool),
+            None => format!("hook:{}", hook_type),
+        };
+
+        Self {
+            source_type: "HookDescription".to_string(),
+            file_path: None,
+            start_line: None,
+            end_line: None,
+            chunk_index: None,
+            total_chunks: None,
+            hook_type: Some(hook_type),
+            tool_name,
+            display_string: Some(display),
+        }
+    }
+
+    /// Format a display string for file sources.
+    ///
+    /// Examples:
+    /// - "/docs/guide.md:15-42 (chunk 3/5)"
+    /// - "/docs/guide.md:15-42"
+    /// - "/docs/guide.md (chunk 3/5)"
+    fn format_display_string(
+        file_path: &str,
+        start_line: Option<u32>,
+        end_line: Option<u32>,
+        chunk_index: Option<u32>,
+        total_chunks: Option<u32>,
+    ) -> String {
+        let mut display = file_path.to_string();
+
+        // Add line range if available
+        if let (Some(start), Some(end)) = (start_line, end_line) {
+            display = format!("{}:{}-{}", display, start, end);
+        } else if let Some(start) = start_line {
+            display = format!("{}:{}", display, start);
+        }
+
+        // Add chunk info if available
+        if let (Some(idx), Some(total)) = (chunk_index, total_chunks) {
+            display = format!("{} (chunk {}/{})", display, idx + 1, total);
+        }
+
+        display
+    }
 }
 
 /// Response for search_causes tool.

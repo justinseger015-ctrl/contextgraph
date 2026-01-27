@@ -67,6 +67,20 @@ pub struct SourceMetadata {
     /// - "effect": Document primarily describes effects (higher E5 effect norm)
     /// - "unknown": No clear causal direction detected
     pub causal_direction: Option<String>,
+
+    // ===== CausalExplanation-specific fields =====
+
+    /// UUID of the original memory that was analyzed (for CausalExplanation).
+    pub source_fingerprint_id: Option<uuid::Uuid>,
+
+    /// Link to the associated CausalRelationship (for CausalExplanation).
+    pub causal_relationship_id: Option<uuid::Uuid>,
+
+    /// Type of causal mechanism (for CausalExplanation): "direct", "mediated", "feedback", "temporal"
+    pub mechanism_type: Option<String>,
+
+    /// LLM confidence score [0.0, 1.0] (for CausalExplanation).
+    pub confidence: Option<f32>,
 }
 
 /// Type of memory source.
@@ -80,6 +94,13 @@ pub enum SourceType {
     ClaudeResponse,
     /// User-injected via MCP tools
     Manual,
+    /// LLM-generated causal explanation (E5+LLM knowledge generation)
+    ///
+    /// E5+LLM is the ONLY embedder pair that GENERATES new knowledge.
+    /// This source type indicates the memory content is an LLM-articulated
+    /// causal relationship, stored as a first-class teleological fingerprint
+    /// with all 13 embeddings.
+    CausalExplanation,
     /// Unknown source
     Unknown,
 }
@@ -98,6 +119,10 @@ impl Default for SourceMetadata {
             session_id: None,
             session_sequence: None,
             causal_direction: None,
+            source_fingerprint_id: None,
+            causal_relationship_id: None,
+            mechanism_type: None,
+            confidence: None,
         }
     }
 }
@@ -123,6 +148,10 @@ impl SourceMetadata {
             session_id: None,
             session_sequence: None,
             causal_direction: None,
+            source_fingerprint_id: None,
+            causal_relationship_id: None,
+            mechanism_type: None,
+            confidence: None,
         }
     }
 
@@ -154,6 +183,10 @@ impl SourceMetadata {
             session_id: None,
             session_sequence: None,
             causal_direction: None,
+            source_fingerprint_id: None,
+            causal_relationship_id: None,
+            mechanism_type: None,
+            confidence: None,
         }
     }
 
@@ -176,6 +209,10 @@ impl SourceMetadata {
             session_id: None,
             session_sequence: None,
             causal_direction: None,
+            source_fingerprint_id: None,
+            causal_relationship_id: None,
+            mechanism_type: None,
+            confidence: None,
         }
     }
 
@@ -193,6 +230,10 @@ impl SourceMetadata {
             session_id: None,
             session_sequence: None,
             causal_direction: None,
+            source_fingerprint_id: None,
+            causal_relationship_id: None,
+            mechanism_type: None,
+            confidence: None,
         }
     }
 
@@ -210,6 +251,43 @@ impl SourceMetadata {
             session_id: None,
             session_sequence: None,
             causal_direction: None,
+            source_fingerprint_id: None,
+            causal_relationship_id: None,
+            mechanism_type: None,
+            confidence: None,
+        }
+    }
+
+    /// Create metadata for a CausalExplanation source.
+    ///
+    /// # Arguments
+    ///
+    /// * `source_fingerprint_id` - UUID of the original memory that was analyzed
+    /// * `causal_relationship_id` - UUID of the associated CausalRelationship
+    /// * `mechanism_type` - Type of causal mechanism: "direct", "mediated", "feedback", "temporal"
+    /// * `confidence` - LLM confidence score [0.0, 1.0]
+    pub fn causal_explanation(
+        source_fingerprint_id: uuid::Uuid,
+        causal_relationship_id: uuid::Uuid,
+        mechanism_type: String,
+        confidence: f32,
+    ) -> Self {
+        Self {
+            source_type: SourceType::CausalExplanation,
+            file_path: None,
+            chunk_index: None,
+            total_chunks: None,
+            start_line: None,
+            end_line: None,
+            hook_type: None,
+            tool_name: None,
+            session_id: None,
+            session_sequence: None,
+            causal_direction: None,
+            source_fingerprint_id: Some(source_fingerprint_id),
+            causal_relationship_id: Some(causal_relationship_id),
+            mechanism_type: Some(mechanism_type),
+            confidence: Some(confidence),
         }
     }
 
@@ -276,6 +354,11 @@ impl SourceMetadata {
             }
             SourceType::ClaudeResponse => "Source: Claude response capture".to_string(),
             SourceType::Manual => "Source: Manual injection".to_string(),
+            SourceType::CausalExplanation => {
+                let mech = self.mechanism_type.as_deref().unwrap_or("unknown");
+                let conf = self.confidence.unwrap_or(0.0);
+                format!("Source: CausalExplanation[{}] (confidence: {:.2})", mech, conf)
+            }
             SourceType::Unknown => "Source: Unknown".to_string(),
         }
     }
@@ -288,6 +371,7 @@ impl std::fmt::Display for SourceType {
             SourceType::HookDescription => write!(f, "HookDescription"),
             SourceType::ClaudeResponse => write!(f, "ClaudeResponse"),
             SourceType::Manual => write!(f, "Manual"),
+            SourceType::CausalExplanation => write!(f, "CausalExplanation"),
             SourceType::Unknown => write!(f, "Unknown"),
         }
     }

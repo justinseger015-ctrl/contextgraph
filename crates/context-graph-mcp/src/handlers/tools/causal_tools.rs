@@ -212,8 +212,13 @@ impl Handlers {
                 cause.source = Some(SourceInfo {
                     source_type: format!("{}", metadata.source_type),
                     file_path: metadata.file_path.clone(),
+                    start_line: metadata.start_line,
+                    end_line: metadata.end_line,
+                    chunk_index: metadata.chunk_index,
+                    total_chunks: metadata.total_chunks,
                     hook_type: metadata.hook_type.clone(),
                     tool_name: metadata.tool_name.clone(),
+                    display_string: Some(metadata.display_string()),
                 });
             }
 
@@ -434,8 +439,13 @@ impl Handlers {
                 effect.source = Some(SourceInfo {
                     source_type: format!("{}", metadata.source_type),
                     file_path: metadata.file_path.clone(),
+                    start_line: metadata.start_line,
+                    end_line: metadata.end_line,
+                    chunk_index: metadata.chunk_index,
+                    total_chunks: metadata.total_chunks,
                     hook_type: metadata.hook_type.clone(),
                     tool_name: metadata.tool_name.clone(),
+                    display_string: Some(metadata.display_string()),
                 });
             }
 

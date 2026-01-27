@@ -25,6 +25,93 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+// ============================================================================
+// SOURCE SPAN TYPES (Provenance Tracking)
+// ============================================================================
+
+/// A character span in the source text where a causal relationship was found.
+///
+/// Provides fine-grained provenance tracking by recording exact character offsets
+/// into the source content. This enables displaying the exact text that was
+/// used to derive a causal relationship.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CausalSourceSpan {
+    /// Character offset from start of source content (0-based).
+    pub start_char: usize,
+
+    /// Character offset for end of span (exclusive).
+    pub end_char: usize,
+
+    /// The exact text excerpt (truncated to 200 chars).
+    /// This MUST be copied exactly from the source, not paraphrased.
+    pub text_excerpt: String,
+
+    /// What this span represents: "cause", "effect", or "full".
+    pub span_type: String,
+}
+
+impl CausalSourceSpan {
+    /// Create a new causal source span.
+    pub fn new(
+        start_char: usize,
+        end_char: usize,
+        text_excerpt: impl Into<String>,
+        span_type: impl Into<String>,
+    ) -> Self {
+        let excerpt = text_excerpt.into();
+        // Truncate to 200 chars if needed
+        let truncated = if excerpt.chars().count() > 200 {
+            excerpt.chars().take(200).collect::<String>() + "..."
+        } else {
+            excerpt
+        };
+        Self {
+            start_char,
+            end_char,
+            text_excerpt: truncated,
+            span_type: span_type.into(),
+        }
+    }
+
+    /// Check if the offsets are within bounds of a given text length.
+    pub fn is_valid_for(&self, text_len: usize) -> bool {
+        self.start_char < self.end_char && self.end_char <= text_len
+    }
+
+    /// Validate that text_excerpt matches the source text at the given offsets.
+    ///
+    /// Returns true if the excerpt matches the actual source text (allowing for
+    /// truncation with "...").
+    pub fn matches_source(&self, source_text: &str) -> bool {
+        if self.end_char > source_text.len() {
+            return false;
+        }
+        let actual = &source_text[self.start_char..self.end_char];
+        // Allow for truncation - check if excerpt starts with actual or vice versa
+        self.text_excerpt.trim() == actual.trim()
+            || actual.starts_with(self.text_excerpt.trim_end_matches("..."))
+    }
+
+    /// Check if this is a "cause" span.
+    pub fn is_cause_span(&self) -> bool {
+        self.span_type == "cause"
+    }
+
+    /// Check if this is an "effect" span.
+    pub fn is_effect_span(&self) -> bool {
+        self.span_type == "effect"
+    }
+
+    /// Check if this is a "full" span.
+    pub fn is_full_span(&self) -> bool {
+        self.span_type == "full"
+    }
+}
+
+// ============================================================================
+// CAUSAL RELATIONSHIP
+// ============================================================================
+
 /// A causal relationship identified by LLM analysis.
 ///
 /// Contains the LLM-generated explanation with E5 dual embeddings for
@@ -118,6 +205,11 @@ pub struct CausalRelationship {
 
     /// Unix timestamp when relationship was identified.
     pub created_at: i64,
+
+    /// Character spans in source_content where this relationship was extracted.
+    /// Provides fine-grained provenance for displaying the exact source text.
+    #[serde(default)]
+    pub source_spans: Vec<CausalSourceSpan>,
 }
 
 impl CausalRelationship {
@@ -167,6 +259,39 @@ impl CausalRelationship {
             source_content,
             source_fingerprint_id,
             created_at: chrono::Utc::now().timestamp(),
+            source_spans: Vec::new(),
+        }
+    }
+
+    /// Create with source spans for provenance tracking.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_spans(
+        cause_statement: String,
+        effect_statement: String,
+        explanation: String,
+        e5_as_cause: Vec<f32>,
+        e5_as_effect: Vec<f32>,
+        e1_semantic: Vec<f32>,
+        source_content: String,
+        source_fingerprint_id: Uuid,
+        confidence: f32,
+        mechanism_type: String,
+        source_spans: Vec<CausalSourceSpan>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            cause_statement,
+            effect_statement,
+            explanation,
+            e5_as_cause,
+            e5_as_effect,
+            e1_semantic,
+            confidence: confidence.clamp(0.0, 1.0),
+            mechanism_type,
+            source_content,
+            source_fingerprint_id,
+            created_at: chrono::Utc::now().timestamp(),
+            source_spans,
         }
     }
 
@@ -198,7 +323,14 @@ impl CausalRelationship {
             source_content,
             source_fingerprint_id,
             created_at: chrono::Utc::now().timestamp(),
+            source_spans: Vec::new(),
         }
+    }
+
+    /// Add source spans to an existing relationship.
+    pub fn with_source_spans(mut self, spans: Vec<CausalSourceSpan>) -> Self {
+        self.source_spans = spans;
+        self
     }
 
     /// Check if all embeddings have the expected dimensions.
@@ -240,6 +372,50 @@ impl CausalRelationship {
             "temporal" | "sequence" => "temporal",
             _ => "direct",
         }
+    }
+
+    // ===== PROVENANCE METHODS =====
+
+    /// Check if this relationship has provenance tracking (source spans).
+    pub fn has_provenance(&self) -> bool {
+        !self.source_spans.is_empty()
+    }
+
+    /// Validate all source spans against the source content.
+    ///
+    /// Returns true if all spans have valid offsets and their excerpts
+    /// match the actual source content.
+    pub fn validate_spans(&self) -> bool {
+        if self.source_spans.is_empty() {
+            return false;
+        }
+        let source_len = self.source_content.len();
+        self.source_spans.iter().all(|span| {
+            span.is_valid_for(source_len) && span.matches_source(&self.source_content)
+        })
+    }
+
+    /// Get spans of a specific type.
+    pub fn spans_of_type(&self, span_type: &str) -> Vec<&CausalSourceSpan> {
+        self.source_spans
+            .iter()
+            .filter(|s| s.span_type == span_type)
+            .collect()
+    }
+
+    /// Get the "cause" span(s).
+    pub fn cause_spans(&self) -> Vec<&CausalSourceSpan> {
+        self.spans_of_type("cause")
+    }
+
+    /// Get the "effect" span(s).
+    pub fn effect_spans(&self) -> Vec<&CausalSourceSpan> {
+        self.spans_of_type("effect")
+    }
+
+    /// Get the "full" span(s).
+    pub fn full_spans(&self) -> Vec<&CausalSourceSpan> {
+        self.spans_of_type("full")
     }
 }
 
