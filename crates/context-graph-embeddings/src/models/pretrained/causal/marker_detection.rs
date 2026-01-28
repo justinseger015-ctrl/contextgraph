@@ -28,10 +28,6 @@ pub struct CausalMarkerResult {
     pub cause_marker_indices: Vec<usize>,
     /// Token indices of effect indicators (e.g., "therefore", "results in")
     pub effect_marker_indices: Vec<usize>,
-    /// All marker indices combined (for unified global attention)
-    pub all_marker_indices: Vec<usize>,
-    /// Detected dominant direction (if any)
-    pub detected_direction: CausalDirection,
     /// Causal strength score [0.0, 1.0]
     pub causal_strength: f32,
 }
@@ -97,18 +93,6 @@ impl CausalMarkerResult {
         weights
     }
 
-}
-
-/// Direction of causal relationship detected in text.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum CausalDirection {
-    /// Text emphasizes causes (e.g., "because X, Y happened")
-    Cause,
-    /// Text emphasizes effects (e.g., "X happened, therefore Y")
-    Effect,
-    /// Both or neither detected
-    #[default]
-    Unknown,
 }
 
 /// Cause indicator patterns for marker detection.
@@ -414,30 +398,14 @@ pub fn detect_causal_markers(text: &str, encoding: &Encoding) -> CausalMarkerRes
     effect_indices.sort_unstable();
     effect_indices.dedup();
 
-    // Combine all markers
-    let mut all_indices = cause_indices.clone();
-    all_indices.extend(&effect_indices);
-    all_indices.sort_unstable();
-    all_indices.dedup();
-
-    // Determine dominant direction based on counts
-    let detected_direction = match cause_indices.len().cmp(&effect_indices.len()) {
-        std::cmp::Ordering::Greater => CausalDirection::Cause,
-        std::cmp::Ordering::Less => CausalDirection::Effect,
-        std::cmp::Ordering::Equal if !cause_indices.is_empty() => CausalDirection::Cause, // Tie-breaker
-        _ => CausalDirection::Unknown,
-    };
-
     // Compute causal strength based on marker density
     let word_count = text.split_whitespace().count().max(1) as f32;
-    let total_markers = all_indices.len() as f32;
+    let total_markers = (cause_indices.len() + effect_indices.len()) as f32;
     let causal_strength = (total_markers / word_count.sqrt()).min(1.0);
 
     CausalMarkerResult {
         cause_marker_indices: cause_indices,
         effect_marker_indices: effect_indices,
-        all_marker_indices: all_indices,
-        detected_direction,
         causal_strength,
     }
 }
@@ -459,17 +427,10 @@ mod tests {
     }
 
     #[test]
-    fn test_causal_direction_default() {
-        assert_eq!(CausalDirection::default(), CausalDirection::Unknown);
-    }
-
-    #[test]
     fn test_marker_result_default() {
         let result = CausalMarkerResult::default();
         assert!(result.cause_marker_indices.is_empty());
         assert!(result.effect_marker_indices.is_empty());
-        assert!(result.all_marker_indices.is_empty());
-        assert_eq!(result.detected_direction, CausalDirection::Unknown);
         assert_eq!(result.causal_strength, 0.0);
     }
 }
