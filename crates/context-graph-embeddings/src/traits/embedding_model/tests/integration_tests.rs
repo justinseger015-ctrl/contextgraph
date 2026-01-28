@@ -82,7 +82,7 @@ async fn test_dyn_trait_reference_works() {
     let model_ref: &dyn EmbeddingModel = &model;
 
     assert_eq!(model_ref.model_id(), ModelId::Graph);
-    assert_eq!(model_ref.dimension(), 384);
+    assert_eq!(model_ref.dimension(), 1024); // e5-large-v2 (upgraded from MiniLM 384D)
     assert!(model_ref.is_initialized());
 
     let input = ModelInput::text("Reference test").unwrap();

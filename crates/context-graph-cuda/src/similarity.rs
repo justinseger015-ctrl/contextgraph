@@ -21,11 +21,10 @@
 //! # Memory Layout
 //!
 //! Query tensors are pre-normalized and grouped by dimension:
-//! - Group 1024D: E1 (semantic), E9 (HDC)
+//! - Group 1024D: E1 (semantic), E8 (graph - e5-large-v2), E9 (HDC)
 //! - Group 768D: E5 (causal), E10 (multimodal), E11 (entity)
 //! - Group 512D: E2 (temporal recent), E3 (temporal periodic), E4 (temporal positional)
 //! - Group 1536D: E7 (code)
-//! - Group 384D: E8 (graph)
 //!
 //! Sparse embedders (E6, E13) and token-level (E12) are excluded from GPU batching.
 //!
@@ -46,7 +45,7 @@ use crate::error::{CudaError, CudaResult};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum DimensionGroup {
-    /// 1024-dimensional embedders: E1 (semantic), E9 (HDC)
+    /// 1024-dimensional embedders: E1 (semantic), E8 (graph - e5-large-v2), E9 (HDC)
     Dim1024 = 0,
     /// 768-dimensional embedders: E5 (causal), E10 (multimodal), E11 (entity)
     Dim768 = 1,
@@ -54,8 +53,6 @@ pub enum DimensionGroup {
     Dim512 = 2,
     /// 1536-dimensional embedder: E7 (code)
     Dim1536 = 3,
-    /// 384-dimensional embedder: E8 (graph)
-    Dim384 = 4,
 }
 
 impl DimensionGroup {
@@ -67,18 +64,16 @@ impl DimensionGroup {
             Self::Dim768 => 768,
             Self::Dim512 => 512,
             Self::Dim1536 => 1536,
-            Self::Dim384 => 384,
         }
     }
 
     /// Get all dimension groups in order.
-    pub const fn all() -> [DimensionGroup; 5] {
+    pub const fn all() -> [DimensionGroup; 4] {
         [
             Self::Dim1024,
             Self::Dim768,
             Self::Dim512,
             Self::Dim1536,
-            Self::Dim384,
         ]
     }
 
@@ -86,27 +81,24 @@ impl DimensionGroup {
     /// Returns (embedder_index, offset_in_group).
     pub const fn embedder_indices(&self) -> &'static [(usize, usize)] {
         match self {
-            // E1 (idx 0) and E9 (idx 8)
-            Self::Dim1024 => &[(0, 0), (8, 1)],
+            // E1 (idx 0), E8 (idx 7, upgraded to 1024D), E9 (idx 8)
+            Self::Dim1024 => &[(0, 0), (7, 1), (8, 2)],
             // E5 (idx 4), E10 (idx 9), E11 (idx 10)
             Self::Dim768 => &[(4, 0), (9, 1), (10, 2)],
             // E2 (idx 1), E3 (idx 2), E4 (idx 3)
             Self::Dim512 => &[(1, 0), (2, 1), (3, 2)],
             // E7 (idx 6)
             Self::Dim1536 => &[(6, 0)],
-            // E8 (idx 7)
-            Self::Dim384 => &[(7, 0)],
         }
     }
 
     /// Number of embedders in this dimension group.
     pub const fn embedder_count(&self) -> usize {
         match self {
-            Self::Dim1024 => 2,  // E1, E9
+            Self::Dim1024 => 3,  // E1, E8, E9
             Self::Dim768 => 3,  // E5, E10, E11
             Self::Dim512 => 3,  // E2, E3, E4
             Self::Dim1536 => 1, // E7
-            Self::Dim384 => 1,  // E8
         }
     }
 }
@@ -115,11 +107,10 @@ impl DimensionGroup {
 /// Returns None for sparse (E6, E13) and token-level (E12) embedders.
 pub const fn embedder_to_group(embedder_idx: usize) -> Option<DimensionGroup> {
     match embedder_idx {
-        0 | 8 => Some(DimensionGroup::Dim1024),      // E1, E9
+        0 | 7 | 8 => Some(DimensionGroup::Dim1024),  // E1, E8 (upgraded to 1024D), E9
         4 | 9 | 10 => Some(DimensionGroup::Dim768),  // E5, E10, E11
         1 | 2 | 3 => Some(DimensionGroup::Dim512),   // E2, E3, E4
         6 => Some(DimensionGroup::Dim1536),          // E7
-        7 => Some(DimensionGroup::Dim384),           // E8
         5 | 11 | 12 => None, // E6 (sparse), E12 (token), E13 (sparse)
         _ => None,
     }
@@ -157,7 +148,7 @@ impl BatchedQueryContext {
     /// * `query_vectors` - Array of 10 dense embedder vectors in order:
     ///   [E1, E2, E3, E4, E5, E7, E8, E9, E10, E11]
     pub fn new(query_vectors: &[&[f32]; 10]) -> CudaResult<Self> {
-        let dimensions = [1024, 512, 512, 512, 768, 1536, 384, 1024, 768, 768];
+        let dimensions = [1024, 512, 512, 512, 768, 1536, 1024, 1024, 768, 768];
         let mut normalized_vectors = [[0.0f32; 1536]; 10];
 
         for (i, &vec) in query_vectors.iter().enumerate() {
@@ -223,7 +214,7 @@ pub fn compute_batch_cosine_similarity(
         return Ok(Vec::new());
     }
 
-    let dimensions = [1024, 512, 512, 512, 768, 1536, 384, 1024, 768, 768];
+    let dimensions = [1024, 512, 512, 512, 768, 1536, 1024, 1024, 768, 768];
 
     // Pre-allocate result array
     let mut results = Vec::with_capacity(n_candidates);
@@ -334,7 +325,6 @@ mod tests {
         assert_eq!(DimensionGroup::Dim768.dimension(), 768);
         assert_eq!(DimensionGroup::Dim512.dimension(), 512);
         assert_eq!(DimensionGroup::Dim1536.dimension(), 1536);
-        assert_eq!(DimensionGroup::Dim384.dimension(), 384);
     }
 
     #[test]
@@ -351,8 +341,8 @@ mod tests {
         assert_eq!(embedder_to_group(5), None);
         // E7 (1536D)
         assert_eq!(embedder_to_group(6), Some(DimensionGroup::Dim1536));
-        // E8 (384D)
-        assert_eq!(embedder_to_group(7), Some(DimensionGroup::Dim384));
+        // E8 (1024D - upgraded from 384D to e5-large-v2)
+        assert_eq!(embedder_to_group(7), Some(DimensionGroup::Dim1024));
         // E9 (1024D)
         assert_eq!(embedder_to_group(8), Some(DimensionGroup::Dim1024));
         // E10 (768D)
@@ -404,7 +394,7 @@ mod tests {
         let e4 = vec![1.0f32; 512];  // E4: 512D
         let e5 = vec![1.0f32; 768];  // E5: 768D
         let e7 = vec![1.0f32; 1536]; // E7: 1536D
-        let e8 = vec![1.0f32; 384];  // E8: 384D
+        let e8 = vec![1.0f32; 1024]; // E8: 1024D (e5-large-v2)
         let e9 = vec![1.0f32; 1024]; // E9: 1024D
         let e10 = vec![1.0f32; 768]; // E10: 768D
         let e11 = vec![1.0f32; 768]; // E11: 768D

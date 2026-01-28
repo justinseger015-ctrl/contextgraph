@@ -400,10 +400,10 @@ mod tests {
             (ModelId::Causal, 768),             // E5: Longformer
             (ModelId::Sparse, 30522),           // E6: SPLADE (sparse vocab)
             (ModelId::Code, 1536),              // E7: Qodo-Embed-1-1.5B native
-            (ModelId::Graph, 384),              // E8: paraphrase-MiniLM
+            (ModelId::Graph, 1024),             // E8: e5-large-v2 (upgraded from MiniLM 384D)
             (ModelId::Hdc, 10000),              // E9: Hyperdimensional (10K-bit)
             (ModelId::Multimodal, 768),         // E10: CLIP
-            (ModelId::Entity, 384),             // E11: all-MiniLM
+            (ModelId::Entity, 768),             // E11: KEPLER (upgraded from MiniLM 384D)
             (ModelId::LateInteraction, 128),    // E12: ColBERT per-token
         ];
 

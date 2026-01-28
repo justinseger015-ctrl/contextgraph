@@ -493,14 +493,14 @@ mod tests {
     #[test]
     fn test_large_dimension() {
         let encoder = Float8E4M3Encoder::new();
-        // Test with E8_Graph dimension (384)
-        let embedding: Vec<f32> = (0..384).map(|i| (i as f32).sin()).collect();
+        // Test with E8_Graph dimension (1024, upgraded from MiniLM 384D to e5-large-v2)
+        let embedding: Vec<f32> = (0..1024).map(|i| (i as f32).sin()).collect();
 
         let quantized = encoder.quantize(&embedding).expect("quantize");
         let reconstructed = encoder.dequantize(&quantized).expect("dequantize");
 
-        assert_eq!(reconstructed.len(), 384);
-        assert_eq!(quantized.data.len(), 384);
+        assert_eq!(reconstructed.len(), 1024);
+        assert_eq!(quantized.data.len(), 1024);
     }
 
     #[test]
@@ -599,23 +599,23 @@ mod tests {
 
     #[test]
     fn test_e8_graph_dimension() {
-        // E8 has 384 dimensions
+        // E8 has 1024 dimensions (e5-large-v2, upgraded from MiniLM 384D)
         let encoder = Float8E4M3Encoder::new();
-        let embedding = vec![0.1f32; 384];
+        let embedding = vec![0.1f32; 1024];
 
         let quantized = encoder.quantize(&embedding).expect("quantize");
-        assert_eq!(quantized.original_dim, 384);
-        assert_eq!(quantized.data.len(), 384);
+        assert_eq!(quantized.original_dim, 1024);
+        assert_eq!(quantized.data.len(), 1024);
     }
 
     #[test]
     fn test_e11_entity_dimension() {
-        // E11 has 384 dimensions
+        // E11 has 768 dimensions (KEPLER, upgraded from MiniLM 384D)
         let encoder = Float8E4M3Encoder::new();
-        let embedding = vec![0.1f32; 384];
+        let embedding = vec![0.1f32; 768];
 
         let quantized = encoder.quantize(&embedding).expect("quantize");
-        assert_eq!(quantized.original_dim, 384);
-        assert_eq!(quantized.data.len(), 384);
+        assert_eq!(quantized.original_dim, 768);
+        assert_eq!(quantized.data.len(), 768);
     }
 }

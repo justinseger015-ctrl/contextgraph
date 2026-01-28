@@ -1015,7 +1015,7 @@ impl EmbedderImpactRunner {
             (EmbedderIndex::E5Causal, 768),
             (EmbedderIndex::E6Sparse, 30000), // Sparse
             (EmbedderIndex::E7Code, 1536),
-            (EmbedderIndex::E8Graph, 384),
+            (EmbedderIndex::E8Graph, 1024),
             (EmbedderIndex::E9HDC, 1024),
             (EmbedderIndex::E10Multimodal, 768),
             (EmbedderIndex::E11Entity, 768),

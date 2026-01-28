@@ -112,7 +112,7 @@ impl EmbedderId {
             EmbedderId::E5 => "768",
             EmbedderId::E6 => "sparse (~30K)",
             EmbedderId::E7 => "1536",
-            EmbedderId::E8 => "384",
+            EmbedderId::E8 => "1024",
             EmbedderId::E9 => "1024",
             EmbedderId::E10 => "768",
             EmbedderId::E11 => "768",

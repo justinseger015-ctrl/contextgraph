@@ -5,7 +5,7 @@
 //! # Key Verifications
 //! - Storage size targets (~17KB quantized fingerprint)
 //! - Model count: 13 embedders
-//! - Dimension totals: 10624D
+//! - Dimension totals: 11648D
 //! - Quantization method assignments per Constitution
 //! - Memory estimate calculations
 //!
@@ -73,10 +73,10 @@ fn test_storage_version() {
 // DIMENSION BENCHMARK TESTS
 // =============================================================================
 
-/// Test: Total dimension is 10624 (updated after E7 Code 768→1536 for Qodo-Embed)
+/// Test: Total dimension is 11648 (updated after E7 Code 768→1536 for Qodo-Embed)
 #[test]
 fn test_total_dimension_benchmark() {
-    assert_eq!(TOTAL_DIMENSION, 10624);
+    assert_eq!(TOTAL_DIMENSION, 11648);
     eprintln!("[BENCHMARK] Total dimension: {}D", TOTAL_DIMENSION);
 }
 
@@ -265,11 +265,11 @@ fn create_benchmark_embeddings() -> HashMap<u8, QuantizedEmbedding> {
         (3, QuantizationMethod::Float8E4M3, 512, 512), // E4: Float8
         (4, QuantizationMethod::PQ8, 768, 8),  // E5: PQ8
         (5, QuantizationMethod::SparseNative, 30522, 500), // E6: Sparse (~500 nnz * 2)
-        (6, QuantizationMethod::PQ8, 768, 8),  // E7: PQ8
-        (7, QuantizationMethod::Float8E4M3, 1536, 1536), // E8: Float8
+        (6, QuantizationMethod::PQ8, 1536, 8),  // E7: PQ8 (Qodo-Embed 1536D)
+        (7, QuantizationMethod::Float8E4M3, 1024, 1024), // E8: Float8 (e5-large-v2 1024D)
         (8, QuantizationMethod::Binary, 10000, 1250), // E9: Binary (10K bits / 8)
         (9, QuantizationMethod::PQ8, 768, 8),  // E10: PQ8
-        (10, QuantizationMethod::Float8E4M3, 384, 384), // E11: Float8
+        (10, QuantizationMethod::Float8E4M3, 768, 768), // E11: Float8 (KEPLER 768D)
         (11, QuantizationMethod::TokenPruning, 128, 256), // E12: TokenPruning
         (12, QuantizationMethod::SparseNative, 30522, 500), // E13: Sparse
     ];
@@ -639,7 +639,7 @@ fn test_constitution_constants_consistency() {
     assert_eq!(RRF_K, 60.0);
 
     // TOTAL_DIMENSION (updated after E7 Code 768→1536 for Qodo-Embed)
-    assert_eq!(TOTAL_DIMENSION, 10624);
+    assert_eq!(TOTAL_DIMENSION, 11648);
 
     eprintln!("[BENCHMARK] Constitution constants verified:");
     eprintln!("  NUM_EMBEDDERS = MODEL_COUNT = {}", NUM_EMBEDDERS);

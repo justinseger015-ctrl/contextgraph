@@ -139,7 +139,7 @@ fn test_expected_size_float8() {
 
     // Float8: 1 byte per element
     assert_eq!(router.expected_size(ModelId::TemporalRecent, 512), 512);
-    assert_eq!(router.expected_size(ModelId::Graph, 384), 384);
+    assert_eq!(router.expected_size(ModelId::Graph, 1024), 1024); // e5-large-v2 (upgraded from MiniLM 384D)
 }
 
 #[test]

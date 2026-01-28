@@ -7,16 +7,18 @@ use crate::gpu::BertWeights;
 use crate::traits::SingleModelConfig;
 use tokenizers::Tokenizer;
 
-/// Native dimension for all-MiniLM entity embeddings.
-pub const ENTITY_DIMENSION: usize = 384;
+/// Native dimension for KEPLER entity embeddings (RoBERTa-base + TransE).
+/// Upgraded from all-MiniLM 384D to KEPLER 768D.
+pub const ENTITY_DIMENSION: usize = 768;
 
-/// Maximum tokens for MiniLM (standard BERT-family limit).
+/// Maximum tokens for KEPLER (standard BERT-family limit).
 pub const ENTITY_MAX_TOKENS: usize = 512;
 
 /// Latency budget in milliseconds (P95 target).
 pub const ENTITY_LATENCY_BUDGET_MS: u64 = 2;
 
 /// HuggingFace model repository name.
+/// Note: This is the deprecated MiniLM model. Production uses ModelId::Kepler with KEPLER 768D.
 pub const ENTITY_MODEL_NAME: &str = "sentence-transformers/all-MiniLM-L6-v2";
 
 /// Internal state that varies based on feature flags.
@@ -34,16 +36,15 @@ pub(crate) enum ModelState {
     },
 }
 
-/// Entity embedding model using sentence-transformers/all-MiniLM-L6-v2.
+/// Entity embedding model (deprecated - use ModelId::Kepler for production).
 ///
-/// This model produces 384D vectors optimized for named entity embeddings
+/// This model produces 768D vectors optimized for named entity embeddings
 /// and TransE-style knowledge graph operations.
 ///
 /// # Architecture
 ///
-/// MiniLM is a distilled BERT model optimized for speed while maintaining
-/// good semantic understanding. The all-MiniLM variant is trained on
-/// a large corpus making it excellent for entity and general text embeddings.
+/// Production uses KEPLER (RoBERTa-base + TransE) at 768D.
+/// This EntityModel is legacy code using MiniLM - prefer KeplerModel for new code.
 ///
 /// # Entity-Specific Features
 ///

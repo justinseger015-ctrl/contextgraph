@@ -105,10 +105,10 @@ fn test_e7_code_native_dimension() {
 fn test_e8_graph_native_dimension() {
     assert_eq!(
         ModelId::Graph.dimension(),
-        384,
-        "E8 Graph: expected native dimension 384"
+        1024,
+        "E8 Graph: expected native dimension 1024 (e5-large-v2, upgraded from MiniLM 384D)"
     );
-    assert_eq!(GRAPH_NATIVE, 384, "GRAPH_NATIVE constant mismatch");
+    assert_eq!(GRAPH_NATIVE, 1024, "GRAPH_NATIVE constant mismatch");
 }
 
 /// Test E9 Hdc native dimension matches Constitution.
@@ -141,10 +141,10 @@ fn test_e10_multimodal_native_dimension() {
 fn test_e11_entity_native_dimension() {
     assert_eq!(
         ModelId::Entity.dimension(),
-        384,
-        "E11 Entity: expected native dimension 384"
+        768,
+        "E11 Entity: expected native dimension 768 (KEPLER, upgraded from MiniLM 384D)"
     );
-    assert_eq!(ENTITY_NATIVE, 384, "ENTITY_NATIVE constant mismatch");
+    assert_eq!(ENTITY_NATIVE, 768, "ENTITY_NATIVE constant mismatch");
 }
 
 /// Test E12 LateInteraction native dimension matches Constitution.

@@ -19,10 +19,10 @@ pub const EXPECTED_NATIVE_DIMS: [(ModelId, usize); 13] = [
     (ModelId::Causal, 768),             // E5
     (ModelId::Sparse, 30522),           // E6
     (ModelId::Code, 1536),              // E7
-    (ModelId::Graph, 384),              // E8
+    (ModelId::Graph, 1024),             // E8 (e5-large-v2, upgraded from MiniLM 384D)
     (ModelId::Hdc, 10000),              // E9
     (ModelId::Multimodal, 768),         // E10
-    (ModelId::Entity, 384),             // E11
+    (ModelId::Entity, 768),             // E11 (KEPLER, upgraded from MiniLM 384D)
     (ModelId::LateInteraction, 128),    // E12
     (ModelId::Splade, 30522),           // E13
 ];
@@ -37,10 +37,10 @@ pub const EXPECTED_PROJECTED_DIMS: [(ModelId, usize); 13] = [
     (ModelId::Causal, 768),             // E5 - no projection
     (ModelId::Sparse, 1536),            // E6 - 30K -> 1536
     (ModelId::Code, 1536),              // E7 - native 1536D
-    (ModelId::Graph, 384),              // E8 - no projection
+    (ModelId::Graph, 1024),             // E8 - e5-large-v2 (upgraded from MiniLM 384D)
     (ModelId::Hdc, 1024),               // E9 - 10K -> 1024
     (ModelId::Multimodal, 768),         // E10 - no projection
-    (ModelId::Entity, 384),             // E11 - no projection
+    (ModelId::Entity, 768),             // E11 - KEPLER (upgraded from MiniLM 384D)
     (ModelId::LateInteraction, 128),    // E12 - no projection
     (ModelId::Splade, 1536),            // E13 - 30K -> 1536
 ];
@@ -62,8 +62,9 @@ pub const EXPECTED_QUANTIZATION: [(ModelId, QuantizationMethod); 13] = [
     (ModelId::Splade, QuantizationMethod::SparseNative), // E13
 ];
 
-/// Expected total dimension sum (updated after E7 Code 768→1536 for Qodo-Embed).
-pub const EXPECTED_TOTAL_DIMENSION: usize = 10624;
+/// Expected total dimension sum.
+/// Updated: E8 upgraded 384→1024 (e5-large-v2), E11 upgraded 384→768 (KEPLER).
+pub const EXPECTED_TOTAL_DIMENSION: usize = 11648;
 
 /// Expected model count.
 pub const EXPECTED_MODEL_COUNT: usize = 13;

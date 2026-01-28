@@ -89,67 +89,9 @@ impl Default for ToolRegistry {
     }
 }
 
-/// Register all Context Graph MCP tools.
-///
-/// Uses existing definitions from tools/definitions/ modules.
-///
-/// 19 tools are exposed (inject_context merged into store_memory):
-///
-/// | Category | Count | Source |
-/// |----------|-------|--------|
-/// | Core | 4 | definitions/core.rs |
-/// | Merge | 1 | definitions/merge.rs |
-/// | Curation | 2 | definitions/curation.rs |
-/// | Topic | 4 | definitions/topic.rs |
-/// | File Watcher | 4 | definitions/file_watcher.rs |
-/// | Sequence | 4 | definitions/sequence.rs (E4 integration) |
-pub fn register_all_tools() -> ToolRegistry {
-    use super::definitions;
-
-    let mut registry = ToolRegistry::new();
-
-    // Register core tools (4): store_memory, get_memetic_status, search_graph, trigger_consolidation
-    // Note: inject_context was merged into store_memory
-    for tool in definitions::core::definitions() {
-        registry.register(tool);
-    }
-
-    // Register merge tools (1): merge_concepts
-    for tool in definitions::merge::definitions() {
-        registry.register(tool);
-    }
-
-    // Register curation tools (2): forget_concept, boost_importance
-    for tool in definitions::curation::definitions() {
-        registry.register(tool);
-    }
-
-    // Register topic tools (4): get_topic_portfolio, get_topic_stability, detect_topics, get_divergence_alerts
-    for tool in definitions::topic::definitions() {
-        registry.register(tool);
-    }
-
-    // Register file watcher tools (4): list_watched_files, get_file_watcher_stats, delete_file_content, reconcile_files
-    for tool in definitions::file_watcher::definitions() {
-        registry.register(tool);
-    }
-
-    // Register sequence tools (4): get_conversation_context, get_session_timeline, traverse_memory_chain, compare_session_states
-    for tool in definitions::sequence::definitions() {
-        registry.register(tool);
-    }
-
-    // Verify expected tool count (15 original + 4 sequence = 19 total)
-    // Note: inject_context merged into store_memory, reducing count by 1
-    let actual_count = registry.len();
-    assert_eq!(
-        actual_count, 19,
-        "Expected 19 tools (15 original + 4 sequence), got {}. Check definitions modules.",
-        actual_count
-    );
-
-    registry
-}
+// NOTE: register_all_tools() was removed as dead code.
+// Production uses get_tool_definitions() from definitions/mod.rs which returns 49 tools.
+// The old register_all_tools() only registered 19 tools and was never used in production.
 
 #[cfg(test)]
 mod tests {
@@ -164,13 +106,6 @@ mod tests {
     }
 
     #[test]
-    fn test_register_all_tools_count() {
-        let registry = register_all_tools();
-        // 15 original tools + 4 sequence tools = 19 total (inject_context merged into store_memory)
-        assert_eq!(registry.len(), 19, "Must have exactly 19 tools (15 original + 4 sequence)");
-    }
-
-    #[test]
     #[should_panic(expected = "Duplicate tool registration")]
     fn test_duplicate_registration_panics() {
         let mut registry = ToolRegistry::new();
@@ -180,67 +115,21 @@ mod tests {
     }
 
     #[test]
-    fn test_get_returns_tool_definition() {
-        let registry = register_all_tools();
-        let tool = registry.get("store_memory").expect("Must exist");
-        assert_eq!(tool.name, "store_memory");
-    }
+    fn test_registry_operations() {
+        let mut registry = ToolRegistry::new();
 
-    #[test]
-    fn test_get_unknown_tool_returns_none() {
-        let registry = register_all_tools();
-        assert!(registry.get("nonexistent_tool").is_none());
-    }
+        let tool = ToolDefinition::new("test_tool", "Test tool", json!({"type": "object"}));
+        registry.register(tool);
 
-    #[test]
-    fn test_list_returns_all_tools_sorted() {
-        let registry = register_all_tools();
-        let tools = registry.list();
-        // 15 original tools + 4 sequence tools = 19 total (inject_context merged into store_memory)
-        assert_eq!(tools.len(), 19);
+        assert_eq!(registry.len(), 1);
+        assert!(!registry.is_empty());
+        assert!(registry.contains("test_tool"));
+        assert!(!registry.contains("nonexistent"));
 
-        for i in 1..tools.len() {
-            assert!(tools[i - 1].name <= tools[i].name);
-        }
-    }
+        let retrieved = registry.get("test_tool").expect("Tool must exist");
+        assert_eq!(retrieved.name, "test_tool");
 
-    #[test]
-    fn test_all_19_tools_registered() {
-        let registry = register_all_tools();
-        let expected_tools = [
-            // Core (4 - inject_context merged into store_memory)
-            "store_memory",
-            "get_memetic_status",
-            "search_graph",
-            "trigger_consolidation",
-            // Merge (1)
-            "merge_concepts",
-            // Curation (2)
-            "forget_concept",
-            "boost_importance",
-            // Topic (4)
-            "get_topic_portfolio",
-            "get_topic_stability",
-            "detect_topics",
-            "get_divergence_alerts",
-            // File Watcher (4)
-            "list_watched_files",
-            "get_file_watcher_stats",
-            "delete_file_content",
-            "reconcile_files",
-            // Sequence (4) - E4 integration
-            "get_conversation_context",
-            "get_session_timeline",
-            "traverse_memory_chain",
-            "compare_session_states",
-        ];
-
-        for name in expected_tools {
-            assert!(
-                registry.contains(name),
-                "Tool '{}' should be registered but is not",
-                name
-            );
-        }
+        let names = registry.tool_names();
+        assert_eq!(names, vec!["test_tool"]);
     }
 }

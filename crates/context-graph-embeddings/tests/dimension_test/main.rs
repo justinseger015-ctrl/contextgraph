@@ -14,14 +14,14 @@
 //! | E5 Causal | 768 | 768 | PQ8 |
 //! | E6 Sparse | 30522 | 1536 | SparseNative |
 //! | E7 Code | 1536 | 1536 | PQ8 |
-//! | E8 Graph | 384 | 384 | Float8E4M3 |
+//! | E8 Graph | 1024 | 1024 | Float8E4M3 |
 //! | E9 Hdc | 10000 | 1024 | Binary |
 //! | E10 Multimodal | 768 | 768 | PQ8 |
-//! | E11 Entity | 384 | 384 | Float8E4M3 |
+//! | E11 Entity | 768 | 768 | Float8E4M3 |
 //! | E12 LateInteraction | 128 | 128 | TokenPruning |
 //! | E13 Splade | 30522 | 1536 | SparseNative |
 //!
-//! TOTAL_DIMENSION = 10624
+//! TOTAL_DIMENSION = 11648
 
 mod aggregate_dimensions;
 mod comprehensive;

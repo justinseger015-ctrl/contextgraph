@@ -17,10 +17,10 @@ use super::tokenizer::TokenizerFamily;
 /// | Causal | Longformer | 768 | Pretrained |
 /// | Sparse | SPLADE | ~30K sparse | Pretrained |
 /// | Code | Qodo-Embed-1-1.5B | 1536 | Pretrained |
-/// | Graph | paraphrase-MiniLM | 384 | Pretrained |
+/// | Graph | e5-large-v2 | 1024 | Pretrained |
 /// | Hdc | Hyperdimensional | 10K-bit | Custom |
 /// | Multimodal | CLIP | 768 | Pretrained |
-/// | Entity | all-MiniLM | 384 | Pretrained (DEPRECATED) |
+/// | Entity | KEPLER | 768 | Pretrained (DEPRECATED - use Kepler) |
 /// | Kepler | KEPLER (RoBERTa + TransE) | 768 | Pretrained |
 /// | LateInteraction | ColBERT | 128/token | Pretrained |
 /// | Splade | SPLADE v3 | ~30K sparse | Pretrained |
@@ -51,14 +51,14 @@ pub enum ModelId {
     Sparse = 5,
     /// E7: Code embedding using Qodo-Embed-1-1.5B (1536D native)
     Code = 6,
-    /// E8: Graph/sentence using sentence-transformers/paraphrase-MiniLM-L6-v2 (384D)
+    /// E8: Graph/sentence using intfloat/e5-large-v2 (1024D, upgraded from MiniLM 384D)
     Graph = 7,
     /// E9: Hyperdimensional computing (10K-bit -> 1024D projected, custom)
     Hdc = 8,
     /// E10: Multimodal using openai/clip-vit-large-patch14 (768D)
     Multimodal = 9,
-    /// E11: Entity using sentence-transformers/all-MiniLM-L6-v2 (384D)
-    /// DEPRECATED: Use Kepler instead for meaningful TransE operations.
+    /// E11: Entity using KEPLER (768D, upgraded from MiniLM 384D)
+    /// DEPRECATED: Use Kepler ModelId instead for meaningful TransE operations.
     Entity = 10,
     /// E12: Late interaction using colbert-ir/colbertv2.0 (128D per token)
     LateInteraction = 11,
@@ -84,10 +84,10 @@ impl ModelId {
             Self::Causal => 768,
             Self::Sparse => 30522, // SPLADE vocab size
             Self::Code => 1536,    // Qodo-Embed-1-1.5B native dimension
-            Self::Graph => 384,
-            Self::Hdc => 10000, // 10K-bit vector
+            Self::Graph => 1024,   // e5-large-v2 (upgraded from MiniLM 384D)
+            Self::Hdc => 10000,    // 10K-bit vector
             Self::Multimodal => 768,
-            Self::Entity => 384,
+            Self::Entity => 768,   // KEPLER (upgraded from MiniLM 384D)
             Self::LateInteraction => 128, // Per-token dimension
             Self::Splade => 30522,        // SPLADE v3 vocab size
             Self::Kepler => 768,          // KEPLER (RoBERTa-base)

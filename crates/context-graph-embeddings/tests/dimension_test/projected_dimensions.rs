@@ -115,10 +115,10 @@ fn test_e7_code_projected_dimension() {
 fn test_e8_graph_projected_dimension() {
     assert_eq!(
         ModelId::Graph.projected_dimension(),
-        384,
-        "E8 Graph: expected projected dimension 384"
+        1024,
+        "E8 Graph: expected projected dimension 1024 (e5-large-v2, upgraded from MiniLM 384D)"
     );
-    assert_eq!(GRAPH, 384, "GRAPH constant mismatch");
+    assert_eq!(GRAPH, 1024, "GRAPH constant mismatch");
 }
 
 /// Test E9 Hdc projected dimension (10K -> 1024 projection).
@@ -155,10 +155,10 @@ fn test_e10_multimodal_projected_dimension() {
 fn test_e11_entity_projected_dimension() {
     assert_eq!(
         ModelId::Entity.projected_dimension(),
-        384,
-        "E11 Entity: expected projected dimension 384"
+        768,
+        "E11 Entity: expected projected dimension 768 (KEPLER, upgraded from MiniLM 384D)"
     );
-    assert_eq!(ENTITY, 384, "ENTITY constant mismatch");
+    assert_eq!(ENTITY, 768, "ENTITY constant mismatch");
 }
 
 /// Test E12 LateInteraction projected dimension (pooled to single vector).

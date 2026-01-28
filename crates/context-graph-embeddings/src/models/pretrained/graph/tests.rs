@@ -85,13 +85,13 @@ mod tests {
     #[test]
     fn test_native_dimension() {
         let model = create_test_model();
-        assert_eq!(model.dimension(), 384);
+        assert_eq!(model.dimension(), 1024);
     }
 
     #[test]
     fn test_projected_dimension_equals_native() {
         let model = create_test_model();
-        assert_eq!(model.projected_dimension(), 384);
+        assert_eq!(model.projected_dimension(), 1024);
     }
 
     #[test]
@@ -173,12 +173,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_embed_text_returns_384d() {
+    async fn test_embed_text_returns_1024d() {
         let model = create_and_load_model().await;
         let input = ModelInput::text("Alice works at Anthropic").expect("Input");
         let embedding = model.embed(&input).await.expect("Embed should succeed");
         assert_eq!(embedding.vector.len(), GRAPH_DIMENSION);
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
     }
 
     #[tokio::test]
@@ -386,7 +386,7 @@ mod tests {
         let relation_text = GraphModel::encode_relation("Alice", "works_at", "Anthropic");
         let input = ModelInput::text(&relation_text).expect("Input");
         let embedding = model.embed(&input).await.expect("Embed");
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
         assert_eq!(embedding.model_id, ModelId::Graph);
     }
 
@@ -400,7 +400,7 @@ mod tests {
         let context_text = GraphModel::encode_context("Alice", &neighbors);
         let input = ModelInput::text(&context_text).expect("Input");
         let embedding = model.embed(&input).await.expect("Embed");
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
         assert_eq!(embedding.model_id, ModelId::Graph);
     }
 
@@ -417,7 +417,7 @@ mod tests {
         let embeddings = model.embed_batch(&inputs).await.expect("Batch embed");
         assert_eq!(embeddings.len(), 3);
         for emb in &embeddings {
-            assert_eq!(emb.vector.len(), 384);
+            assert_eq!(emb.vector.len(), 1024);
             assert_eq!(emb.model_id, ModelId::Graph);
         }
     }
@@ -445,7 +445,7 @@ mod tests {
         let embeddings = model.embed_batch(&inputs).await.expect("Batch embed");
         assert_eq!(embeddings.len(), 3);
         for emb in &embeddings {
-            assert_eq!(emb.vector.len(), 384);
+            assert_eq!(emb.vector.len(), 1024);
         }
     }
 
@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn test_constants_are_correct() {
-        assert_eq!(GRAPH_DIMENSION, 384);
+        assert_eq!(GRAPH_DIMENSION, 1024);
         assert_eq!(GRAPH_MAX_TOKENS, 512);
         assert_eq!(GRAPH_LATENCY_BUDGET_MS, 5);
         assert_eq!(
@@ -504,7 +504,7 @@ mod tests {
             let embedding = result
                 .expect("Task should not panic")
                 .expect("Embed should succeed");
-            assert_eq!(embedding.vector.len(), 384);
+            assert_eq!(embedding.vector.len(), 1024);
         }
     }
 

@@ -87,7 +87,7 @@ const EMBEDDING_DIMS: [usize; 13] = [
     768,  // E5 - causal
     1024, // E6 - sparse (placeholder dim)
     1536, // E7 - code
-    384,  // E8 - graph
+    1024, // E8 - graph (e5-large-v2)
     1024, // E9 - HDC
     768,  // E10 - intent
     768,  // E11 - entity

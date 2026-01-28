@@ -1,4 +1,4 @@
-//! Tool definitions per PRD v6 Section 10 (45 tools total).
+//! Tool definitions per PRD v6 Section 10 (49 tools total).
 //!
 //! Includes 17 original tools (inject_context merged into store_memory)
 //! plus 4 sequence tools for E4 integration
@@ -36,7 +36,7 @@ use crate::tools::types::ToolDefinition;
 
 /// Get all tool definitions for the `tools/list` response.
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
-    let mut tools = Vec::with_capacity(45);
+    let mut tools = Vec::with_capacity(49);
 
     // Core tools (4 - inject_context merged into store_memory)
     tools.extend(core::definitions());

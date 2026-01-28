@@ -258,7 +258,7 @@ async fn test_inject_context_produces_all_13_embeddings_with_gpu() {
     );
     assert_eq!(e7_dim, E7_DIM, "E7 must be {}D", E7_DIM);
 
-    // E8: Graph (384D) - uses dual vectors for asymmetric similarity
+    // E8: Graph (1024D e5-large-v2) - uses dual vectors for asymmetric similarity
     let e8_source_dim = stored_fp.semantic.e8_graph_as_source.len();
     let e8_target_dim = stored_fp.semantic.e8_graph_as_target.len();
     println!(

@@ -90,7 +90,7 @@ embedders:
   E13: { name: V_keyword_precision, sparse: true, finds: "Term expansions (fast→quick)", use: "Stage 1 recall", gpu: "warm-loaded" }
 
   # RELATIONAL ENHANCERS (topic_weight: 0.5, GPU: ~2GB total)
-  E8: { name: V_connectivity, dim: 384, finds: "Graph structure (X imports Y)", gpu: "warm-loaded" }
+  E8: { name: V_connectivity, dim: 1024, finds: "Graph structure (X imports Y)", model: "e5-large-v2", gpu: "warm-loaded" }
   E11: { name: V_factuality, dim: 768, finds: "Entity knowledge (Diesel=database ORM)", model: "KEPLER (RoBERTa-base + TransE)", gpu: "warm-loaded" }
 
   # TEMPORAL CONTEXT (topic_weight: 0.0, POST-RETRIEVAL ONLY, GPU: ~1.5GB total)
@@ -750,7 +750,7 @@ gpu:
       E5_Causal: "~150MB"
       E6_Sparse: "~50MB"
       E7_Code: "~300MB (in teleological), ~3GB (dedicated)"
-      E8_Graph: "~75MB"
+      E8_Graph: "~200MB (e5-large-v2)"
       E9_HDC: "~50MB"
       E10_Multimodal: "~150MB"
       E11_Entity: "~75MB"

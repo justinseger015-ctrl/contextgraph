@@ -18,8 +18,8 @@ fn test_comprehensive_dimension_validation() {
     println!("[1/6] MODEL_COUNT = 13");
 
     // 2. Verify TOTAL_DIMENSION
-    assert_eq!(TOTAL_DIMENSION, 10624, "TOTAL_DIMENSION must be 10624");
-    println!("[2/6] TOTAL_DIMENSION = 10624");
+    assert_eq!(TOTAL_DIMENSION, 11648, "TOTAL_DIMENSION must be 11648");
+    println!("[2/6] TOTAL_DIMENSION = 11648");
 
     // 3. Verify all native dimensions
     for (model_id, expected) in &EXPECTED_NATIVE_DIMS {
@@ -64,5 +64,5 @@ fn test_comprehensive_dimension_validation() {
     println!("  - 13 native dimensions verified");
     println!("  - 13 projected dimensions verified");
     println!("  - 13 quantization methods verified");
-    println!("  - TOTAL_DIMENSION = 10624 verified");
+    println!("  - TOTAL_DIMENSION = 11648 verified");
 }

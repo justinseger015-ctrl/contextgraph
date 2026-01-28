@@ -141,7 +141,7 @@ Each embedder finds what OTHERS MISS. Combined = superior answers.
 | **E10** | V_multimodality | Same-goal work (different words) | Misses intent alignment | Semantic | 1.0 |
 | **E12** | V_precision | Exact phrase matches | Token-level precision lost | Semantic | 1.0 |
 | **E13** | V_keyword | Term expansions (fast→quick) | Sparse term overlap missed | Semantic | 1.0 |
-| **E8** | V_connectivity | Graph structure ("X imports Y") | Relationship structure | Relational | 0.5 |
+| **E8** | V_connectivity | Graph structure ("X imports Y") | Relationship structure (e5-large-v2) | Relational | 0.5 |
 | **E11** | V_factuality | Entity knowledge ("Diesel=ORM") | Named entity relationships | Relational | 0.5 |
 | **E9** | V_robustness | Noise-robust structure | Structural patterns | Structural | 0.5 |
 | **E2** | V_freshness | Recency | *POST-RETRIEVAL ONLY* | Temporal | 0.0 |
@@ -157,7 +157,7 @@ Each embedder finds what OTHERS MISS. Combined = superior answers.
 | E5 | 768 | Asymmetric KNN | Direction matters, faiss-gpu IVF |
 | E6 | ~30K sparse | Jaccard | cuSPARSE operations |
 | E7 | 1536 | Cosine | AST-aware, largest model (~3GB) |
-| E8 | 384 | TransE | GPU TransE distance ||h + r - t|| |
+| E8 | 1024 | Cosine | e5-large-v2 GPU, structural relationships |
 | E11 | 768 | TransE | KEPLER GPU, RoBERTa-base + TransE |
 | E9 | 1024 | Hamming | GPU bitwise ops (10K→1024) |
 | E10 | 768 | Cosine | Multiplicative boost, same GPU batch |

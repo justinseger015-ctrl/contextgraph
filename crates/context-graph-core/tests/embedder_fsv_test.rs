@@ -287,12 +287,12 @@ fn fsv_all_embedders_differentiated_scores() {
     fp1.e7_code = make_dense_vector(1536, &[(0, 1.0)]);
     fp2.e7_code = make_dense_vector(1536, &[(0, 0.98), (1, 0.2)]);
 
-    // E8: Graph (384D) - MEDIUM-LOW similarity (~0.60)
+    // E8: Graph (1024D e5-large-v2) - MEDIUM-LOW similarity (~0.60)
     // Uses dual vectors (source/target)
-    fp1.e8_graph_as_source = make_dense_vector(384, &[(0, 1.0)]);
-    fp2.e8_graph_as_source = make_dense_vector(384, &[(0, 0.4), (1, 0.917)]); // ~66° → 0.7
-    fp1.e8_graph_as_target = make_dense_vector(384, &[(0, 1.0)]);
-    fp2.e8_graph_as_target = make_dense_vector(384, &[(0, 0.0), (1, 1.0)]); // 90° → 0.5
+    fp1.e8_graph_as_source = make_dense_vector(1024, &[(0, 1.0)]);
+    fp2.e8_graph_as_source = make_dense_vector(1024, &[(0, 0.4), (1, 0.917)]); // ~66° → 0.7
+    fp1.e8_graph_as_target = make_dense_vector(1024, &[(0, 1.0)]);
+    fp2.e8_graph_as_target = make_dense_vector(1024, &[(0, 0.0), (1, 1.0)]); // 90° → 0.5
 
     // E9: HDC (1024D) - HIGH similarity (~0.88)
     // Typo-tolerant, very similar

@@ -3,7 +3,7 @@
 //! These constants define the exact dimensions used throughout the embedding pipeline:
 //! - Native dimensions: Raw model output sizes
 //! - Projected dimensions: Target sizes for Multi-Array Storage
-//! - TOTAL_DIMENSION: Sum of all projected dimensions (10624D)
+//! - TOTAL_DIMENSION: Sum of all projected dimensions (11648D)
 //!
 //! # Multi-Array Storage
 //!
@@ -16,10 +16,10 @@
 //! use context_graph_embeddings::types::dimensions;
 //!
 //! // Total dimension for memory calculations
-//! assert_eq!(dimensions::TOTAL_DIMENSION, 10624);
+//! assert_eq!(dimensions::TOTAL_DIMENSION, 11648);
 //!
 //! // Compile-time validation
-//! const _: () = assert!(dimensions::TOTAL_DIMENSION == 10624);
+//! const _: () = assert!(dimensions::TOTAL_DIMENSION == 11648);
 //! ```
 
 mod aggregates;
@@ -78,7 +78,7 @@ mod tests {
             + LATE_INTERACTION
             + super::constants::SPLADE;
         assert_eq!(sum, TOTAL_DIMENSION);
-        assert_eq!(TOTAL_DIMENSION, 10624);
+        assert_eq!(TOTAL_DIMENSION, 11648);
     }
 
     #[test]

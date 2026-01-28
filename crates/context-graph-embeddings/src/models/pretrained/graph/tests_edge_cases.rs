@@ -69,10 +69,10 @@ mod tests {
 
         println!("AFTER: result = {:?}", result.is_ok());
 
-        // Whitespace input should still produce valid 384D embedding
+        // Whitespace input should still produce valid 1024D embedding
         assert!(result.is_ok(), "Whitespace input should not error");
         let embedding = result.unwrap();
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
         println!("AFTER: vector.len() = {}", embedding.vector.len());
     }
 
@@ -95,7 +95,7 @@ mod tests {
         // Must handle long input (real model would truncate at 512)
         assert!(result.is_ok());
         let embedding = result.unwrap();
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
         println!("AFTER: vector.len() = {}", embedding.vector.len());
     }
 
@@ -155,7 +155,7 @@ mod tests {
 
         assert!(result.is_ok(), "Special characters should be handled");
         let embedding = result.unwrap();
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
 
         // Verify no NaN or Inf
         let has_invalid = embedding
@@ -194,7 +194,7 @@ mod tests {
 
         // VERIFY
         assert_eq!(embedding.model_id, ModelId::Graph);
-        assert_eq!(embedding.vector.len(), 384); // Native dimension (no projection)
+        assert_eq!(embedding.vector.len(), 1024); // Native dimension (no projection)
         assert!((norm - 1.0).abs() < 0.001);
         assert!(!has_nan && !has_inf);
     }
@@ -304,7 +304,7 @@ mod tests {
             budget_ms,
             latencies
         );
-        assert_eq!(embedding.vector.len(), 384);
+        assert_eq!(embedding.vector.len(), 1024);
         assert!((norm - 1.0).abs() < 0.001);
         assert!(is_deterministic, "Same input must be deterministic");
         assert!(vectors_differ, "Different inputs must differ");
