@@ -10,7 +10,14 @@
 //! - The operation that failed
 //! - The file path involved
 //! - The underlying RocksDB error (if applicable)
+//!
+//! # Concurrency
+//!
+//! O(n) scan operations (list_indexed_files) use `spawn_blocking` to avoid
+//! blocking the Tokio async runtime. Single-key operations use sync RocksDB
+//! calls directly since they're typically fast (<1ms).
 
+use std::sync::Arc;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -43,42 +50,52 @@ impl RocksDbTeleologicalStore {
     /// # Errors
     /// - Storage error if iteration fails
     pub(crate) async fn list_indexed_files_async(&self) -> CoreResult<Vec<FileIndexEntry>> {
-        let cf = self.cf_file_index();
-        let mut entries = Vec::new();
+        let db = Arc::clone(&self.db);
 
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
-        for item in iter {
-            match item {
-                Ok((key, value)) => {
-                    // Deserialize the entry
-                    match bincode::deserialize::<FileIndexEntry>(&value) {
-                        Ok(entry) => {
-                            entries.push(entry);
-                        }
-                        Err(e) => {
-                            let key_str = String::from_utf8_lossy(&key);
-                            error!(
-                                "FILE_INDEX ERROR: Failed to deserialize entry for key '{}': {}. \
-                                 This indicates data corruption. Skipping entry.",
-                                key_str, e
-                            );
-                            // FAIL FAST: Don't silently skip - return error
-                            return Err(CoreError::Internal(format!(
-                                "Failed to deserialize file index entry for '{}': {}. Data corruption detected.",
-                                key_str, e
-                            )));
+        let entries = tokio::task::spawn_blocking(move || -> CoreResult<Vec<FileIndexEntry>> {
+            let cf = db
+                .cf_handle(CF_FILE_INDEX)
+                .ok_or_else(|| CoreError::Internal("CF_FILE_INDEX not found".to_string()))?;
+            let mut entries = Vec::new();
+
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+            for item in iter {
+                match item {
+                    Ok((key, value)) => {
+                        // Deserialize the entry
+                        match bincode::deserialize::<FileIndexEntry>(&value) {
+                            Ok(entry) => {
+                                entries.push(entry);
+                            }
+                            Err(e) => {
+                                let key_str = String::from_utf8_lossy(&key);
+                                error!(
+                                    "FILE_INDEX ERROR: Failed to deserialize entry for key '{}': {}. \
+                                     This indicates data corruption. Skipping entry.",
+                                    key_str, e
+                                );
+                                // FAIL FAST: Don't silently skip - return error
+                                return Err(CoreError::Internal(format!(
+                                    "Failed to deserialize file index entry for '{}': {}. Data corruption detected.",
+                                    key_str, e
+                                )));
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    error!("FILE_INDEX ERROR: Iterator error: {}", e);
-                    return Err(CoreError::StorageError(format!(
-                        "Failed to iterate file index: {}",
-                        e
-                    )));
+                    Err(e) => {
+                        error!("FILE_INDEX ERROR: Iterator error: {}", e);
+                        return Err(CoreError::StorageError(format!(
+                            "Failed to iterate file index: {}",
+                            e
+                        )));
+                    }
                 }
             }
-        }
+
+            Ok(entries)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         debug!("Listed {} indexed files", entries.len());
         Ok(entries)

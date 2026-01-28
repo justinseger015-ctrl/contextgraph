@@ -76,7 +76,8 @@ pub struct RocksDbTeleologicalStore {
     /// In-memory count of fingerprints (cached for performance).
     pub(crate) fingerprint_count: RwLock<Option<usize>>,
     /// Soft-deleted IDs (tracked in memory for filtering).
-    pub(crate) soft_deleted: RwLock<HashMap<Uuid, bool>>,
+    /// Wrapped in Arc to allow cheap cloning for spawn_blocking closures.
+    pub(crate) soft_deleted: Arc<RwLock<HashMap<Uuid, bool>>>,
     /// Per-embedder index registry with 12 HNSW indexes for O(log n) ANN search.
     /// E6, E12, E13 use different index types (inverted/MaxSim).
     /// NO FALLBACKS - FAIL FAST on invalid operations.
@@ -183,7 +184,7 @@ impl RocksDbTeleologicalStore {
             cache,
             path: path_buf,
             fingerprint_count: RwLock::new(None),
-            soft_deleted: RwLock::new(HashMap::new()),
+            soft_deleted: Arc::new(RwLock::new(HashMap::new())),
             index_registry,
             causal_e11_index,
         };
@@ -742,6 +743,17 @@ impl RocksDbTeleologicalStore {
     /// ```
     pub fn db_arc(&self) -> Arc<DB> {
         Arc::clone(&self.db)
+    }
+
+    /// Invalidate the fingerprint count cache.
+    ///
+    /// Useful for benchmarking to force re-counting on each call.
+    /// In normal operation, the cache is automatically invalidated
+    /// when fingerprints are stored or deleted.
+    pub fn invalidate_count_cache(&self) {
+        if let Ok(mut count) = self.fingerprint_count.write() {
+            *count = None;
+        }
     }
 
     /// Health check: verify all column families are accessible.

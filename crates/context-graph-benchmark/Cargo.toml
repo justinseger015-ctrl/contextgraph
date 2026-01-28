@@ -251,3 +251,8 @@ required-features = ["real-embeddings"]
 name = "model-injection-rigorous-bench"
 path = "src/bin/model_injection_rigorous_bench.rs"
 required-features = ["real-embeddings"]
+
+[[bin]]
+name = "spawn-blocking-bench"
+path = "src/bin/spawn_blocking_bench.rs"
+required-features = ["real-embeddings"]

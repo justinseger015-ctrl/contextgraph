@@ -2,8 +2,14 @@
 //!
 //! Contains batch store/retrieve, count/stats, flush/checkpoint/compact,
 //! and topic portfolio persistence operations.
+//!
+//! # Concurrency
+//!
+//! Methods that perform O(n) RocksDB iteration use `spawn_blocking` to move
+//! I/O to Tokio's blocking thread pool, enabling parallel agent access.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -28,6 +34,9 @@ use super::types::TeleologicalStoreError;
 
 impl RocksDbTeleologicalStore {
     /// Store batch of fingerprints (internal async wrapper).
+    ///
+    /// Note: Individual stores are handled by store_async which uses sync I/O.
+    /// Batch operations call store_async for each fingerprint.
     pub(crate) async fn store_batch_async(
         &self,
         fingerprints: Vec<TeleologicalFingerprint>,
@@ -47,18 +56,59 @@ impl RocksDbTeleologicalStore {
     }
 
     /// Retrieve batch of fingerprints (internal async wrapper).
+    ///
+    /// Uses `spawn_blocking` to move batch I/O to Tokio's blocking thread pool.
     pub(crate) async fn retrieve_batch_async(
         &self,
         ids: &[Uuid],
     ) -> CoreResult<Vec<Option<TeleologicalFingerprint>>> {
         debug!("Retrieving batch of {} fingerprints", ids.len());
 
-        let mut results = Vec::with_capacity(ids.len());
+        // Clone Arc-wrapped fields for spawn_blocking closure
+        // CRITICAL: Use Arc::clone for soft_deleted instead of cloning the HashMap
+        let db = Arc::clone(&self.db);
+        let soft_deleted = Arc::clone(&self.soft_deleted);
+        let ids_clone: Vec<Uuid> = ids.to_vec();
 
-        for &id in ids {
-            let fp = self.retrieve_async(id).await?;
-            results.push(fp);
-        }
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<Option<TeleologicalFingerprint>>> {
+            use crate::teleological::schema::fingerprint_key;
+
+            let cf = db.cf_handle(CF_FINGERPRINTS).ok_or_else(|| {
+                TeleologicalStoreError::ColumnFamilyNotFound {
+                    name: CF_FINGERPRINTS.to_string(),
+                }
+            })?;
+
+            let mut results = Vec::with_capacity(ids_clone.len());
+
+            for id in ids_clone {
+                // Skip soft-deleted entries (read lock inside spawn_blocking)
+                let is_deleted = soft_deleted
+                    .read()
+                    .map(|guard| guard.get(&id).copied().unwrap_or(false))
+                    .unwrap_or(false);
+                if is_deleted {
+                    results.push(None);
+                    continue;
+                }
+
+                let key = fingerprint_key(&id);
+                match db.get_cf(cf, key) {
+                    Ok(Some(data)) => {
+                        let fp = deserialize_teleological_fingerprint(&data);
+                        results.push(Some(fp));
+                    }
+                    Ok(None) => results.push(None),
+                    Err(e) => {
+                        return Err(TeleologicalStoreError::rocksdb_op("get", CF_FINGERPRINTS, Some(id), e).into());
+                    }
+                }
+            }
+
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         Ok(results)
     }
@@ -70,29 +120,51 @@ impl RocksDbTeleologicalStore {
 
 impl RocksDbTeleologicalStore {
     /// Count fingerprints (internal async wrapper).
+    ///
+    /// Uses `spawn_blocking` to move O(n) iteration to Tokio's blocking thread pool.
     pub(crate) async fn count_async(&self) -> CoreResult<usize> {
-        // Check cache first
+        // Check cache first (outside spawn_blocking since it's fast)
         if let Ok(cached) = self.fingerprint_count.read() {
             if let Some(count) = *cached {
                 return Ok(count);
             }
         }
 
-        // Count by iterating
-        let cf = self.get_cf(CF_FINGERPRINTS)?;
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        // Clone Arc-wrapped fields for spawn_blocking closure
+        // CRITICAL: Use Arc::clone for soft_deleted instead of cloning the HashMap
+        let db = Arc::clone(&self.db);
+        let soft_deleted = Arc::clone(&self.soft_deleted);
 
-        let mut count = 0;
-        for item in iter {
-            let (key, _) = item.map_err(|e| {
-                TeleologicalStoreError::rocksdb_op("iterate", CF_FINGERPRINTS, None, e)
+        // Count by iterating in blocking thread pool
+        let count = tokio::task::spawn_blocking(move || -> CoreResult<usize> {
+            let cf = db.cf_handle(CF_FINGERPRINTS).ok_or_else(|| {
+                TeleologicalStoreError::ColumnFamilyNotFound {
+                    name: CF_FINGERPRINTS.to_string(),
+                }
             })?;
-            let id = parse_fingerprint_key(&key);
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-            if !self.is_soft_deleted(&id) {
-                count += 1;
+            let mut count = 0;
+            for item in iter {
+                let (key, _) = item.map_err(|e| {
+                    TeleologicalStoreError::rocksdb_op("iterate", CF_FINGERPRINTS, None, e)
+                })?;
+                let id = parse_fingerprint_key(&key);
+
+                // Check soft-deleted inside spawn_blocking
+                let is_deleted = soft_deleted
+                    .read()
+                    .map(|guard| guard.get(&id).copied().unwrap_or(false))
+                    .unwrap_or(false);
+                if !is_deleted {
+                    count += 1;
+                }
             }
-        }
+
+            Ok(count)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         // Cache the result
         if let Ok(mut cached) = self.fingerprint_count.write() {
@@ -143,32 +215,48 @@ impl RocksDbTeleologicalStore {
 
 impl RocksDbTeleologicalStore {
     /// Flush all column families (internal async wrapper).
+    ///
+    /// Uses `spawn_blocking` to move flush I/O to Tokio's blocking thread pool.
     pub(crate) async fn flush_async(&self) -> CoreResult<()> {
         debug!("Flushing all column families");
 
-        for cf_name in TELEOLOGICAL_CFS {
-            let cf = self.get_cf(cf_name)?;
-            self.db
-                .flush_cf(cf)
-                .map_err(|e| TeleologicalStoreError::RocksDbOperation {
-                    operation: "flush",
-                    cf: cf_name,
-                    key: None,
-                    source: e,
-                })?;
-        }
+        let db = Arc::clone(&self.db);
 
-        for cf_name in QUANTIZED_EMBEDDER_CFS {
-            let cf = self.get_cf(cf_name)?;
-            self.db
-                .flush_cf(cf)
-                .map_err(|e| TeleologicalStoreError::RocksDbOperation {
-                    operation: "flush",
-                    cf: cf_name,
-                    key: None,
-                    source: e,
+        tokio::task::spawn_blocking(move || -> CoreResult<()> {
+            for cf_name in TELEOLOGICAL_CFS {
+                let cf = db.cf_handle(cf_name).ok_or_else(|| {
+                    TeleologicalStoreError::ColumnFamilyNotFound {
+                        name: cf_name.to_string(),
+                    }
                 })?;
-        }
+                db.flush_cf(cf)
+                    .map_err(|e| TeleologicalStoreError::RocksDbOperation {
+                        operation: "flush",
+                        cf: cf_name,
+                        key: None,
+                        source: e,
+                    })?;
+            }
+
+            for cf_name in QUANTIZED_EMBEDDER_CFS {
+                let cf = db.cf_handle(cf_name).ok_or_else(|| {
+                    TeleologicalStoreError::ColumnFamilyNotFound {
+                        name: cf_name.to_string(),
+                    }
+                })?;
+                db.flush_cf(cf)
+                    .map_err(|e| TeleologicalStoreError::RocksDbOperation {
+                        operation: "flush",
+                        cf: cf_name,
+                        key: None,
+                        source: e,
+                    })?;
+            }
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         info!("Flushed all column families");
         Ok(())
@@ -403,6 +491,8 @@ impl RocksDbTeleologicalStore {
     /// This method iterates over all fingerprints in storage and extracts
     /// their 13-element embedding arrays for use in HDBSCAN clustering.
     ///
+    /// Uses `spawn_blocking` to move O(n) iteration to Tokio's blocking thread pool.
+    ///
     /// # Arguments
     /// * `limit` - Optional maximum number of fingerprints to scan
     ///
@@ -418,39 +508,58 @@ impl RocksDbTeleologicalStore {
     ) -> CoreResult<Vec<(Uuid, [Vec<f32>; 13])>> {
         info!(limit = ?limit, "Scanning fingerprints for clustering");
 
-        let cf = self.get_cf(CF_FINGERPRINTS)?;
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        // Clone Arc-wrapped fields for spawn_blocking closure
+        // CRITICAL: Use Arc::clone for soft_deleted instead of cloning the HashMap
+        let db = Arc::clone(&self.db);
+        let soft_deleted = Arc::clone(&self.soft_deleted);
 
-        let mut results = Vec::new();
-
-        for item in iter {
-            let (key, value) = item.map_err(|e| {
-                TeleologicalStoreError::rocksdb_op("iterate", CF_FINGERPRINTS, None, e)
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<(Uuid, [Vec<f32>; 13])>> {
+            let cf = db.cf_handle(CF_FINGERPRINTS).ok_or_else(|| {
+                TeleologicalStoreError::ColumnFamilyNotFound {
+                    name: CF_FINGERPRINTS.to_string(),
+                }
             })?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-            // Parse fingerprint ID from key
-            let id = parse_fingerprint_key(&key);
+            let mut results = Vec::new();
 
-            // Skip soft-deleted fingerprints
-            if self.is_soft_deleted(&id) {
-                continue;
-            }
+            for item in iter {
+                let (key, value) = item.map_err(|e| {
+                    TeleologicalStoreError::rocksdb_op("iterate", CF_FINGERPRINTS, None, e)
+                })?;
 
-            // Deserialize fingerprint using the custom serialization format
-            // (has version prefix, not plain bincode)
-            let fp = deserialize_teleological_fingerprint(&value);
+                // Parse fingerprint ID from key
+                let id = parse_fingerprint_key(&key);
 
-            // Extract the 13 embeddings as cluster array
-            let cluster_array = fp.semantic.to_cluster_array();
-            results.push((id, cluster_array));
+                // Skip soft-deleted fingerprints (read lock inside spawn_blocking)
+                let is_deleted = soft_deleted
+                    .read()
+                    .map(|guard| guard.get(&id).copied().unwrap_or(false))
+                    .unwrap_or(false);
+                if is_deleted {
+                    continue;
+                }
 
-            // Apply limit if specified
-            if let Some(max) = limit {
-                if results.len() >= max {
-                    break;
+                // Deserialize fingerprint using the custom serialization format
+                // (has version prefix, not plain bincode)
+                let fp = deserialize_teleological_fingerprint(&value);
+
+                // Extract the 13 embeddings as cluster array
+                let cluster_array = fp.semantic.to_cluster_array();
+                results.push((id, cluster_array));
+
+                // Apply limit if specified
+                if let Some(max) = limit {
+                    if results.len() >= max {
+                        break;
+                    }
                 }
             }
-        }
+
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         info!(
             count = results.len(),

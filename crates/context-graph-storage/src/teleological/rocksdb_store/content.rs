@@ -1,7 +1,14 @@
 //! Content storage operations for RocksDbTeleologicalStore.
 //!
 //! Contains methods for storing and retrieving raw content text.
+//!
+//! # Concurrency
+//!
+//! Batch operations use `spawn_blocking` to avoid blocking the Tokio async
+//! runtime. Single-key operations use sync RocksDB calls directly since
+//! they're typically fast (<1ms).
 
+use std::sync::Arc;
 use sha2::{Digest, Sha256};
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -140,52 +147,64 @@ impl RocksDbTeleologicalStore {
             return Ok(Vec::new());
         }
 
-        debug!("Batch retrieving content for {} fingerprints", ids.len());
+        let batch_size = ids.len();
+        debug!("Batch retrieving content for {} fingerprints", batch_size);
 
-        let cf = self.cf_content();
+        let db = Arc::clone(&self.db);
+        let ids = ids.to_vec();
 
-        let keys: Vec<_> = ids
-            .iter()
-            .map(|id| (cf, content_key(id).to_vec()))
-            .collect();
+        let contents = tokio::task::spawn_blocking(move || -> CoreResult<Vec<Option<String>>> {
+            let cf = db
+                .cf_handle(CF_CONTENT)
+                .ok_or_else(|| CoreError::Internal("CF_CONTENT not found".to_string()))?;
 
-        let results = self.db.multi_get_cf(keys);
+            let keys: Vec<_> = ids
+                .iter()
+                .map(|id| (cf, content_key(id).to_vec()))
+                .collect();
 
-        let mut contents = Vec::with_capacity(ids.len());
-        for (i, result) in results.into_iter().enumerate() {
-            match result {
-                Ok(Some(bytes)) => {
-                    let content = String::from_utf8(bytes).map_err(|e| {
+            let results = db.multi_get_cf(keys);
+
+            let mut contents = Vec::with_capacity(ids.len());
+            for (i, result) in results.into_iter().enumerate() {
+                match result {
+                    Ok(Some(bytes)) => {
+                        let content = String::from_utf8(bytes).map_err(|e| {
+                            error!(
+                                "CONTENT ERROR: Invalid UTF-8 in batch content for fingerprint {}. \
+                                 Index: {}, Error: {}",
+                                ids[i], i, e
+                            );
+                            CoreError::Internal(format!(
+                                "Invalid UTF-8 in content for {}: {}. Data corruption detected.",
+                                ids[i], e
+                            ))
+                        })?;
+                        contents.push(Some(content));
+                    }
+                    Ok(None) => contents.push(None),
+                    Err(e) => {
                         error!(
-                            "CONTENT ERROR: Invalid UTF-8 in batch content for fingerprint {}. \
-                             Index: {}, Error: {}",
-                            ids[i], i, e
+                            "ROCKSDB ERROR: Batch read failed at index {} (fingerprint {}): {}",
+                            i, ids[i], e
                         );
-                        CoreError::Internal(format!(
-                            "Invalid UTF-8 in content for {}: {}. Data corruption detected.",
-                            ids[i], e
-                        ))
-                    })?;
-                    contents.push(Some(content));
-                }
-                Ok(None) => contents.push(None),
-                Err(e) => {
-                    error!(
-                        "ROCKSDB ERROR: Batch read failed at index {} (fingerprint {}): {}",
-                        i, ids[i], e
-                    );
-                    return Err(CoreError::StorageError(format!(
-                        "Failed to read content batch at index {}: {}",
-                        i, e
-                    )));
+                        return Err(CoreError::StorageError(format!(
+                            "Failed to read content batch at index {}: {}",
+                            i, e
+                        )));
+                    }
                 }
             }
-        }
+
+            Ok(contents)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         let found_count = contents.iter().filter(|c| c.is_some()).count();
         debug!(
             "Batch content retrieval complete: {} requested, {} found",
-            ids.len(),
+            batch_size,
             found_count
         );
         Ok(contents)

@@ -1,7 +1,14 @@
 //! Source metadata storage operations for RocksDbTeleologicalStore.
 //!
 //! Contains methods for storing and retrieving source metadata (provenance tracking).
+//!
+//! # Concurrency
+//!
+//! Batch and O(n) scan operations use `spawn_blocking` to avoid blocking the
+//! Tokio async runtime. Single-key operations use sync RocksDB calls directly
+//! since they're typically fast (<1ms).
 
+use std::sync::Arc;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -105,55 +112,67 @@ impl RocksDbTeleologicalStore {
             return Ok(Vec::new());
         }
 
+        let batch_size = ids.len();
         debug!(
             "Batch retrieving source metadata for {} fingerprints",
-            ids.len()
+            batch_size
         );
 
-        let cf = self.cf_source_metadata();
+        let db = Arc::clone(&self.db);
+        let ids = ids.to_vec();
 
-        let keys: Vec<_> = ids
-            .iter()
-            .map(|id| (cf, source_metadata_key(id).to_vec()))
-            .collect();
+        let metadata_vec = tokio::task::spawn_blocking(move || -> CoreResult<Vec<Option<SourceMetadata>>> {
+            let cf = db
+                .cf_handle(CF_SOURCE_METADATA)
+                .ok_or_else(|| CoreError::Internal("CF_SOURCE_METADATA not found".to_string()))?;
 
-        let results = self.db.multi_get_cf(keys);
+            let keys: Vec<_> = ids
+                .iter()
+                .map(|id| (cf, source_metadata_key(id).to_vec()))
+                .collect();
 
-        let mut metadata_vec = Vec::with_capacity(ids.len());
-        for (i, result) in results.into_iter().enumerate() {
-            match result {
-                Ok(Some(bytes)) => {
-                    let metadata: SourceMetadata = bincode::deserialize(&bytes).map_err(|e| {
+            let results = db.multi_get_cf(keys);
+
+            let mut metadata_vec = Vec::with_capacity(ids.len());
+            for (i, result) in results.into_iter().enumerate() {
+                match result {
+                    Ok(Some(bytes)) => {
+                        let metadata: SourceMetadata = bincode::deserialize(&bytes).map_err(|e| {
+                            error!(
+                                "METADATA ERROR: Failed to deserialize batch source metadata for fingerprint {}. \
+                                 Index: {}, Error: {}",
+                                ids[i], i, e
+                            );
+                            CoreError::Internal(format!(
+                                "Failed to deserialize source metadata for {}: {}. Data corruption detected.",
+                                ids[i], e
+                            ))
+                        })?;
+                        metadata_vec.push(Some(metadata));
+                    }
+                    Ok(None) => metadata_vec.push(None),
+                    Err(e) => {
                         error!(
-                            "METADATA ERROR: Failed to deserialize batch source metadata for fingerprint {}. \
-                             Index: {}, Error: {}",
-                            ids[i], i, e
+                            "ROCKSDB ERROR: Batch read failed at index {} (fingerprint {}): {}",
+                            i, ids[i], e
                         );
-                        CoreError::Internal(format!(
-                            "Failed to deserialize source metadata for {}: {}. Data corruption detected.",
-                            ids[i], e
-                        ))
-                    })?;
-                    metadata_vec.push(Some(metadata));
-                }
-                Ok(None) => metadata_vec.push(None),
-                Err(e) => {
-                    error!(
-                        "ROCKSDB ERROR: Batch read failed at index {} (fingerprint {}): {}",
-                        i, ids[i], e
-                    );
-                    return Err(CoreError::StorageError(format!(
-                        "Failed to read source metadata batch at index {}: {}",
-                        i, e
-                    )));
+                        return Err(CoreError::StorageError(format!(
+                            "Failed to read source metadata batch at index {}: {}",
+                            i, e
+                        )));
+                    }
                 }
             }
-        }
+
+            Ok(metadata_vec)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         let found_count = metadata_vec.iter().filter(|m| m.is_some()).count();
         debug!(
             "Batch source metadata retrieval complete: {} requested, {} found",
-            ids.len(),
+            batch_size,
             found_count
         );
         Ok(metadata_vec)
@@ -215,39 +234,51 @@ impl RocksDbTeleologicalStore {
         &self,
         file_path: &str,
     ) -> CoreResult<Vec<Uuid>> {
-        let cf = self.cf_source_metadata();
-        let mut matching_ids = Vec::new();
+        let db = Arc::clone(&self.db);
+        let file_path_owned = file_path.to_string();
+        let file_path_log = file_path_owned.clone();
 
-        // Iterate through all source metadata entries
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
-        for item in iter {
-            match item {
-                Ok((key, value)) => {
-                    // Parse UUID from key (format: "source_metadata:{uuid}")
-                    let key_str = String::from_utf8_lossy(&key);
-                    if let Some(uuid_str) = key_str.strip_prefix("source_metadata:") {
-                        if let Ok(id) = Uuid::parse_str(uuid_str) {
-                            // Deserialize metadata and check file_path
-                            if let Ok(metadata) = bincode::deserialize::<SourceMetadata>(&value) {
-                                if let Some(ref path) = metadata.file_path {
-                                    if path == file_path {
-                                        matching_ids.push(id);
+        let matching_ids = tokio::task::spawn_blocking(move || -> CoreResult<Vec<Uuid>> {
+            let cf = db
+                .cf_handle(CF_SOURCE_METADATA)
+                .ok_or_else(|| CoreError::Internal("CF_SOURCE_METADATA not found".to_string()))?;
+            let mut matching_ids = Vec::new();
+
+            // Iterate through all source metadata entries
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+            for item in iter {
+                match item {
+                    Ok((key, value)) => {
+                        // Parse UUID from key (format: "source_metadata:{uuid}")
+                        let key_str = String::from_utf8_lossy(&key);
+                        if let Some(uuid_str) = key_str.strip_prefix("source_metadata:") {
+                            if let Ok(id) = Uuid::parse_str(uuid_str) {
+                                // Deserialize metadata and check file_path
+                                if let Ok(metadata) = bincode::deserialize::<SourceMetadata>(&value) {
+                                    if let Some(ref path) = metadata.file_path {
+                                        if path == &file_path_owned {
+                                            matching_ids.push(id);
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                Err(e) => {
-                    error!("Error iterating source metadata: {}", e);
+                    Err(e) => {
+                        error!("Error iterating source metadata: {}", e);
+                    }
                 }
             }
-        }
+
+            Ok(matching_ids)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         debug!(
             "Found {} fingerprints for file path {}",
             matching_ids.len(),
-            file_path
+            file_path_log
         );
         Ok(matching_ids)
     }

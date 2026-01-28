@@ -7,7 +7,14 @@
 //!
 //! - `CF_CAUSAL_RELATIONSHIPS`: Primary storage by UUID
 //! - `CF_CAUSAL_BY_SOURCE`: Secondary index by source fingerprint ID
+//!
+//! # Concurrency
+//!
+//! O(n) scan operations (search, count, repair) use `spawn_blocking` to avoid
+//! blocking the Tokio async runtime. Single-key operations (store, get, delete)
+//! use sync RocksDB calls directly since they're typically fast (<1ms).
 
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -352,56 +359,70 @@ impl RocksDbTeleologicalStore {
     ) -> CoreResult<Vec<(Uuid, f32)>> {
         use crate::teleological::rocksdb_store::helpers::compute_cosine_similarity;
 
-        let cf = self.cf_causal_relationships();
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        let db = Arc::clone(&self.db);
+        let query_dim = query_embedding.len();
+        let query_embedding = query_embedding.to_vec();
+        let direction_filter_str = direction_filter.map(|s| s.to_string());
+        let direction_filter_log = direction_filter_str.clone();
 
-        let mut results: Vec<(Uuid, f32)> = Vec::new();
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<(Uuid, f32)>> {
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-        for item in iter {
-            let (_key, value) = item.map_err(|e| {
-                error!(
-                    "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
-                    e
-                );
-                CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
-            })?;
+            let mut results: Vec<(Uuid, f32)> = Vec::new();
 
-            let relationship: CausalRelationship = match bincode::deserialize(&value) {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(
-                        "CAUSAL WARNING: Failed to deserialize relationship during search: {}",
+            for item in iter {
+                let (_key, value) = item.map_err(|e| {
+                    error!(
+                        "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
                         e
                     );
-                    continue;
-                }
-            };
+                    CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
+                })?;
 
-            // Apply mechanism type filter if specified
-            if let Some(filter) = direction_filter {
-                if filter != "all" && relationship.normalized_mechanism_type() != filter {
-                    continue;
+                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!(
+                            "CAUSAL WARNING: Failed to deserialize relationship during search: {}",
+                            e
+                        );
+                        continue;
+                    }
+                };
+
+                // Apply mechanism type filter if specified
+                if let Some(ref filter) = direction_filter_str {
+                    if filter != "all" && relationship.normalized_mechanism_type() != filter {
+                        continue;
+                    }
                 }
+
+                // Compute similarity using E1 semantic embedding
+                let similarity =
+                    compute_cosine_similarity(&query_embedding, &relationship.e1_semantic);
+
+                results.push((relationship.id, similarity));
             }
 
-            // Compute similarity using E1 semantic embedding
-            let similarity =
-                compute_cosine_similarity(query_embedding, &relationship.e1_semantic);
+            // Sort by similarity descending
+            results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            results.push((relationship.id, similarity));
-        }
+            // Take top_k
+            results.truncate(top_k);
 
-        // Sort by similarity descending
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Take top_k
-        results.truncate(top_k);
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         debug!(
-            query_dim = query_embedding.len(),
+            query_dim = query_dim,
             top_k = top_k,
             results_count = results.len(),
-            direction_filter = ?direction_filter,
+            direction_filter = ?direction_filter_log,
             "Searched causal relationships"
         );
 
@@ -429,57 +450,69 @@ impl RocksDbTeleologicalStore {
     ) -> CoreResult<Vec<(Uuid, f32)>> {
         use crate::teleological::rocksdb_store::helpers::compute_cosine_similarity;
 
-        let cf = self.cf_causal_relationships();
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        let db = Arc::clone(&self.db);
+        let query_dim = query_embedding.len();
+        let query_embedding = query_embedding.to_vec();
 
-        let mut results: Vec<(Uuid, f32)> = Vec::new();
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<(Uuid, f32)>> {
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-        for item in iter {
-            let (_key, value) = item.map_err(|e| {
-                error!(
-                    "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
-                    e
-                );
-                CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
-            })?;
+            let mut results: Vec<(Uuid, f32)> = Vec::new();
 
-            let relationship: CausalRelationship = match bincode::deserialize(&value) {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(
-                        "CAUSAL WARNING: Failed to deserialize relationship during E5 search: {}",
+            for item in iter {
+                let (_key, value) = item.map_err(|e| {
+                    error!(
+                        "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
                         e
                     );
+                    CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
+                })?;
+
+                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!(
+                            "CAUSAL WARNING: Failed to deserialize relationship during E5 search: {}",
+                            e
+                        );
+                        continue;
+                    }
+                };
+
+                // Select appropriate E5 vector based on search mode
+                let doc_embedding = if search_causes {
+                    // Searching for causes: compare query (effect) against stored cause vectors
+                    &relationship.e5_as_cause
+                } else {
+                    // Searching for effects: compare query (cause) against stored effect vectors
+                    &relationship.e5_as_effect
+                };
+
+                // Skip if E5 embeddings are empty (legacy data with placeholder zeros)
+                if doc_embedding.iter().all(|&v| v == 0.0) {
                     continue;
                 }
-            };
 
-            // Select appropriate E5 vector based on search mode
-            let doc_embedding = if search_causes {
-                // Searching for causes: compare query (effect) against stored cause vectors
-                &relationship.e5_as_cause
-            } else {
-                // Searching for effects: compare query (cause) against stored effect vectors
-                &relationship.e5_as_effect
-            };
-
-            // Skip if E5 embeddings are empty (legacy data with placeholder zeros)
-            if doc_embedding.iter().all(|&v| v == 0.0) {
-                continue;
+                let similarity = compute_cosine_similarity(&query_embedding, doc_embedding);
+                results.push((relationship.id, similarity));
             }
 
-            let similarity = compute_cosine_similarity(query_embedding, doc_embedding);
-            results.push((relationship.id, similarity));
-        }
+            // Sort by similarity descending
+            results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Sort by similarity descending
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            // Take top_k
+            results.truncate(top_k);
 
-        // Take top_k
-        results.truncate(top_k);
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         debug!(
-            query_dim = query_embedding.len(),
+            query_dim = query_dim,
             search_causes = search_causes,
             top_k = top_k,
             results_count = results.len(),
@@ -519,69 +552,81 @@ impl RocksDbTeleologicalStore {
     ) -> CoreResult<Vec<(Uuid, f32)>> {
         use crate::teleological::rocksdb_store::helpers::compute_cosine_similarity;
 
-        let cf = self.cf_causal_relationships();
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        let db = Arc::clone(&self.db);
+        let query_dim = query_embedding.len();
+        let query_embedding = query_embedding.to_vec();
 
-        let mut results: Vec<(Uuid, f32)> = Vec::new();
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<(Uuid, f32)>> {
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-        for item in iter {
-            let (_key, value) = item.map_err(|e| {
-                error!(
-                    "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
-                    e
-                );
-                CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
-            })?;
+            let mut results: Vec<(Uuid, f32)> = Vec::new();
 
-            let relationship: CausalRelationship = match bincode::deserialize(&value) {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(
-                        "CAUSAL WARNING: Failed to deserialize relationship during hybrid search: {}",
+            for item in iter {
+                let (_key, value) = item.map_err(|e| {
+                    error!(
+                        "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
                         e
                     );
+                    CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
+                })?;
+
+                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!(
+                            "CAUSAL WARNING: Failed to deserialize relationship during hybrid search: {}",
+                            e
+                        );
+                        continue;
+                    }
+                };
+
+                // Select appropriate E5 vectors based on search mode
+                let (explanation_embedding, source_embedding) = if search_causes {
+                    // Searching for causes: compare query (effect) against stored cause vectors
+                    (&relationship.e5_as_cause, &relationship.e5_source_cause)
+                } else {
+                    // Searching for effects: compare query (cause) against stored effect vectors
+                    (&relationship.e5_as_effect, &relationship.e5_source_effect)
+                };
+
+                // Skip if E5 explanation embeddings are empty (legacy data)
+                if explanation_embedding.iter().all(|&v| v == 0.0) {
                     continue;
                 }
-            };
 
-            // Select appropriate E5 vectors based on search mode
-            let (explanation_embedding, source_embedding) = if search_causes {
-                // Searching for causes: compare query (effect) against stored cause vectors
-                (&relationship.e5_as_cause, &relationship.e5_source_cause)
-            } else {
-                // Searching for effects: compare query (cause) against stored effect vectors
-                (&relationship.e5_as_effect, &relationship.e5_source_effect)
-            };
+                // Compute explanation similarity
+                let explanation_sim = compute_cosine_similarity(&query_embedding, explanation_embedding);
 
-            // Skip if E5 explanation embeddings are empty (legacy data)
-            if explanation_embedding.iter().all(|&v| v == 0.0) {
-                continue;
+                // Compute source similarity (if source embeddings exist)
+                let source_sim = if source_embedding.is_empty() || source_embedding.iter().all(|&v| v == 0.0) {
+                    // No source embeddings - fall back to explanation only
+                    explanation_sim
+                } else {
+                    compute_cosine_similarity(&query_embedding, source_embedding)
+                };
+
+                // Compute hybrid score
+                let hybrid_score = source_weight * source_sim + explanation_weight * explanation_sim;
+                results.push((relationship.id, hybrid_score));
             }
 
-            // Compute explanation similarity
-            let explanation_sim = compute_cosine_similarity(query_embedding, explanation_embedding);
+            // Sort by hybrid score descending
+            results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            // Compute source similarity (if source embeddings exist)
-            let source_sim = if source_embedding.is_empty() || source_embedding.iter().all(|&v| v == 0.0) {
-                // No source embeddings - fall back to explanation only
-                explanation_sim
-            } else {
-                compute_cosine_similarity(query_embedding, source_embedding)
-            };
+            // Take top_k
+            results.truncate(top_k);
 
-            // Compute hybrid score
-            let hybrid_score = source_weight * source_sim + explanation_weight * explanation_sim;
-            results.push((relationship.id, hybrid_score));
-        }
-
-        // Sort by hybrid score descending
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Take top_k
-        results.truncate(top_k);
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         debug!(
-            query_dim = query_embedding.len(),
+            query_dim = query_dim,
             search_causes = search_causes,
             top_k = top_k,
             source_weight = source_weight,
@@ -614,57 +659,69 @@ impl RocksDbTeleologicalStore {
     ) -> CoreResult<Vec<(Uuid, f32)>> {
         use crate::teleological::rocksdb_store::helpers::compute_cosine_similarity;
 
-        let cf = self.cf_causal_relationships();
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        let db = Arc::clone(&self.db);
+        let query_dim = query_embedding.len();
+        let query_embedding = query_embedding.to_vec();
 
-        let mut results: Vec<(Uuid, f32)> = Vec::new();
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<(Uuid, f32)>> {
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-        for item in iter {
-            let (_key, value) = item.map_err(|e| {
-                error!(
-                    "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
-                    e
-                );
-                CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
-            })?;
+            let mut results: Vec<(Uuid, f32)> = Vec::new();
 
-            let relationship: CausalRelationship = match bincode::deserialize(&value) {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(
-                        "CAUSAL WARNING: Failed to deserialize relationship during E8 search: {}",
+            for item in iter {
+                let (_key, value) = item.map_err(|e| {
+                    error!(
+                        "ROCKSDB ERROR: Failed to iterate causal_relationships: {}",
                         e
                     );
+                    CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
+                })?;
+
+                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!(
+                            "CAUSAL WARNING: Failed to deserialize relationship during E8 search: {}",
+                            e
+                        );
+                        continue;
+                    }
+                };
+
+                // Skip if E8 embeddings are not set
+                if !relationship.has_graph_embeddings() {
                     continue;
                 }
-            };
 
-            // Skip if E8 embeddings are not set
-            if !relationship.has_graph_embeddings() {
-                continue;
+                // Select appropriate E8 vector based on search mode
+                let doc_embedding = if search_sources {
+                    // Searching for sources: compare query (target) against stored source vectors
+                    relationship.e8_graph_source_embedding()
+                } else {
+                    // Searching for targets: compare query (source) against stored target vectors
+                    relationship.e8_graph_target_embedding()
+                };
+
+                let similarity = compute_cosine_similarity(&query_embedding, doc_embedding);
+                results.push((relationship.id, similarity));
             }
 
-            // Select appropriate E8 vector based on search mode
-            let doc_embedding = if search_sources {
-                // Searching for sources: compare query (target) against stored source vectors
-                relationship.e8_graph_source_embedding()
-            } else {
-                // Searching for targets: compare query (source) against stored target vectors
-                relationship.e8_graph_target_embedding()
-            };
+            // Sort by similarity descending
+            results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-            let similarity = compute_cosine_similarity(query_embedding, doc_embedding);
-            results.push((relationship.id, similarity));
-        }
+            // Take top_k
+            results.truncate(top_k);
 
-        // Sort by similarity descending
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Take top_k
-        results.truncate(top_k);
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         debug!(
-            query_dim = query_embedding.len(),
+            query_dim = query_dim,
             search_sources = search_sources,
             top_k = top_k,
             results_count = results.len(),
@@ -838,9 +895,18 @@ impl RocksDbTeleologicalStore {
 
     /// Get total count of causal relationships.
     pub async fn count_causal_relationships(&self) -> CoreResult<usize> {
-        let cf = self.cf_causal_relationships();
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
-        let count = iter.count();
+        let db = Arc::clone(&self.db);
+
+        let count = tokio::task::spawn_blocking(move || -> CoreResult<usize> {
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+            Ok(iter.count())
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
+
         Ok(count)
     }
 
@@ -855,43 +921,54 @@ impl RocksDbTeleologicalStore {
     ///
     /// Returns (deleted_count, total_scanned).
     pub async fn repair_corrupted_causal_relationships(&self) -> CoreResult<(usize, usize)> {
-        let cf = self.cf_causal_relationships();
-        let iter = self.db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+        let db = Arc::clone(&self.db);
+        let causal_e11_index = Arc::clone(&self.causal_e11_index);
 
-        let mut deleted_count = 0;
-        let mut total_scanned = 0;
-        let mut corrupted_keys: Vec<(Box<[u8]>, Option<Uuid>)> = Vec::new();
+        let (deleted_count, total_scanned) = tokio::task::spawn_blocking(move || -> CoreResult<(usize, usize)> {
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
 
-        for item in iter {
-            total_scanned += 1;
+            let mut deleted_count = 0;
+            let mut total_scanned = 0;
+            let mut corrupted_keys: Vec<(Box<[u8]>, Option<Uuid>)> = Vec::new();
 
-            let (key, value) = match item {
-                Ok((k, v)) => (k, v),
-                Err(e) => {
-                    error!("Failed to iterate causal_relationships during repair: {}", e);
+            for item in iter {
+                total_scanned += 1;
+
+                let (key, value) = match item {
+                    Ok((k, v)) => (k, v),
+                    Err(e) => {
+                        error!("Failed to iterate causal_relationships during repair: {}", e);
+                        continue;
+                    }
+                };
+
+                if bincode::deserialize::<CausalRelationship>(&value).is_err() {
+                    let key_id = (key.len() == 16).then(|| Uuid::from_slice(&key).ok()).flatten();
+                    warn!(key_len = key.len(), id = ?key_id, "Found corrupted causal relationship");
+                    corrupted_keys.push((key, key_id));
+                }
+            }
+
+            for (key, key_id) in corrupted_keys {
+                if let Err(e) = db.delete_cf(cf, &key) {
+                    error!("Failed to delete corrupted causal relationship: {}", e);
                     continue;
                 }
-            };
 
-            if bincode::deserialize::<CausalRelationship>(&value).is_err() {
-                let key_id = (key.len() == 16).then(|| Uuid::from_slice(&key).ok()).flatten();
-                warn!(key_len = key.len(), id = ?key_id, "Found corrupted causal relationship");
-                corrupted_keys.push((key, key_id));
-            }
-        }
-
-        for (key, key_id) in corrupted_keys {
-            if let Err(e) = self.db.delete_cf(cf, &key) {
-                error!("Failed to delete corrupted causal relationship: {}", e);
-                continue;
+                deleted_count += 1;
+                if let Some(id) = key_id {
+                    let _ = causal_e11_index.remove(id);
+                }
+                debug!(id = ?key_id, "Deleted corrupted causal relationship");
             }
 
-            deleted_count += 1;
-            if let Some(id) = key_id {
-                let _ = self.causal_e11_index.remove(id);
-            }
-            debug!(id = ?key_id, "Deleted corrupted causal relationship");
-        }
+            Ok((deleted_count, total_scanned))
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         info!(deleted = deleted_count, scanned = total_scanned, "Causal relationship repair complete");
         Ok((deleted_count, total_scanned))

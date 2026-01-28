@@ -1,6 +1,13 @@
 //! CRUD operations for TeleologicalMemoryStore trait.
 //!
 //! Contains store, retrieve, update, and delete implementations.
+//!
+//! # Concurrency
+//!
+//! Individual CRUD operations use sync RocksDB calls directly since they're
+//! typically fast single-key operations (< 1ms). The main performance benefit
+//! of spawn_blocking comes from batch/iteration operations in search.rs and
+//! persistence.rs.
 
 use rocksdb::WriteBatch;
 use tracing::{debug, info};
@@ -129,6 +136,11 @@ impl RocksDbTeleologicalStore {
             // Soft delete: mark as deleted in memory
             if let Ok(mut deleted) = self.soft_deleted.write() {
                 deleted.insert(id, true);
+            }
+
+            // Invalidate count cache (soft delete changes the effective count)
+            if let Ok(mut count) = self.fingerprint_count.write() {
+                *count = None;
             }
         } else {
             // Hard delete: remove from all column families
