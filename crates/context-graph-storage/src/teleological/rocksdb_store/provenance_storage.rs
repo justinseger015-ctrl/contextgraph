@@ -30,12 +30,7 @@ use crate::teleological::column_families::{
 use super::store::RocksDbTeleologicalStore;
 use super::types::{TeleologicalStoreError, TeleologicalStoreResult};
 
-// Minimal hex encoding for error messages
-mod hex {
-    pub fn encode(bytes: &[u8]) -> String {
-        bytes.iter().map(|b| format!("{:02x}", b)).collect()
-    }
-}
+use super::helpers::hex_encode;
 
 // ============================================================================
 // CF_MERGE_HISTORY Operations
@@ -131,7 +126,7 @@ impl RocksDbTeleologicalStore {
                     CF_MERGE_HISTORY, e
                 );
                 TeleologicalStoreError::Deserialization {
-                    key: format!("merge_history:{}", hex::encode(&*key)),
+                    key: format!("merge_history:{}", hex_encode(&*key)),
                     message: format!("MergeRecord deserialization failed: {}", e),
                 }
             })?;
@@ -245,7 +240,7 @@ impl RocksDbTeleologicalStore {
                         CF_IMPORTANCE_HISTORY, e
                     );
                     TeleologicalStoreError::Deserialization {
-                        key: format!("importance_history:{}", hex::encode(&*key)),
+                        key: format!("importance_history:{}", hex_encode(&*key)),
                         message: format!(
                             "ImportanceChangeRecord deserialization failed: {}",
                             e

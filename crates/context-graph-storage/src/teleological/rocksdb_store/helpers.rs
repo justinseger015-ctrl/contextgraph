@@ -1,6 +1,13 @@
 //! Helper functions for RocksDbTeleologicalStore.
 //!
-//! Contains utility functions for computing similarity.
+//! Contains utility functions for computing similarity and formatting.
+
+/// Encode a byte slice as lowercase hexadecimal string.
+///
+/// Used in error messages for RocksDB keys that are raw byte arrays.
+pub fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
 
 /// Compute cosine similarity between two dense vectors.
 ///

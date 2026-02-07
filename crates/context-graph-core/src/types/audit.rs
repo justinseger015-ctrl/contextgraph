@@ -35,6 +35,29 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 // ============================================================================
+// Shared Key Helpers
+// ============================================================================
+
+/// Build a 24-byte storage key: `{uuid_bytes}_{timestamp_nanos_be}`.
+///
+/// Used by MergeRecord, ImportanceChangeRecord, and AuditRecord for
+/// consistent key generation across all provenance column families.
+fn build_uuid_ts_key(id: &Uuid, timestamp: &DateTime<Utc>) -> [u8; 24] {
+    let mut key = [0u8; 24];
+    key[..16].copy_from_slice(id.as_bytes());
+    let nanos = timestamp.timestamp_nanos_opt().unwrap_or(0);
+    key[16..24].copy_from_slice(&nanos.to_be_bytes());
+    key
+}
+
+/// Build a 16-byte prefix key from a UUID (for RocksDB prefix iteration).
+fn build_uuid_prefix(id: &Uuid) -> [u8; 16] {
+    let mut prefix = [0u8; 16];
+    prefix.copy_from_slice(id.as_bytes());
+    prefix
+}
+
+// ============================================================================
 // Merge History (Phase 4, item 5.10)
 // ============================================================================
 
@@ -73,38 +96,12 @@ impl MergeRecord {
     ///
     /// Format: `{merged_uuid_bytes}_{timestamp_nanos_be}` (24 bytes).
     pub fn storage_key(&self) -> [u8; 24] {
-        let mut key = [0u8; 24];
-        key[..16].copy_from_slice(self.merged_id.as_bytes());
-        let nanos = self.timestamp.timestamp_nanos_opt().unwrap_or(0);
-        key[16..24].copy_from_slice(&nanos.to_be_bytes());
-        key
+        build_uuid_ts_key(&self.merged_id, &self.timestamp)
     }
 
     /// Generate a prefix key for scanning all merge records for a given merged_id.
     pub fn prefix_key(merged_id: &Uuid) -> [u8; 16] {
-        let mut prefix = [0u8; 16];
-        prefix.copy_from_slice(merged_id.as_bytes());
-        prefix
-    }
-}
-
-impl ImportanceChangeRecord {
-    /// Generate the storage key for CF_IMPORTANCE_HISTORY.
-    ///
-    /// Format: `{memory_uuid_bytes}_{timestamp_nanos_be}` (24 bytes).
-    pub fn storage_key(&self) -> [u8; 24] {
-        let mut key = [0u8; 24];
-        key[..16].copy_from_slice(self.memory_id.as_bytes());
-        let nanos = self.timestamp.timestamp_nanos_opt().unwrap_or(0);
-        key[16..24].copy_from_slice(&nanos.to_be_bytes());
-        key
-    }
-
-    /// Generate a prefix key for scanning all changes for a given memory_id.
-    pub fn prefix_key(memory_id: &Uuid) -> [u8; 16] {
-        let mut prefix = [0u8; 16];
-        prefix.copy_from_slice(memory_id.as_bytes());
-        prefix
+        build_uuid_prefix(merged_id)
     }
 }
 
@@ -132,6 +129,20 @@ pub struct ImportanceChangeRecord {
     pub operator_id: Option<String>,
     /// Why the importance was changed
     pub reason: Option<String>,
+}
+
+impl ImportanceChangeRecord {
+    /// Generate the storage key for CF_IMPORTANCE_HISTORY.
+    ///
+    /// Format: `{memory_uuid_bytes}_{timestamp_nanos_be}` (24 bytes).
+    pub fn storage_key(&self) -> [u8; 24] {
+        build_uuid_ts_key(&self.memory_id, &self.timestamp)
+    }
+
+    /// Generate a prefix key for scanning all changes for a given memory_id.
+    pub fn prefix_key(memory_id: &Uuid) -> [u8; 16] {
+        build_uuid_prefix(memory_id)
+    }
 }
 
 // ============================================================================
@@ -479,20 +490,14 @@ impl AuditRecord {
     /// UUID prefix enables efficient prefix scans for all records targeting
     /// a specific entity.
     pub fn target_index_key(&self) -> [u8; 24] {
-        let mut key = [0u8; 24];
-        key[..16].copy_from_slice(self.target_id.as_bytes());
-        let nanos = self.timestamp.timestamp_nanos_opt().unwrap_or(0);
-        key[16..24].copy_from_slice(&nanos.to_be_bytes());
-        key
+        build_uuid_ts_key(&self.target_id, &self.timestamp)
     }
 
     /// Generate a target index prefix key for scanning all records for a target.
     ///
     /// Returns the 16-byte UUID prefix used for RocksDB prefix iteration.
     pub fn target_index_prefix(target_id: &Uuid) -> [u8; 16] {
-        let mut prefix = [0u8; 16];
-        prefix.copy_from_slice(target_id.as_bytes());
-        prefix
+        build_uuid_prefix(target_id)
     }
 }
 
