@@ -8,7 +8,6 @@
 //! plus 1 code tool for E7 code search enhancement
 //! plus 2 graph tools for E8 upgrade (Phase 4)
 //! plus 1 robustness tool for E9 typo-tolerant search
-//! plus 1 intent tool for E10 upgrade (search_by_intent - merged with find_contextual_matches)
 //! plus 6 entity tools for E11 integration (extract, search, infer, find, validate, graph)
 //! plus 4 embedder-first search tools for Constitution v6.3
 //! plus 2 temporal tools for E2/E3 (search_recent, search_periodic)
@@ -25,7 +24,6 @@ pub(crate) mod entity;
 pub(crate) mod file_watcher;
 pub(crate) mod graph;
 pub(crate) mod graph_link;
-pub(crate) mod intent;
 pub(crate) mod keyword;
 pub(crate) mod maintenance;
 pub(crate) mod merge;
@@ -77,13 +75,10 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     // Robustness tools (1) - E9 typo-tolerant search
     tools.extend(robustness::definitions());
 
-    // Intent tools (1) - E10 upgrade (search_by_intent - merged with find_contextual_matches)
-    tools.extend(intent::definitions());
-
     // Entity tools (6) - E11 integration
     tools.extend(entity::definitions());
 
-    // Embedder-first search tools (8) - Constitution v6.3 + NAV-GAP tools
+    // Embedder-first search tools (7) - Constitution v6.3 + NAV-GAP tools
     tools.extend(embedder::definitions());
 
     // Temporal tools (2) - E2 recency search, E3 periodic search
@@ -107,12 +102,12 @@ mod tests {
 
     #[test]
     fn test_total_tool_count() {
-        // 57 tools:
+        // 55 tools:
         // core: 4, merge: 1, curation: 2, topic: 4, file_watcher: 4, sequence: 4,
         // causal: 4, causal_discovery: 2, keyword: 1, code: 1, graph: 4,
-        // robustness: 1, intent: 1, entity: 6, embedder: 8, temporal: 2, graph_link: 4,
+        // robustness: 1, entity: 6, embedder: 7, temporal: 2, graph_link: 4,
         // maintenance: 1, provenance: 3
-        assert_eq!(get_tool_definitions().len(), 57);
+        assert_eq!(get_tool_definitions().len(), 55);
     }
 
     #[test]
@@ -161,8 +156,6 @@ mod tests {
             "get_graph_path",
             // Robustness tools (1) - E9 typo-tolerant search
             "search_robust",
-            // Intent tools (1) - E10 upgrade (find_contextual_matches merged into search_by_intent)
-            "search_by_intent",
             // Entity tools (6) - E11 integration
             "extract_entities",
             "search_by_entities",
@@ -170,7 +163,7 @@ mod tests {
             "find_related_entities",
             "validate_knowledge",
             "get_entity_graph",
-            // Embedder-first search tools (8) - Constitution v6.3 + NAV-GAP
+            // Embedder-first search tools (7) - Constitution v6.3 + NAV-GAP
             "search_by_embedder",
             "get_embedder_clusters",
             "compare_embedder_views",
@@ -178,7 +171,6 @@ mod tests {
             "get_memory_fingerprint",
             "create_weight_profile",
             "search_cross_embedder_anomalies",
-            "adaptive_search",
             // Temporal tools (2) - E2 recency search, E3 periodic search
             "search_recent",
             "search_periodic",
@@ -240,9 +232,8 @@ mod tests {
         assert_eq!(code::definitions().len(), 1);
         assert_eq!(graph::definitions().len(), 4); // search_connections, get_graph_path, discover_graph_relationships, validate_graph_link
         assert_eq!(robustness::definitions().len(), 1); // E9 typo-tolerant search
-        assert_eq!(intent::definitions().len(), 1); // find_contextual_matches merged into search_by_intent
         assert_eq!(entity::definitions().len(), 6);
-        assert_eq!(embedder::definitions().len(), 8); // Constitution v6.3 embedder-first search + NAV-GAP tools
+        assert_eq!(embedder::definitions().len(), 7); // Constitution v6.3 embedder-first search + NAV-GAP tools
         assert_eq!(temporal::definitions().len(), 2); // E2 recency search, E3 periodic search
         assert_eq!(graph_link::definitions().len(), 4); // K-NN navigation, typed edges, unified neighbors
         assert_eq!(maintenance::definitions().len(), 1); // Data repair and cleanup

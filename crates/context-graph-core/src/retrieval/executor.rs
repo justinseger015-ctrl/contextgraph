@@ -99,7 +99,7 @@ pub trait MultiEmbeddingQueryExecutor: Send + Sync {
     /// 1. SPLADE sparse recall
     /// 2. Matryoshka 128D filtering
     /// 3. Full 13-space HNSW search
-    /// 4. Teleological alignment filter
+    /// 4. Score-based filter
     /// 5. Late interaction reranking
     ///
     /// # Performance Target

@@ -133,11 +133,6 @@ pub use graph_linking::{
     DEFAULT_THRESHOLDS, KNN_K, MIN_KNN_SIMILARITY, NN_DESCENT_ITERATIONS, NN_DESCENT_SAMPLE_RATE,
 };
 
-// Session intent tracking (Phase 5) - E10 intent drift detection
-pub use session::{
-    IntentDrift, IntentSnapshot, IntentTracker, IntentTrajectoryStats,
-    DEFAULT_DRIFT_THRESHOLD, DEFAULT_WINDOW_SIZE,
-};
 
 // Weight profiles - for multi-embedder search weight configuration
 pub use weights::{

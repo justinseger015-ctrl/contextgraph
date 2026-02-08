@@ -511,9 +511,8 @@ impl MultiEmbeddingQueryExecutor for InMemoryMultiEmbeddingExecutor {
         let stage3_time = stage3_start.elapsed();
         let stage3_candidates = config.full_search_limit;
 
-        // Stage 4: Teleological alignment filter
+        // Stage 4: Score-based filter
         let stage4_start = Instant::now();
-        // In production, this would filter by purpose alignment
         // For now, we just limit the results
         let stage4_candidates = config.teleological_limit;
         let stage4_time = stage4_start.elapsed();

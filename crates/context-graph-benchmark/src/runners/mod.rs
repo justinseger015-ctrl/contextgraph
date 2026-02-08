@@ -12,7 +12,6 @@ pub mod embedder_impact;
 pub mod failfast;
 pub mod graph_linking;
 pub mod graph_realdata;
-pub mod mcp_intent;
 pub mod multimodal;
 pub mod retrieval;
 pub mod scaling;
@@ -59,10 +58,6 @@ pub use temporal::{
 pub use temporal_realdata::{
     TemporalRealdataBenchmarkConfig, TemporalRealdataBenchmarkResults, TemporalRealdataBenchmarkRunner,
     TimestampBaselineResults, TemporalBenchmarkTimings, TemporalDatasetStats,
-};
-pub use mcp_intent::{
-    MCPIntentBenchmarkConfig, MCPIntentBenchmarkResults, MCPIntentBenchmarkRunner,
-    MCPIntentTimings,
 };
 pub use topic::TopicRunner;
 pub use failfast::{

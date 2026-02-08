@@ -140,10 +140,6 @@ name = "multimodal-realdata-bench"
 path = "src/bin/multimodal_realdata_bench.rs"
 
 [[bin]]
-name = "mcp-intent-bench"
-path = "src/bin/mcp_intent_bench.rs"
-
-[[bin]]
 name = "unified-realdata-bench"
 path = "src/bin/unified_realdata_bench.rs"
 

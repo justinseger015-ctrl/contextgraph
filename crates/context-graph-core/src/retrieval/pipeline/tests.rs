@@ -32,7 +32,6 @@ async fn test_pipeline_creation() {
     let health = pipeline.health_check().await.unwrap();
 
     assert_eq!(health.spaces_available, 13);
-    assert!(!health.has_goal_hierarchy);
 
     println!("[VERIFIED] Pipeline created with all components");
 }
@@ -124,7 +123,6 @@ fn test_pipeline_health_defaults() {
     let health = PipelineHealth {
         is_healthy: true,
         spaces_available: 13,
-        has_goal_hierarchy: false,
         index_size: 1_000_000,
         last_query_time: Some(Duration::from_millis(45)),
     };

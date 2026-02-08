@@ -851,6 +851,35 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     /// Delete a custom weight profile by name.
     async fn delete_custom_weight_profile(&self, name: &str) -> CoreResult<bool>;
 
+    // ==================== Processing Cursor Persistence ====================
+
+    /// Store a processing cursor as raw bytes under a well-known key.
+    ///
+    /// Used by background services (e.g., CausalDiscoveryService) to persist
+    /// their progress so they can resume after restarts. Stored in CF_SYSTEM.
+    ///
+    /// # Arguments
+    /// * `key` - A unique cursor key (e.g., "causal_discovery_cursor")
+    /// * `data` - Serialized cursor data (JSON bytes)
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn store_processing_cursor(&self, key: &str, data: &[u8]) -> CoreResult<()>;
+
+    /// Retrieve a processing cursor by key.
+    ///
+    /// Returns None if no cursor has been stored for this key.
+    ///
+    /// # Arguments
+    /// * `key` - The cursor key to look up
+    ///
+    /// # Returns
+    /// `Some(bytes)` if found, `None` if not stored yet.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn get_processing_cursor(&self, key: &str) -> CoreResult<Option<Vec<u8>>>;
+
     // ==================== Type Downcasting ====================
 
     /// Get a reference to self as Any for downcasting.

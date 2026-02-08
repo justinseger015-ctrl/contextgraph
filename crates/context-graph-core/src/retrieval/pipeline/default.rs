@@ -3,8 +3,7 @@
 //! This module provides `DefaultTeleologicalPipeline`, the standard
 //! implementation of the 5-stage teleological retrieval process.
 //!
-//! Stage 4 (Teleological) now uses topic-based clustering similarity
-//! rather than goal-based alignment (per PRD v6 - topics emerge from clustering).
+//! Stage 4 uses score-based ranking and truncation.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -119,7 +118,6 @@ where
 
         debug!(
             text = %query.text,
-            has_goals = query.has_goals(),
             include_breakdown = query.include_breakdown,
             "Starting teleological pipeline"
         );
@@ -139,7 +137,6 @@ where
                 teleological_limit: config.teleological_limit,
                 late_interaction_limit: config.late_interaction_limit,
                 rrf_k: config.rrf_k,
-                min_alignment_threshold: config.min_alignment_threshold,
             }),
             include_space_breakdown: query.include_breakdown,
             aggregation: super::super::AggregationStrategy::RRF { k: config.rrf_k },
@@ -175,8 +172,8 @@ where
             }
         }
 
-        // Apply proper Stage 4 filtering with real fingerprints
-        let (stage4_results, filtered_count, avg_filtered_alignment) =
+        // Apply proper Stage 4 score-based filtering with real fingerprints
+        let stage4_results =
             self.apply_stage4_filtering(&candidates, query).await?;
 
         let stage4_time = stage4_start.elapsed();
@@ -184,9 +181,7 @@ where
         debug!(
             candidates_in = candidates.len(),
             results_out = stage4_results.len(),
-            filtered = filtered_count,
-            avg_filtered_alignment = avg_filtered_alignment,
-            "Stage 4 teleological filtering complete"
+            "Stage 4 score-based filtering complete"
         );
 
         // Build timing from executor result + Stage 4
@@ -248,34 +243,22 @@ where
         Ok(result)
     }
 
-    async fn filter_by_alignment(
+    async fn filter_by_score(
         &self,
         candidates: &[&TeleologicalFingerprint],
         query: &TeleologicalQuery,
     ) -> CoreResult<Vec<ScoredMemory>> {
         let config = query.effective_config();
-        let min_threshold = config.min_alignment_threshold;
 
         let mut results = Vec::with_capacity(candidates.len());
 
         for fingerprint in candidates {
-            // Use a default alignment score since alignment_score field was removed
-            // from TeleologicalFingerprint. All candidates pass by default.
-            let alignment_score = 1.0_f32;
-            let is_misaligned = false;
-
-            if alignment_score < min_threshold {
-                continue;
-            }
-
             let scored = ScoredMemory::new(
                 fingerprint.id,
-                alignment_score, // Use alignment as score
-                alignment_score,
-                alignment_score,
+                1.0, // Default pass-through score
+                1.0,
                 NUM_EMBEDDERS, // Assume all spaces
-            )
-            .with_misalignment(is_misaligned);
+            );
 
             results.push(scored);
         }
@@ -302,7 +285,6 @@ where
         Ok(PipelineHealth {
             is_healthy: spaces.len() == 13,
             spaces_available: spaces.len(),
-            has_goal_hierarchy: false, // No longer using goal hierarchy
             index_size,
             last_query_time: last_time,
         })

@@ -197,48 +197,6 @@ pub const WEIGHT_PROFILES: &[(&str, [f32; NUM_EMBEDDERS])] = &[
         ],
     ),
 
-    // Intent Search: "What was the goal?" queries - E1 primary, E10 via multiplicative boost
-    // ARCH-17 COMPLIANT: E10 is 0.0 in weighted fusion (uses multiplicative boost instead)
-    (
-        "intent_search",
-        [
-            0.55, // E1_Semantic (foundation per ARCH-12, boosted)
-            0.0,  // E2_Temporal_Recent - NOT for semantic search per AP-71
-            0.0,  // E3_Temporal_Periodic - NOT for semantic search per AP-71
-            0.0,  // E4_Temporal_Positional - NOT for semantic search per AP-71
-            0.12, // E5_Causal (intent often has causal structure)
-            0.05, // E6_Sparse (keyword backup)
-            0.18, // E7_Code (code intent/purpose, boosted)
-            0.05, // E8_Graph (relational)
-            0.0,  // E9_HDC
-            0.0,  // E10_Multimodal - NOW VIA MULTIPLICATIVE BOOST (ARCH-17)
-            0.05, // E11_Entity (entities in intent)
-            0.0,  // E12_Late_Interaction (Stage 3 rerank only per AP-73)
-            0.0,  // E13_SPLADE (Stage 1 recall only per AP-74)
-        ],
-    ),
-
-    // Intent Enhanced: E1 primary foundation, E10 via stronger multiplicative boost
-    // ARCH-17 COMPLIANT: E10 uses IntentBoostConfig::aggressive()
-    (
-        "intent_enhanced",
-        [
-            0.55, // E1_Semantic (foundation per ARCH-12, boosted)
-            0.0,  // E2_Temporal_Recent - NOT for semantic search per AP-71
-            0.0,  // E3_Temporal_Periodic - NOT for semantic search per AP-71
-            0.0,  // E4_Temporal_Positional - NOT for semantic search per AP-71
-            0.12, // E5_Causal (intent often has causal structure)
-            0.05, // E6_Sparse (keyword backup)
-            0.18, // E7_Code (code intent/purpose, boosted)
-            0.05, // E8_Graph (relational)
-            0.0,  // E9_HDC
-            0.0,  // E10_Multimodal - NOW VIA MULTIPLICATIVE BOOST (ARCH-17)
-            0.05, // E11_Entity (entities in intent)
-            0.0,  // E12_Late_Interaction (Stage 3 rerank only per AP-73)
-            0.0,  // E13_SPLADE (Stage 1 recall only per AP-74)
-        ],
-    ),
-
     // =========================================================================
     // GRAPH REASONING PROFILE - E8 primary for structural queries
     // =========================================================================
@@ -414,7 +372,7 @@ pub const WEIGHT_PROFILES: &[(&str, [f32; NUM_EMBEDDERS])] = &[
             0.15, // E7_Code (code understanding)
             0.03, // E8_Graph (relational)
             0.02, // E9_HDC (noise tolerance)
-            0.08, // E10_Multimodal (intent alignment via boost)
+            0.08, // E10_Multimodal (paraphrase detection via boost)
             0.05, // E11_Entity (entity matching)
             0.0,  // E12_Late_Interaction (Stage 3 rerank only per AP-73)
             0.0,  // E13_SPLADE (Stage 1 recall only per AP-74)
@@ -590,7 +548,7 @@ mod tests {
     fn test_temporal_embedders_excluded_from_semantic_profiles() {
         let semantic_profiles = [
             "semantic_search", "causal_reasoning", "code_search",
-            "fact_checking", "graph_reasoning", "intent_search", "intent_enhanced"
+            "fact_checking", "graph_reasoning"
         ];
 
         for profile_name in semantic_profiles {

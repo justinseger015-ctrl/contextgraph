@@ -421,6 +421,16 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         self.delete_custom_weight_profile(name).map_err(Into::into)
     }
 
+    // ==================== Processing Cursor Persistence ====================
+
+    async fn store_processing_cursor(&self, key: &str, data: &[u8]) -> CoreResult<()> {
+        self.store_processing_cursor_sync(key, data)
+    }
+
+    async fn get_processing_cursor(&self, key: &str) -> CoreResult<Option<Vec<u8>>> {
+        self.get_processing_cursor_sync(key)
+    }
+
     // ==================== Type Downcasting ====================
 
     fn as_any(&self) -> &dyn Any {

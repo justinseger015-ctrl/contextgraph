@@ -18,6 +18,7 @@ use context_graph_core::clustering::{MultiSpaceClusterManager, TopicStabilityTra
 use context_graph_core::memory::{CodeEmbeddingProvider, CodeStorage};
 use context_graph_core::monitoring::LayerStatusProvider;
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore};
+use context_graph_embeddings::models::CausalModel;
 use context_graph_graph_agent::GraphDiscoveryService;
 use context_graph_storage::{BackgroundGraphBuilder, EdgeRepository};
 
@@ -111,6 +112,20 @@ pub struct Handlers {
     /// Session-scoped: cleared when the server restarts.
     /// Accessible by name from search_graph's weightProfile, get_unified_neighbors, etc.
     pub(in crate::handlers) custom_profiles: Arc<RwLock<HashMap<String, [f32; 13]>>>,
+
+    // =========================================================================
+    // Inline Causal Discovery (INLINE-CAUSAL)
+    // =========================================================================
+
+    /// Causal Discovery LLM for inline multi-relationship extraction during store_memory.
+    /// When present, extract_causal_relationships() is called on every store_memory content
+    /// to discover and persist CausalRelationship records inline with the 13-embedder pipeline.
+    pub(in crate::handlers) causal_discovery_llm:
+        Option<Arc<context_graph_causal_agent::CausalDiscoveryLLM>>,
+
+    /// CausalModel (E5) for generating asymmetric cause/effect embeddings.
+    /// Used by inline causal extraction to embed each discovered relationship.
+    pub(in crate::handlers) causal_model: Option<Arc<CausalModel>>,
 }
 
 impl Handlers {
@@ -156,6 +171,9 @@ impl Handlers {
             causal_hint_provider: None,
             // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
+            // INLINE-CAUSAL: Disabled by default
+            causal_discovery_llm: None,
+            causal_model: None,
         }
     }
 
@@ -204,6 +222,9 @@ impl Handlers {
             causal_hint_provider: None,
             // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
+            // INLINE-CAUSAL: Disabled by default
+            causal_discovery_llm: None,
+            causal_model: None,
         }
     }
 
@@ -255,6 +276,9 @@ impl Handlers {
             causal_hint_provider: None,
             // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
+            // INLINE-CAUSAL: Disabled by default
+            causal_discovery_llm: None,
+            causal_model: None,
         }
     }
 
@@ -303,13 +327,17 @@ impl Handlers {
             causal_hint_provider: None,
             // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
+            // INLINE-CAUSAL: Disabled by default
+            causal_discovery_llm: None,
+            causal_model: None,
         }
     }
 
-    /// Create handlers with graph discovery enabled.
+    /// Create handlers with graph discovery and inline causal extraction enabled.
     ///
     /// GRAPH-AGENT: Constructor for graph linking with LLM-based relationship discovery.
-    /// Uses shared CausalDiscoveryLLM (~6GB for Qwen2.5-3B). NO FALLBACKS.
+    /// INLINE-CAUSAL: Also enables inline causal relationship extraction during store_memory.
+    /// Uses shared CausalDiscoveryLLM. NO FALLBACKS.
     ///
     /// # Arguments
     /// * `teleological_store` - Store for TeleologicalFingerprint
@@ -319,6 +347,8 @@ impl Handlers {
     /// * `graph_builder` - Background graph builder for K-NN construction
     /// * `graph_discovery_service` - REQUIRED LLM-based graph relationship discovery
     /// * `causal_hint_provider` - REQUIRED LLM-based causal hint provider for E5 enhancement
+    /// * `causal_discovery_llm` - Shared LLM for inline multi-relationship extraction
+    /// * `causal_model` - E5 CausalModel for asymmetric cause/effect embeddings
     pub fn with_graph_discovery(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
@@ -327,8 +357,10 @@ impl Handlers {
         graph_builder: Arc<BackgroundGraphBuilder>,
         graph_discovery_service: Arc<GraphDiscoveryService>,
         causal_hint_provider: Arc<dyn context_graph_embeddings::provider::CausalHintProvider>,
+        causal_discovery_llm: Arc<context_graph_causal_agent::CausalDiscoveryLLM>,
+        causal_model: Arc<CausalModel>,
     ) -> Self {
-        info!("Creating Handlers with graph discovery and causal hints enabled - NO FALLBACKS");
+        info!("Creating Handlers with graph discovery, causal hints, and inline causal extraction - NO FALLBACKS");
 
         let cluster_manager = MultiSpaceClusterManager::with_defaults()
             .expect("Default cluster manager should always succeed");
@@ -352,6 +384,9 @@ impl Handlers {
             causal_hint_provider: Some(causal_hint_provider),
             // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
+            // INLINE-CAUSAL: Enabled - extracts relationships during store_memory
+            causal_discovery_llm: Some(causal_discovery_llm),
+            causal_model: Some(causal_model),
         }
     }
 

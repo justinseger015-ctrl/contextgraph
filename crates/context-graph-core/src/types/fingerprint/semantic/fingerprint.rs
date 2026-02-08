@@ -204,11 +204,11 @@ pub struct SemanticFingerprint {
     /// E9: HDC (projected from 10K-bit hyperdimensional) - 1024D dense embedding.
     pub e9_hdc: Vec<f32>,
 
-    /// E10: Multimodal (CLIP/MPNet) - 768D dense embedding (as intent).
+    /// E10: Multimodal (CLIP/MPNet) - 768D dense embedding (paraphrase side).
     ///
-    /// This vector encodes the text as a potential intent in contextual relationships.
-    /// For asymmetric similarity: query_as_intent is compared against doc_as_context.
-    /// Example: "User wants to fix the bug" → captures the action/goal.
+    /// This vector encodes the text for paraphrase detection in asymmetric retrieval.
+    /// For asymmetric similarity: query paraphrase vector is compared against doc context vector.
+    /// Example: "User wants to fix the bug" → captures the expressed meaning.
     pub e10_multimodal_as_intent: Vec<f32>,
 
     /// E10: Multimodal (CLIP/MPNet) - 768D dense embedding (as context).
@@ -442,7 +442,7 @@ impl SemanticFingerprint {
     /// the legacy `e10_multimodal` field for backward compatibility.
     ///
     /// This is the default E10 vector used for symmetric similarity comparisons
-    /// (when intent/context direction is unknown or not relevant).
+    /// (when paraphrase/context direction is unknown or not relevant).
     #[inline]
     pub fn e10_active_vector(&self) -> &[f32] {
         if !self.e10_multimodal_as_intent.is_empty() {
@@ -452,9 +452,9 @@ impl SemanticFingerprint {
         }
     }
 
-    /// Get E10 multimodal embedding encoded as a potential intent.
+    /// Get E10 multimodal embedding (paraphrase side).
     ///
-    /// Use this for asymmetric similarity when the query represents an intent.
+    /// Use this for asymmetric similarity when the query represents expressed meaning.
     /// (e.g., "User wants to accomplish X")
     #[inline]
     pub fn get_e10_as_intent(&self) -> &[f32] {

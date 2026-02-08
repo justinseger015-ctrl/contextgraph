@@ -14,7 +14,6 @@
 //! - search_code (code_tools.rs) - E7 Code Search Enhancement
 //! - search_connections, get_graph_path (graph_tools.rs) - E8 Upgrade Phase 4
 //! - search_robust (robustness_tools.rs) - E9 HDC Blind-Spot Detection
-//! - search_by_intent (intent_tools.rs) - E10 Intent/Context Upgrade (find_contextual_matches merged)
 //! - extract_entities, search_by_entities, infer_relationship, find_related_entities, validate_knowledge, get_entity_graph (entity_tools.rs) - E11 Entity Integration
 //! - search_by_embedder, get_embedder_clusters, compare_embedder_views, list_embedder_indexes (embedder_tools.rs) - Constitution v6.3 Embedder-First Search
 //! - search_recent (temporal_tools.rs) - E2 V_freshness Temporal Search
@@ -33,7 +32,6 @@ mod file_watcher_tools;
 mod graph_link_tools;
 mod graph_tools;
 mod helpers;
-mod intent_tools;
 mod keyword_tools;
 mod maintenance_tools;
 mod memory_tools;
@@ -52,7 +50,6 @@ pub mod embedder_dtos;
 pub mod entity_dtos;
 pub mod graph_dtos;
 pub mod graph_link_dtos;
-pub mod intent_dtos;
 pub mod keyword_dtos;
 pub mod robustness_dtos;
 pub mod temporal_dtos;

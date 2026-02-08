@@ -67,14 +67,14 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "required": []
             }),
         ),
-        // search_graph - semantic search with E5 causal and E10 intent asymmetric similarity (ARCH-15, AP-77)
+        // search_graph - semantic search with E5 causal and E10 paraphrase asymmetric similarity (ARCH-15, AP-77)
         ToolDefinition::new(
             "search_graph",
             "Search the knowledge graph using multi-space semantic similarity. \
              For causal queries ('why', 'what happens'), automatically applies \
              asymmetric E5 similarity with direction modifiers (cause→effect 1.2x, \
-             effect→cause 0.8x). For intent queries, applies E10 asymmetric similarity \
-             (intent→context 1.2x, context→intent 0.8x). Returns nodes matching the query with relevance scores.",
+             effect→cause 0.8x). For paraphrase queries, applies E10 asymmetric similarity \
+             (paraphrase→context 1.2x, context→paraphrase 0.8x). Returns nodes matching the query with relevance scores.",
             json!({
                 "type": "object",
                 "properties": {
@@ -116,13 +116,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "string",
                         "enum": [
                             "semantic_search", "causal_reasoning", "code_search", "fact_checking",
-                            "intent_search", "intent_enhanced", "graph_reasoning",
-                            "temporal_navigation", "sequence_navigation", "conversation_history",
-                            "category_weighted", "typo_tolerant",
+                            "graph_reasoning", "temporal_navigation", "sequence_navigation",
+                            "conversation_history", "category_weighted", "typo_tolerant",
                             "pipeline_stage1_recall", "pipeline_stage2_scoring", "pipeline_full",
                             "balanced"
                         ],
-                        "description": "Weight profile for multi-space search. All 16 profiles available. Pipeline profiles (pipeline_*) are for staged retrieval. balanced gives equal weight to all embedders."
+                        "description": "Weight profile for multi-space search. All 14 profiles available. Pipeline profiles (pipeline_*) are for staged retrieval. balanced gives equal weight to all embedders."
                     },
                     "customWeights": {
                         "type": "object",
@@ -177,31 +176,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "boolean",
                         "default": false,
                         "description": "Expand causal queries with related terms for better recall"
-                    },
-                    "intentMode": {
-                        "type": "string",
-                        "enum": ["none", "seeking_intent", "seeking_context", "auto"],
-                        "default": "none",
-                        "description": "E10 intent mode: none (disabled), seeking_intent (query is a goal/purpose, apply 1.2x boost), seeking_context (query is a situation, apply 0.8x), auto (detect from query)"
-                    },
-                    "intentBlend": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 1,
-                        "default": 0.3,
-                        "description": "E10 intent blend weight when intentMode is active [0.0=pure E1, 1.0=pure E10]. Only used when intentMode != none."
-                    },
-                    "enableIntentGate": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Enable E10 intent gate in pipeline strategy. Adds intent filtering between E1 scoring and E12 reranking. Only effective with strategy='pipeline'."
-                    },
-                    "intentGateThreshold": {
-                        "type": "number",
-                        "minimum": 0,
-                        "maximum": 1,
-                        "default": 0.3,
-                        "description": "Minimum E10 intent similarity for pipeline gate. Candidates below threshold are filtered out. Only used when enableIntentGate=true."
                     },
                     "temporalWeight": {
                         "type": "number",

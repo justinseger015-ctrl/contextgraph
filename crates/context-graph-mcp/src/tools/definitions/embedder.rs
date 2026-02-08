@@ -12,7 +12,7 @@
 //! - E6 (keyword): Exact keyword matches
 //! - E7 (code): Code patterns, function signatures
 //! - E8 (graph): Structural relationships (imports, deps)
-//! - E10 (intent): Goal alignment, similar purpose
+//! - E10 (paraphrase): Same meaning, different wording
 //! - E11 (entity): Entity knowledge via KEPLER
 //! - E12 (precision): Exact phrase matches (reranking)
 //! - E13 (expansion): Term expansion (recall)
@@ -47,7 +47,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "string",
                         "description": "Which embedder to use as primary (E1-E13). E1=semantic, E2=recency, \
                                         E3=periodic, E4=sequence, E5=causal, E6=keyword, E7=code, E8=graph, \
-                                        E9=robustness, E10=intent, E11=entity, E12=precision, E13=expansion.",
+                                        E9=robustness, E10=paraphrase, E11=entity, E12=precision, E13=expansion.",
                         "enum": ["E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12", "E13"]
                     },
                     "query": {
@@ -193,7 +193,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "get_memory_fingerprint",
             "Retrieve the per-embedder fingerprint vectors for a specific memory. Returns dimension, \
              vector norm (L2), and presence status for each of the 13 embedders. Asymmetric embedders \
-             (E5 causal, E8 graph, E10 intent) show both directional variants. Sparse embedders \
+             (E5 causal, E8 graph, E10 paraphrase) show both directional variants. Sparse embedders \
              (E6, E13) show non-zero element count. Use to debug embedding quality, verify which \
              embedders produced vectors, and understand how a memory is represented across all 13 spaces.",
             json!({
@@ -232,7 +232,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "create_weight_profile",
             "Create a named custom embedder weight profile for the current session. Assigns weights \
              to each of the 13 embedders (E1-E13). The profile can be referenced by name in \
-             search_graph's weightProfile, get_unified_neighbors, and search_by_intent. Useful \
+             search_graph's weightProfile and get_unified_neighbors. Useful \
              for defining reusable search strategies. Rejects built-in profile names.",
             json!({
                 "type": "object",
@@ -327,42 +327,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "additionalProperties": false
             }),
         ),
-        // adaptive_search - Auto-classify query and select optimal weight profile
-        ToolDefinition::new(
-            "adaptive_search",
-            "Auto-classify a query by type (causal, code, temporal, entity, semantic) and select \
-             the optimal embedder weight profile. Uses keyword heuristics to detect query intent \
-             and route to the best E1-E13 weighting. Returns results with strategy explanation \
-             showing why the profile was selected and which keywords triggered it.",
-            json!({
-                "type": "object",
-                "required": ["query"],
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Search query to auto-classify and search."
-                    },
-                    "topK": {
-                        "type": "integer",
-                        "description": "Maximum results (1-100, default: 10).",
-                        "default": 10,
-                        "minimum": 1,
-                        "maximum": 100
-                    },
-                    "explainStrategy": {
-                        "type": "boolean",
-                        "description": "Include classification explanation in response (default: true).",
-                        "default": true
-                    },
-                    "includeContent": {
-                        "type": "boolean",
-                        "description": "Include content text in results (default: false).",
-                        "default": false
-                    }
-                },
-                "additionalProperties": false
-            }),
-        ),
     ]
 }
 
@@ -372,10 +336,10 @@ mod tests {
 
     #[test]
     fn test_embedder_tool_count() {
-        // 8 embedder tools: search_by_embedder, get_embedder_clusters, compare_embedder_views,
+        // 7 embedder tools: search_by_embedder, get_embedder_clusters, compare_embedder_views,
         // list_embedder_indexes, get_memory_fingerprint, create_weight_profile,
-        // search_cross_embedder_anomalies, adaptive_search
-        assert_eq!(definitions().len(), 8);
+        // search_cross_embedder_anomalies
+        assert_eq!(definitions().len(), 7);
     }
 
     #[test]

@@ -24,7 +24,7 @@ fn get_memory_neighbors_definition() -> ToolDefinition {
         "get_memory_neighbors",
         "Get K nearest neighbors of a memory in a specific embedder space. Returns neighbors \
          sorted by similarity. Use to find related memories according to different perspectives: \
-         E1 (semantic), E5 (causal), E7 (code), E8 (graph), E10 (intent), E11 (entity).",
+         E1 (semantic), E5 (causal), E7 (code), E8 (graph), E10 (paraphrase), E11 (entity).",
         json!({
             "type": "object",
             "required": ["memory_id"],
@@ -39,7 +39,7 @@ fn get_memory_neighbors_definition() -> ToolDefinition {
                     "minimum": 0,
                     "maximum": 12,
                     "default": 0,
-                    "description": "Embedder space to search (0=E1 semantic, 4=E5 causal, 6=E7 code, 7=E8 graph, 9=E10 intent, 10=E11 entity)"
+                    "description": "Embedder space to search (0=E1 semantic, 4=E5 causal, 6=E7 code, 7=E8 graph, 9=E10 paraphrase, 10=E11 entity)"
                 },
                 "top_k": {
                     "type": "integer",
@@ -201,14 +201,13 @@ fn get_unified_neighbors_definition() -> ToolDefinition {
                     "type": "string",
                     "enum": [
                         "semantic_search", "causal_reasoning", "code_search", "fact_checking",
-                        "intent_search", "intent_enhanced", "graph_reasoning",
-                        "temporal_navigation", "sequence_navigation", "conversation_history",
-                        "category_weighted", "typo_tolerant",
+                        "graph_reasoning", "temporal_navigation", "sequence_navigation",
+                        "conversation_history", "category_weighted", "typo_tolerant",
                         "pipeline_stage1_recall", "pipeline_stage2_scoring", "pipeline_full",
                         "balanced"
                     ],
                     "default": "semantic_search",
-                    "description": "Weight profile for RRF fusion. All 16 profiles available (default: semantic_search)."
+                    "description": "Weight profile for RRF fusion. All 14 profiles available (default: semantic_search)."
                 },
                 "top_k": {
                     "type": "integer",

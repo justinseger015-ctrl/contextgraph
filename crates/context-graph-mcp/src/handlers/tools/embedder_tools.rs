@@ -31,12 +31,12 @@ use context_graph_core::types::audit::{AuditOperation, AuditRecord};
 use crate::protocol::{JsonRpcId, JsonRpcResponse};
 
 use super::embedder_dtos::{
-    AdaptiveSearchRequest, AdaptiveSearchResponse, AllEmbedderScores, AsymmetricVariant,
+    AllEmbedderScores, AsymmetricVariant,
     CompareEmbedderViewsRequest, CompareEmbedderViewsResponse, CreateWeightProfileRequest,
     CreateWeightProfileResponse, EmbedderAnomaly, EmbedderId, EmbedderIndexInfo, EmbedderRanking,
     EmbedderSearchResult, EmbedderVectorInfo, GetEmbedderClustersRequest,
     GetMemoryFingerprintRequest, GetMemoryFingerprintResponse, ListEmbedderIndexesRequest,
-    ListEmbedderIndexesResponse, QueryClassification, RankedMemory,
+    ListEmbedderIndexesResponse, RankedMemory,
     SearchByEmbedderRequest, SearchByEmbedderResponse, SearchCrossEmbedderAnomaliesRequest,
     SearchCrossEmbedderAnomaliesResponse, UniqueFind,
 };
@@ -855,18 +855,18 @@ impl Handlers {
                     (!v.is_empty(), v.len(), l2_norm(v), None)
                 }
                 EmbedderId::E10 => {
-                    // Asymmetric: intent + context variants
-                    let intent = &sem.e10_multimodal_as_intent;
+                    // Asymmetric: paraphrase + context variants
+                    let paraphrase_vec = &sem.e10_multimodal_as_intent;
                     let context = &sem.e10_multimodal_as_context;
                     let active = sem.e10_active_vector();
                     let p = !active.is_empty();
                     let variants = Some(vec![
                         AsymmetricVariant {
-                            variant: "intent".to_string(),
-                            present: !intent.is_empty(),
-                            dimension: intent.len(),
-                            l2_norm: if request.include_vector_norms && !intent.is_empty() {
-                                Some(l2_norm(intent))
+                            variant: "paraphrase".to_string(),
+                            present: !paraphrase_vec.is_empty(),
+                            dimension: paraphrase_vec.len(),
+                            l2_norm: if request.include_vector_norms && !paraphrase_vec.is_empty() {
+                                Some(l2_norm(paraphrase_vec))
                             } else { None },
                         },
                         AsymmetricVariant {
@@ -968,7 +968,7 @@ impl Handlers {
     /// create_weight_profile tool implementation.
     ///
     /// Creates a session-scoped custom weight profile that can be referenced
-    /// by name in search_graph, get_unified_neighbors, and search_by_intent.
+    /// by name in search_graph and get_unified_neighbors.
     pub(crate) async fn call_create_weight_profile(
         &self,
         id: Option<JsonRpcId>,
@@ -1229,228 +1229,6 @@ impl Handlers {
         )
     }
 
-    /// adaptive_search tool implementation.
-    ///
-    /// Auto-classifies a query by type and selects the optimal weight profile.
-    /// Uses keyword heuristics for classification.
-    pub(crate) async fn call_adaptive_search(
-        &self,
-        id: Option<JsonRpcId>,
-        args: serde_json::Value,
-    ) -> JsonRpcResponse {
-        let start = Instant::now();
-
-        let request: AdaptiveSearchRequest = match serde_json::from_value(args) {
-            Ok(req) => req,
-            Err(e) => {
-                error!(error = %e, "adaptive_search: Failed to parse request");
-                return self.tool_error(id, &format!("Invalid request: {}", e));
-            }
-        };
-
-        if let Err(e) = request.validate() {
-            error!(error = %e, "adaptive_search: Validation failed");
-            return self.tool_error(id, &e);
-        }
-
-        // Step 1: Classify the query
-        let classification = classify_query(&request.query);
-
-        info!(
-            query = %request.query,
-            query_type = %classification.query_type,
-            profile = %classification.selected_profile,
-            confidence = classification.confidence,
-            "adaptive_search: Query classified"
-        );
-
-        // Step 2: Resolve the weight profile
-        let weights = match context_graph_core::weights::get_weight_profile(&classification.selected_profile) {
-            Ok(w) => w,
-            Err(e) => {
-                error!(error = %e, profile = %classification.selected_profile, "adaptive_search: Profile resolution FAILED");
-                return self.tool_error(id, &format!("Failed to resolve profile '{}': {}", classification.selected_profile, e));
-            }
-        };
-
-        // Step 3: Embed the query
-        let query_fingerprint = match self.multi_array_provider.embed_all(&request.query).await {
-            Ok(output) => output.fingerprint,
-            Err(e) => {
-                error!(error = %e, "adaptive_search: Query embedding FAILED");
-                return self.tool_error(id, &format!("Query embedding failed: {}", e));
-            }
-        };
-
-        // Step 4: Search with the selected profile's weights
-        // MUST use MultiSpace strategy so custom weights actually participate in RRF fusion
-        let options = TeleologicalSearchOptions::quick(request.top_k)
-            .with_strategy(SearchStrategy::MultiSpace)
-            .with_custom_weights(weights);
-
-        let candidates = match self
-            .teleological_store
-            .search_semantic(&query_fingerprint, options)
-            .await
-        {
-            Ok(results) => results,
-            Err(e) => {
-                error!(error = %e, "adaptive_search: Search FAILED");
-                return self.tool_error(id, &format!("Search failed: {}", e));
-            }
-        };
-
-        // Step 5: Build results
-        let candidate_ids: Vec<Uuid> = candidates.iter().map(|c| c.fingerprint.id).collect();
-        let contents = if request.include_content {
-            match self.teleological_store.get_content_batch(&candidate_ids).await {
-                Ok(c) => c,
-                Err(e) => {
-                    error!(error = %e, "adaptive_search: Content retrieval FAILED");
-                    return self.tool_error(id, &format!("Content retrieval failed: {}", e));
-                }
-            }
-        } else {
-            vec![None; candidate_ids.len()]
-        };
-
-        let results: Vec<EmbedderSearchResult> = candidates
-            .iter()
-            .enumerate()
-            .map(|(i, cand)| EmbedderSearchResult {
-                memory_id: cand.fingerprint.id,
-                similarity: cand.similarity,
-                content: contents.get(i).and_then(|c| c.clone()),
-                all_scores: None,
-            })
-            .collect();
-
-        let elapsed_ms = start.elapsed().as_millis() as u64;
-
-        // Capture classification fields for audit before moving into response
-        let audit_query_type = classification.query_type.clone();
-        let audit_selected_profile = classification.selected_profile.clone();
-        let audit_confidence = classification.confidence;
-
-        let response = AdaptiveSearchResponse {
-            query: request.query.clone(),
-            classification: if request.explain_strategy {
-                Some(classification)
-            } else {
-                None
-            },
-            total_results: results.len(),
-            results,
-            search_time_ms: elapsed_ms,
-        };
-
-        info!(
-            results = response.total_results,
-            elapsed_ms = elapsed_ms,
-            "adaptive_search: Completed"
-        );
-
-        // Emit SearchPerformed audit (non-fatal)
-        {
-            let audit_record = AuditRecord::new(
-                AuditOperation::SearchPerformed {
-                    tool_name: "adaptive_search".to_string(),
-                    results_returned: response.total_results,
-                    weight_profile: Some(audit_selected_profile.clone()),
-                    strategy: Some("MultiSpace".to_string()),
-                },
-                candidate_ids.first().copied().unwrap_or(Uuid::nil()),
-            )
-            .with_operator("adaptive_search")
-            .with_parameters(json!({
-                "query_preview": request.query.chars().take(100).collect::<String>(),
-                "top_k": request.top_k,
-                "detected_type": audit_query_type,
-                "selected_profile": audit_selected_profile,
-                "confidence": audit_confidence,
-            }));
-
-            if let Err(e) = self.teleological_store.append_audit_record(&audit_record).await {
-                warn!(error = %e, "adaptive_search: Failed to write audit record (non-fatal)");
-            }
-        }
-
-        self.tool_result(
-            id,
-            serde_json::to_value(response).unwrap_or_else(|_| json!({})),
-        )
-    }
-}
-
-/// Classify a query by type using keyword heuristics.
-///
-/// Returns the detected query type, selected weight profile, confidence,
-/// and the keywords that triggered the classification.
-fn classify_query(query: &str) -> QueryClassification {
-    let lower = query.to_lowercase();
-    let word_count = lower.split_whitespace().count().max(1) as f32;
-
-    /// Collect keywords from `candidates` that appear in `text`.
-    fn matched_keywords<'a>(text: &str, candidates: &[&'a str]) -> Vec<&'a str> {
-        candidates.iter().copied().filter(|kw| text.contains(kw)).collect()
-    }
-
-    let categories: [(&str, &str, Vec<&str>); 6] = [
-        ("causal", "causal_reasoning", matched_keywords(&lower, &[
-            "why", "because", "caused", "cause", "effect", "leads to",
-            "result of", "consequence", "due to", "therefore", "hence",
-        ])),
-        ("code", "code_search", matched_keywords(&lower, &[
-            "fn ", "function", "class ", "struct ", "impl ", "def ",
-            "async ", "pub fn", "import ", "module", "crate", "package",
-            "compile", "runtime", "error:", "panic", "unwrap",
-        ])),
-        ("temporal", "temporal_navigation", matched_keywords(&lower, &[
-            "recent", "yesterday", "last week", "today", "latest",
-            "newest", "when", "before", "after", "ago", "previous",
-        ])),
-        ("entity", "fact_checking", matched_keywords(&lower, &[
-            "who", "what is", "where", "define", "definition",
-            "entity", "person", "organization", "company",
-        ])),
-        ("intent", "intent_search", matched_keywords(&lower, &[
-            "how to", "goal", "achieve", "accomplish", "implement",
-            "build", "create", "design", "plan",
-        ])),
-        ("graph", "graph_reasoning", matched_keywords(&lower, &[
-            "related to", "connected", "depends on", "dependency",
-            "imports", "uses", "relationship", "link",
-        ])),
-    ];
-
-    // Pick the category with the most keyword matches
-    if let Some((query_type, profile, kws)) = categories
-        .iter()
-        .filter(|(_, _, kws)| !kws.is_empty())
-        .max_by_key(|(_, _, kws)| kws.len())
-    {
-        let count = kws.len();
-        let confidence = (count as f32 / word_count).min(1.0);
-        return QueryClassification {
-            query_type: query_type.to_string(),
-            selected_profile: profile.to_string(),
-            confidence,
-            reason: format!(
-                "Detected {} keyword(s) matching '{}' type. Using '{}' profile for optimal retrieval.",
-                count, query_type, profile
-            ),
-            trigger_keywords: kws.iter().map(|s| s.to_string()).collect(),
-        };
-    }
-
-    // Default: semantic search
-    QueryClassification {
-        query_type: "semantic".to_string(),
-        selected_profile: "semantic_search".to_string(),
-        confidence: 0.5,
-        reason: "No specific query type detected. Using default 'semantic_search' profile.".to_string(),
-        trigger_keywords: vec![],
-    }
 }
 
 #[cfg(test)]

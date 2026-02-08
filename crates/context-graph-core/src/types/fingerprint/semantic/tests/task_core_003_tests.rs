@@ -137,7 +137,7 @@ fn test_storage_bytes() {
     // Calculate expected size:
     // Dense: 10 embeddings
     // With dual E5 vectors (cause + effect), total dense dims = TOTAL_DENSE_DIMS + E5_DIM
-    // With dual E5, E8, and E10 vectors (cause/effect, source/target, intent/context)
+    // With dual E5, E8, and E10 vectors (cause/effect, source/target, paraphrase/context)
     let dense_floats =
         E1_DIM + E2_DIM + E3_DIM + E4_DIM + E5_DIM + E5_DIM + E7_DIM + E8_DIM + E8_DIM + E9_DIM + E10_DIM + E10_DIM + E11_DIM;
     let expected_dense_bytes = dense_floats * std::mem::size_of::<f32>();
@@ -169,7 +169,7 @@ fn test_storage_bytes_with_sparse() {
     let bytes = fp.storage_bytes();
 
     // Calculate expected size:
-    // With dual E5, E8, and E10 vectors (cause/effect, source/target, intent/context)
+    // With dual E5, E8, and E10 vectors (cause/effect, source/target, paraphrase/context)
     let dense_floats =
         E1_DIM + E2_DIM + E3_DIM + E4_DIM + E5_DIM + E5_DIM + E7_DIM + E8_DIM + E8_DIM + E9_DIM + E10_DIM + E10_DIM + E11_DIM;
     let dense_bytes = dense_floats * std::mem::size_of::<f32>();

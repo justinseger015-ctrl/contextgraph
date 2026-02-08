@@ -147,10 +147,10 @@ impl MultiUtlParams {
         Self::default()
     }
 
-    /// Create params from a topic profile's alignments.
-    pub fn from_purpose_alignments(alignments: [f32; NUM_EMBEDDERS]) -> Self {
+    /// Create params from a topic profile's per-embedder weights.
+    pub fn from_topic_weights(weights: [f32; NUM_EMBEDDERS]) -> Self {
         Self {
-            tau_weights: alignments,
+            tau_weights: weights,
             ..Default::default()
         }
     }
@@ -542,16 +542,16 @@ mod tests {
     }
 
     #[test]
-    fn test_from_purpose_alignments() {
-        let alignments = [
+    fn test_from_topic_weights() {
+        let weights = [
             0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.0, -0.1, -0.2, -0.3,
         ];
-        let params = MultiUtlParams::from_purpose_alignments(alignments);
+        let params = MultiUtlParams::from_topic_weights(weights);
 
-        for (i, &alignment) in alignments.iter().enumerate().take(NUM_EMBEDDERS) {
-            assert!((params.tau_weights[i] - alignment).abs() < 1e-6);
+        for (i, &w) in weights.iter().enumerate().take(NUM_EMBEDDERS) {
+            assert!((params.tau_weights[i] - w).abs() < 1e-6);
         }
 
-        println!("[PASS] from_purpose_alignments sets tau_weights correctly");
+        println!("[PASS] from_topic_weights sets tau_weights correctly");
     }
 }

@@ -10,7 +10,7 @@
 //! - Stage 1: SPLADE sparse pre-filter (<5ms, 10K candidates)
 //! - Stage 2: Matryoshka 128D fast ANN (<10ms, 1K candidates)
 //! - Stage 3: Full 13-space HNSW (<20ms, 100 candidates)
-//! - Stage 4: Teleological alignment filter (<10ms, 50 candidates)
+//! - Stage 4: Score-based filter (<10ms, 50 candidates)
 //! - Stage 5: Late interaction reranking (<15ms, final results)
 //!
 //! Total target: <60ms @ 1M memories

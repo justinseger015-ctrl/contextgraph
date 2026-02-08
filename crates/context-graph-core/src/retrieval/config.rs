@@ -45,7 +45,7 @@ pub const SPACE_WEIGHTS: [f32; 13] = [
     0.0, // E2: Temporal Recent (excluded)
     0.0, // E3: Temporal Periodic (excluded)
     0.0, // E4: Temporal Positional (excluded)
-    1.0, // E5: Causal - intent/causality
+    1.0, // E5: Causal - cause/effect
     1.0, // E6: Sparse - sparse terms
     1.0, // E7: Code - code structure
     0.5, // E8: Emotional (Relational)

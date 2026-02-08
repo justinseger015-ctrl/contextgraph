@@ -980,6 +980,20 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
         Ok(false)
     }
 
+    // ==================== Processing Cursor Persistence ====================
+
+    async fn store_processing_cursor(&self, _key: &str, _data: &[u8]) -> CoreResult<()> {
+        Err(CoreError::NotImplemented(
+            "InMemoryTeleologicalStore does not support processing cursors. Use RocksDB.".to_string(),
+        ))
+    }
+
+    async fn get_processing_cursor(&self, _key: &str) -> CoreResult<Option<Vec<u8>>> {
+        Err(CoreError::NotImplemented(
+            "InMemoryTeleologicalStore does not support processing cursors. Use RocksDB.".to_string(),
+        ))
+    }
+
     // ==================== Type Downcasting ====================
 
     fn as_any(&self) -> &dyn Any {

@@ -27,17 +27,15 @@ struct MemoryContent {
     embedding: Vec<f32>,
     #[allow(dead_code)] // Populated from storage; used by future text-based consolidation strategies
     text: String,
-    alignment: f32,
     access_count: u32,
 }
 
 impl MemoryContent {
-    fn new(id: MemoryId, embedding: Vec<f32>, text: String, alignment: f32) -> Self {
+    fn new(id: MemoryId, embedding: Vec<f32>, text: String) -> Self {
         Self {
             id,
             embedding,
             text,
-            alignment,
             access_count: 0,
         }
     }
@@ -67,7 +65,6 @@ struct ConsolidationCandidate {
     source_ids: Vec<MemoryId>,
     target_id: MemoryId,
     similarity: f32,
-    combined_alignment: f32,
 }
 
 /// Configuration for consolidation service.
@@ -76,7 +73,6 @@ struct ConsolidationConfig {
     enabled: bool,
     similarity_threshold: f32,
     max_daily_merges: usize,
-    theta_diff_threshold: f32,
 }
 
 /// Service that finds consolidation candidates.
@@ -101,18 +97,12 @@ impl ConsolidationService {
                 // Dot product can exceed 1.0 for non-normalized embeddings.
                 let sim = cosine_similarity(&pair.first.embedding, &pair.second.embedding);
 
-                // Compute alignment difference
-                let alignment_diff = (pair.first.alignment - pair.second.alignment).abs();
-
-                // Accept if high similarity and small alignment difference
-                if sim >= self.config.similarity_threshold
-                    && alignment_diff <= self.config.theta_diff_threshold
-                {
+                // Accept if high similarity
+                if sim >= self.config.similarity_threshold {
                     Some(ConsolidationCandidate {
                         source_ids: vec![pair.first.id, pair.second.id],
                         target_id: pair.first.id, // Keep the first as target
                         similarity: sim,
-                        combined_alignment: (pair.first.alignment + pair.second.alignment) / 2.0,
                     })
                 } else {
                     None
@@ -279,12 +269,9 @@ impl Handlers {
             // Use E1 (semantic 1024D) embedding for comparison
             let embedding = fp.semantic.e1_semantic.clone();
 
-            // No semantic bias score - use 1.0 as neutral alignment
-            let alignment = 1.0;
-
             let text = content_texts.get(idx).and_then(|c| c.clone()).unwrap_or_default();
 
-            let content = MemoryContent::new(MemoryId(fp.id), embedding, text, alignment)
+            let content = MemoryContent::new(MemoryId(fp.id), embedding, text)
                 .with_access_count(fp.access_count as u32);
 
             memory_contents.push(content);
@@ -335,19 +322,14 @@ impl Handlers {
                 pairs
             }
             "semantic" => {
+                // Semantic strategy: pair all memories
                 let mut pairs = Vec::new();
-                let alignment_threshold = 0.5;
-
                 for i in 0..memory_contents.len() {
                     for j in (i + 1)..memory_contents.len() {
-                        if memory_contents[i].alignment >= alignment_threshold
-                            && memory_contents[j].alignment >= alignment_threshold
-                        {
-                            pairs.push(MemoryPair::new(
-                                memory_contents[i].clone(),
-                                memory_contents[j].clone(),
-                            ));
-                        }
+                        pairs.push(MemoryPair::new(
+                            memory_contents[i].clone(),
+                            memory_contents[j].clone(),
+                        ));
                     }
                 }
                 pairs
@@ -363,7 +345,6 @@ impl Handlers {
             enabled: true,
             similarity_threshold: params.min_similarity,
             max_daily_merges: 50,
-            theta_diff_threshold: 0.05,
         };
         let consolidation_service = ConsolidationService::with_config(config);
 
@@ -420,8 +401,7 @@ impl Handlers {
                 json!({
                     "source_ids": c.source_ids.iter().map(|id| id.0.to_string()).collect::<Vec<_>>(),
                     "target_id": c.target_id.0.to_string(),
-                    "similarity": c.similarity,
-                    "combined_alignment": c.combined_alignment
+                    "similarity": c.similarity
                 })
             })
             .collect();

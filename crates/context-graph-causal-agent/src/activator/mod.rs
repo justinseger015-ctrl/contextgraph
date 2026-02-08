@@ -159,26 +159,29 @@ impl E5EmbedderActivator {
         effect_content: &str,
         analysis: &CausalAnalysisResult,
     ) -> CausalAgentResult<(Vec<f32>, Vec<f32>)> {
-        let mut stats = self.stats.write();
-        stats.processed += 1;
+        // Phase 1: Pre-await stats updates (parking_lot guard is !Send, must drop before .await)
+        {
+            let mut stats = self.stats.write();
+            stats.processed += 1;
 
-        // Check confidence threshold
-        if analysis.confidence < self.config.min_confidence {
-            debug!(
-                cause = %cause_id,
-                effect = %effect_id,
-                confidence = analysis.confidence,
-                threshold = self.config.min_confidence,
-                "Skipping low confidence relationship"
-            );
-            stats.skipped_low_confidence += 1;
-            return Err(CausalAgentError::ConfigError {
-                message: format!(
-                    "Confidence {} below threshold {}",
-                    analysis.confidence, self.config.min_confidence
-                ),
-            });
-        }
+            // Check confidence threshold
+            if analysis.confidence < self.config.min_confidence {
+                debug!(
+                    cause = %cause_id,
+                    effect = %effect_id,
+                    confidence = analysis.confidence,
+                    threshold = self.config.min_confidence,
+                    "Skipping low confidence relationship"
+                );
+                stats.skipped_low_confidence += 1;
+                return Err(CausalAgentError::ConfigError {
+                    message: format!(
+                        "Confidence {} below threshold {}",
+                        analysis.confidence, self.config.min_confidence
+                    ),
+                });
+            }
+        } // stats guard dropped here
 
         // Check if relationship already exists in graph
         {
@@ -190,7 +193,7 @@ impl E5EmbedderActivator {
                         effect = %effect_id,
                         "Skipping existing relationship"
                     );
-                    stats.skipped_existing += 1;
+                    self.stats.write().skipped_existing += 1;
                     return Err(CausalAgentError::ConfigError {
                         message: "Relationship already exists".to_string(),
                     });
@@ -203,16 +206,20 @@ impl E5EmbedderActivator {
             .generate_e5_embeddings(cause_content, effect_content, &analysis.direction, analysis)
             .await?;
 
-        // Count embeddings generated (2 for unidirectional, 4 for bidirectional)
+        // Phase 2: Post-await stats updates (re-acquire guard after .await)
         let emb_count = if embeddings.is_bidirectional() { 4 } else { 2 };
-        stats.embeddings_generated += emb_count;
 
         let cause_embedding = embeddings.cause_primary.clone();
         let effect_embedding = embeddings.effect_primary.clone();
 
         // Add edge to causal graph
         self.add_graph_edge(cause_id, effect_id, cause_content, effect_content, analysis)?;
-        stats.edges_created += 1;
+
+        {
+            let mut stats = self.stats.write();
+            stats.embeddings_generated += emb_count;
+            stats.edges_created += 1;
+        }
 
         info!(
             cause = %cause_id,

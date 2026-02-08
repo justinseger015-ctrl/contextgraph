@@ -598,7 +598,7 @@ pub fn quantize_fingerprint(
     // For E5, we quantize the active vector (cause vector takes precedence over legacy)
     let e5_causal = quantize_pq8(fp.e5_active_vector(), E5_DIM / 32, Embedder::Causal)?; // 24 subvectors
     let e7_code = quantize_pq8(&fp.e7_code, E7_DIM / 32, Embedder::Code)?; // 48 subvectors
-    // For E10, we quantize the active vector (intent vector takes precedence over legacy)
+    // For E10, we quantize the active vector (paraphrase vector takes precedence over legacy)
     let e10_multimodal = quantize_pq8(fp.e10_active_vector(), E10_DIM / 32, Embedder::Multimodal)?; // 24 subvectors
 
     // Float8 quantization for temporal and relational embeddings
@@ -784,7 +784,7 @@ mod tests {
         for (i, v) in fp.e9_hdc.iter_mut().enumerate() {
             *v = (i as f32 / 1024.0) * 2.0 - 1.0;
         }
-        // E10 now uses dual vectors for asymmetric intent/context similarity
+        // E10 now uses dual vectors for asymmetric paraphrase/context similarity
         for (i, v) in fp.e10_multimodal_as_intent.iter_mut().enumerate() {
             *v = (i as f32 / 768.0) * 2.0 - 1.0;
         }

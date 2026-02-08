@@ -180,7 +180,7 @@ Each embedder's signal has specific meaning defined by tunable parameters. These
 
 **Benchmark Results**: +69% improvement for signature searches, +29% for pattern searches, +19.2% overall MRR improvement over pure E1.
 
-#### E10 Intent Signal (Multiplicative Boost)
+#### E10 Paraphrase Signal (Multiplicative Boost)
 | E1 Strength | Boost | Rationale |
 |-------------|-------|-----------|
 | Strong (>0.8) | 5% | E1 is confident, E10 refines |

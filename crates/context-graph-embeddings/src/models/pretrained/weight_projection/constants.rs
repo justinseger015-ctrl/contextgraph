@@ -30,7 +30,7 @@ pub const DEFAULT_CATEGORY_WEIGHTS: [f32; NUM_EMBEDDERS] = [
     1.0, // E7 Code (semantic)
     0.5, // E8 Graph (relational)
     0.5, // E9 Robustness (structural)
-    1.0, // E10 Intent (semantic)
+    1.0, // E10 Paraphrase (semantic)
     0.5, // E11 Entity (relational)
     1.0, // E12 Late Interaction (semantic)
     1.0, // E13 SPLADE (semantic)

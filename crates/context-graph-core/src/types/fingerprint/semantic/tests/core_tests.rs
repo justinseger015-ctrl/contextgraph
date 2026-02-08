@@ -21,7 +21,7 @@ fn test_semantic_fingerprint_zeroed() {
     assert!(fp.e8_graph_as_target.iter().all(|&v| v == 0.0));
     assert!(fp.e8_graph.is_empty()); // Legacy field is empty
     assert!(fp.e9_hdc.iter().all(|&v| v == 0.0));
-    // E10 now uses dual vectors for asymmetric intent/context similarity
+    // E10 now uses dual vectors for asymmetric paraphrase/context similarity
     assert!(fp.e10_multimodal_as_intent.iter().all(|&v| v == 0.0));
     assert!(fp.e10_multimodal_as_context.iter().all(|&v| v == 0.0));
     assert!(fp.e10_multimodal.is_empty()); // Legacy field is empty
@@ -50,7 +50,7 @@ fn test_semantic_fingerprint_dimensions() {
     assert_eq!(fp.e8_graph_as_target.len(), E8_DIM);
     assert!(fp.e8_graph.is_empty(), "Legacy e8_graph should be empty in new format");
     assert_eq!(fp.e9_hdc.len(), E9_DIM);
-    // E10 now uses dual vectors for asymmetric intent/context similarity
+    // E10 now uses dual vectors for asymmetric paraphrase/context similarity
     assert_eq!(fp.e10_multimodal_as_intent.len(), E10_DIM);
     assert_eq!(fp.e10_multimodal_as_context.len(), E10_DIM);
     assert!(fp.e10_multimodal.is_empty(), "Legacy e10_multimodal should be empty in new format");

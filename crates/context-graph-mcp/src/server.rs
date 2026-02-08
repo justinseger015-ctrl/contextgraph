@@ -61,8 +61,9 @@ use context_graph_embeddings::traits::EmbeddingModel;
 use context_graph_storage::code::CodeStore;
 
 use context_graph_embeddings::{
-    get_warm_graph_model, get_warm_provider, initialize_global_warm_provider, is_warm_initialized,
-    warm_status_message, GpuConfig, ProductionMultiArrayProvider,
+    get_warm_causal_model, get_warm_graph_model, get_warm_provider,
+    initialize_global_warm_provider, is_warm_initialized, warm_status_message, GpuConfig,
+    ProductionMultiArrayProvider,
 };
 
 // REAL implementations - NO STUBS
@@ -596,6 +597,22 @@ impl McpServer {
             graph_discovery_config,
         ));
 
+        // INLINE-CAUSAL: Get CausalModel for E5 asymmetric embeddings (shares warm provider)
+        // Used by inline causal extraction during store_memory (no background loop).
+        let causal_model = get_warm_causal_model().map_err(|e| {
+            error!(
+                "FATAL: Failed to get CausalModel from warm provider: {}. \
+                 Inline causal extraction requires E5 model for relationship embeddings.",
+                e
+            );
+            anyhow::anyhow!("Failed to get CausalModel: {}", e)
+        })?;
+        info!("CausalModel obtained from warm provider - E5 embeddings ready for inline causal extraction");
+
+        // INLINE-CAUSAL: Clone shared_llm BEFORE it's moved into LlmCausalHintProvider
+        // This clone is passed to Handlers for inline extract_causal_relationships()
+        let causal_llm_for_inline = Arc::clone(&shared_llm);
+
         // CAUSAL-HINT: Create LlmCausalHintProvider using shared LLM (GPU inference via CUDA)
         info!("CAUSAL-HINT: Creating LlmCausalHintProvider (2s timeout for GPU inference)");
         let causal_hint_provider: Arc<dyn CausalHintProvider> =
@@ -604,10 +621,10 @@ impl McpServer {
                 LlmCausalHintProvider::DEFAULT_TIMEOUT_MS,
             ));
 
-        // TASK-GRAPHLINK: Use with_graph_discovery to enable K-NN graph operations
-        // with background builder support and LLM-based relationship detection
-        // NO FALLBACKS - All components MUST work or server startup fails
-        info!("Creating Handlers with graph discovery and causal hints enabled - NO FALLBACKS");
+        // TASK-GRAPHLINK + INLINE-CAUSAL: Use with_graph_discovery to enable K-NN graph operations
+        // with background builder support, LLM-based relationship detection, and inline causal extraction.
+        // NO FALLBACKS - All components MUST work or server startup fails.
+        info!("Creating Handlers with graph discovery, causal hints, and inline causal extraction - NO FALLBACKS");
         let handlers = Handlers::with_graph_discovery(
             Arc::clone(&teleological_store),
             lazy_provider,
@@ -615,9 +632,11 @@ impl McpServer {
             edge_repository,
             Arc::clone(&graph_builder),
             graph_discovery_service,
-            causal_hint_provider, // NEW: Enable LLM-based causal hints for E5
+            causal_hint_provider,
+            causal_llm_for_inline, // INLINE-CAUSAL: Shared LLM for extract_causal_relationships()
+            causal_model,          // INLINE-CAUSAL: E5 CausalModel for asymmetric embeddings
         );
-        info!("Created Handlers with full graph linking enabled (K-NN edges + background builder, NO FALLBACKS)");
+        info!("Created Handlers with inline causal extraction enabled (K-NN edges + background builder, NO FALLBACKS)");
 
         info!(
             "MCP Server initialization complete - TeleologicalFingerprint mode with 13 embeddings"

@@ -133,11 +133,6 @@ impl Handlers {
             }
             tool_names::VALIDATE_GRAPH_LINK => self.call_validate_graph_link(id, arguments).await,
 
-            // ========== INTENT TOOLS (E10 Intent/Context Upgrade) ==========
-            // Note: search_by_intent now handles both query-based and context-based searches
-            // (formerly separate find_contextual_matches tool was merged)
-            tool_names::SEARCH_BY_INTENT => self.call_search_by_intent(id, arguments).await,
-
             // ========== KEYWORD TOOLS (E6 Keyword Search Enhancement) ==========
             tool_names::SEARCH_BY_KEYWORDS => self.call_search_by_keywords(id, arguments).await,
 
@@ -177,8 +172,6 @@ impl Handlers {
             tool_names::SEARCH_CROSS_EMBEDDER_ANOMALIES => {
                 self.call_search_cross_embedder_anomalies(id, arguments).await
             }
-            tool_names::ADAPTIVE_SEARCH => self.call_adaptive_search(id, arguments).await,
-
             // ========== TEMPORAL TOOLS (E2/E3 Integration) ==========
             tool_names::SEARCH_RECENT => self.call_search_recent(id, arguments).await,
             tool_names::SEARCH_PERIODIC => self.call_search_periodic(id, arguments).await,

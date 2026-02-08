@@ -15,7 +15,7 @@
 //! | E7Code | 1536D | Code/tech |
 //! | E8Graph | 1024D | Graph |
 //! | E9HDC | 1024D | Structure |
-//! | E10Multimodal | 768D | Intent |
+//! | E10Multimodal | 768D | Paraphrase |
 //! | E11Entity | 768D | Multi-modal |
 //!
 //! # NOT Supported (different algorithms)

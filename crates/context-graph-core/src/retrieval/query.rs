@@ -179,7 +179,7 @@ pub struct PipelineStageConfig {
     /// Default: 100
     pub full_search_limit: usize,
 
-    /// Stage 4: Teleological alignment filter limit.
+    /// Stage 4: Score-based filter limit.
     /// Default: 50
     pub teleological_limit: usize,
 
@@ -194,11 +194,6 @@ pub struct PipelineStageConfig {
     /// Formula: RRF(d) = Σᵢ 1/(k + rankᵢ(d))
     pub rrf_k: f32,
 
-    /// Minimum alignment threshold for Stage 4 teleological filter.
-    ///
-    /// Constitution: `teleological.thresholds.critical`
-    /// Default: 0.55 (via `alignment::CRITICAL`)
-    pub min_alignment_threshold: f32,
 }
 
 impl Default for PipelineStageConfig {
@@ -210,7 +205,6 @@ impl Default for PipelineStageConfig {
             teleological_limit: 50,
             late_interaction_limit: 20,
             rrf_k: pipeline::DEFAULT_RRF_K,
-            min_alignment_threshold: 0.55, // Critical threshold from constitution.yaml
         }
     }
 }
@@ -222,8 +216,7 @@ impl PipelineStageConfig {
     ///
     /// 1. All candidate counts must be > 0
     /// 2. rrf_k must be > 0
-    /// 3. min_alignment_threshold must be in [0.0, 1.0]
-    /// 4. Stage limits should form a decreasing funnel
+    /// 3. Stage limits should form a decreasing funnel
     ///
     /// # Errors
     ///
@@ -270,17 +263,6 @@ impl PipelineStageConfig {
             return Err(crate::error::CoreError::ValidationError {
                 field: "rrf_k".to_string(),
                 message: "RRF k parameter must be > 0".to_string(),
-            });
-        }
-
-        // Rule 3: min_alignment_threshold must be in [0.0, 1.0]
-        if !(0.0..=1.0).contains(&self.min_alignment_threshold) {
-            return Err(crate::error::CoreError::ValidationError {
-                field: "min_alignment_threshold".to_string(),
-                message: format!(
-                    "Alignment threshold must be in [0.0, 1.0], got {}",
-                    self.min_alignment_threshold
-                ),
             });
         }
 
@@ -439,7 +421,6 @@ mod tests {
         assert_eq!(config.teleological_limit, 50);
         assert_eq!(config.late_interaction_limit, 20);
         assert!((config.rrf_k - 60.0).abs() < 0.001);
-        assert!((config.min_alignment_threshold - 0.55).abs() < 0.001);
 
         println!("[VERIFIED] PipelineStageConfig defaults match constitution.yaml");
     }

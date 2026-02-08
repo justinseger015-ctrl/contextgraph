@@ -146,7 +146,7 @@ mod tests {
     fn test_temporal_embedders_excluded_from_semantic_profiles() {
         let semantic_profiles = [
             "semantic_search", "causal_reasoning", "code_search", "fact_checking",
-            "category_weighted", "intent_search", "intent_enhanced", "typo_tolerant",
+            "category_weighted", "typo_tolerant",
             "graph_reasoning"
         ];
 
@@ -229,16 +229,6 @@ mod tests {
         assert!(weights[3] >= 0.50, "E4 should be >= 0.50 (got {})", weights[3]);
         let max_weight = weights.iter().cloned().fold(0.0f32, f32::max);
         assert!((weights[3] - max_weight).abs() < 0.001, "E4 should be highest weighted");
-    }
-
-    #[test]
-    fn test_intent_search_profile_exists() {
-        assert!(get_weight_profile("intent_search").is_some());
-    }
-
-    #[test]
-    fn test_intent_enhanced_profile_exists() {
-        assert!(get_weight_profile("intent_enhanced").is_some());
     }
 
     #[test]

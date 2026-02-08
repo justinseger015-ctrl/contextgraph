@@ -1,7 +1,7 @@
 //! TASK-TELEO-013: MultiSpaceRetriever Implementation
 //!
 //! Teleological-aware retrieval across multi-embedding space.
-//! Combines similarity from multiple embeddings weighted by purpose alignment.
+//! Combines similarity from multiple embeddings weighted by topic profile.
 //!
 //! # From teleoplan.md
 //!

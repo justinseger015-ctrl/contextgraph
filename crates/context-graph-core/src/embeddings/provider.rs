@@ -259,7 +259,7 @@ impl StubMultiArrayProvider {
             e8_graph_as_target: e8_vec,
             e8_graph: Vec::new(), // Empty - using new dual format
             e9_hdc: e9_vec,
-            // E10: Using new dual format for asymmetric intent/context similarity
+            // E10: Using new dual format for asymmetric paraphrase/context similarity
             e10_multimodal_as_intent: e10_vec.clone(),
             e10_multimodal_as_context: e10_vec,
             e10_multimodal: Vec::new(), // Empty - using new dual format
@@ -515,8 +515,8 @@ mod tests {
         assert_eq!(fp.e8_graph_as_target.len(), 1024, "E8 target should be 1024D");
         assert!(fp.e8_graph.is_empty(), "E8 legacy should be empty in new format");
         assert_eq!(fp.e9_hdc.len(), 1024, "E9 should be 1024D");
-        // E10 now uses dual vectors for asymmetric intent/context similarity
-        assert_eq!(fp.e10_multimodal_as_intent.len(), 768, "E10 intent should be 768D");
+        // E10 now uses dual vectors for asymmetric paraphrase/context similarity
+        assert_eq!(fp.e10_multimodal_as_intent.len(), 768, "E10 paraphrase should be 768D");
         assert_eq!(fp.e10_multimodal_as_context.len(), 768, "E10 context should be 768D");
         assert!(fp.e10_multimodal.is_empty(), "E10 legacy should be empty in new format");
         assert_eq!(fp.e11_entity.len(), 768, "E11 should be 768D (KEPLER)");

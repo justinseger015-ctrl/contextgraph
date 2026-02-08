@@ -64,7 +64,7 @@ fn create_test_fingerprint_with_seed(seed: u64) -> TeleologicalFingerprint {
         e8_graph_as_target: generate_vec(1024, seed + 8),       // 1024D (as target)
         e8_graph: Vec::new(),                                  // Legacy field, empty
         e9_hdc: generate_vec(1024, seed + 8),                  // 1024D HDC (projected)
-        e10_multimodal_as_intent: generate_vec(768, seed + 9), // 768D (as intent)
+        e10_multimodal_as_intent: generate_vec(768, seed + 9), // 768D (paraphrase side)
         e10_multimodal_as_context: generate_vec(768, seed + 13), // 768D (as context)
         e10_multimodal: Vec::new(),                            // Legacy field, empty
         e11_entity: generate_vec(768, seed + 10),              // 768D (KEPLER)

@@ -22,9 +22,6 @@ pub struct PipelineHealth {
     /// Number of embedding spaces available.
     pub spaces_available: usize,
 
-    /// Whether goal hierarchy is configured.
-    pub has_goal_hierarchy: bool,
-
     /// Index size (total memories).
     pub index_size: usize,
 
@@ -35,7 +32,7 @@ pub struct PipelineHealth {
 /// Trait for teleological retrieval pipeline execution.
 ///
 /// Implementations must coordinate the 5-stage retrieval process and
-/// integrate teleological filtering (purpose alignment, goal hierarchy).
+/// integrate teleological filtering (multi-space scoring and ranking).
 ///
 /// # Performance Requirements
 ///
@@ -53,7 +50,7 @@ pub trait TeleologicalRetrievalPipeline: Send + Sync {
     /// Execute the full 5-stage teleological retrieval pipeline.
     ///
     /// # Arguments
-    /// * `query` - The teleological query with text/embeddings, goals, filters
+    /// * `query` - The teleological query with text/embeddings and filters
     ///
     /// # Returns
     /// `TeleologicalRetrievalResult` with ranked results and timing breakdown.
@@ -69,15 +66,15 @@ pub trait TeleologicalRetrievalPipeline: Send + Sync {
     /// Execute only Stage 4 (teleological filtering) on pre-fetched candidates.
     ///
     /// Use this when you already have candidates from another source and
-    /// only need teleological filtering/scoring.
+    /// only need scoring and ranking.
     ///
     /// # Arguments
     /// * `candidates` - Pre-fetched fingerprints to filter/score
-    /// * `query` - Query with goals and filters
+    /// * `query` - Query with search options
     ///
     /// # Returns
-    /// Filtered and scored results
-    async fn filter_by_alignment(
+    /// Scored and ranked results
+    async fn filter_by_score(
         &self,
         candidates: &[&TeleologicalFingerprint],
         query: &TeleologicalQuery,

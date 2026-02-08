@@ -52,5 +52,3 @@ pub use options::{
     SequenceOptions, TemporalScale, TemporalSearchOptions, TimeWindow,
 };
 
-// Re-export E10 Intent Gate types (Phase 4)
-pub use options::IntentDirection;

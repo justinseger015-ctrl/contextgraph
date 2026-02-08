@@ -21,11 +21,11 @@
 //! # Original Documentation (for reference)
 //!
 //! Following the E5 Causal pattern (ARCH-15) and E8 Graph pattern, this module
-//! provided learned projection matrices for creating asymmetric intent/context embeddings.
+//! provided learned projection matrices for creating asymmetric paraphrase/context embeddings.
 //!
 //! # Architecture
 //!
-//! The projections transform the base MPNet embedding into intent-role and
+//! The projections transform the base MPNet embedding into paraphrase-role and
 //! context-role vectors. They are initialized as perturbed identity matrices
 //! (I + N(0, 0.02)) to create immediate asymmetry without training.
 //!
@@ -68,7 +68,7 @@ pub const CONTEXT_PROJECTION_SEED: u64 = 0xE10_C0E7;
 /// Standard deviation for initializing projection weight perturbations.
 const PROJECTION_INIT_STD: f64 = 0.02;
 
-/// Learned projection weights for asymmetric intent/context embeddings.
+/// Learned projection weights for asymmetric paraphrase/context embeddings.
 ///
 /// **DEPRECATED**: This struct is deprecated as of v0.2.0. The ContextualModel
 /// now uses E5-base-v2's prefix-based asymmetric encoding instead.

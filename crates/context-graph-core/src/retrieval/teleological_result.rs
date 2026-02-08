@@ -1,14 +1,13 @@
-//! Teleological retrieval result types for purpose-aware search.
+//! Teleological retrieval result types for multi-embedding search.
 //!
-//! This module provides result structures for the 5-stage teleological
-//! retrieval pipeline, including per-stage breakdown and teleological
-//! alignment scores.
+//! This module provides result structures for the multi-embedding
+//! retrieval pipeline, including per-stage breakdown.
 //!
 //! # TASK-L008 Implementation
 //!
 //! Implements result structures per constitution.yaml spec:
 //! - `TeleologicalRetrievalResult`: Top-level result with timing and breakdown
-//! - `ScoredMemory`: Individual result with teleological scores
+//! - `ScoredMemory`: Individual result with scores
 //! - `PipelineBreakdown`: Per-stage candidate details for debugging
 //!
 //! FAIL FAST: No silent fallbacks, explicit error propagation.
@@ -19,18 +18,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::PipelineStageTiming;
-
-/// Alignment threshold constants (from constitution.yaml teleological.thresholds).
-mod alignment_thresholds {
-    /// Optimal alignment threshold: theta >= 0.75
-    pub const OPTIMAL: f32 = 0.75;
-    /// Acceptable alignment threshold: theta >= 0.70
-    pub const ACCEPTABLE: f32 = 0.70;
-    /// Warning alignment threshold: theta >= 0.55
-    pub const WARNING: f32 = 0.55;
-    /// Critical alignment threshold: theta < 0.55
-    pub const CRITICAL: f32 = 0.55;
-}
 
 /// Result from teleological retrieval pipeline.
 ///
@@ -43,7 +30,7 @@ mod alignment_thresholds {
 /// - Stage 1 (SPLADE): <5ms
 /// - Stage 2 (Matryoshka): <10ms
 /// - Stage 3 (Full HNSW): <20ms
-/// - Stage 4 (Teleological): <10ms
+/// - Stage 4 (Score filter): <10ms
 /// - Stage 5 (Late Interaction): <15ms
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TeleologicalRetrievalResult {
@@ -124,21 +111,6 @@ impl TeleologicalRetrievalResult {
         self.results.is_empty()
     }
 
-    /// Get results above a minimum alignment threshold.
-    ///
-    /// Useful for filtering to only well-aligned results.
-    pub fn results_above_alignment(&self, min_alignment: f32) -> Vec<&ScoredMemory> {
-        self.results
-            .iter()
-            .filter(|r| r.goal_alignment >= min_alignment)
-            .collect()
-    }
-
-    /// Count misaligned results.
-    pub fn misaligned_count(&self) -> usize {
-        self.results.iter().filter(|r| r.is_misaligned).count()
-    }
-
     /// Get timing summary as human-readable string.
     pub fn timing_summary(&self) -> String {
         format!("Total: {:?} | {}", self.total_time, self.timing.summary())
@@ -147,14 +119,12 @@ impl TeleologicalRetrievalResult {
 
 /// A scored memory from teleological retrieval.
 ///
-/// Includes standard similarity scores plus teleological-specific
-/// alignment classification.
+/// Includes standard similarity scores from multi-embedding search.
 ///
 /// # Score Components
 ///
 /// - `score`: Final aggregate score after RRF fusion (0.0-1.0)
 /// - `content_similarity`: Raw content similarity from Stage 3
-/// - `goal_alignment`: Goal hierarchy alignment from Stage 4
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScoredMemory {
     /// Memory/fingerprint UUID.
@@ -170,17 +140,6 @@ pub struct ScoredMemory {
     /// Average cosine similarity across the 13 embedding spaces.
     pub content_similarity: f32,
 
-    /// Goal hierarchy alignment (Stage 4).
-    ///
-    /// Purpose alignment score from the fingerprint.
-    /// Includes Strategic, Tactical, Immediate levels.
-    pub goal_alignment: f32,
-
-    /// Whether this memory is misaligned.
-    ///
-    /// True if alignment score is below critical threshold (0.55).
-    pub is_misaligned: bool,
-
     /// Number of embedding spaces where this memory appeared.
     ///
     /// Higher = more cross-space relevance.
@@ -188,98 +147,18 @@ pub struct ScoredMemory {
 }
 
 impl ScoredMemory {
-    /// Create a new scored memory with all teleological fields.
+    /// Create a new scored memory.
     pub fn new(
         memory_id: Uuid,
         score: f32,
         content_similarity: f32,
-        goal_alignment: f32,
         space_count: usize,
     ) -> Self {
-        // Critical threshold from constitution.yaml teleological.thresholds.critical
-        let is_misaligned = goal_alignment < alignment_thresholds::CRITICAL;
-
         Self {
             memory_id,
             score,
             content_similarity,
-            goal_alignment,
-            is_misaligned,
             space_count,
-        }
-    }
-
-    /// Create a scored memory with explicit misalignment flag.
-    pub fn with_misalignment(mut self, is_misaligned: bool) -> Self {
-        self.is_misaligned = is_misaligned;
-        self
-    }
-
-    /// Check if alignment is optimal (≥ alignment_thresholds::OPTIMAL).
-    ///
-    /// Constitution: `teleological.thresholds.optimal`
-    #[inline]
-    pub fn is_optimal(&self) -> bool {
-        self.goal_alignment >= alignment_thresholds::OPTIMAL
-    }
-
-    /// Check if alignment is acceptable (≥ alignment_thresholds::ACCEPTABLE).
-    ///
-    /// Constitution: `teleological.thresholds.acceptable`
-    #[inline]
-    pub fn is_acceptable(&self) -> bool {
-        self.goal_alignment >= alignment_thresholds::ACCEPTABLE
-    }
-
-    /// Check if alignment needs attention (between WARNING and ACCEPTABLE).
-    ///
-    /// Constitution: `teleological.thresholds.warning`
-    #[inline]
-    pub fn needs_attention(&self) -> bool {
-        self.goal_alignment >= alignment_thresholds::WARNING && self.goal_alignment < alignment_thresholds::ACCEPTABLE
-    }
-
-    /// Get alignment threshold classification.
-    ///
-    /// Uses thresholds from constitution.yaml teleological.thresholds.
-    pub fn alignment_threshold(&self) -> AlignmentLevel {
-        if self.goal_alignment >= alignment_thresholds::OPTIMAL {
-            AlignmentLevel::Optimal
-        } else if self.goal_alignment >= alignment_thresholds::ACCEPTABLE {
-            AlignmentLevel::Acceptable
-        } else if self.goal_alignment >= alignment_thresholds::WARNING {
-            AlignmentLevel::Warning
-        } else {
-            AlignmentLevel::Critical
-        }
-    }
-}
-
-/// Alignment level classification.
-///
-/// Thresholds from constitution.yaml teleological.thresholds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AlignmentLevel {
-    /// θ ≥ OPTIMAL (0.75) - Excellent alignment
-    Optimal,
-    /// θ ∈ [ACCEPTABLE, OPTIMAL) - Good alignment
-    Acceptable,
-    /// θ ∈ [WARNING, ACCEPTABLE) - Needs improvement
-    Warning,
-    /// θ < CRITICAL (0.55) - Critical misalignment
-    Critical,
-}
-
-impl AlignmentLevel {
-    /// Get the minimum threshold for this level.
-    ///
-    /// Uses constants from `crate::config::constants::alignment`.
-    pub fn min_threshold(self) -> f32 {
-        match self {
-            AlignmentLevel::Optimal => alignment_thresholds::OPTIMAL,
-            AlignmentLevel::Acceptable => alignment_thresholds::ACCEPTABLE,
-            AlignmentLevel::Warning => alignment_thresholds::WARNING,
-            AlignmentLevel::Critical => 0.0,
         }
     }
 }
@@ -299,17 +178,11 @@ pub struct PipelineBreakdown {
     /// Stage 3: Full HNSW multi-space candidates.
     pub stage3_candidates: Vec<Uuid>,
 
-    /// Stage 4: Teleological filtering candidates.
+    /// Stage 4: Score-filtered candidates.
     pub stage4_candidates: Vec<Uuid>,
 
     /// Stage 5: Late interaction final candidates.
     pub stage5_candidates: Vec<Uuid>,
-
-    /// Number filtered out at Stage 4 due to alignment.
-    pub stage4_filtered_count: usize,
-
-    /// Average alignment of filtered candidates (for debugging).
-    pub stage4_filtered_avg_alignment: f32,
 }
 
 impl PipelineBreakdown {
@@ -336,16 +209,9 @@ impl PipelineBreakdown {
         self
     }
 
-    /// Set Stage 4 candidates and filtering info.
-    pub fn with_stage4(
-        mut self,
-        candidates: Vec<Uuid>,
-        filtered_count: usize,
-        filtered_avg_alignment: f32,
-    ) -> Self {
+    /// Set Stage 4 candidates.
+    pub fn with_stage4(mut self, candidates: Vec<Uuid>) -> Self {
         self.stage4_candidates = candidates;
-        self.stage4_filtered_count = filtered_count;
-        self.stage4_filtered_avg_alignment = filtered_avg_alignment;
         self
     }
 
@@ -366,12 +232,11 @@ impl PipelineBreakdown {
     /// Get funnel summary string.
     pub fn funnel_summary(&self) -> String {
         format!(
-            "S1:{} → S2:{} → S3:{} → S4:{} (filtered:{}) → S5:{}",
+            "S1:{} → S2:{} → S3:{} → S4:{} → S5:{}",
             self.stage1_candidates.len(),
             self.stage2_candidates.len(),
             self.stage3_candidates.len(),
             self.stage4_candidates.len(),
-            self.stage4_filtered_count,
             self.stage5_candidates.len()
         )
     }
@@ -384,71 +249,20 @@ mod tests {
     #[test]
     fn test_scored_memory_creation() {
         let id = Uuid::new_v4();
-        let memory = ScoredMemory::new(id, 0.85, 0.90, 0.75, 8);
+        let memory = ScoredMemory::new(id, 0.85, 0.90, 8);
 
         assert_eq!(memory.memory_id, id);
         assert!((memory.score - 0.85).abs() < f32::EPSILON);
         assert!((memory.content_similarity - 0.90).abs() < f32::EPSILON);
-        assert!((memory.goal_alignment - 0.75).abs() < f32::EPSILON);
-        assert!(!memory.is_misaligned);
         assert_eq!(memory.space_count, 8);
 
-        println!("[VERIFIED] ScoredMemory creation with all teleological fields");
-    }
-
-    #[test]
-    fn test_scored_memory_misalignment_detection() {
-        let id = Uuid::new_v4();
-
-        // Below critical threshold (0.55)
-        let misaligned = ScoredMemory::new(
-            id,
-            0.85,
-            0.90,
-            0.40, // Below 0.55
-            8,
-        );
-        assert!(misaligned.is_misaligned);
-
-        // Above threshold
-        let aligned = ScoredMemory::new(id, 0.85, 0.90, 0.60, 8);
-        assert!(!aligned.is_misaligned);
-
-        println!(
-            "AFTER: is_misaligned={}",
-            misaligned.is_misaligned
-        );
-        println!("[VERIFIED] Misalignment detection uses CRITICAL_THRESHOLD=0.55");
-    }
-
-    #[test]
-    fn test_alignment_level_classification() {
-        let id = Uuid::new_v4();
-
-        let optimal = ScoredMemory::new(id, 0.9, 0.9, 0.80, 8);
-        assert_eq!(optimal.alignment_threshold(), AlignmentLevel::Optimal);
-        assert!(optimal.is_optimal());
-
-        let acceptable = ScoredMemory::new(id, 0.9, 0.9, 0.72, 8);
-        assert_eq!(acceptable.alignment_threshold(), AlignmentLevel::Acceptable);
-        assert!(acceptable.is_acceptable());
-        assert!(!acceptable.is_optimal());
-
-        let warning = ScoredMemory::new(id, 0.9, 0.9, 0.60, 8);
-        assert_eq!(warning.alignment_threshold(), AlignmentLevel::Warning);
-        assert!(warning.needs_attention());
-
-        let critical = ScoredMemory::new(id, 0.9, 0.9, 0.40, 8);
-        assert_eq!(critical.alignment_threshold(), AlignmentLevel::Critical);
-        assert!(critical.is_misaligned);
-
-        println!("[VERIFIED] AlignmentLevel thresholds: Optimal>=0.75, Acceptable>=0.70, Warning>=0.55, Critical<0.55");
+        println!("[VERIFIED] ScoredMemory creation with all fields");
     }
 
     #[test]
     fn test_teleological_result_creation() {
         let id = Uuid::new_v4();
-        let memory = ScoredMemory::new(id, 0.85, 0.90, 0.75, 8);
+        let memory = ScoredMemory::new(id, 0.85, 0.90, 8);
 
         let timing = PipelineStageTiming::new(
             std::time::Duration::from_millis(4),
@@ -478,33 +292,6 @@ mod tests {
     }
 
     #[test]
-    fn test_result_filtering() {
-        let results = vec![
-            ScoredMemory::new(Uuid::new_v4(), 0.9, 0.9, 0.80, 8),
-            ScoredMemory::new(Uuid::new_v4(), 0.8, 0.8, 0.65, 6),
-            ScoredMemory::new(Uuid::new_v4(), 0.7, 0.7, 0.40, 4),
-        ];
-
-        let timing = PipelineStageTiming::default();
-        let result = TeleologicalRetrievalResult::new(
-            results,
-            timing,
-            std::time::Duration::from_millis(50),
-            13,
-            0,
-        );
-
-        // Filter by alignment
-        let above_70 = result.results_above_alignment(0.70);
-        assert_eq!(above_70.len(), 1);
-
-        // Misaligned count
-        assert_eq!(result.misaligned_count(), 1);
-
-        println!("[VERIFIED] Result filtering by alignment works");
-    }
-
-    #[test]
     fn test_pipeline_breakdown() {
         let ids: Vec<Uuid> = (0..100).map(|_| Uuid::new_v4()).collect();
 
@@ -512,19 +299,16 @@ mod tests {
             .with_stage1(ids[0..100].to_vec())
             .with_stage2(ids[0..50].to_vec())
             .with_stage3(ids[0..25].to_vec())
-            .with_stage4(ids[0..15].to_vec(), 10, 0.48)
+            .with_stage4(ids[0..15].to_vec())
             .with_stage5(ids[0..10].to_vec());
 
         assert_eq!(breakdown.stage1_candidates.len(), 100);
-        assert_eq!(breakdown.stage4_filtered_count, 10);
-        assert!((breakdown.stage4_filtered_avg_alignment - 0.48).abs() < f32::EPSILON);
 
         let ratio = breakdown.reduction_ratio();
         assert!((ratio - 0.10).abs() < 0.001);
 
         let summary = breakdown.funnel_summary();
         assert!(summary.contains("S1:100"));
-        assert!(summary.contains("filtered:10"));
 
         println!("BEFORE: 100 candidates");
         println!("AFTER: {}", summary);
@@ -581,15 +365,5 @@ mod tests {
         assert!(summary.contains("S4:"));
 
         println!("[VERIFIED] timing_summary produces: {}", summary);
-    }
-
-    #[test]
-    fn test_alignment_level_min_threshold() {
-        assert!((AlignmentLevel::Optimal.min_threshold() - 0.75).abs() < f32::EPSILON);
-        assert!((AlignmentLevel::Acceptable.min_threshold() - 0.70).abs() < f32::EPSILON);
-        assert!((AlignmentLevel::Warning.min_threshold() - 0.55).abs() < f32::EPSILON);
-        assert!((AlignmentLevel::Critical.min_threshold() - 0.0).abs() < f32::EPSILON);
-
-        println!("[VERIFIED] AlignmentLevel min_threshold matches constitution.yaml");
     }
 }

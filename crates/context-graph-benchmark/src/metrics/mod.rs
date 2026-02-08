@@ -22,7 +22,6 @@ pub mod e11_entity;
 pub mod embedder_contribution;
 pub mod graph_linking;
 pub mod graph_structure;
-pub mod mcp_intent;
 pub mod multimodal;
 pub mod performance;
 pub mod resource_usage;
@@ -52,14 +51,6 @@ pub use sparse::{
 };
 pub use temporal::TemporalMetrics;
 pub use temporal_realdata::TemporalRealdataMetrics;
-pub use mcp_intent::{
-    AsymmetricPairResult, AsymmetricValidationMetrics, BlendSweepPoint as MCPBlendSweepPoint,
-    ConstitutionalComplianceMetrics, E10EnhancementMetrics, MCPIntentMetrics,
-    MCPToolMetrics, RuleComplianceResult, ToolMetrics as MCPToolMetric,
-    compute_mrr as mcp_compute_mrr, compute_ndcg_at_k as mcp_compute_ndcg,
-    compute_percentile as mcp_compute_percentile, compute_precision_at_k as mcp_compute_precision,
-    compute_recall_at_k as mcp_compute_recall,
-};
 pub use validation::{
     ValidationMetrics, ToolValidationMetrics, TestCaseResult,
     BoundaryTestConfig, BoundaryTestValue, sequence_tool_boundary_configs,

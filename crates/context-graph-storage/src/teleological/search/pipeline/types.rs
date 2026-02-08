@@ -86,8 +86,8 @@ pub enum QueryType {
     Causal,
     /// Entity query - prefer E11 EntityShared edges.
     Entity,
-    /// Intent query - prefer E10 IntentAligned edges.
-    Intent,
+    /// Paraphrase query - prefer E10 IntentAligned edges.
+    Paraphrase,
 }
 
 impl QueryType {
@@ -99,7 +99,6 @@ impl QueryType {
                 "code_search" => return Self::Code,
                 "causal_reasoning" => return Self::Causal,
                 "fact_checking" => return Self::Entity,
-                "intent_search" | "intent_enhanced" => return Self::Intent,
                 _ => {}
             }
         }
@@ -118,10 +117,6 @@ impl QueryType {
             || q.contains("define")
         {
             Self::Entity
-        } else if q.contains("goal") || q.contains("intent") || q.contains("purpose")
-            || q.contains("trying to")
-        {
-            Self::Intent
         } else {
             Self::General
         }
@@ -163,7 +158,7 @@ impl EdgeTypeRouting {
                     edge_type,
                     GraphLinkEdgeType::EntityShared | GraphLinkEdgeType::MultiAgreement
                 ),
-                QueryType::Intent => matches!(
+                QueryType::Paraphrase => matches!(
                     edge_type,
                     GraphLinkEdgeType::IntentAligned | GraphLinkEdgeType::MultiAgreement
                 ),

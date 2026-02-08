@@ -298,7 +298,7 @@ impl MultiArrayEmbeddingProvider for StubMultiArrayProvider {
         // Legacy field uses source vector for backward compatibility
         fingerprint.e8_graph = fingerprint.e8_graph_as_source.clone();
         fingerprint.e9_hdc = Self::fill_dense_embedding(content, 1024, 8); // HDC projected
-        // E10: CORE-01 FIX: Generate DISTINCT vectors for asymmetric intent/context fields.
+        // E10: CORE-01 FIX: Generate DISTINCT vectors for asymmetric paraphrase/context fields.
         fingerprint.e10_multimodal_as_intent = Self::fill_dense_embedding(content, 768, 9);
         fingerprint.e10_multimodal_as_context = Self::fill_dense_embedding(content, 768, 21);
         // Legacy field uses intent vector for backward compatibility

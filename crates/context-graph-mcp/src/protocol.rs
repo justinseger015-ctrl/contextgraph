@@ -97,16 +97,12 @@ pub mod error_codes {
     pub const FINGERPRINT_NOT_FOUND: i32 = -32010;
     /// Multi-array embedding provider not ready (13 embedders)
     pub const EMBEDDER_NOT_READY: i32 = -32011;
-    /// Purpose vector computation failed
-    pub const PURPOSE_COMPUTATION_ERROR: i32 = -32012;
     /// Embedder category classification failed
     pub const CATEGORY_CLASSIFICATION_ERROR: i32 = -32013;
     /// Sparse search (SPLADE E13) failed
     pub const SPARSE_SEARCH_ERROR: i32 = -32014;
     /// Semantic search (13-embedding) failed
     pub const SEMANTIC_SEARCH_ERROR: i32 = -32015;
-    /// Purpose alignment search failed
-    pub const PURPOSE_SEARCH_ERROR: i32 = -32016;
     /// Checkpoint/restore operation failed
     pub const CHECKPOINT_ERROR: i32 = -32017;
     /// Batch operation failed
@@ -114,16 +110,9 @@ pub mod error_codes {
     /// Tool not yet implemented - FAIL FAST per AP-007
     pub const TOOL_NOT_IMPLEMENTED: i32 = -32019;
 
-    // Goal/alignment specific error codes (-32020 to -32029) - TASK-S003
-    /// Goal not found in hierarchy
-    pub const GOAL_NOT_FOUND: i32 = -32020;
     /// Insufficient memories for topic detection (< min_cluster_size)
     /// Per constitution clustering.parameters.min_cluster_size: 3
     pub const INSUFFICIENT_MEMORIES: i32 = -32021;
-    /// Alignment computation failed
-    pub const ALIGNMENT_COMPUTATION_ERROR: i32 = -32022;
-    /// Goal hierarchy operation failed
-    pub const GOAL_HIERARCHY_ERROR: i32 = -32023;
 
     // Meta-UTL error codes (-32040 to -32049) - TASK-S005
     /// Prediction not found for validation

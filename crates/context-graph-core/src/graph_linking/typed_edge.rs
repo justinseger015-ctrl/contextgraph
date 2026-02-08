@@ -226,7 +226,7 @@ impl TypedEdge {
             return GraphLinkEdgeType::GraphConnected;
         }
 
-        // E10 Intent (bit 9)
+        // E10 Paraphrase (bit 9)
         if (agreeing_embedders & (1 << 9)) != 0 {
             return GraphLinkEdgeType::IntentAligned;
         }
@@ -521,7 +521,7 @@ mod tests {
         let mut scores = default_scores();
         scores[0] = 0.85; // E1 semantic
         scores[5] = 0.75; // E6 sparse
-        scores[9] = 0.80; // E10 intent
+        scores[9] = 0.80; // E10 paraphrase
 
         let thresholds = default_thresholds();
 

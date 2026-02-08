@@ -285,14 +285,14 @@ async fn test_inject_context_produces_all_13_embeddings_with_gpu() {
     let e10_intent_dim = stored_fp.semantic.e10_multimodal_as_intent.len();
     let e10_context_dim = stored_fp.semantic.e10_multimodal_as_context.len();
     println!(
-        "  E10 (Multimodal intent): {} dims (expected {})",
+        "  E10 (Multimodal paraphrase): {} dims (expected {})",
         e10_intent_dim, E10_DIM
     );
     println!(
         "  E10 (Multimodal context):{} dims (expected {})",
         e10_context_dim, E10_DIM
     );
-    assert_eq!(e10_intent_dim, E10_DIM, "E10 intent must be {}D", E10_DIM);
+    assert_eq!(e10_intent_dim, E10_DIM, "E10 paraphrase must be {}D", E10_DIM);
     assert_eq!(e10_context_dim, E10_DIM, "E10 context must be {}D", E10_DIM);
     assert!(stored_fp.semantic.e10_multimodal.is_empty(), "Legacy e10_multimodal should be empty");
 
@@ -429,20 +429,20 @@ async fn test_gpu_embeddings_are_nonzero() {
     assert!(e8_source_nonzero, "E8 (Graph source) MUST have non-zero values");
     assert!(e8_target_nonzero, "E8 (Graph target) MUST have non-zero values");
 
-    // E10: Multimodal - intent embedding (uses dual vectors)
+    // E10: Multimodal - paraphrase embedding (uses dual vectors)
     let e10_intent_nonzero = has_nonzero_values(&stored_fp.semantic.e10_multimodal_as_intent);
     let e10_context_nonzero = has_nonzero_values(&stored_fp.semantic.e10_multimodal_as_context);
     let e10_intent_norm = l2_norm(&stored_fp.semantic.e10_multimodal_as_intent);
     let e10_context_norm = l2_norm(&stored_fp.semantic.e10_multimodal_as_context);
     println!(
-        "  E10 (Intent):      non-zero={}, L2 norm={:.6}",
+        "  E10 (Paraphrase):  non-zero={}, L2 norm={:.6}",
         e10_intent_nonzero, e10_intent_norm
     );
     println!(
         "  E10 (Context):     non-zero={}, L2 norm={:.6}",
         e10_context_nonzero, e10_context_norm
     );
-    assert!(e10_intent_nonzero, "E10 (Intent) MUST have non-zero values");
+    assert!(e10_intent_nonzero, "E10 (Paraphrase) MUST have non-zero values");
     assert!(e10_context_nonzero, "E10 (Context) MUST have non-zero values");
 
     // E11: Entity - entity embedding
@@ -466,7 +466,7 @@ async fn test_gpu_embeddings_are_nonzero() {
         ("E8 src", &stored_fp.semantic.e8_graph_as_source),
         ("E8 tgt", &stored_fp.semantic.e8_graph_as_target),
         ("E9", &stored_fp.semantic.e9_hdc),
-        ("E10 intent", &stored_fp.semantic.e10_multimodal_as_intent),
+        ("E10 paraphrase", &stored_fp.semantic.e10_multimodal_as_intent),
         ("E10 context", &stored_fp.semantic.e10_multimodal_as_context),
         ("E11", &stored_fp.semantic.e11_entity),
     ];

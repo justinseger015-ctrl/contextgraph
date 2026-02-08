@@ -59,78 +59,6 @@ const MAX_TOP_K: u64 = 100;
 // Per Phase 5: Infer causal direction from E5 embedding norms
 const CAUSAL_DIRECTION_THRESHOLD: f32 = 0.1;
 
-// =============================================================================
-// E10 INTENT MODE (Phase 2 E10 Upgrade)
-// =============================================================================
-
-/// Intent mode for E10 asymmetric similarity.
-///
-/// Per E10 Upgrade Plan: Enables intent-aware search in search_graph.
-/// - SeekingIntent: Query is a goal/purpose, apply intent→context 1.2x boost
-/// - SeekingContext: Query is a situation, apply context→intent 0.8x
-/// - None: Disabled
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IntentMode {
-    /// Disabled (no E10 asymmetric reranking)
-    None,
-    /// Query is a goal/purpose - apply intent→context 1.2x boost
-    SeekingIntent,
-    /// Query is a situation - apply context→intent 0.8x
-    SeekingContext,
-}
-
-/// Direction modifiers for E10 intent asymmetric similarity.
-/// Per Constitution: intent→context = 1.2x, context→intent = 0.8x
-mod intent_mod {
-    pub const INTENT_TO_CONTEXT: f32 = 1.2;
-    pub const CONTEXT_TO_INTENT: f32 = 0.8;
-}
-
-/// Detect intent mode from query text.
-///
-/// Analyzes query patterns to detect if the user is:
-/// - Seeking intent: "What was the goal?", "find purpose", "accomplish", "trying to"
-/// - Seeking context: "In the situation where", "given the context", "when dealing with"
-///
-/// # Arguments
-/// * `query` - Query text
-///
-/// # Returns
-/// Detected intent mode
-fn detect_intent_mode(query: &str) -> IntentMode {
-    let query_lower = query.to_lowercase();
-
-    // Intent-seeking patterns (query is describing a goal/purpose)
-    let intent_patterns = [
-        "goal", "purpose", "intent", "accomplish", "achieve", "trying to",
-        "want to", "need to", "aim to", "objective", "target", "mission",
-        "what was the plan", "what were we doing", "what is the intent",
-    ];
-
-    // Context-seeking patterns (query is describing a situation)
-    let context_patterns = [
-        "in the situation", "given the context", "when dealing with",
-        "in the case of", "for the scenario", "situation where",
-        "context of", "circumstances", "environment where", "setting where",
-    ];
-
-    // Check for intent-seeking
-    for pattern in intent_patterns {
-        if query_lower.contains(pattern) {
-            return IntentMode::SeekingIntent;
-        }
-    }
-
-    // Check for context-seeking
-    for pattern in context_patterns {
-        if query_lower.contains(pattern) {
-            return IntentMode::SeekingContext;
-        }
-    }
-
-    IntentMode::None
-}
-
 /// Infer causal direction from E5 asymmetric embeddings.
 ///
 /// Compares the norms of the e5_causal_as_cause and e5_causal_as_effect vectors
@@ -533,104 +461,149 @@ impl Handlers {
                     }
                 }
 
-                // ===== MULTI-RELATIONSHIP CAUSAL EXTRACTION =====
-                // Per plan: Extract ALL causal relationships from content, generate E5 dual
-                // embeddings for each, and store in CF_CAUSAL_RELATIONSHIPS with full provenance.
-                if let Some(ref provider) = self.causal_hint_provider {
-                    if provider.is_available() {
-                        debug!("store_memory: Extracting all causal relationships via LLM");
+                // ===== INLINE CAUSAL RELATIONSHIP EXTRACTION =====
+                // INLINE-CAUSAL: Extract ALL causal relationships from content using the
+                // Hermes 2 Pro 7B LLM, generate proper asymmetric E5 embeddings for each
+                // (cause text → cause vec, effect text → effect vec per AP-77), and persist
+                // CausalRelationship records to CF_CAUSAL_RELATIONSHIPS with full provenance.
+                //
+                // This runs inline with the 13-embedder pipeline — no background loop.
+                if let Some(ref llm) = self.causal_discovery_llm {
+                    if llm.is_loaded() {
+                        debug!("store_memory: Extracting causal relationships inline via LLM");
 
-                        let extracted = provider.extract_all_relationships(&content).await;
+                        let extraction_result = tokio::time::timeout(
+                            std::time::Duration::from_secs(30),
+                            llm.extract_causal_relationships(&content),
+                        )
+                        .await;
 
-                        if extracted.is_empty() {
-                            debug!("store_memory: No causal relationships found in content");
-                        } else {
-                            info!(
-                                count = extracted.len(),
-                                "store_memory: Found causal relationships, generating embeddings"
-                            );
-
-                            for relationship in extracted {
-                                // Generate E5 dual embeddings for the explanation (768D each)
-                                let e5_result = self
-                                    .multi_array_provider
-                                    .embed_e5_dual(&relationship.explanation)
-                                    .await;
-
-                                let (e5_cause, e5_effect) = match e5_result {
-                                    Ok(dual) => dual,
-                                    Err(e) => {
-                                        warn!(
-                                            fingerprint_id = %fingerprint_id,
-                                            error = %e,
-                                            cause = %relationship.cause,
-                                            "store_memory: Failed to generate E5 dual embeddings for causal relationship"
-                                        );
-                                        continue;
-                                    }
-                                };
-
-                                // Generate E1 semantic embedding for fallback search (1024D)
-                                let e1_result = self
-                                    .multi_array_provider
-                                    .embed_e1_only(&relationship.explanation)
-                                    .await;
-
-                                let e1_semantic = match e1_result {
-                                    Ok(emb) => emb,
-                                    Err(e) => {
-                                        warn!(
-                                            fingerprint_id = %fingerprint_id,
-                                            error = %e,
-                                            cause = %relationship.cause,
-                                            "store_memory: Failed to generate E1 embedding for causal relationship"
-                                        );
-                                        continue;
-                                    }
-                                };
-
-                                // Create causal relationship with full E5 dual embeddings
-                                let causal_rel = context_graph_core::types::CausalRelationship::new(
-                                    relationship.cause.clone(),       // cause_statement
-                                    relationship.effect.clone(),      // effect_statement
-                                    relationship.explanation.clone(), // explanation
-                                    e5_cause,                         // e5_as_cause (768D)
-                                    e5_effect,                        // e5_as_effect (768D)
-                                    e1_semantic,                      // e1_semantic (1024D)
-                                    content.clone(),                  // source_content
-                                    fingerprint_id,                   // source_fingerprint_id
-                                    relationship.confidence,          // confidence
-                                    relationship.mechanism_type.as_str().to_string(), // mechanism_type
+                        match extraction_result {
+                            Err(_elapsed) => {
+                                warn!(
+                                    fingerprint_id = %fingerprint_id,
+                                    "store_memory: Causal relationship extraction timed out (30s)"
+                                );
+                            }
+                            Ok(Err(e)) => {
+                                warn!(
+                                    fingerprint_id = %fingerprint_id,
+                                    error = %e,
+                                    "store_memory: Causal relationship extraction FAILED"
+                                );
+                            }
+                            Ok(Ok(multi_result)) if multi_result.relationships.is_empty() => {
+                                debug!(
+                                    fingerprint_id = %fingerprint_id,
+                                    "store_memory: No causal relationships found in content"
+                                );
+                            }
+                            Ok(Ok(multi_result)) => {
+                                let rel_count = multi_result.relationships.len();
+                                info!(
+                                    count = rel_count,
+                                    fingerprint_id = %fingerprint_id,
+                                    "store_memory: Found causal relationships, generating E5 embeddings"
                                 );
 
-                                // Store in dedicated CF
-                                match self
-                                    .teleological_store
-                                    .store_causal_relationship(&causal_rel)
-                                    .await
-                                {
-                                    Ok(causal_id) => {
-                                        debug!(
-                                            causal_id = %causal_id,
-                                            source_id = %fingerprint_id,
-                                            cause = %causal_rel.cause_statement,
-                                            effect = %causal_rel.effect_statement,
-                                            mechanism_type = %causal_rel.mechanism_type,
-                                            "store_memory: Stored causal relationship"
+                                if let Some(ref causal_model) = self.causal_model {
+                                    for relationship in &multi_result.relationships {
+                                        // Generate E5 asymmetric embeddings per AP-77:
+                                        // cause_vec = cause-encoding of cause text
+                                        // effect_vec = effect-encoding of effect text
+                                        let cause_result = causal_model
+                                            .embed_dual(&relationship.cause)
+                                            .await;
+                                        let effect_result = causal_model
+                                            .embed_dual(&relationship.effect)
+                                            .await;
+
+                                        let (e5_cause, e5_effect) = match (cause_result, effect_result) {
+                                            (Ok((cause_vec, _)), Ok((_, effect_vec))) => {
+                                                (cause_vec, effect_vec)
+                                            }
+                                            (Err(e), _) | (_, Err(e)) => {
+                                                warn!(
+                                                    fingerprint_id = %fingerprint_id,
+                                                    error = %e,
+                                                    cause = %relationship.cause,
+                                                    "store_memory: E5 dual embedding failed for causal relationship"
+                                                );
+                                                continue;
+                                            }
+                                        };
+
+                                        // Generate E1 semantic embedding for fallback search (1024D)
+                                        let e1_semantic = match self
+                                            .multi_array_provider
+                                            .embed_e1_only(&relationship.explanation)
+                                            .await
+                                        {
+                                            Ok(emb) => emb,
+                                            Err(e) => {
+                                                warn!(
+                                                    fingerprint_id = %fingerprint_id,
+                                                    error = %e,
+                                                    cause = %relationship.cause,
+                                                    "store_memory: E1 embedding failed for causal relationship"
+                                                );
+                                                continue;
+                                            }
+                                        };
+
+                                        // Create CausalRelationship with proper asymmetric E5 vectors
+                                        let causal_rel = context_graph_core::types::CausalRelationship::new(
+                                            relationship.cause.clone(),
+                                            relationship.effect.clone(),
+                                            relationship.explanation.clone(),
+                                            e5_cause,
+                                            e5_effect,
+                                            e1_semantic,
+                                            content.clone(),
+                                            fingerprint_id,
+                                            relationship.confidence,
+                                            relationship.mechanism_type.as_str().to_string(),
                                         );
+
+                                        match self
+                                            .teleological_store
+                                            .store_causal_relationship(&causal_rel)
+                                            .await
+                                        {
+                                            Ok(causal_id) => {
+                                                debug!(
+                                                    causal_id = %causal_id,
+                                                    source_id = %fingerprint_id,
+                                                    cause = %relationship.cause,
+                                                    effect = %relationship.effect,
+                                                    confidence = relationship.confidence,
+                                                    mechanism = %relationship.mechanism_type.as_str(),
+                                                    "store_memory: Persisted CausalRelationship"
+                                                );
+                                            }
+                                            Err(e) => {
+                                                warn!(
+                                                    fingerprint_id = %fingerprint_id,
+                                                    error = %e,
+                                                    cause = %relationship.cause,
+                                                    "store_memory: Failed to persist CausalRelationship"
+                                                );
+                                            }
+                                        }
                                     }
-                                    Err(e) => {
-                                        // Non-fatal: fingerprint is stored, causal relationship is optional
-                                        warn!(
-                                            fingerprint_id = %fingerprint_id,
-                                            error = %e,
-                                            cause = %causal_rel.cause_statement,
-                                            "store_memory: Failed to store causal relationship"
-                                        );
-                                    }
+                                } else {
+                                    warn!(
+                                        fingerprint_id = %fingerprint_id,
+                                        "store_memory: CausalModel not available for E5 embedding"
+                                    );
                                 }
                             }
                         }
+                    } else {
+                        warn!(
+                            fingerprint_id = %fingerprint_id,
+                            "store_memory: CausalDiscoveryLLM not loaded, cannot extract relationships"
+                        );
                     }
                 }
 
@@ -962,28 +935,6 @@ impl Handlers {
             .unwrap_or(false);
 
         // =========================================================================
-        // E10 INTENT ASYMMETRIC PARAMETERS (ARCH-15)
-        // =========================================================================
-
-        // Parse intentMode (none, seeking_intent, seeking_context, auto)
-        // - none: Disabled (default)
-        // - seeking_intent: Query is a goal/purpose, apply intent→context 1.2x boost
-        // - seeking_context: Query is a situation, apply context→intent 0.8x
-        // - auto: Auto-detect from query text
-        let intent_mode_param = args
-            .get("intentMode")
-            .and_then(|v| v.as_str())
-            .unwrap_or("none");
-
-        // Parse intentBlend (default: 0.3)
-        // Blend weight for E10 vs E1 semantic [0.0=pure E1, 1.0=pure E10]
-        let intent_blend = args
-            .get("intentBlend")
-            .and_then(|v| v.as_f64())
-            .map(|v| v as f32)
-            .unwrap_or(0.3);
-
-        // =========================================================================
         // PHASE 1: CAUSAL DIRECTION DETECTION
         // =========================================================================
 
@@ -1005,29 +956,6 @@ impl Handlers {
         }
 
         // =========================================================================
-        // PHASE 1b: INTENT MODE DETECTION
-        // =========================================================================
-        // Detect intent mode from query text or use user-specified mode
-        // Per E10 Upgrade Plan: seeking_intent applies 1.2x, seeking_context applies 0.8x
-
-        let intent_mode = match intent_mode_param {
-            "seeking_intent" => IntentMode::SeekingIntent,
-            "seeking_context" => IntentMode::SeekingContext,
-            "auto" => detect_intent_mode(query),
-            "none" | _ => IntentMode::None,
-        };
-
-        // Log intent detection for debugging/monitoring
-        if intent_mode != IntentMode::None {
-            info!(
-                mode = ?intent_mode,
-                blend = intent_blend,
-                query_preview = %query.chars().take(100).collect::<String>(),
-                "Intent mode active - asymmetric E10 reranking will be applied"
-            );
-        }
-
-        // =========================================================================
         // PHASE 5: QUERY EXPANSION (Optional)
         // =========================================================================
 
@@ -1039,27 +967,22 @@ impl Handlers {
         };
 
         // Auto-select weight profile based on query type
-        // Priority: user-specified > causal > intent > conversation_context > default
-        let effective_weight_profile = match (&weight_profile, &causal_direction, &intent_mode, use_conversation_context) {
+        // Priority: user-specified > causal > conversation_context > default
+        let effective_weight_profile = match (&weight_profile, &causal_direction, use_conversation_context) {
             // User specified a profile - always use it
-            (Some(profile), _, _, _) => Some(profile.clone()),
+            (Some(profile), _, _) => Some(profile.clone()),
             // Causal query detected - use causal_reasoning
-            (None, CausalDirection::Cause | CausalDirection::Effect, _, _) => {
+            (None, CausalDirection::Cause | CausalDirection::Effect, _) => {
                 debug!("Auto-selecting 'causal_reasoning' profile for causal query");
                 Some("causal_reasoning".to_string())
             }
-            // Intent mode active - use intent_enhanced for stronger E10 weighting
-            (None, CausalDirection::Unknown, IntentMode::SeekingIntent | IntentMode::SeekingContext, _) => {
-                debug!("Auto-selecting 'intent_enhanced' profile for intent-aware query");
-                Some("intent_enhanced".to_string())
-            }
             // Conversation context enabled - use conversation_history for balanced E1+E4
-            (None, CausalDirection::Unknown, IntentMode::None, true) => {
+            (None, CausalDirection::Unknown, true) => {
                 debug!("Auto-selecting 'conversation_history' profile for conversation context");
                 Some("conversation_history".to_string())
             }
             // No special case - use default
-            (None, CausalDirection::Unknown, IntentMode::None, false) => weight_profile.clone(),
+            (None, CausalDirection::Unknown, false) => weight_profile.clone(),
         };
 
         // Build search options with multi-space parameters
@@ -1281,31 +1204,6 @@ impl Handlers {
                 };
 
                 // =========================================================================
-                // PHASE 3: ASYMMETRIC E10 INTENT RERANKING (E10 Upgrade)
-                // =========================================================================
-                // Apply asymmetric E10 similarity for intent-aware queries
-                // Per E10 Upgrade Plan: intent→context 1.2x, context→intent 0.8x
-
-                let intent_reranking_applied = if intent_mode != IntentMode::None && !results.is_empty() {
-                    info!(
-                        results_count = results.len(),
-                        intent_mode = ?intent_mode,
-                        intent_blend = intent_blend,
-                        "Applying asymmetric E10 intent reranking"
-                    );
-
-                    apply_asymmetric_e10_reranking(
-                        &mut results,
-                        &query_embedding,
-                        intent_mode,
-                        intent_blend,
-                    );
-                    true
-                } else {
-                    false
-                };
-
-                // =========================================================================
                 // PHASE 4: COLBERT LATE INTERACTION RERANKING
                 // =========================================================================
                 // Apply ColBERT reranking if enabled (Stage 3 of pipeline)
@@ -1402,8 +1300,10 @@ impl Handlers {
                 // PHASE-2-PROVENANCE: Pre-compute query analysis once (outside the loop)
                 // so we can include it in each result's provenance without re-analyzing.
                 let query_analysis = if include_provenance {
-                    let analyzer = context_graph_core::retrieval::QueryTypeAnalyzer::new();
-                    Some(analyzer.analyze(query))
+                    Some(context_graph_core::retrieval::QueryClassification {
+                        detected_type: String::new(),
+                        detection_patterns: Vec::new(),
+                    })
                 } else {
                     None
                 };
@@ -1570,18 +1470,8 @@ impl Handlers {
 
                                 // Build query classification from pre-computed analysis
                                 let query_class = json!({
-                                    "detectedType": analysis.query_type.name(),
-                                    "detectionPatterns": analysis.keywords,
-                                    "intentMode": if intent_mode != IntentMode::None {
-                                        Some(format!("{:?}", intent_mode))
-                                    } else {
-                                        None::<String>
-                                    },
-                                    "e10BoostApplied": match intent_mode {
-                                        IntentMode::SeekingIntent => Some(1.2f32),
-                                        IntentMode::SeekingContext => Some(0.8f32),
-                                        IntentMode::None => None::<f32>,
-                                    }
+                                    "detectedType": analysis.detected_type,
+                                    "detectionPatterns": analysis.detection_patterns,
                                 });
 
                                 entry["provenance"] = json!({
@@ -1645,7 +1535,6 @@ impl Handlers {
                     "excludedEmbedders": exclude_embedder_names,
                     "temporalConfig": temporal_config,
                     "rrfConstant": 60.0,
-                    "intentReranking": intent_reranking_applied,
                     "resolvedWeightProfile": effective_weight_profile,
                 });
 
@@ -1980,117 +1869,6 @@ fn apply_colbert_reranking(
 }
 
 // =============================================================================
-// E10 INTENT ASYMMETRIC RERANKING (E10 Upgrade Plan Phase 2)
-// =============================================================================
-
-/// Apply asymmetric E10 intent reranking to search results.
-///
-/// This function implements E10 intent-aware reranking per the E10 Upgrade Plan:
-/// - Uses E10 asymmetric vectors (intent vs context)
-/// - Applies direction modifiers: intent→context 1.2x, context→intent 0.8x
-/// - Blends E10 score with existing similarity using intent_blend weight
-/// - Re-sorts results by combined score
-///
-/// # Arguments
-/// * `results` - Mutable reference to search results to rerank
-/// * `query_embedding` - Query's semantic fingerprint
-/// * `intent_mode` - Intent mode (SeekingIntent or SeekingContext)
-/// * `intent_blend` - Blend weight [0.0=pure E1, 1.0=pure E10]
-fn apply_asymmetric_e10_reranking(
-    results: &mut [TeleologicalSearchResult],
-    query_embedding: &SemanticFingerprint,
-    intent_mode: IntentMode,
-    intent_blend: f32,
-) {
-    if results.is_empty() || intent_mode == IntentMode::None {
-        return;
-    }
-
-    // Get query E10 vectors based on intent mode
-    let (query_e10, modifier, doc_e10_getter): (
-        &[f32],
-        f32,
-        fn(&SemanticFingerprint) -> &[f32],
-    ) = match intent_mode {
-        IntentMode::SeekingIntent => {
-            // Query is a goal - use query's intent to find matching contexts
-            // intent→context direction, apply 1.2x boost
-            (
-                query_embedding.get_e10_as_intent(),
-                intent_mod::INTENT_TO_CONTEXT,
-                |fp: &SemanticFingerprint| fp.get_e10_as_context(),
-            )
-        }
-        IntentMode::SeekingContext => {
-            // Query is a situation - use query's context to find matching intents
-            // context→intent direction, apply 0.8x dampening
-            (
-                query_embedding.get_e10_as_context(),
-                intent_mod::CONTEXT_TO_INTENT,
-                |fp: &SemanticFingerprint| fp.get_e10_as_intent(),
-            )
-        }
-        IntentMode::None => return,
-    };
-
-    // E1 weight is the complement of intent_blend
-    let e1_weight = 1.0 - intent_blend;
-    let mut reranked = 0;
-
-    for result in results.iter_mut() {
-        // Get document E10 vector based on direction
-        let doc_e10 = doc_e10_getter(&result.fingerprint.semantic);
-
-        // Compute E10 cosine similarity
-        let e10_raw_sim = compute_cosine_similarity(query_e10, doc_e10);
-
-        // Apply direction modifier
-        let e10_modified_sim = (e10_raw_sim * modifier).clamp(0.0, 1.0);
-
-        // Blend E1 (existing) and E10 scores
-        // Formula: new_sim = e1_weight × e1_sim + intent_blend × e10_modified_sim
-        let e1_sim = result.similarity; // Existing score (dominated by E1)
-        result.similarity = e1_weight * e1_sim + intent_blend * e10_modified_sim;
-
-        reranked += 1;
-    }
-
-    // Re-sort after E10 reranking
-    results.sort_by(|a, b| {
-        b.similarity
-            .partial_cmp(&a.similarity)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    debug!(
-        reranked = reranked,
-        intent_mode = ?intent_mode,
-        intent_blend = intent_blend,
-        modifier = modifier,
-        "E10 intent reranking applied"
-    );
-}
-
-/// Compute cosine similarity between two vectors.
-///
-/// Returns 0.0 if either vector is empty or has zero norm.
-fn compute_cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.is_empty() || b.is_empty() || a.len() != b.len() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a < f32::EPSILON || norm_b < f32::EPSILON {
-        return 0.0;
-    }
-
-    (dot / (norm_a * norm_b)).clamp(-1.0, 1.0)
-}
-
-// =============================================================================
 // SEQUENCE POSITION LABEL HELPER
 // =============================================================================
 
@@ -2156,7 +1934,7 @@ const EMBEDDER_INFO: [(usize, &str, &str, &str); 13] = [
     (6, "E7_Code", "SEMANTIC", "Code patterns - function signatures, syntax E1 treats as noise"),
     (7, "E8_Graph", "RELATIONAL", "Structural relationships - imports, dependencies"),
     (8, "E9_HDC", "STRUCTURAL", "Noise-robust structure - survives typos, variations"),
-    (9, "E10_Intent", "SEMANTIC", "Goal alignment - same purpose expressed differently"),
+    (9, "E10_Multimodal", "SEMANTIC", "Paraphrase detection - same meaning expressed differently"),
     (10, "E11_Entity", "RELATIONAL", "Entity knowledge - 'Diesel' = database ORM for Rust"),
     (11, "E12_ColBERT", "SEMANTIC", "Exact phrase matches - token-level precision (reranking)"),
     (12, "E13_SPLADE", "SEMANTIC", "Term expansions - fast→quick, db→database (recall)"),
@@ -2196,7 +1974,7 @@ fn compute_blind_spots(embedder_scores: &[f32; 13], e1_score: f32) -> Vec<serde_
         (6, "E7_Code", "code patterns"),
         (7, "E8_Graph", "graph structure"),
         (8, "E9_HDC", "noise-robust matches"),
-        (9, "E10_Intent", "intent alignment"),
+        (9, "E10_Paraphrase", "paraphrase detection"),
         (10, "E11_Entity", "entity knowledge"),
         (11, "E12_ColBERT", "phrase precision"),
         (12, "E13_SPLADE", "term expansion"),
@@ -2299,7 +2077,7 @@ fn compute_navigation_hints(embedder_scores: &[f32; 13]) -> Vec<String> {
         hints.push("E8 (graph) is strong - try search_connections for imports/dependencies".to_string());
     }
     if e10 > e1 + 0.1 {
-        hints.push("E10 (intent) found aligned goals - try search_by_intent for similar purposes".to_string());
+        hints.push("E10 (paraphrase) found similar purpose - results may use different words for same concept".to_string());
     }
     if e6 > 0.5 && e1 < 0.4 {
         hints.push("E6 (keyword) found exact terms E1 missed - try search_by_keywords".to_string());
@@ -2670,7 +2448,7 @@ mod tests {
         scores[0] = 0.15;  // E1 low
         scores[4] = 0.6;   // E5 Causal found
         scores[6] = 0.75;  // E7 Code found
-        scores[9] = 0.55;  // E10 Intent found
+        scores[9] = 0.55;  // E10 Paraphrase found
 
         let blind_spots = compute_blind_spots(&scores, scores[0]);
         assert_eq!(blind_spots.len(), 3, "Should detect three blind spots");

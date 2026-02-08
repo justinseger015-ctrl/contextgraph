@@ -219,4 +219,48 @@ impl RocksDbTeleologicalStore {
         info!("Deleted fingerprint {} (soft={})", id, soft);
         Ok(true)
     }
+
+    // ==================== Processing Cursor Storage ====================
+
+    /// Store a processing cursor in CF_SYSTEM under a "cursor::" prefixed key.
+    pub(crate) fn store_processing_cursor_sync(
+        &self,
+        key: &str,
+        data: &[u8],
+    ) -> CoreResult<()> {
+        let cf = self
+            .get_cf(crate::column_families::cf_names::SYSTEM)
+            .map_err(|e| CoreError::StorageError(format!("CF_SYSTEM not found: {e}")))?;
+        let prefixed_key = format!("cursor::{key}");
+        self.db
+            .put_cf(cf, prefixed_key.as_bytes(), data)
+            .map_err(|e| {
+                CoreError::StorageError(format!(
+                    "Failed to store processing cursor '{key}': {e}"
+                ))
+            })?;
+        debug!(key = key, bytes = data.len(), "Stored processing cursor");
+        Ok(())
+    }
+
+    /// Retrieve a processing cursor from CF_SYSTEM.
+    pub(crate) fn get_processing_cursor_sync(
+        &self,
+        key: &str,
+    ) -> CoreResult<Option<Vec<u8>>> {
+        let cf = self
+            .get_cf(crate::column_families::cf_names::SYSTEM)
+            .map_err(|e| CoreError::StorageError(format!("CF_SYSTEM not found: {e}")))?;
+        let prefixed_key = format!("cursor::{key}");
+        match self.db.get_cf(cf, prefixed_key.as_bytes()) {
+            Ok(Some(data)) => {
+                debug!(key = key, bytes = data.len(), "Retrieved processing cursor");
+                Ok(Some(data))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(CoreError::StorageError(format!(
+                "Failed to get processing cursor '{key}': {e}"
+            ))),
+        }
+    }
 }

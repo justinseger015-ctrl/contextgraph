@@ -14,7 +14,7 @@
 //! | EntityShared | E11 | Shared entities (KEPLER) |
 //! | CausalChain | E5 | Causal relationship (asymmetric) |
 //! | GraphConnected | E8 | Graph connectivity (asymmetric) |
-//! | IntentAligned | E10 | Same goal/intent |
+//! | IntentAligned | E10 | Paraphrase (same meaning) |
 //! | KeywordOverlap | E6, E13 | Keyword/lexical similarity |
 //! | MultiAgreement | 3+ embedders | Multiple embedders agree |
 
@@ -69,8 +69,8 @@ pub enum GraphLinkEdgeType {
     /// ASYMMETRIC: direction matters (source → target).
     GraphConnected = 4,
 
-    /// Same goal/intent via E10 (CLIP multimodal).
-    /// Two memories share the same underlying purpose or goal.
+    /// Same meaning via E10 (CLIP multimodal) - paraphrase detection.
+    /// Two memories express the same concept using different words.
     IntentAligned = 5,
 
     /// Keyword/lexical overlap via E6 (SPLADE) or E13 (SPLADE v3).
@@ -133,7 +133,7 @@ impl GraphLinkEdgeType {
             Self::EntityShared => 0.65,    // E11 entity matching
             Self::CausalChain => 0.60,     // E5 causal chains
             Self::GraphConnected => 0.60,  // E8 graph structure
-            Self::IntentAligned => 0.70,   // E10 intent matching
+            Self::IntentAligned => 0.70,   // E10 paraphrase matching
             Self::KeywordOverlap => 0.50,  // Sparse similarity scores differently
             Self::MultiAgreement => 0.60,  // Multiple agree = strong signal
         }
@@ -147,7 +147,7 @@ impl GraphLinkEdgeType {
             Self::EntityShared => "Shared entities (E11)",
             Self::CausalChain => "Causal relationship (E5, asymmetric)",
             Self::GraphConnected => "Graph connectivity (E8, asymmetric)",
-            Self::IntentAligned => "Intent/goal aligned (E10)",
+            Self::IntentAligned => "Paraphrase aligned (E10)",
             Self::KeywordOverlap => "Keyword overlap (E6/E13)",
             Self::MultiAgreement => "Multi-embedder agreement (3+)",
         }

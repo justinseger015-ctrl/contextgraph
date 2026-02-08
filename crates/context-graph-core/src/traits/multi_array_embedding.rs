@@ -1419,7 +1419,7 @@ mod tests {
         assert_eq!(fp.e8_graph_as_target.len(), 1024);
         assert!(fp.e8_graph.is_empty()); // Legacy field empty in new format
         assert_eq!(fp.e9_hdc.len(), 1024); // HDC projected
-        // E10 now uses dual vectors for asymmetric intent/context similarity
+        // E10 now uses dual vectors for asymmetric paraphrase/context similarity
         assert_eq!(fp.e10_multimodal_as_intent.len(), 768);
         assert_eq!(fp.e10_multimodal_as_context.len(), 768);
         assert!(fp.e10_multimodal.is_empty()); // Legacy field empty in new format

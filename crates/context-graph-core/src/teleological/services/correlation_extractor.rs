@@ -312,7 +312,7 @@ impl CorrelationExtractor {
         for i in 0..SYNERGY_DIM {
             for j in (i + 1)..SYNERGY_DIM {
                 // Compute alignment-based correlation using geometric mean
-                // This is dimension-agnostic and captures "both embedders have strong purpose alignment"
+                // This is dimension-agnostic and captures "both embedders have strong topic weight"
                 let ai = alignments[i].max(0.0);
                 let aj = alignments[j].max(0.0);
                 let corr = (ai * aj).sqrt();

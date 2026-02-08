@@ -46,21 +46,6 @@ pub mod pipeline {
     pub const DEFAULT_RRF_K: f32 = similarity::RRF_K;
 }
 
-/// Goal alignment estimation factors.
-///
-/// These are placeholder values used when actual alignment scores are unavailable.
-/// They should be replaced with proper computation in production.
-pub mod estimation {
-    /// Content similarity to goal alignment estimation factor.
-    ///
-    /// Used as a placeholder when purpose alignment is unavailable.
-    /// Formula: goal_alignment = content_similarity * CONTENT_TO_GOAL_FACTOR
-    ///
-    /// NOTE: This is a placeholder per `retrieval/pipeline.rs:578`.
-    /// In production, this should be replaced with proper teleological computation.
-    pub const CONTENT_TO_GOAL_FACTOR: f32 = 0.9;
-}
-
 #[cfg(test)]
 #[allow(clippy::assertions_on_constants)]
 mod tests {
@@ -82,19 +67,6 @@ mod tests {
             pipeline::DEFAULT_RRF_K,
             similarity::RRF_K,
             "Pipeline RRF_K should use similarity::RRF_K"
-        );
-    }
-
-    #[test]
-    fn test_estimation_factor_valid() {
-        // Estimation factor should be in (0, 1]
-        assert!(
-            estimation::CONTENT_TO_GOAL_FACTOR > 0.0,
-            "CONTENT_TO_GOAL_FACTOR must be > 0"
-        );
-        assert!(
-            estimation::CONTENT_TO_GOAL_FACTOR <= 1.0,
-            "CONTENT_TO_GOAL_FACTOR must be <= 1"
         );
     }
 }

@@ -310,7 +310,7 @@ mod tests {
 
     /// Create test scored memory.
     fn create_test_scored(id: Uuid, score: f32) -> ScoredMemory {
-        ScoredMemory::new(id, score, score, 1.0, 13)
+        ScoredMemory::new(id, score, score, 13)
     }
 
     // ========================================================================

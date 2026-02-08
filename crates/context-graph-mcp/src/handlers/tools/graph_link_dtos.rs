@@ -714,7 +714,7 @@ pub const SEMANTIC_EMBEDDER_INDICES: [usize; 10] = [
     6,  // E7  - Code (patterns)
     7,  // E8  - Graph (structure)
     8,  // E9  - HDC (robustness)
-    9,  // E10 - Intent (goals)
+    9,  // E10 - Paraphrase (same meaning)
     10, // E11 - Entity (knowledge)
     11, // E12 - ColBERT (phrases)
     12, // E13 - SPLADE (expansion)

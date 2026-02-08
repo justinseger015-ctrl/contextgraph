@@ -37,7 +37,7 @@ pub struct EdgeThresholds {
     pub causal_chain: f32,
     /// E8 graph connectivity threshold (default: 0.60)
     pub graph_connected: f32,
-    /// E10 intent similarity threshold (default: 0.70)
+    /// E10 paraphrase similarity threshold (default: 0.70)
     pub intent_aligned: f32,
     /// E6/E13 keyword overlap threshold (default: 0.50)
     pub keyword_overlap: f32,
@@ -105,7 +105,7 @@ pub const DEFAULT_THRESHOLDS: EdgeThresholds = EdgeThresholds {
     entity_shared: 0.65,          // E11 - entity matching
     causal_chain: 0.60,           // E5 - causal chains (asymmetric)
     graph_connected: 0.60,        // E8 - graph structure (asymmetric)
-    intent_aligned: 0.70,         // E10 - intent matching
+    intent_aligned: 0.70,         // E10 - paraphrase matching
     keyword_overlap: 0.50,        // E6/E13 - sparse similarity scores differently
     multi_agreement: 0.60,        // Multiple agree = strong signal
     multi_agreement_min_embedders: 3, // Need 3+ embedders to agree

@@ -1,728 +1,627 @@
-# Context Graph Constitution v6.7.0
-# 13-Perspectives Collaboration | E1 Foundation | GPU-First Architecture | Code Embedding Separation | Dynamic Weight Navigation | Provenance
-# ═══════════════════════════════════════════════════════════════
-
-# GPU-FIRST ARCHITECTURE
-# This is a GPU-first system. All compute-intensive operations use GPU over CPU.
-# All 13 embedders are warm-loaded into GPU memory at MCP server startup.
-# Target Hardware: RTX 5090 32GB (Blackwell GB202) + CUDA 13.1
-#
-# Key GPU Capabilities:
-#   - 32GB GDDR7 VRAM: All 13 embedder models resident simultaneously
-#   - 1,792 GB/s bandwidth: Sub-millisecond embedding generation
-#   - 680 5th-gen Tensor Cores: FP16/BF16/FP8 inference
-#   - 170 SMs with Green Contexts: Isolated inference partitions
-#   - CUDA Tile: Portable, auto-optimized kernels
+# Context Graph Constitution v7.0.0
+# 13-Perspective Knowledge Graph | GPU-First | 52 CFs | 55 MCP Tools | Provenance-Audited
 
 # ═══════════════════════════════════════════════════════════════
-# CORE PHILOSOPHY: ALL EMBEDDERS ARE SIGNAL
+# METADATA
 # ═══════════════════════════════════════════════════════════════
-#
-# SYSTEM GOAL: MULTI-PERSPECTIVE NAVIGATION
-# Use all 13 embedders to navigate massive datasets from multiple angles
-# to optimally find all answers one seeks. Each embedder provides a unique
-# lens on the knowledge graph - the AI model receives FULL VISIBILITY into
-# all 13 embedder scores to guide intelligent exploration.
-#
-# Navigation Principles:
-#   1. FULL VISIBILITY: AI sees all 13 embedder scores per result, categorized by type
-#   2. BLIND SPOT DETECTION: Highlights when enhancers found what E1 missed
-#   3. NAVIGATION HINTS: Suggests which embedder-specific tools to explore next
-#   4. AGREEMENT METRICS: Shows how many embedders agree on a result's relevance
-#   5. CUSTOM WEIGHT BLENDING: AI specifies arbitrary [f32;13] weights via customWeights
-#   6. EMBEDDER EXCLUSION: AI masks specific embedders via excludeEmbedders (zero + renormalize)
-#   7. BREAKDOWN TRANSPARENCY: Per-embedder RRF contribution visible via includeEmbedderBreakdown
-#
-# The AI model uses this information to:
-#   - Identify which embedders found strong matches for different query aspects
-#   - Navigate to specialized tools (search_code, search_by_entities, etc.)
-#   - Understand blind spots where E1 missed but other embedders found signal
-#   - Make informed decisions about which perspective to explore next
-#
-# FUNDAMENTAL PRINCIPLE: Every embedder provides SIGNAL, never noise.
-# Each of the 13 embedders captures a unique dimension of meaning that
-# E1 (semantic) alone cannot see. No embedder output is noise - each is
-# a carefully tuned lens on the knowledge graph.
-#
-# WHY THIS MATTERS:
-# - E1 treats code as natural language → E7 treats it as structured signal
-# - E1 loses causal direction → E5 preserves cause→effect as signal
-# - E1 dilutes exact terms → E6 preserves keyword precision as signal
-# - E1 misses entity relationships → E11 encodes "Diesel=ORM" as signal
-#
-# PARAMETER TUNING = SIGNAL DEFINITION:
-# Each embedder's parameters are tuned to define what its signal MEANS:
-#   - Blend weights: How strongly this signal influences final ranking
-#   - Similarity thresholds: What constitutes meaningful signal vs. weak
-#   - Boost factors: How to amplify signal in specific contexts
-#   - Topic weights: How much this signal contributes to topic detection
-#
-# 13 embedders = 13 unique perspectives on every memory
-# Each finds what OTHERS MISS. Combined = superior answers.
-#
-# Example: Query "What databases work with Rust?"
-# - E1 finds: "database" or "Rust" semantically
-# - E11 finds: "Diesel" (knows Diesel IS a database ORM - E1 missed this)
-# - E7 finds: code using sqlx, diesel crates
-# - Combined: Better answer than any single embedder
-#
-# THE SIGNAL, NOT NOISE PRINCIPLE:
-# When E1 misses something that E7 or E11 finds, that's not because E1
-# was wrong - it's because E7/E11 captured ADDITIONAL signal that E1
-# cannot encode in its representation space. All embedders contribute
-# valid signal; the question is which signal matters for this query.
+metadata:
+  project: context-graph
+  crate_version: "0.1.0"
+  constitution_version: "7.0.0"
+  rust_edition: "2021"
+  msrv: "1.75"
+  license: "MIT OR Apache-2.0"
 
 # ═══════════════════════════════════════════════════════════════
-# EMBEDDERS (13 Perspectives) - ALL GPU-RESIDENT
+# TECH STACK
 # ═══════════════════════════════════════════════════════════════
-# All 13 embedders are warm-loaded into GPU VRAM at startup.
-# Total VRAM footprint: ~8-12GB (leaves 20GB+ for batch processing)
-# Inference precision: FP16/BF16 (Tensor Core accelerated)
-# No CPU fallback - GPU is mandatory for this system.
+tech_stack:
+  language: { name: Rust, edition: 2021, msrv: "1.75" }
+  storage: { name: RocksDB, crate: rust-rocksdb, column_families: 52 }
+  gpu_framework: { name: Candle, version: "0.9.2-alpha", features: [cuda], org: HuggingFace }
+  llm_runtime: { name: llama-cpp-2, version: "0.1", format: GGUF, grammar: GBNF }
+  async_runtime: { name: Tokio, version: "1.35", features: [full] }
+  web_framework: { name: Axum, version: "0.8", use: "SSE transport" }
+  ast_parser: { name: tree-sitter, use: "Code entity extraction (Rust)" }
+  hnsw_index: { name: hnsw_rs, version: "0.3", metrics: [cosine, l2, dot] }
+  serialization:
+    json: { crate: serde_json, version: "1.0", use: "Provenance, SourceMetadata, audit, profiles" }
+    bincode: { crate: bincode, version: "1.3", use: "Dense vectors, binary indexes ONLY" }
+  errors: { crate: thiserror, version: "1.0", pattern: "Unified ContextGraphError → JSON-RPC codes" }
+  concurrency: { crate: parking_lot, pattern: "Non-poisoning RwLock/Mutex" }
+  validation: { crate: schemars, version: "0.8", use: "MCP tool JSON schema" }
+  ids: { crate: uuid, version: "1.6", format: v4 }
 
+# ═══════════════════════════════════════════════════════════════
+# WORKSPACE (10 crates)
+# ═══════════════════════════════════════════════════════════════
+workspace:
+  context-graph-core: "Domain types, traits, HNSW indexes, similarity"
+  context-graph-storage: "RocksDB backend, 52 CFs, teleological store"
+  context-graph-mcp: "MCP JSON-RPC server, 55 tools, TCP transport"
+  context-graph-embeddings: "13 embedder models, ONNX/Candle, quantization"
+  context-graph-cuda: "CUDA ops, Poincare ball, HDBSCAN, cones"
+  context-graph-graph: "Graph structures, traversal, edge types"
+  context-graph-cli: "CLI interface"
+  context-graph-benchmark: "Performance benchmarks"
+  context-graph-causal-agent: "LLM causal discovery (Qwen2.5 + GBNF)"
+  context-graph-graph-agent: "LLM graph relationship discovery"
+
+# ═══════════════════════════════════════════════════════════════
+# DIRECTORY STRUCTURE
+# ═══════════════════════════════════════════════════════════════
+# contextgraph/
+#   crates/           10 workspace crates (ALL source code lives here)
+#   models/           Downloaded model weights (ONNX, GGUF)
+#   config/           Configuration files
+#   tests/            Integration tests, chaos tests
+#   tests/fixtures/   Test data
+#   docs/             Documentation, specs
+#   scripts/          Utility scripts
+#   examples/         Example code
+#   benchmarks/       Benchmark configs and datasets
+
+# ═══════════════════════════════════════════════════════════════
+# CODING STANDARDS
+# ═══════════════════════════════════════════════════════════════
+coding_standards:
+  naming:
+    functions: snake_case            # create_hnsw_index, search_multi_space_sync
+    types: PascalCase                # TeleologicalFingerprint, SourceMetadata
+    constants: SCREAMING_SNAKE_CASE  # CF_FINGERPRINTS, TOTAL_COLUMN_FAMILIES
+    modules: snake_case              # teleological, rocksdb_store, hnsw_impl
+    cf_strings: lowercase_underscore # "fingerprints", "source_metadata"
+
+  file_organization:
+    - "One primary type per module file"
+    - "Co-locate unit tests via #[cfg(test)] mod tests"
+    - "Integration tests in crate tests/ directory"
+    - "Chaos tests in tests/chaos_tests/"
+    - "Keep files under 500 lines"
+
+  error_handling:
+    - "thiserror #[derive(Error)] for ALL error types"
+    - "Unified ContextGraphError with From<> conversions for sub-errors"
+    - "map_err() over .expect() — never panic in library code"
+    - "JSON-RPC error codes: -32001 to -32009 for domain-specific errors"
+    - "is_recoverable() / is_critical() classification on all errors"
+    - "FAIL FAST — no silent degradation"
+
+  serialization:
+    rule: "JSON for provenance/metadata/audit. Bincode for dense vectors/indexes ONLY."
+    critical: "bincode + skip_serializing_if = SILENT CORRUPTION of optional fields"
+    json_cfs: [source_metadata, audit_log, merge_history, importance_history, topic_portfolio, embedding_registry, custom_weight_profiles]
+    bincode_cfs: [e12_late_interaction, file_index, tool_call_index, consolidation_recommendations, "code_*"]
+
+  concurrency:
+    - "parking_lot::RwLock/Mutex — non-poisoning, ~5-10x faster than std::sync"
+    - "RwLockReadGuard is !Send — MUST drop before .await in async contexts"
+    - "Pattern: let data = guard.something().clone(); drop(guard); async_work(data).await"
+    - "Consistent lock ordering to prevent ABBA deadlocks"
+    - "JoinHandle must be awaited or aborted — never silently dropped"
+
+# ═══════════════════════════════════════════════════════════════
+# SECURITY
+# ═══════════════════════════════════════════════════════════════
+security:
+  SEC-01: "Validate all MCP tool params at handler boundary (JSON schema + custom validation)"
+  SEC-02: "Sanitize file paths — prevent directory traversal in file watcher and code indexer"
+  SEC-03: "CUDA bounds checking — validate embedding dimensions before GPU kernel launch"
+  SEC-04: "No secrets in code — env vars only (CONTEXT_GRAPH_STORAGE_PATH for DB path)"
+  SEC-05: "PII detection at input boundary — regex for email, SSN, API keys"
+  SEC-06: "Audit all destructive ops (delete, repair, reconcile) via append-only audit log"
+  SEC-07: "Non-fatal audit writes — warn! on failure, never block main operation"
+
+# ═══════════════════════════════════════════════════════════════
+# TESTING
+# ═══════════════════════════════════════════════════════════════
+testing:
+  golden_rule: "ALL MCP tests use real RocksDB + real GPU embeddings. NO STUBS."
+  env_var: "CONTEXT_GRAPH_STORAGE_PATH controls test DB location"
+  test_helper: "create_test_handlers() → async → (Handlers, TempDir) with RocksDB + warm GPU"
+  counts:
+    mcp: "~700 tests (real RocksDB + GPU)"
+    core: "~2800 tests"
+    storage: "~630 tests"
+    chaos: "16 tests (concurrent mutation, GPU OOM, memory pressure)"
+    integration: "8 end-to-end FSV tests"
+  commands:
+    build: "cargo build --release"
+    test_all: "cargo test"
+    test_release: "cargo test --release"
+    test_crate: "cargo test -p context-graph-mcp"
+    test_single: "cargo test -p context-graph-mcp test_name"
+  rules:
+    - "Run tests after every code change"
+    - "Release build must succeed before committing"
+    - "Tests ship with implementation, not as separate tasks"
+    - "No #[ignore] without a documented reason"
+
+# ═══════════════════════════════════════════════════════════════
+# CORE PHILOSOPHY (5 principles)
+# ═══════════════════════════════════════════════════════════════
+# 1. 13 embedders = 13 unique lenses on every memory. Combined > any single embedder.
+# 2. Every embedder provides SIGNAL, never noise. What E1 misses is additional signal.
+# 3. E1 (semantic) is foundation; enhancers complement E1, never compete with it.
+# 4. AI receives FULL VISIBILITY into all 13 scores for intelligent navigation.
+# 5. GPU-first: all 13 embedders warm-loaded into VRAM at startup. No CPU fallback.
+
+# ═══════════════════════════════════════════════════════════════
+# EMBEDDERS (13 Perspectives) — ALL GPU-RESIDENT
+# ═══════════════════════════════════════════════════════════════
 embedders:
-  # FOUNDATION (GPU: ~2GB VRAM)
-  E1: { name: V_meaning, dim: 1024, finds: "Semantic similarity", misses: "Entities, code patterns, causal links", gpu: "warm-loaded" }
+  # FOUNDATION (topic_weight: 1.0)
+  E1:
+    name: V_meaning
+    dim: 1024
+    topic_wt: 1.0
+    finds: "Semantic similarity"
+    when_strong: "Clear semantic content matching stored memories"
+    when_weak: "Code syntax, entity names, causal relationships"
+    threshold: { high: 0.75, low: 0.30 }
+    matryoshka: [256, 512, 1024]
 
-  # SEMANTIC ENHANCERS (topic_weight: 1.0, GPU: ~4GB total)
-  E5: { name: V_causality, dim: 768, finds: "Causal chains (why X caused Y)", misses_by_E1: "Direction lost", gpu: "warm-loaded" }
-  E6: { name: V_selectivity, sparse: true, finds: "Exact keyword matches", misses_by_E1: "Diluted by averaging", gpu: "warm-loaded" }
-  E7: { name: V_correctness, dim: 1536, finds: "Code patterns, function signatures", misses_by_E1: "Treats code as NL", gpu: "warm-loaded" }
-  E10: { name: V_multimodality, dim: 768, finds: "Same-goal work (different words)", integration: "Multiplicative boost on E1", gpu: "warm-loaded" }
-  E12: { name: V_precision, per_token: true, finds: "Exact phrase matches", use: "Reranking only", gpu: "warm-loaded" }
-  E13: { name: V_keyword_precision, sparse: true, finds: "Term expansions (fast→quick)", use: "Stage 1 recall", gpu: "warm-loaded" }
+  # SEMANTIC ENHANCERS (topic_weight: 1.0)
+  E5:
+    name: V_causality
+    dim: 768
+    topic_wt: 1.0
+    finds: "Causal chains (cause→effect)"
+    when_strong: "'why' / 'what caused' queries"
+    when_weak: "Descriptive/definitional, no causal chain"
+    asymmetric: true
+    direction_mod: { cause_to_effect: 1.2, effect_to_cause: 0.8 }
+    threshold: { high: 0.70, low: 0.25 }
+  E6:
+    name: V_selectivity
+    sparse: true
+    topic_wt: 1.0
+    finds: "Exact keyword matches"
+    when_strong: "Quoted terms, error codes, jargon"
+    when_weak: "Conceptual or paraphrased queries"
+    blend_weight: { default: 0.3, range: [0.1, 0.5] }
+    jaccard_threshold: { high: 0.60, low: 0.20 }
+  E7:
+    name: V_correctness
+    dim: 1536
+    topic_wt: 1.0
+    finds: "Code patterns, function signatures"
+    when_strong: "Code syntax (::, ->, fn, impl, .await)"
+    when_weak: "Natural language without code"
+    blend_weight: { default: 0.4, range: [0.2, 0.6] }
+    threshold: { high: 0.80, low: 0.35 }
+    benchmark: "+69% signature, +29% pattern vs E1-only"
+  E10:
+    name: V_multimodality
+    dim: 768
+    topic_wt: 1.0
+    finds: "Same-goal work (different words)"
+    when_strong: "Goal/purpose queries, paraphrased intent"
+    when_weak: "Exact match, no interpretation needed"
+    integration: "Multiplicative boost: E1 * (1 + boost), NOT linear blend"
+    boost: { strong_e1: 0.05, medium_e1: 0.10, weak_e1: 0.15 }
+    clamp: [0.8, 1.2]
+  E12:
+    name: V_precision
+    per_token: true
+    topic_wt: 1.0
+    finds: "Exact phrase matches (MaxSim)"
+    use: "Reranking ONLY — NEVER initial retrieval (AP-74)"
+    maxsim_threshold: { high: 0.70, low: 0.30 }
+  E13:
+    name: V_keyword_precision
+    sparse: true
+    topic_wt: 1.0
+    finds: "Term expansions (fast→quick, db→database)"
+    use: "Stage 1 recall ONLY — NEVER final ranking (AP-75)"
+    splade_threshold: { high: 0.60, low: 0.20 }
+    recall_candidates: 10000
 
-  # RELATIONAL ENHANCERS (topic_weight: 0.5, GPU: ~2GB total)
-  E8: { name: V_connectivity, dim: 1024, finds: "Graph structure (X imports Y)", model: "e5-large-v2", gpu: "warm-loaded" }
-  E11: { name: V_factuality, dim: 768, finds: "Entity knowledge (Diesel=database ORM)", model: "KEPLER (RoBERTa-base + TransE)", gpu: "warm-loaded" }
+  # RELATIONAL ENHANCERS (topic_weight: 0.5)
+  E8:
+    name: V_connectivity
+    dim: 1024
+    topic_wt: 0.5
+    finds: "Graph structure (imports, dependencies)"
+    when_strong: "'what uses X?' / 'depends on' queries"
+    when_weak: "Content queries, not structural"
+    model: "e5-large-v2"
+    asymmetric: true
+    direction_mod: { source_to_target: 1.2, target_to_source: 0.8 }
+  E11:
+    name: V_factuality
+    dim: 768
+    topic_wt: 0.5
+    finds: "Entity knowledge (Diesel=database ORM)"
+    when_strong: "Named entities (frameworks, libraries, tools)"
+    when_weak: "Conceptual queries without entity names"
+    model: "KEPLER (RoBERTa-base + TransE)"
+    transe_threshold: { valid: "> -2.0", uncertain: "-2.0 to -5.0" }
 
-  # TEMPORAL CONTEXT (topic_weight: 0.0, POST-RETRIEVAL ONLY, GPU: ~1.5GB total)
-  E2: { name: V_freshness, dim: 512, finds: "Recency", gpu: "warm-loaded" }
-  E3: { name: V_periodicity, dim: 512, finds: "Time-of-day patterns", gpu: "warm-loaded" }
-  E4: { name: V_ordering, dim: 512, finds: "Sequence (before/after)", gpu: "warm-loaded" }
+  # TEMPORAL (topic_weight: 0.0 — POST-RETRIEVAL ONLY per ARCH-25)
+  E2: { name: V_freshness, dim: 512, topic_wt: 0.0, finds: "Recency", post_retrieval_only: true }
+  E3: { name: V_periodicity, dim: 512, topic_wt: 0.0, finds: "Time-of-day patterns", post_retrieval_only: true }
+  E4: { name: V_ordering, dim: 512, topic_wt: 0.0, finds: "Sequence (before/after)", post_retrieval_only: true }
 
-  # STRUCTURAL (topic_weight: 0.5, GPU: ~1GB)
-  E9: { name: V_robustness, dim: 1024, finds: "Noise-robust structure", gpu: "warm-loaded" }
+  # STRUCTURAL (topic_weight: 0.5)
+  E9:
+    name: V_robustness
+    dim: 1024
+    topic_wt: 0.5
+    finds: "Noise-robust structure (typos, variations)"
+    when_strong: "Queries with typos, misspellings, noise"
+    when_weak: "Clean, well-formed text"
+    hamming_threshold: { high: 0.70 }
 
-# ═══════════════════════════════════════════════════════════════
-# EMBEDDER SIGNAL DEFINITIONS (Parameter Tuning)
-# ═══════════════════════════════════════════════════════════════
-# Each embedder's signal has specific meaning defined by tunable parameters.
-# These parameters are NOT arbitrary - they define what each signal REPRESENTS.
-
-signal_definitions:
-  # E1: SEMANTIC FOUNDATION
-  E1_semantic:
-    signal_meaning: "Dense semantic similarity - the foundation for all retrieval"
-    role: "Foundation layer - all retrieval starts here"
-    tunable_params:
-      similarity_threshold: { high: 0.75, low: 0.30, description: "What constitutes meaningful semantic match" }
-      matryoshka_dim: { values: [256, 512, 1024], description: "Precision vs speed tradeoff" }
-    when_strong: "Query has clear semantic content that matches stored memories"
-    when_weak: "Query involves code syntax, entity names, or causal relationships"
-
-  # E5: CAUSAL SIGNAL
-  E5_causal:
-    signal_meaning: "Cause→effect direction - asymmetric relationships E1 loses"
-    role: "Enhancer for 'why' and 'what caused' queries"
-    tunable_params:
-      direction_modifier: { cause_to_effect: 1.2, effect_to_cause: 0.8, description: "Asymmetric boost for causal direction" }
-      similarity_threshold: { high: 0.70, low: 0.25, description: "Causal relationship strength" }
-    when_strong: "Query asks 'why did X happen?' or 'what caused Y?'"
-    when_weak: "Query is descriptive or definitional, no causal chain"
-
-  # E6: KEYWORD SIGNAL
-  E6_keyword:
-    signal_meaning: "Exact term matches - precision E1 dilutes through averaging"
-    role: "Enhancer for exact terminology, jargon, error codes"
-    tunable_params:
-      blend_weight: { default: 0.3, range: [0.1, 0.5], description: "How much keyword precision influences ranking" }
-      jaccard_threshold: { high: 0.60, low: 0.20, description: "Minimum keyword overlap" }
-    when_strong: "Query contains quoted terms, error codes, specific jargon"
-    when_weak: "Query is conceptual or paraphrased"
-
-  # E7: CODE SIGNAL
-  E7_code:
-    signal_meaning: "Code structure and patterns - what E1 treats as noise is signal"
-    role: "Enhancer for code queries, function signatures, implementations"
-    tunable_params:
-      blend_weight: { default: 0.4, range: [0.2, 0.6], description: "Code signal influence on ranking" }
-      similarity_threshold: { high: 0.80, low: 0.35, description: "Code pattern match strength" }
-      language_detection: { auto: true, description: "Auto-detect programming language from query" }
-    when_strong: "Query contains code syntax (::, ->, fn, impl, async)"
-    when_weak: "Query is natural language description without code"
-    benchmark_validated: "+69% improvement for signature searches, +29% for pattern searches"
-
-  # E8: GRAPH STRUCTURE SIGNAL
-  E8_graph:
-    signal_meaning: "Structural relationships - imports, dependencies, connections"
-    role: "Enhancer for 'what uses X?' or 'what does Y depend on?' queries"
-    tunable_params:
-      direction_modifier: { source_to_target: 1.2, target_to_source: 0.8, description: "Asymmetric for graph direction" }
-      similarity_threshold: { high: 0.65, description: "Connection strength" }
-    when_strong: "Query asks about imports, dependencies, or structural relationships"
-    when_weak: "Query is about content, not structure"
-
-  # E9: NOISE-ROBUST SIGNAL
-  E9_robustness:
-    signal_meaning: "Structural patterns robust to typos and variations"
-    role: "Backup signal when E1 fails due to typos or misspellings"
-    tunable_params:
-      hamming_threshold: { high: 0.70, description: "Structure match despite noise" }
-    when_strong: "Query has typos, variations, or noise"
-    when_weak: "Query is clean, well-formed text"
-
-  # E10: INTENT SIGNAL
-  E10_intent:
-    signal_meaning: "Goal alignment - same purpose expressed differently"
-    role: "Enhancer via multiplicative boost on E1 (NOT replacement)"
-    tunable_params:
-      boost_strong_e1: { value: 0.05, description: "5% boost when E1 > 0.8 (refine)" }
-      boost_medium_e1: { value: 0.10, description: "10% boost when E1 0.4-0.8" }
-      boost_weak_e1: { value: 0.15, description: "15% boost when E1 < 0.4 (broaden)" }
-      multiplier_clamp: { min: 0.8, max: 1.2, description: "Never override E1 completely" }
-    when_strong: "Query describes a goal or purpose, might use different words than stored memories"
-    when_weak: "Query is exact match, no intent interpretation needed"
-
-  # E11: ENTITY KNOWLEDGE SIGNAL
-  E11_entity:
-    signal_meaning: "Entity relationships - 'Diesel' = database ORM for Rust"
-    role: "Enhancer for named entity queries, technical terms with known relationships"
-    tunable_params:
-      transe_score_threshold: { valid: "> -2.0", uncertain: "-2.0 to -5.0", description: "TransE distance for relation validity" }
-      jaccard_boost: { exact_match: 1.3, description: "Boost for exact entity matches" }
-    when_strong: "Query contains named entities (frameworks, libraries, tools)"
-    when_weak: "Query is conceptual without specific entity names"
-
-  # E12: PRECISION SIGNAL (RERANKING ONLY)
-  E12_precision:
-    signal_meaning: "Token-level exact phrase matches - MaxSim reranking"
-    role: "Final stage reranking ONLY (per AP-74)"
-    tunable_params:
-      maxsim_threshold: { high: 0.70, low: 0.30, description: "Phrase match precision" }
-    when_strong: "Need to distinguish between very similar candidates"
-    forbidden: "NEVER use for initial retrieval (AP-74)"
-
-  # E13: TERM EXPANSION SIGNAL (STAGE 1 ONLY)
-  E13_expansion:
-    signal_meaning: "Term expansion - fast→quick, db→database"
-    role: "Stage 1 recall ONLY - cast wide net (per AP-75)"
-    tunable_params:
-      splade_threshold: { high: 0.60, low: 0.20, description: "Term expansion match" }
-      recall_candidates: { default: 10000, description: "Number of candidates for pipeline" }
-    when_strong: "Need to find synonyms, abbreviations, related terms"
-    forbidden: "NEVER use for final ranking (AP-75)"
-
-  # E2-E4: TEMPORAL SIGNALS (POST-RETRIEVAL ONLY)
-  E2_E3_E4_temporal:
-    signal_meaning: "Temporal context - recency, periodicity, sequence"
-    role: "POST-RETRIEVAL badges only (per ARCH-25, AP-73)"
-    tunable_params:
-      recency_boost: { under_1h: 1.3, under_1d: 1.2, under_7d: 1.1, description: "Post-retrieval recency weight" }
-    when_used: "After retrieval, to add temporal context badges"
-    forbidden: "NEVER in similarity fusion or initial retrieval"
-    topic_weight: 0.0  # ALWAYS - temporal proximity ≠ semantic relationship
+  temporal_recency_boost: { under_1h: 1.3, under_1d: 1.2, under_7d: 1.1 }
 
 # ═══════════════════════════════════════════════════════════════
-# CUSTOM WEIGHT RULES (Dynamic Navigation)
+# CUSTOM WEIGHT RULES
 # ═══════════════════════════════════════════════════════════════
-custom_weight_rules:
-  validation:
-    sum_tolerance: 0.01
-    per_weight_range: [0.0, 1.0]
-    validator: "validate_weights() in weights/mod.rs"
+custom_weights:
+  validation: { sum_tolerance: 0.01, per_weight: [0.0, 1.0], validator: "validate_weights() in weights/mod.rs" }
   precedence: "customWeights > weightProfile > DEFAULT_SEMANTIC_WEIGHTS"
-  exclusion_behavior:
-    method: "Zero excluded weights, renormalize remaining to sum=1.0"
-    all_excluded: "Error — cannot exclude all 13 embedders"
-    fail_fast: "Invalid embedder names (e.g., E14) return error immediately"
-  pipeline_embedders:
-    E12_E13: "Weights allowed but only apply in Pipeline strategy. In MultiSpace, silently treated as 0."
-  temporal_embedders:
-    E2_E3_E4: "Weights allowed. High values may reduce topical relevance per AP-73."
+  exclusion: "Zero excluded weights, renormalize remaining. All-excluded = error. Invalid names = fail fast."
+  E12_E13: "Weights apply in Pipeline only. In MultiSpace, silently treated as 0."
+  E2_E3_E4: "Weights allowed. High values reduce topical relevance per AP-73."
+  profiles_14: [semantic_search, causal_reasoning, code_search, fact_checking,
+    graph_reasoning, temporal_navigation, sequence_navigation,
+    conversation_history, category_weighted, typo_tolerant, pipeline_stage1_recall,
+    pipeline_stage2_scoring, pipeline_full, balanced]
 
 # ═══════════════════════════════════════════════════════════════
-# ARCHITECTURAL RULES (MUST follow)
+# ARCHITECTURE RULES (MUST follow)
 # ═══════════════════════════════════════════════════════════════
 arch_rules:
-  # GPU-First (MANDATORY)
-  ARCH-GPU-01: "GPU is mandatory - no CPU fallback for embeddings"
+  # GPU-First
+  ARCH-GPU-01: "GPU mandatory for production — no CPU fallback for embeddings"
   ARCH-GPU-02: "All 13 embedders warm-loaded into VRAM at MCP server startup"
   ARCH-GPU-03: "Embedding inference uses FP16/BF16 Tensor Cores"
-  ARCH-GPU-04: "FAISS indexes use GPU (faiss-gpu) not CPU"
-  ARCH-GPU-05: "HDBSCAN clustering runs on GPU via cuML"
-  ARCH-GPU-06: "Batch operations preferred - minimize kernel launches"
-  ARCH-GPU-07: "Green Contexts partition SMs: 70% inference, 30% indexing"
-  ARCH-GPU-08: "CUDA streams for async embedding + indexing overlap"
+  ARCH-GPU-04: "HNSW indexes via hnsw_rs (cosine/L2/dot metrics)"
+  ARCH-GPU-05: "Clustering via context-graph-cuda crate (HDBSCAN)"
+  ARCH-GPU-06: "Batch operations preferred — minimize kernel launches"
+  ARCH-GPU-07: "[TARGET] Green Contexts partition SMs: 70% inference, 30% indexing"
+  ARCH-GPU-08: "[TARGET] CUDA streams for async embedding + indexing overlap"
 
-  # Signal Philosophy (FUNDAMENTAL)
-  ARCH-SIGNAL-01: "ALL 13 embedders provide SIGNAL, never noise - each captures unique dimensions of meaning"
-  ARCH-SIGNAL-02: "What E1 misses is ADDITIONAL signal, not noise - E7/E11/E5 capture what E1 cannot encode"
-  ARCH-SIGNAL-03: "Parameter tuning defines signal MEANING - blend weights, thresholds, boosts define each embedder's role"
-  ARCH-SIGNAL-04: "Combined signal > any single embedder - multi-perspective retrieval is always superior"
-  ARCH-SIGNAL-05: "Enhancers complement E1, never compete - E10 boosts E1, doesn't replace it"
+  # Signal Philosophy
+  ARCH-SIGNAL-01: "ALL 13 embedders provide SIGNAL, never noise"
+  ARCH-SIGNAL-02: "What E1 misses is ADDITIONAL signal — E7/E11/E5 capture what E1 cannot"
+  ARCH-SIGNAL-03: "Parameter tuning defines signal MEANING"
+  ARCH-SIGNAL-04: "Combined signal > any single embedder"
+  ARCH-SIGNAL-05: "Enhancers complement E1, never compete"
 
-  # Multi-Perspective Navigation (AI VISIBILITY)
-  ARCH-NAV-01: "AI receives FULL VISIBILITY into all 13 embedder scores per result"
-  ARCH-NAV-02: "Embedder scores categorized by type: SEMANTIC, RELATIONAL, STRUCTURAL, TEMPORAL"
-  ARCH-NAV-03: "Blind spots detected: enhancer >= 0.5 AND E1 < 0.3 triggers alert"
-  ARCH-NAV-04: "Navigation hints guide AI to specialized tools based on score patterns"
-  ARCH-NAV-05: "Agreement metrics show embedder consensus for confidence assessment"
-  ARCH-NAV-06: "Custom weight blending: AI specifies arbitrary [f32;13] weights via customWeights, validated by validate_weights() (sum ~1.0, each in [0.0,1.0]). Overrides weightProfile."
-  ARCH-NAV-07: "Embedder masking: AI excludes specific embedders via excludeEmbedders array (E1-E13). Excluded weights zeroed and remaining renormalized. All-excluded = error."
-  ARCH-NAV-08: "Breakdown transparency: includeEmbedderBreakdown returns per-embedder {embedder, score, rank, weight, rrfContribution} + dominantEmbedder + agreementLevel per result."
+  # Multi-Perspective Navigation (AI Visibility)
+  ARCH-NAV-01: "AI sees all 13 embedder scores per result"
+  ARCH-NAV-02: "Scores categorized: SEMANTIC, RELATIONAL, STRUCTURAL, TEMPORAL"
+  ARCH-NAV-03: "Blind spot alert: enhancer >= 0.5 AND E1 < 0.3"
+  ARCH-NAV-04: "Navigation hints guide AI to specialized tools by score patterns"
+  ARCH-NAV-05: "Agreement metrics show embedder consensus"
+  ARCH-NAV-06: "customWeights: [f32;13], validate_weights() enforces sum ~1.0, each [0.0,1.0]"
+  ARCH-NAV-07: "excludeEmbedders: zero + renormalize. All-excluded = error"
+  ARCH-NAV-08: "includeEmbedderBreakdown: per-embedder {score, rank, weight, rrfContribution}"
 
   # Core
-  ARCH-01: "TeleologicalArray is atomic - all 13 embeddings or nothing"
-  ARCH-02: "Apples-to-apples only - compare E1↔E1, never E1↔E5"
+  ARCH-01: "TeleologicalArray is atomic — all 13 embeddings or nothing"
+  ARCH-02: "Apples-to-apples only — compare E1↔E1, never E1↔E5"
   ARCH-04: "Temporal (E2-E4) NEVER count toward topics"
-  ARCH-05: "All 13 embedders required - missing = fatal"
+  ARCH-05: "All 13 embedders required — missing = fatal"
   ARCH-06: "All memory ops through MCP tools only"
   ARCH-09: "Topic threshold: weighted_agreement >= 2.5"
   ARCH-10: "Divergence detection: SEMANTIC embedders only (E1,E5,E6,E7,E10,E12,E13)"
 
   # Retrieval Pipeline
-  ARCH-12: "E1 is foundation - all retrieval starts with E1"
-  ARCH-13: "Strategies: E1Only (default), MultiSpace (E1+E5+E7+E8+E10+E11 via RRF), Pipeline (E13→E1→E12), EmbedderFirst (any E as primary)"
+  ARCH-12: "E1 is foundation — all retrieval starts with E1"
+  ARCH-13: "Strategies: E1Only, MultiSpace (E1+E5+E7+E8+E10+E11 via RRF), Pipeline (E13→E1→E12), EmbedderFirst"
   ARCH-17: "Strong E1 (>0.8): enhancers refine. Weak E1 (<0.4): enhancers broaden"
   ARCH-18: "E5 Causal: asymmetric similarity (cause→effect direction matters)"
-  ARCH-21: "Multi-space fusion: use Weighted RRF, not weighted sum"
+  ARCH-21: "Multi-space fusion: Weighted RRF, not weighted sum"
+  ARCH-25: "Temporal boosts POST-retrieval only, NOT in similarity fusion"
 
   # E10 Multiplicative Boost
   ARCH-28: "E10 uses multiplicative boost: E1 * (1 + boost), NOT linear blending"
   ARCH-29: "E10 boost adapts: strong E1=5%, medium=10%, weak=15%"
-  ARCH-30: "E10 alignment: >0.5=boost, <0.5=reduce, =0.5=neutral"
+  ARCH-30: "REMOVED — E10 alignment was non-functional (hardcoded to 1.0)"
   ARCH-33: "E10 multiplier clamped to [0.8, 1.2]"
 
-  # Temporal (POST-RETRIEVAL ONLY)
-  ARCH-25: "Temporal boosts POST-retrieval only, NOT in similarity fusion"
+  # Enrichment
+  ARCH-ENRICH-01: "Query type detection before search"
+  ARCH-ENRICH-02: "E1 always runs first (per ARCH-12)"
+  ARCH-ENRICH-03: "Enhancers run in parallel via tokio::join!"
+  ARCH-ENRICH-04: "Fusion uses Weighted RRF (per ARCH-21)"
+  ARCH-ENRICH-05: "Blind spots: enhancer > 0.5 AND E1 < 0.3"
+  ARCH-ENRICH-06: "Light mode: max 2 enhancers, Full: max 6"
+
+  # Search Transparency
+  ARCH-TRANS-01: "searchTransparency MUST be in every search_graph response"
+  ARCH-TRANS-02: "activeEmbedders reflects ACTUAL embedders searched"
+  ARCH-TRANS-03: "ignoredWeights explains WHY weights were unused (strategy limitation)"
+
+  # Code Embedding
+  ARCH-CODE-01: "Code entities stored separately from teleological memories"
+  ARCH-CODE-02: "E7 is primary for code, not part of 13-embedder array for code pipeline"
+  ARCH-CODE-03: "AST chunking preserves syntactic boundaries (functions, structs)"
+  ARCH-CODE-04: "Code file watcher uses git-based change detection"
+  ARCH-CODE-05: "Code search blends E7 (code) with E1 (semantic) for best results"
+  ARCH-CODE-06: "tree-sitter for AST parsing, NOT regex-based extraction"
+
+  # Provenance
+  ARCH-PROV-01: "Audit writes non-fatal — warn! on failure, never block main operation"
+  ARCH-PROV-02: "AuditRecord target_id = Uuid::nil() for operations on CFs/files"
+  ARCH-PROV-03: "Merge history is permanent — no TTL, no expiration"
+  ARCH-PROV-04: "All destructive ops (delete, repair, reconcile) MUST emit audit records"
+  ARCH-PROV-05: "get_provenance_chain queries all 5 queryable CFs in a single response"
+
+  # LLM Agents
+  ARCH-LLM-01: "LLM inference local-only via llama.cpp — no external API calls"
+  ARCH-LLM-02: "All LLM output constrained by GBNF grammar for structured JSON"
+  ARCH-LLM-03: "LLM results include source memory provenance links"
+
+  # Serialization (critical — learned from forensic audit)
+  ARCH-SER-01: "JSON for provenance/SourceMetadata/audit. Bincode for dense vectors only."
+  ARCH-SER-02: "NEVER use bincode with skip_serializing_if — silent corruption"
+
+  # Concurrency (critical — learned from forensic audit)
+  ARCH-CONC-01: "parking_lot RwLock/Mutex, not std::sync"
+  ARCH-CONC-02: "Drop RwLockReadGuard before .await — it is !Send"
+  ARCH-CONC-03: "Consistent lock ordering to prevent ABBA deadlocks"
 
 # ═══════════════════════════════════════════════════════════════
 # ANTI-PATTERNS (FORBIDDEN)
 # ═══════════════════════════════════════════════════════════════
 forbidden:
-  # GPU Anti-Patterns
-  AP-GPU-01: "NEVER use CPU for embedding inference when GPU available"
-  AP-GPU-02: "NEVER cold-load embedders per-request - warm-load at startup"
-  AP-GPU-03: "NEVER use CPU FAISS when GPU FAISS available"
-  AP-GPU-04: "NEVER use sklearn HDBSCAN - use cuML GPU implementation"
-  AP-GPU-05: "NEVER transfer embeddings GPU→CPU→GPU - keep on GPU"
-  AP-GPU-06: "NEVER use FP32 for inference - use FP16/BF16 Tensor Cores"
-  AP-GPU-07: "NEVER serialize embeddings per-item - batch for GPU efficiency"
-  AP-GPU-08: "NEVER block on sync - use CUDA streams for async ops"
+  # GPU
+  AP-GPU-01: "NEVER CPU for embedding inference when GPU available"
+  AP-GPU-02: "NEVER cold-load embedders per-request — warm-load at startup"
+  AP-GPU-05: "NEVER transfer embeddings GPU→CPU→GPU — keep on device"
+  AP-GPU-06: "NEVER FP32 for inference — use FP16/BF16 Tensor Cores"
+  AP-GPU-07: "NEVER serialize embeddings per-item — batch for GPU efficiency"
+  AP-GPU-08: "NEVER block on sync — use async operations"
 
-  # Core Anti-Patterns
+  # Core
   AP-02: "No cross-embedder comparison (E1↔E5)"
   AP-04: "No partial TeleologicalArray"
   AP-05: "No embedding fusion into single vector"
   AP-60: "Temporal (E2-E4) MUST NOT count toward topics"
-  AP-73: "Temporal MUST NOT be used in similarity fusion"
+  AP-73: "Temporal MUST NOT be in similarity fusion"
   AP-74: "E12 ColBERT: reranking ONLY, not initial retrieval"
   AP-75: "E13 SPLADE: Stage 1 recall ONLY, not final ranking"
-  AP-77: "E5 MUST NOT use symmetric cosine - causal is directional"
-  AP-79: "MUST NOT use simple weighted sum - use Weighted RRF"
-  AP-80: "E10 MUST NOT use linear blending - makes E10 compete with E1"
-  AP-84: "E10 MUST NOT override E1 - when E1=0, result=0"
+  AP-77: "E5 MUST NOT use symmetric cosine — causal is directional"
+  AP-79: "MUST NOT use simple weighted sum — use Weighted RRF"
+  AP-80: "E10 MUST NOT use linear blending — makes E10 compete with E1"
+  AP-84: "E10 MUST NOT override E1 — when E1=0, result=0"
 
-  # Navigation Anti-Patterns
-  AP-NAV-01: "NEVER silently drop invalid embedder names — fail fast with descriptive error"
-  AP-NAV-02: "NEVER allow customWeights that don't sum to ~1.0 — validate_weights() must pass"
-  AP-NAV-03: "NEVER exclude all 13 embedders — at least one must remain for search"
+  # Navigation
+  AP-NAV-01: "NEVER silently drop invalid embedder names — fail fast with error"
+  AP-NAV-02: "NEVER allow customWeights not summing to ~1.0"
+  AP-NAV-03: "NEVER exclude all 13 embedders"
+
+  # Code
+  AP-CODE-01: "NEVER chunk code by word count — use AST boundaries"
+  AP-CODE-02: "NEVER store code in teleological memory graph"
+  AP-CODE-03: "NEVER use E1 alone for code search — E7 is primary"
+  AP-CODE-04: "NEVER parse code without tree-sitter — no regex extraction"
+
+# ═══════════════════════════════════════════════════════════════
+# COLUMN FAMILIES (52 total)
+# ═══════════════════════════════════════════════════════════════
+# Shared: 256MB LRU block cache, LZ4 compression (most CFs), bloom 10-bit
+column_families:
+  total: 52  # 11 base + 21 teleological + 13 quantized + 5 code + 2 causal
+
+  base_11:
+    nodes: "Memory nodes, UUID prefix key"
+    edges: "Graph edges, source_uuid key"
+    embeddings: "1536D f32 vectors, 64KB blocks"
+    metadata: "Memory metadata, 256MB cache"
+    temporal: "timestamp_ms:UUID index"
+    tags: "tag:UUID index"
+    sources: "source_uri:UUID index"
+    system: "System config, no compression"
+    embedder_edges: "[u8 embedder][16B uuid] = 17-byte key"
+    typed_edges: "[16B src][16B tgt] = 32-byte key"
+    typed_edges_by_type: "[u8 type][16B src] = 17-byte key"
+
+  teleological_21:
+    # Fingerprints & Indexes (5)
+    fingerprints: "~63KB per fingerprint (all 13 embeddings), 64KB blocks"
+    topic_profiles: "13D vectors, 52 bytes, no compression"
+    e13_splade_inverted: "SPLADE posting lists (term_id→Vec<Uuid>)"
+    e6_sparse_inverted: "E6 keyword inverted index"
+    e1_matryoshka_128: "Truncated E1 128D vectors for fast ANN"
+    # Content & Metadata (4)
+    content: "Raw text, LZ4 compressed, up to 1MB"
+    source_metadata: "Provenance info, JSON, ~100-500B"
+    file_index: "file_path→FileIndexEntry"
+    topic_portfolio: "Persisted topic clusters, JSON"
+    # E12 & Entity (2)
+    e12_late_interaction: "Token embeddings, 10-25KB per memory"
+    entity_provenance: "Entity→fingerprint links"
+    # Audit & Lifecycle (4)
+    audit_log: "Append-only, [timestamp_nanos_be][uuid] key, JSON value"
+    audit_by_target: "Secondary index: target UUID → audit keys"
+    merge_history: "Permanent merge records, JSON (no TTL)"
+    importance_history: "Importance change log, JSON"
+    # Tool / Consolidation / Embedding (3)
+    tool_call_index: "tool_use_id→Vec<Uuid>"
+    consolidation_recommendations: "Analysis results"
+    embedding_registry: "Model version tracking per fingerprint"
+    # Profiles (1)
+    custom_weight_profiles: "[f32;13] profiles, JSON"
+    # Legacy (2) — kept for backwards compatibility
+    session_identity: "DEPRECATED"
+    ego_node: "DEPRECATED"
+
+  quantized_13:
+    # One CF per embedder (emb_0 through emb_12), quantized for fast ANN
+    emb_0: "E1 Semantic (1024D, PQ-8)"
+    emb_1: "E2 TemporalRecent (512D, Float8E4M3)"
+    emb_2: "E3 TemporalPeriodic (512D, Float8E4M3)"
+    emb_3: "E4 TemporalPositional (512D, Float8E4M3)"
+    emb_4: "E5 Causal (768D, PQ-8)"
+    emb_5: "E6 Sparse (variable)"
+    emb_6: "E7 Code (1536D, PQ-8)"
+    emb_7: "E8 Graph (1024D, Float8E4M3)"
+    emb_8: "E9 HDC (10000D binary)"
+    emb_9: "E10 Paraphrase (768D, PQ-8)"
+    emb_10: "E11 Entity (768D, Float8E4M3)"
+    emb_11: "E12 LateInteraction (variable, token pruning)"
+    emb_12: "E13 SPLADE (sparse)"
+
+  code_5:
+    code_entities: "AST-extracted functions/structs/traits metadata"
+    code_e7_embeddings: "1536D E7 (Qodo-Embed) vectors for code"
+    code_file_index: "file_path→entity ID mappings"
+    code_name_index: "entity_name→Vec<Uuid>"
+    code_signature_index: "signature_hash→Vec<Uuid>"
+
+  causal_2:
+    causal_relationships: "LLM-generated descriptions + E1 embeddings"
+    causal_by_source: "Secondary index by source fingerprint"
+
+# ═══════════════════════════════════════════════════════════════
+# MCP TOOLS (55 total, 17 categories)
+# ═══════════════════════════════════════════════════════════════
+# Tool names match constants in tools/names.rs and definitions in tools/definitions/.
+mcp_tools:
+  core_4:              [store_memory, get_memetic_status, search_graph, trigger_consolidation]
+  curation_3:          [merge_concepts, forget_concept, boost_importance]
+  topic_4:             [get_topic_portfolio, get_topic_stability, detect_topics, get_divergence_alerts]
+  file_watcher_4:      [list_watched_files, get_file_watcher_stats, delete_file_content, reconcile_files]
+  sequence_4:          [get_conversation_context, get_session_timeline, traverse_memory_chain, compare_session_states]
+  causal_4:            [search_causes, search_effects, get_causal_chain, search_causal_relationships]
+  causal_discovery_2:  [trigger_causal_discovery, get_causal_discovery_status]
+  keyword_1:           [search_by_keywords]
+  code_1:              [search_code]
+  graph_4:             [search_connections, get_graph_path, discover_graph_relationships, validate_graph_link]
+  robustness_1:        [search_robust]
+  entity_6:            [extract_entities, search_by_entities, infer_relationship, find_related_entities, validate_knowledge, get_entity_graph]
+  embedder_search_7:   [search_by_embedder, get_embedder_clusters, compare_embedder_views, list_embedder_indexes, get_memory_fingerprint, create_weight_profile, search_cross_embedder_anomalies]
+  temporal_2:          [search_recent, search_periodic]
+  graph_linking_4:     [get_memory_neighbors, get_typed_edges, traverse_graph, get_unified_neighbors]
+  maintenance_1:       [repair_causal_relationships]
+  provenance_3:        [get_audit_trail, get_merge_history, get_provenance_chain]
+
+  search_strategies:
+    E1Only: "Fast simple semantic (default)"
+    MultiSpace: "E1+E5+E7+E8+E10+E11 via RRF (6 embedders)"
+    Pipeline: "E13 recall → E1 dense → E12 rerank (max precision)"
+    EmbedderFirst: "Any embedder as primary perspective"
+    # AdaptiveSearch removed — was non-functional (detected intent but never applied boost)
+
+# ═══════════════════════════════════════════════════════════════
+# SEARCH & NAVIGATION
+# ═══════════════════════════════════════════════════════════════
+search:
+  # searchTransparency block (always present in search_graph responses)
+  transparency:
+    fields: [activeEmbedders, ignoredWeights, weightUtilization, strategyDescription]
+
+  # Full retrieval pipeline stages
+  pipeline:
+    S1: "E13 SPLADE sparse recall → 10K candidates"
+    S2: "E1 Matryoshka ANN → 1K candidates"
+    S3: "RRF across semantic spaces → 100 candidates"
+    S4: "Score-based filtering → 50 candidates"
+    S5: "E12 MaxSim rerank → 10 final results"
+
+  # Dynamic navigation params
+  navigation:
+    customWeights: { tools: [search_graph, get_unified_neighbors], format: '{"E1": 0.4, "E5": 0.3, "E7": 0.2, "E11": 0.1}' }
+    excludeEmbedders: { tools: [search_graph, get_unified_neighbors], behavior: "Zero + renormalize remaining" }
+    includeEmbedderBreakdown: { tools: [search_graph], returns: [embedderBreakdown, dominantEmbedder, agreementLevel] }
+
+  # Auto query type detection → embedder selection
+  query_type_detection:
+    CAUSAL: { patterns: ["why", "caused", "because", "root cause"], enhancers: [E5, E8] }
+    CODE: { patterns: ["::", "->", "fn ", "impl", ".await"], enhancers: [E7, E6] }
+    ENTITY: { patterns: ["what is", "works with", capitalized_names], enhancers: [E11, E6] }
+    KEYWORD: { patterns: [quoted_terms, "error:", "v2."], enhancers: [E6, E13] }
+    TEMPORAL: { patterns: ["yesterday", "recently"], enhancers: "POST-RETRIEVAL only (ARCH-25)" }
+
+  enrichment_modes:
+    Off: "E1-only (legacy)"
+    Light: "E1 + 1-2 enhancers, basic metrics (default, <500ms)"
+    Full: "All relevant enhancers, full metrics, blind spots (<800ms)"
+
+  # Embedder perspectives (what each finds as primary)
+  perspectives:
+    E1: "Dense semantic similarity"
+    E2: "Temporal freshness (recent first)"
+    E3: "Time-of-day patterns"
+    E4: "Conversation order (before/after)"
+    E5: "Cause-effect relationships"
+    E6: "Exact keyword matches"
+    E7: "Code patterns, AST structure"
+    E8: "Structural relationships (imports, deps)"
+    E9: "Noise-robust structure (typos)"
+    E10: "Paraphrase detection (different words, same meaning)"
+    E11: "Entity knowledge (named entities)"
+    E12: "Exact phrase matches (MaxSim rerank)"
+    E13: "Term expansion (SPLADE synonyms)"
 
 # ═══════════════════════════════════════════════════════════════
 # TOPIC SYSTEM
 # ═══════════════════════════════════════════════════════════════
 topics:
   weighted_agreement:
-    formula: "Sum(topic_weight_i × is_clustered_i)"
+    formula: "Sum(topic_weight_i * is_clustered_i)"
     threshold: 2.5
-    max: 8.5  # 7×1.0 (semantic) + 2×0.5 (relational) + 1×0.5 (structural)
-    temporal_contribution: 0.0  # ALWAYS
-
+    max: 8.5  # 7*1.0 (semantic) + 2*0.5 (relational) + 1*0.5 (structural)
   categories:
     SEMANTIC: { embedders: [E1,E5,E6,E7,E10,E12,E13], weight: 1.0 }
     RELATIONAL: { embedders: [E8,E11], weight: 0.5 }
     STRUCTURAL: { embedders: [E9], weight: 0.5 }
-    TEMPORAL: { embedders: [E2,E3,E4], weight: 0.0 }  # Never for topics
-
+    TEMPORAL: { embedders: [E2,E3,E4], weight: 0.0 }
   divergence_detection: "SEMANTIC embedders only"
 
 # ═══════════════════════════════════════════════════════════════
-# MCP TOOLS
+# PROVENANCE
 # ═══════════════════════════════════════════════════════════════
-mcp_tools:
-  # 57 TOOLS TOTAL across 19 categories.
-  # Each tool name matches a constant in tools/names.rs and a definition in tools/definitions/.
+provenance:
+  rule: "Every mutation, search, and discovery audited. Append-only, non-blocking."
+  cfs: [audit_log, audit_by_target, merge_history, importance_history, entity_provenance, tool_call_index, consolidation_recommendations, embedding_registry]
+  operations: [MemoryCreated, MemoryDeleted, MemoryMerged, ImportanceChanged, SearchPerformed, ConsolidationAnalyzed, RelationshipDiscovered, CausalRelationshipRepaired, FileWatcherEvent]
+  builder: "AuditRecord::new(op, target_id).with_operator().with_session().with_rationale().with_parameters()"
+  target_id_nil: "Use Uuid::nil() for operations on CFs/files, not single entities"
+  tools: [get_audit_trail, get_merge_history, get_provenance_chain]
 
-  # CORE (4): Foundation memory operations
-  core:
-    - store_memory             # Store new memory with 13-embedder TeleologicalArray
-    - get_memetic_status       # System status: memory count, topics, health
-    - search_graph             # Primary search: + customWeights, excludeEmbedders, includeEmbedderBreakdown, searchTransparency, all 16 profiles
-    - trigger_consolidation    # Merge similar memories, reduce redundancy
-
-  # CURATION (3): Memory lifecycle management
-  curation:
-    - merge_concepts           # Merge two memories into one (with provenance)
-    - forget_concept           # Soft-delete a memory (with deletion reason audit)
-    - boost_importance         # Adjust memory importance (with importance history)
-
-  # TOPIC (4): Topic detection and monitoring
-  topic:
-    - get_topic_portfolio      # Current topic clusters with weighted agreement
-    - get_topic_stability      # Churn rate and stability metrics
-    - detect_topics            # Run topic detection on demand
-    - get_divergence_alerts    # Embedder disagreement alerts (SEMANTIC only)
-
-  # FILE WATCHER (4): Code file index management
+# ═══════════════════════════════════════════════════════════════
+# CODE EMBEDDING (Separate Pipeline)
+# ═══════════════════════════════════════════════════════════════
+# Code stored separately from teleological memories. E7 (Qodo-Embed) primary.
+code_embedding:
+  model: { name: "Qodo-Embed-1-1.5B", dim: 1536, precision: FP16, path: "models/code-1536" }
+  ast:
+    parser: tree-sitter
+    target_size: 500  # non-whitespace chars per chunk
+    range: [100, 1000]
+    includes: [parent_context, imports]
+    languages: { rust: { ext: ".rs", grammar: "tree-sitter-rust" } }
+  entities: [Function, Method, Struct, Enum, Trait, Impl, Module, Const, Static, TypeAlias]
+  search:
+    primary: E7
+    e1_blend: { default: 0.4, range: [0.2, 0.6] }
+    modes: [signature, pattern, semantic]
   file_watcher:
-    - list_watched_files       # List indexed files and their entity counts
-    - get_file_watcher_stats   # File watcher health and statistics
-    - delete_file_content      # Remove a file's entities from index (audited)
-    - reconcile_files          # Re-sync file index with filesystem (audited)
-
-  # SEQUENCE (4): E4 temporal ordering and session navigation
-  sequence:
-    - get_conversation_context # Memories near a conversation position
-    - get_session_timeline     # Chronological session memory timeline
-    - traverse_memory_chain    # Walk memory chains (before/after)
-    - compare_session_states   # Diff two session snapshots
-
-  # CAUSAL (4): E5 asymmetric causal reasoning
-  causal:
-    - search_causes            # Find causes of a query (asymmetric E5)
-    - search_effects           # Find effects of a query (asymmetric E5)
-    - get_causal_chain         # Multi-hop causal chain traversal
-    - search_causal_relationships  # Search LLM-generated causal descriptions with provenance
-
-  # CAUSAL DISCOVERY (2): LLM-based causal analysis (Qwen2.5 + GBNF grammar)
-  causal_discovery:
-    - trigger_causal_discovery    # Run LLM causal analysis on memories
-    - get_causal_discovery_status # Agent status and statistics
-
-  # KEYWORD (1): E6 sparse exact-match search
-  keyword:
-    - search_by_keywords       # Jaccard + inverted index keyword search
-
-  # CODE (1): E7 code-aware search
-  code:
-    - search_code              # Code pattern and signature search (Qodo-Embed)
-
-  # GRAPH (4): E8 structural relationship reasoning
-  graph:
-    - search_connections       # Find connected memories (asymmetric E8)
-    - get_graph_path           # Shortest path between two memories
-    - discover_graph_relationships  # LLM-based relationship discovery (graph-agent)
-    - validate_graph_link      # LLM-based link validation between memories
-
-  # ROBUSTNESS (1): E9 noise-tolerant search
-  robustness:
-    - search_robust            # HDC blind-spot detection (high E9 + low E1)
-
-  # INTENT (1): E10 multiplicative boost search
-  intent:
-    - search_by_intent         # Goal-aligned search + customWeights, excludeEmbedders, all 16 profiles
-
-  # ENTITY (6): E11 KEPLER entity knowledge
-  entity:
-    - extract_entities         # Extract named entities from text
-    - search_by_entities       # Search by entity names and relationships
-    - infer_relationship       # Infer relationship between two entities (TransE)
-    - find_related_entities    # Find entities related to a given entity
-    - validate_knowledge       # Validate entity knowledge claims
-    - get_entity_graph         # Visualize entity relationship graph
-
-  # EMBEDDER-FIRST SEARCH (8): Any embedder as primary perspective + navigation tools
-  embedder_search:
-    - search_by_embedder           # Search using any embedder (E1-E13) as primary
-    - get_embedder_clusters        # Explore clusters in any embedder's space
-    - compare_embedder_views       # Compare how different embedders rank the same query
-    - list_embedder_indexes        # List all embedder indexes with stats
-    - get_memory_fingerprint       # Per-embedder fingerprint introspection
-    - create_weight_profile        # Create session-scoped custom weight profile for reuse
-    - search_cross_embedder_anomalies  # Find high-in-one/low-in-another anomalies
-    - adaptive_search              # Auto-classify query and select optimal strategy + weights
-
-  # TEMPORAL (2): E2/E3 post-retrieval temporal search
-  temporal:
-    - search_recent            # E2 recency-boosted search (POST-retrieval per ARCH-25)
-    - search_periodic          # E3 periodicity-boosted search (POST-retrieval per ARCH-25)
-
-  # GRAPH LINKING (4): K-NN navigation and typed edges
-  graph_linking:
-    - get_memory_neighbors     # K-NN neighbors in a specific embedder space
-    - get_typed_edges          # Typed edges derived from embedder agreement patterns
-    - traverse_graph           # Multi-hop graph traversal with filters
-    - get_unified_neighbors    # Unified neighbors via Weighted RRF across all 13 embedders
-
-  # MAINTENANCE (1): Data repair and cleanup
-  maintenance:
-    - repair_causal_relationships  # Scan and remove corrupted causal entries
-
-  # PROVENANCE (3): Audit trail and lineage queries
-  provenance:
-    - get_audit_trail          # Query audit log for a memory or time range
-    - get_merge_history        # Merge lineage and history for a fingerprint
-    - get_provenance_chain     # Full provenance from embedding to source
-
-  search_strategies:
-    E1Only: "Fast, simple semantic queries"
-    MultiSpace: "E1+E5+E7+E8+E10+E11 via RRF (6 embedders) - use when E1 blind spots matter"
-    Pipeline: "E13 recall → E1 dense → E12 rerank - maximum precision"
-    EmbedderFirst: "Any embedder as primary perspective - explore blind spots"
-    AdaptiveSearch: "Auto-classify query type and select optimal strategy + weight profile"
+    trigger: "git diff --name-only"
+    on_change: "Parse AST → extract entities → E7 embed → store → update indexes"
+    on_delete: "Lookup by path → delete entities → remove from indexes"
 
 # ═══════════════════════════════════════════════════════════════
-# EMBEDDER-FIRST SEARCH (NEW)
+# LLM AGENTS
 # ═══════════════════════════════════════════════════════════════
-# Core insight: Each embedder sees the knowledge graph from a unique perspective.
-# Sometimes E1 (semantic) misses what E11 (entity) finds, or E7 (code) discovers
-# patterns E5 (causal) doesn't see. Embedder-first search lets AI agents choose
-# which perspective to prioritize for a given query.
-
-embedder_first_search:
-  philosophy: |
-    The 13 embedders are 13 lenses on the same knowledge. By default, E1 (semantic)
-    is the foundation, but sometimes another perspective reveals what E1 misses.
-
-    Example: "What framework does Tokio relate to?"
-    - E1 (semantic): finds "async", "runtime" → generic matches
-    - E11 (entity): finds "Rust", "Actix" → entity relationships
-    - E8 (graph): finds "imports", "depends on" → structural relationships
-    - E7 (code): finds "tokio::spawn", "#[tokio::main]" → code patterns
-
-    Embedder-first search lets the AI choose the most relevant perspective.
-
-  tool_specs:
-    search_by_embedder:
-      description: "Search using any embedder (E1-E13) as the primary perspective"
-      params:
-        query: "Search query"
-        embedder: "E1|E2|E3|E4|E5|E6|E7|E8|E9|E10|E11|E12|E13"
-        topK: "1-100 (default 10)"
-        minSimilarity: "0.0-1.0 (default 0.0)"
-        includeContent: "boolean (default false)"
-        includeAllScores: "boolean - return scores from all 13 embedders"
-      use_cases:
-        - "E11 search when looking for entity relationships E1 misses"
-        - "E7 search when looking for code patterns"
-        - "E5 search for causal relationships without asymmetric complexity"
-        - "E8 search for graph structure (imports, dependencies)"
-
-    get_embedder_clusters:
-      description: "Explore clusters in a specific embedder's space"
-      params:
-        embedder: "E1|E2|...E13"
-        minClusterSize: "default 3"
-        topClusters: "default 10"
-      use_cases:
-        - "Find code clusters (E7) to see related implementations"
-        - "Find entity clusters (E11) to see related concepts"
-        - "Find temporal clusters (E2) to see recency patterns"
-
-    compare_embedder_views:
-      description: "Compare how different embedders rank the same query"
-      params:
-        query: "Search query"
-        embedders: "[E1, E5, E7, E11]" # Subset to compare
-        topK: "default 5"
-      output: |
-        Shows rankings from each embedder side-by-side:
-        - E1 top 5: [memory1, memory2, ...]
-        - E5 top 5: [memory3, memory1, ...]
-        - Agreement score: how much embedders agree
-        - Unique finds: memories found by only one embedder
-      use_cases:
-        - "Understand E1 blind spots by comparing with E11"
-        - "See what causal (E5) finds that semantic (E1) misses"
-
-    list_embedder_indexes:
-      description: "List all embedder indexes with stats"
-      output:
-        per_embedder:
-          - embedder: "E1-E13"
-          - dimension: "vector dimension or 'sparse'"
-          - index_type: "HNSW|Inverted|MaxSim"
-          - vector_count: "number of indexed vectors"
-          - index_size_mb: "approximate size"
-          - gpu_resident: "true|false"
-
-    get_memory_fingerprint:
-      description: "Retrieve per-embedder fingerprint vectors for a specific memory"
-      params:
-        memoryId: "UUID (required)"
-        embedders: "[E1..E13] optional filter (default: all 13)"
-        includeVectorNorms: "boolean (default: true)"
-        includeContent: "boolean (default: false)"
-      output:
-        per_embedder: [embedder, name, dimension, present, actualDimension, l2Norm]
-        asymmetric_variants: { E5: [cause, effect], E8: [source, target], E10: [intent, context] }
-        sparse_embedders: { E6: nnz, E13: nnz }
-      use_cases:
-        - "Debug embedding quality per memory"
-        - "Verify which embedders produced vectors"
-        - "Understand asymmetric representation (E5 cause vs effect)"
-
-  # Per-embedder direct search (what each finds)
-  embedder_perspectives:
-    E1_semantic: "Dense semantic similarity - foundation"
-    E2_recency: "Temporal freshness - recent memories first"
-    E3_periodic: "Time-of-day patterns - daily/weekly cycles"
-    E4_sequence: "Conversation order - before/after relationships"
-    E5_causal: "Cause-effect relationships - why X caused Y"
-    E6_keyword: "Exact keyword matches - precise terminology"
-    E7_code: "Code patterns - function signatures, AST structure"
-    E8_graph: "Structural relationships - imports, dependencies"
-    E9_hdc: "Noise-robust structure - typos, variations"
-    E10_intent: "Goal alignment - similar purpose, different words"
-    E11_entity: "Entity knowledge - named entities, relationships"
-    E12_precision: "Exact phrase matches - token-level precision"
-    E13_expansion: "Term expansion - synonyms, related terms"
-
-# ═══════════════════════════════════════════════════════════════
-# SEARCH TRANSPARENCY
-# ═══════════════════════════════════════════════════════════════
-# search_graph responses include a searchTransparency block that exposes
-# which embedders were active, which weights were ignored, and the strategy
-# used. This enables the AI to understand and debug search behavior.
-
-search_transparency:
-  response_block: "searchTransparency"
-  fields:
-    activeEmbedders: "List of embedder names that participated in search"
-    ignoredWeights: "Embedders with non-zero weight that were not searched (e.g., E12/E13 in MultiSpace)"
-    weightUtilization: "Fraction of total weight budget that was actually searched"
-    strategyDescription: "Human-readable description of the strategy used"
-  included_in: [search_graph]
-  always_present: true  # Not opt-in — always returned in search_graph responses
-
-  arch_rules:
-    ARCH-TRANS-01: "searchTransparency MUST be included in every search_graph response"
-    ARCH-TRANS-02: "activeEmbedders reflects the ACTUAL embedders searched, not the requested set"
-    ARCH-TRANS-03: "ignoredWeights explains WHY weights were not used (strategy limitation)"
-
-# ═══════════════════════════════════════════════════════════════
-# DYNAMIC NAVIGATION (Gaps 1, 3, 5, 6, 8)
-# ═══════════════════════════════════════════════════════════════
-dynamic_navigation:
-  philosophy: |
-    AI agents dynamically compose arbitrary embedder blends, mask irrelevant
-    embedders, and inspect per-result contributions for explainable navigation.
-
-  capabilities:
-    custom_weights:
-      param: "customWeights"
-      tools: [search_graph, get_unified_neighbors, search_by_intent]
-      format: '{"E1": 0.4, "E5": 0.3, "E7": 0.2, "E11": 0.1}'
-      validation: "Sum ~1.0 (±0.01), each in [0.0, 1.0]"
-    embedder_exclusion:
-      param: "excludeEmbedders"
-      tools: [search_graph, get_unified_neighbors, search_by_intent]
-      behavior: "Zero + renormalize remaining"
-    breakdown:
-      param: "includeEmbedderBreakdown"
-      tools: [search_graph]
-      returns: [embedderBreakdown, dominantEmbedder, agreementLevel]
-
-  weight_profiles:
-    count: 16
-    all_exposed_in: [search_graph, get_unified_neighbors, search_by_intent]
-    list: [semantic_search, causal_reasoning, code_search, fact_checking,
-           intent_search, intent_enhanced, graph_reasoning, temporal_navigation,
-           sequence_navigation, conversation_history, category_weighted, typo_tolerant,
-           pipeline_stage1_recall, pipeline_stage2_scoring, pipeline_full, balanced]
-
-# ═══════════════════════════════════════════════════════════════
-# RETRIEVAL PIPELINE
-# ═══════════════════════════════════════════════════════════════
-retrieval:
-  stages:
-    S1: "E13 SPLADE sparse recall → 10K candidates"
-    S2: "E1 Matryoshka ANN → 1K candidates"
-    S3: "RRF across semantic spaces → 100 candidates"
-    S4: "Topic alignment (weighted_agreement >= 2.5) → 50"
-    S5: "E12 MaxSim rerank → 10 final results"
-
-  # When to use which enhancer
-  use_E5: "Causal queries (why, what caused)"
-  use_E7: "Code queries (implementations, functions)"
-  use_E10: "Intent queries (same goal, similar purpose)"
-  use_E11: "Entity queries (specific named things)"
-  use_E6_E13: "Keyword queries (exact terms, jargon)"
-
-# ═══════════════════════════════════════════════════════════════
-# AUTONOMOUS MULTI-EMBEDDER ENRICHMENT
-# ═══════════════════════════════════════════════════════════════
-# Simplify tool calls: system auto-detects query type and selects embedders.
-# Fewer calls needed, richer results per call.
-
-autonomous_enrichment:
-  philosophy: |
-    Each of the 13 embedders looks at a query from its unique angle.
-    E1 (semantic) is foundation but has blind spots. Other embedders find what E1 misses:
-    - E5: "the bug that caused the crash" (causal relationships)
-    - E7: structural code patterns (not just word similarity)
-    - E10: same goal, different words (intent alignment)
-    - E11: "Diesel" = database ORM (entity knowledge E1 lacks)
-
-    Combined: Better answers than any single embedder alone.
-
-  modes:
-    Off: "E1-only search (legacy behavior)"
-    Light: "E1 + 1-2 enhancers, basic agreement metrics (default)"
-    Full: "All relevant embedders, full metrics, blind spot detection"
-
-  query_type_detection:
-    # System auto-detects query type from patterns
-    CAUSAL: ["why", "caused", "because", "led to", "root cause"]
-    CODE: ["::", "->", "fn ", "function", "impl", ".await"]
-    ENTITY: ["what is", "works with", "related to", capitalized_names]
-    INTENT: ["goal", "purpose", "trying to", "accomplish"]
-    KEYWORD: [quoted_terms, "exact", "error:", "v2."]
-    TEMPORAL: ["yesterday", "before", "after", "recently"]
-
-  embedder_selection:
-    CAUSAL: [E5, E8]       # E5 causal + E8 for causal chains
-    CODE: [E7, E6]         # E7 code + E6 keywords for function names
-    ENTITY: [E11, E6]      # E11 entity + E6 keywords
-    INTENT: [E10, E5]      # E10 intent + E5 often overlap
-    KEYWORD: [E6, E13]     # E6 sparse + E13 SPLADE expansion
-    TEMPORAL: []           # E2-E4 are POST-RETRIEVAL only (ARCH-25)
-
-  output_enrichment:
-    scoring_breakdown:
-      - e1_score: "E1 (semantic) similarity"
-      - enhancer_scores: "Per-enhancer scores {e5: 0.8, e7: 0.6}"
-      - rrf_final: "Weighted RRF fusion score (per ARCH-21)"
-      - e10_boost: "E10 multiplicative boost if applied"
-    agreement_metrics:
-      - embedders_agree: "[E1, E5, E11]"
-      - agreement_score: "0.6 (3 of 5 embedders)"
-      - weighted_agreement: "2.5 (topic threshold)"
-    blind_spot_alert:
-      - node_id: "Memory found by enhancer but missed by E1"
-      - found_by: "[E11]"
-      - e1_score: "0.05 (E1 missed this)"
-      - enhancer_score: "0.85 (E11 found it)"
-      - explanation: "E11 knows Diesel IS a database ORM"
-
-  arch_rules:
-    ARCH-ENRICH-01: "Query type detection happens before search"
-    ARCH-ENRICH-02: "E1 always runs first (per ARCH-12)"
-    ARCH-ENRICH-03: "Enhancers run in parallel via tokio::join!"
-    ARCH-ENRICH-04: "Fusion uses Weighted RRF (per ARCH-21)"
-    ARCH-ENRICH-05: "Blind spots: enhancer > 0.5 AND E1 < 0.3"
-    ARCH-ENRICH-06: "Light mode: max 2 enhancers, Full mode: max 6"
-
-  performance_budget:
-    Light: "<500ms total"
-    Full: "<800ms total"
-    breakdown:
-      e1_search: "~100ms"
-      parallel_enhancers: "~150ms (run in parallel)"
-      rrf_fusion: "~50ms"
-      agreement_calc: "~50ms"
-      buffer: "~150ms"
+llm_agents:
+  runtime: "llama-cpp-2 (llama.cpp Rust bindings)"
+  model: "Qwen2.5 (GGUF format)"
+  grammar: "GBNF constraints for structured JSON"
+  causal_agent:
+    crate: context-graph-causal-agent
+    tools: [trigger_causal_discovery, get_causal_discovery_status]
+    output: "CausalRelationship → CF_CAUSAL_RELATIONSHIPS"
+  graph_agent:
+    crate: context-graph-graph-agent
+    tools: [discover_graph_relationships, validate_graph_link]
+    output: "GraphEdge with LLM-validated relationship types"
 
 # ═══════════════════════════════════════════════════════════════
 # MEMORY SOURCES
@@ -730,236 +629,27 @@ autonomous_enrichment:
 memory_sources:
   HookDescription: "Claude's description of tool use"
   ClaudeResponse: "Session summaries, significant responses"
-  MDFileChunk: "Markdown file chunks (200 words, 50 overlap)"
+  MDFileChunk: "Markdown chunks (200 words, 50 overlap)"
   CodeEntity: "AST-parsed code entities (functions, structs, traits, impls)"
-
-# ═══════════════════════════════════════════════════════════════
-# CODE EMBEDDING SEPARATION (E7 Primary)
-# ═══════════════════════════════════════════════════════════════
-# Code entities are stored in a SEPARATE pipeline from the 13-embedder
-# teleological system. E7 (Qodo-Embed-1-1.5B) is the primary embedder
-# for code, with optional E1 semantic enhancement.
-#
-# WHY SEPARATE:
-# - Code structure is fundamentally different from natural language
-# - AST-aware chunking preserves syntactic boundaries
-# - E7 is specialized for code patterns, function signatures
-# - Enables code-specific retrieval (signature search, pattern matching)
-# - Reduces noise in the main memory graph
-
-code_embedding:
-  philosophy: |
-    Code deserves its own embedding pipeline. E7 (Qodo-Embed-1-1.5B) is a
-    1.5B parameter model fine-tuned specifically for code understanding.
-    It produces 1536D embeddings that capture:
-    - Function signatures and parameter types
-    - Code patterns and idioms
-    - Structural relationships (impl blocks, trait bounds)
-    - Cross-file dependencies (imports, uses)
-
-    By separating code from the 13-embedder teleological system, we:
-    - Keep the memory graph focused on semantic content
-    - Enable specialized code search with E7 as primary
-    - Avoid polluting topic detection with code noise
-    - Allow AST-aware chunking instead of word-based
-
-  model:
-    name: "Qodo-Embed-1-1.5B"
-    path: "/home/cabdru/contextgraph/models/code-1536"
-    dimension: 1536
-    precision: "FP16"
-    vram_budget: "~3GB"
-    gpu_warm_loaded: true
-
-  ast_chunking:
-    # Per Qodo best practices and cAST paper (EMNLP 2025)
-    target_size: 500      # Non-whitespace characters per chunk
-    min_size: 100         # Avoid tiny fragments
-    max_size: 1000        # Prevent semantic dilution
-    include_parent_context: true   # Include parent struct/class with methods
-    include_imports: true          # Include relevant imports
-
-    # Tree-sitter integration
-    parser: "tree-sitter"
-    supported_languages:
-      rust: { extension: ".rs", grammar: "tree-sitter-rust" }
-      # Future: python, typescript, javascript, go
-
-  entity_types:
-    # Code entities extracted from AST
-    Function: "Standalone function (not a method)"
-    Method: "Function within an impl block"
-    Struct: "Struct definition"
-    Enum: "Enum definition"
-    Trait: "Trait definition"
-    Impl: "Impl block (inherent or trait)"
-    Module: "Module definition"
-    Const: "Const definition"
-    Static: "Static definition"
-    TypeAlias: "Type alias"
-
-  storage:
-    # Separate column families from teleological storage
-    column_families:
-      code_entities: "CodeEntity metadata (name, language, signature, visibility)"
-      code_e7_embeddings: "1536D E7 embeddings"
-      code_file_index: "File path → entity ID mapping"
-      code_name_index: "Entity name secondary index"
-      code_signature_index: "Function/method signature index"
-
-    # Secondary indexes for efficient search
-    indexes:
-      by_name: "Fast lookup by entity name"
-      by_signature: "Fast lookup by function signature"
-      by_file: "Fast cleanup on file changes"
-
-  file_watcher:
-    # Git-based change detection
-    trigger: "git diff --name-only"
-    on_change:
-      - "Read file content"
-      - "Parse AST with tree-sitter"
-      - "Extract code entities"
-      - "Generate E7 embeddings"
-      - "Store in CodeStore"
-      - "Update file index"
-    on_delete:
-      - "Lookup entities by file path"
-      - "Delete all entities for file"
-      - "Remove from indexes"
-
-  search:
-    # Code search uses E7 as primary, optional E1 enhancement
-    primary_embedder: "E7"
-    blend_with_e1: { default: 0.4, range: [0.2, 0.6] }
-    search_modes:
-      signature: "Match function signatures"
-      pattern: "Match code patterns"
-      semantic: "E7 + E1 blended semantic"
-
-    # E7 signal thresholds
-    thresholds:
-      high: 0.80   # Strong code pattern match
-      low: 0.35    # Weak but present code signal
-
-  arch_rules:
-    ARCH-CODE-01: "Code entities stored separately from teleological memories"
-    ARCH-CODE-02: "E7 is primary embedder for code, not part of 13-embedder array"
-    ARCH-CODE-03: "AST chunking preserves syntactic boundaries (functions, structs)"
-    ARCH-CODE-04: "Code file watcher uses git-based change detection"
-    ARCH-CODE-05: "Code search blends E7 (code) with E1 (semantic) for best results"
-    ARCH-CODE-06: "Tree-sitter for AST parsing, NOT regex-based extraction"
-
-  forbidden:
-    AP-CODE-01: "NEVER chunk code by word count - use AST boundaries"
-    AP-CODE-02: "NEVER store code in teleological memory graph"
-    AP-CODE-03: "NEVER use E1 alone for code search - E7 is primary"
-    AP-CODE-04: "NEVER parse code without tree-sitter - no regex extraction"
-
-# ═══════════════════════════════════════════════════════════════
-# PROVENANCE INFRASTRUCTURE
-# ═══════════════════════════════════════════════════════════════
-# Every mutation, search, and discovery operation is audited. The provenance
-# system enables full lineage tracking from embedding to source, merge
-# history preservation, and importance change tracking.
-
-provenance:
-  philosophy: |
-    All operations that create, modify, or delete memories must leave an
-    auditable trail. Provenance data is append-only and non-blocking:
-    audit write failures are logged (warn!) but never block the main operation.
-
-  column_families:
-    CF_AUDIT_LOG: "Append-only audit records keyed by timestamp+UUID"
-    CF_AUDIT_BY_TARGET: "Secondary index: target memory UUID → audit record keys"
-    CF_MERGE_HISTORY: "Permanent merge lineage (source → merged-into)"
-    CF_IMPORTANCE_HISTORY: "Importance change log with old/new/reason"
-    CF_ENTITY_PROVENANCE: "Entity source provenance (EntityLink, TransE scores)"
-    CF_TOOL_CALL_INDEX: "tool_use_id → memory UUID mapping"
-    CF_CONSOLIDATION_RECOMMENDATIONS: "Persisted consolidation analysis results"
-    CF_EMBEDDING_REGISTRY: "Embedding model version tracking per fingerprint"
-
-  audit_operations:
-    # Core lifecycle
-    - MemoryCreated
-    - MemoryDeleted
-    - MemoryMerged
-    - ImportanceChanged
-    # Search and discovery
-    - SearchPerformed
-    - ConsolidationAnalyzed
-    - RelationshipDiscovered
-    - CausalRelationshipRepaired
-    - FileWatcherEvent
-
-  audit_record:
-    builder_pattern: "AuditRecord::new(op, target_id).with_operator().with_session().with_rationale().with_parameters()"
-    target_id: "UUID of affected memory, or Uuid::nil() for operations targeting CFs/files"
-    non_blocking: true  # warn! on failure, never block main operation
-
-  mcp_tools:
-    get_audit_trail: "Query audit log by memory UUID or time range"
-    get_merge_history: "Show merge lineage for a fingerprint"
-    get_provenance_chain: "Full chain: embedding registry → source metadata → audit log → merge history → importance history"
-
-  arch_rules:
-    ARCH-PROV-01: "Audit writes are non-fatal — warn! on failure, never block main operation"
-    ARCH-PROV-02: "AuditRecord target_id uses Uuid::nil() for operations on CFs/files, not single entities"
-    ARCH-PROV-03: "Merge history is permanent — no TTL, no expiration"
-    ARCH-PROV-04: "All destructive ops (delete, repair, reconcile) MUST emit audit records"
-    ARCH-PROV-05: "get_provenance_chain queries all 5 queryable CFs in a single response"
-
-  serialization:
-    format: "JSON (NOT bincode — bincode + skip_serializing_if is broken for SourceMetadata)"
-    rule: "All provenance and SourceMetadata structs use serde_json"
-
-# ═══════════════════════════════════════════════════════════════
-# LLM AGENT CRATES
-# ═══════════════════════════════════════════════════════════════
-# Two workspace crates provide LLM-based analysis using local Qwen2.5 models
-# via llama-cpp-2 bindings with GBNF grammar-constrained generation.
-
-llm_agents:
-  runtime: "llama-cpp-2 (llama.cpp Rust bindings)"
-  model: "Qwen2.5 (GGUF format)"
-  grammar: "GBNF grammar constraints for structured JSON output"
-
-  crates:
-    context-graph-causal-agent:
-      purpose: "Discover causal relationships between memories"
-      tools: [trigger_causal_discovery, get_causal_discovery_status]
-      output: "CausalRelationship records stored in CF_CAUSAL_RELATIONSHIPS"
-      description_format: "1-3 paragraph LLM-generated causal explanations with source provenance"
-
-    context-graph-graph-agent:
-      purpose: "Discover structural graph relationships between memories"
-      tools: [discover_graph_relationships, validate_graph_link]
-      output: "GraphEdge records with LLM-validated relationship types"
-      uses: "CausalDiscoveryLLM for shared inference infrastructure"
-
-  arch_rules:
-    ARCH-LLM-01: "LLM inference is local-only via llama.cpp — no external API calls"
-    ARCH-LLM-02: "All LLM output constrained by GBNF grammar for structured JSON"
-    ARCH-LLM-03: "LLM agent results include source memory provenance links"
 
 # ═══════════════════════════════════════════════════════════════
 # DREAM CONSOLIDATION
 # ═══════════════════════════════════════════════════════════════
 dream:
   trigger: "entropy > 0.7 AND churn > 0.5"
-  nrem: "Hebbian replay - strengthen high-importance edges"
-  rem: "Hyperbolic random walk - discover blind spots"
+  nrem: "Hebbian replay — strengthen high-importance edges"
+  rem: "Hyperbolic random walk — discover blind spots in Poincare ball"
 
 # ═══════════════════════════════════════════════════════════════
-# KEY THRESHOLDS
+# THRESHOLDS
 # ═══════════════════════════════════════════════════════════════
 thresholds:
-  topic: 2.5           # weighted_agreement for topic detection
-  high_sim: 0.75       # High similarity
-  low_sim: 0.30        # Divergence threshold
-  duplicate: 0.90      # Duplicate detection
-  entropy_dream: 0.70  # Dream trigger
-  churn_dream: 0.50    # Dream trigger
+  topic: 2.5
+  high_sim: 0.75
+  low_sim: 0.30
+  duplicate: 0.90
+  entropy_dream: 0.70
+  churn_dream: 0.50
 
 # ═══════════════════════════════════════════════════════════════
 # HOOKS (Native Claude Code)
@@ -967,87 +657,41 @@ thresholds:
 hooks:
   config: ".claude/settings.json"
   SessionStart: "Load topic portfolio, warm GPU indexes"
-  UserPromptSubmit: "GPU embed prompt, search, detect divergence, inject context"
+  UserPromptSubmit: "GPU embed → search → detect divergence → inject context"
   PreToolUse: "Inject brief relevant context"
   PostToolUse: "Capture + GPU embed as HookDescription"
   Stop: "Capture response summary"
-  SessionEnd: "Persist state, GPU HDBSCAN, check dream triggers"
+  SessionEnd: "Persist state, HDBSCAN clustering, check dream triggers"
 
 # ═══════════════════════════════════════════════════════════════
-# GPU INFRASTRUCTURE (RTX 5090 32GB + CUDA 13.1) — TARGET SPEC
+# GPU HARDWARE TARGETS
 # ═══════════════════════════════════════════════════════════════
-# NOTE: This section describes the TARGET hardware and GPU architecture.
-# Current implementation uses Candle (HuggingFace) with CUDA feature flags.
-# FAISS-GPU, cuML HDBSCAN, and CUDA 13.1 features are aspirational targets.
-# The CPU-compatible code path exists for development and testing.
+# CURRENT IMPL: Candle (HuggingFace) + CUDA, hnsw_rs, context-graph-cuda HDBSCAN
+# TARGET SPEC: CUDA 13.1 Green Contexts, CUDA Tile, CUDA Streams
 gpu:
-  hardware:
-    device: "NVIDIA GeForce RTX 5090"
-    architecture: "Blackwell (GB202)"
-    vram: "32GB GDDR7"
-    bandwidth: "1,792 GB/s"
-    cuda_cores: 21760
-    tensor_cores: 680
-    sms: 170
-    compute_capability: "12.0"
-    driver: "R580+ (CUDA 13.1)"
+  hardware: { device: "RTX 5090", arch: "Blackwell GB202", vram: "32GB GDDR7", bandwidth: "1792 GB/s", tensor_cores: 680, sms: 170 }
+  host: { cpu: "Ryzen 9 9950X3D", cores: "16C/32T", ram: "128GB DDR5", l3_cache: "192MB" }
 
-  host:
-    cpu: "AMD Ryzen 9 9950X3D"
-    cores: "16 cores / 32 threads"
-    ram: "128GB DDR5"
-    l3_cache: "192MB (96MB x2)"
+  vram_budget:
+    embedders: "~10GB (13 warm-loaded)"
+    code_e7: "~3GB (Qodo-Embed, separate)"
+    hnsw_indexes: "~8GB"
+    batch_buffers: "~4GB"
+    clustering: "~2GB"
+    reserved: "~5GB headroom"
+    total: "32GB"
 
-  vram_allocation:
-    embedders: "~10GB (all 13 warm-loaded)"
-    code_embedder_e7: "~3GB (Qodo-Embed-1-1.5B, separate from 13)"
-    faiss_indexes: "~8GB (HNSW per-space)"
-    batch_buffers: "~4GB (inference batches)"
-    cuml_workspace: "~2GB (HDBSCAN, clustering)"
-    reserved: "~5GB (headroom for spikes)"
-    total_budget: "32GB"
-
-  # GPU Memory Slot Management
-  # LRU eviction for memory pressure, 8GB budget for 13 models
   model_slot_management:
     budget: "8GB for 13 teleological models"
     e7_separate: "~3GB dedicated (not in 8GB budget)"
-    pressure_levels:
-      normal: "<80% VRAM used"
-      high: "80-95% VRAM used"
-      critical: ">95% VRAM used (triggers LRU eviction)"
-    eviction_policy: "LRU - least recently used model evicted first"
-    per_model_estimates:
-      E1_Semantic: "~200MB"
-      E2_E4_Temporal: "~100MB each (300MB total)"
-      E5_Causal: "~150MB"
-      E6_Sparse: "~50MB"
-      E7_Code: "~300MB (in teleological), ~3GB (dedicated)"
-      E8_Graph: "~200MB (e5-large-v2)"
-      E9_HDC: "~50MB"
-      E10_Multimodal: "~150MB"
-      E11_Entity: "~75MB"
-      E12_LateInteraction: "~200MB"
-      E13_SPLADE: "~50MB"
+    eviction: "LRU when VRAM > 95%"
+    pressure: { normal: "<80%", high: "80-95%", critical: ">95% (LRU eviction)" }
 
   performance_targets:
     all_13_embed: "<200ms (GPU batch)"
-    per_space_hnsw: "<1ms (faiss-gpu)"
+    per_space_hnsw: "<1ms"
     inject_context_p95: "<500ms"
     store_memory_p95: "<800ms"
-    any_tool_p99: "<1000ms"
-    topic_detection: "<20ms (cuML HDBSCAN)"
-    warm_load_startup: "<30s (all 13 models)"
-
-  cuda_features:
-    green_contexts: true  # SM partitioning for QoS
-    cuda_tile: true       # Portable kernel programming
-    cuda_streams: true    # Async overlap
-    tensor_cores: "FP16/BF16/FP8"
-    mps_clients: 60       # Multi-Process Service
-
-  testing:
-    all_tests_use_gpu: true
-    benchmarks_require_gpu: true
-    no_cpu_fallback_tests: true
-    gpu_memory_profiling: true
+    any_tool_p99: "<1s"
+    topic_detection: "<20ms"
+    warm_load_startup: "<30s"

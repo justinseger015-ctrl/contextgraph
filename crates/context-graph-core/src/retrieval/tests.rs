@@ -405,7 +405,6 @@ async fn test_pipeline_stage_config_defaults() {
     assert_eq!(config.teleological_limit, 50);
     assert_eq!(config.late_interaction_limit, 20);
     assert!((config.rrf_k - 60.0).abs() < 0.001);
-    assert!((config.min_alignment_threshold - 0.55).abs() < 0.001);
 
     println!("[VERIFIED] PipelineStageConfig defaults match constitution.yaml");
 }

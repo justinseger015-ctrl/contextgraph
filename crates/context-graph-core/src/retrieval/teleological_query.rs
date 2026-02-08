@@ -1,7 +1,7 @@
-//! Teleological query types for purpose-aware retrieval.
+//! Teleological query types for multi-embedding retrieval.
 //!
 //! This module provides the `TeleologicalQuery` struct that carries
-//! query context including text, embeddings, purpose, goals, and filters
+//! query context including text, embeddings, and filters
 //! for the 5-stage teleological retrieval pipeline.
 //!
 //! # TASK-L008 Implementation
@@ -10,14 +10,13 @@
 //! FAIL FAST: All validation errors are immediate, no silent fallbacks.
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::error::{CoreError, CoreResult};
 use crate::types::fingerprint::SemanticFingerprint;
 
 use super::PipelineStageConfig;
 
-/// Query for teleological retrieval with purpose and goal context.
+/// Query for teleological retrieval.
 ///
 /// # Required Fields
 ///
@@ -26,8 +25,6 @@ use super::PipelineStageConfig;
 ///
 /// # Optional Fields
 ///
-/// - `purpose`: Pre-computed purpose vector (computed if not provided)
-/// - `target_goals`: Goal IDs for alignment filtering
 /// - `pipeline_config`: Override default stage configuration
 /// - `include_breakdown`: Enable detailed per-stage breakdown
 ///
@@ -54,12 +51,6 @@ pub struct TeleologicalQuery {
     /// embedding latency.
     pub embeddings: Option<SemanticFingerprint>,
 
-    /// Target goal IDs for alignment scoring.
-    ///
-    /// If empty, alignment filtering is skipped (all results pass).
-    /// If provided, results below `min_alignment_threshold` are filtered.
-    pub target_goals: Vec<Uuid>,
-
     /// Pipeline stage configuration overrides.
     ///
     /// If None, uses `PipelineStageConfig::default()` with:
@@ -69,7 +60,6 @@ pub struct TeleologicalQuery {
     /// - teleological_limit: 50
     /// - late_interaction_limit: 20
     /// - rrf_k: 60.0
-    /// - min_alignment_threshold: 0.55
     pub pipeline_config: Option<PipelineStageConfig>,
 
     /// Include per-stage breakdown in results.
@@ -94,7 +84,6 @@ impl TeleologicalQuery {
         Self {
             text: text.into(),
             embeddings: None,
-            target_goals: Vec::new(),
             pipeline_config: None,
             include_breakdown: false,
         }
@@ -116,22 +105,9 @@ impl TeleologicalQuery {
         Self {
             text: String::new(),
             embeddings: Some(embeddings),
-            target_goals: Vec::new(),
             pipeline_config: None,
             include_breakdown: false,
         }
-    }
-
-    /// Set target goals for alignment filtering.
-    pub fn with_goals(mut self, goals: Vec<Uuid>) -> Self {
-        self.target_goals = goals;
-        self
-    }
-
-    /// Add a single target goal.
-    pub fn with_goal(mut self, goal: Uuid) -> Self {
-        self.target_goals.push(goal);
-        self
     }
 
     /// Set pipeline configuration.
@@ -143,22 +119,6 @@ impl TeleologicalQuery {
     /// Enable breakdown in results.
     pub fn with_breakdown(mut self, include: bool) -> Self {
         self.include_breakdown = include;
-        self
-    }
-
-    /// Set the minimum alignment threshold.
-    ///
-    /// Convenience method that creates or updates pipeline_config with
-    /// the specified threshold.
-    ///
-    /// # Arguments
-    /// * `threshold` - Minimum alignment score [0.0, 1.0]
-    pub fn with_min_alignment(mut self, threshold: f32) -> Self {
-        let config = self.pipeline_config.take().unwrap_or_default();
-        self.pipeline_config = Some(PipelineStageConfig {
-            min_alignment_threshold: threshold.clamp(0.0, 1.0),
-            ..config
-        });
         self
     }
 
@@ -219,12 +179,6 @@ impl TeleologicalQuery {
     #[inline]
     pub fn has_embeddings(&self) -> bool {
         self.embeddings.is_some()
-    }
-
-    /// Check if query has goal alignment filtering.
-    #[inline]
-    pub fn has_goals(&self) -> bool {
-        !self.target_goals.is_empty()
     }
 
     /// Get the effective pipeline config (uses default if not set).
@@ -299,48 +253,6 @@ mod tests {
     }
 
     #[test]
-    fn test_with_goals() {
-        let goal1 = Uuid::new_v4();
-        let goal2 = Uuid::new_v4();
-
-        let query = TeleologicalQuery::from_text("test")
-            .with_goal(goal1)
-            .with_goal(goal2);
-
-        assert!(query.has_goals());
-        assert_eq!(query.target_goals.len(), 2);
-        assert!(query.target_goals.contains(&goal1));
-        assert!(query.target_goals.contains(&goal2));
-
-        println!("[VERIFIED] with_goal adds goals correctly");
-    }
-
-    #[test]
-    fn test_with_min_alignment() {
-        let query = TeleologicalQuery::from_text("test").with_min_alignment(0.70);
-
-        let config = query.effective_config();
-        assert!((config.min_alignment_threshold - 0.70).abs() < f32::EPSILON);
-
-        println!("[VERIFIED] with_min_alignment sets threshold correctly");
-    }
-
-    #[test]
-    fn test_with_min_alignment_clamped() {
-        let query = TeleologicalQuery::from_text("test").with_min_alignment(1.5);
-
-        let config = query.effective_config();
-        assert!((config.min_alignment_threshold - 1.0).abs() < f32::EPSILON);
-
-        let query2 = TeleologicalQuery::from_text("test").with_min_alignment(-0.5);
-
-        let config2 = query2.effective_config();
-        assert!((config2.min_alignment_threshold - 0.0).abs() < f32::EPSILON);
-
-        println!("[VERIFIED] with_min_alignment clamps to [0.0, 1.0]");
-    }
-
-    #[test]
     fn test_effective_config_default() {
         let query = TeleologicalQuery::from_text("test");
         let config = query.effective_config();
@@ -352,21 +264,16 @@ mod tests {
         assert_eq!(config.teleological_limit, 50);
         assert_eq!(config.late_interaction_limit, 20);
         assert!((config.rrf_k - 60.0).abs() < f32::EPSILON);
-        assert!((config.min_alignment_threshold - 0.55).abs() < f32::EPSILON);
 
         println!("[VERIFIED] Default config matches constitution.yaml");
     }
 
     #[test]
     fn test_builder_pattern() {
-        let goal = Uuid::new_v4();
         let query = TeleologicalQuery::from_text("complex query")
-            .with_goal(goal)
-            .with_min_alignment(0.75)
             .with_breakdown(true);
 
         assert_eq!(query.text, "complex query");
-        assert!(query.has_goals());
         assert!(query.include_breakdown);
         assert!(query.validate().is_ok());
 

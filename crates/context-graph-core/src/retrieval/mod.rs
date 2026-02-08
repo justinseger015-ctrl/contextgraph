@@ -19,7 +19,7 @@
 //! │  ├── Stage 1: SPLADE Recall (<5ms, 1000 candidates)                     │
 //! │  ├── Stage 2: Matryoshka 128D Filter (<10ms, 200 candidates)            │
 //! │  ├── Stage 3: Full 13-Space HNSW (<20ms, 100 candidates)                │
-//! │  ├── Stage 4: Teleological Alignment (<10ms, 50 candidates)             │
+//! │  ├── Stage 4: Score-based Filter (<10ms, 50 candidates)                │
 //! │  └── Stage 5: Late Interaction Rerank (<15ms, final ranking)            │
 //! ├─────────────────────────────────────────────────────────────────────────┤
 //! │  Aggregation Strategy                                                    │
@@ -88,7 +88,6 @@ pub mod insight_annotation;
 pub mod multi_space;
 mod pipeline;
 mod query;
-pub mod query_analyzer;
 mod result;
 pub mod retriever;
 pub mod similarity;
@@ -125,7 +124,7 @@ pub use result::{
 };
 pub use teleological_query::TeleologicalQuery;
 pub use teleological_result::{
-    AlignmentLevel, PipelineBreakdown, ScoredMemory, TeleologicalRetrievalResult,
+    PipelineBreakdown, ScoredMemory, TeleologicalRetrievalResult,
 };
 
 // Similarity types for retrieval
@@ -171,10 +170,6 @@ pub use sparse_index::{
     DEFAULT_RECALL_LIMIT,
 };
 
-// Query type analyzer for intelligent embedder selection
-pub use query_analyzer::{
-    CausalDirection, DetectedLanguage, QueryAnalysis, QueryType, QueryTypeAnalyzer,
-};
 
 // Insight annotations and perspective coverage
 pub use insight_annotation::{

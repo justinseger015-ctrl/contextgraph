@@ -38,7 +38,7 @@ pub const DEFAULT_EMBEDDER_THRESHOLDS: [f32; 13] = [
     0.70, // E7 Code
     0.60, // E8 Graph
     0.60, // E9 HDC
-    0.70, // E10 Intent
+    0.70, // E10 Paraphrase
     0.65, // E11 Entity
     0.60, // E12 ColBERT
     0.50, // E13 SPLADE
@@ -319,7 +319,7 @@ impl EdgeBuilder {
             1.0, // E7 Code
             0.5, // E8 Graph (relational)
             0.5, // E9 HDC (structural)
-            1.0, // E10 Intent
+            1.0, // E10 Paraphrase
             0.5, // E11 Entity (relational)
             1.0, // E12 ColBERT
             1.0, // E13 SPLADE
@@ -370,7 +370,7 @@ impl EdgeBuilder {
             return GraphLinkEdgeType::GraphConnected;
         }
 
-        // Intent aligned: E10 high
+        // Paraphrase aligned: E10 high
         if scores[9] >= thresholds[9] {
             return GraphLinkEdgeType::IntentAligned;
         }

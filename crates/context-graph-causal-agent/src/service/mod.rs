@@ -4,25 +4,10 @@
 //! 1. Periodically scans memories for candidate pairs
 //! 2. Analyzes candidates using the local LLM
 //! 3. Activates E5 embeddings for confirmed relationships
-//!
-//! # Architecture
-//!
-//! ```text
-//! ┌────────────────────────────────────────────────────────────┐
-//! │              CausalDiscoveryService                         │
-//! ├────────────────────────────────────────────────────────────┤
-//! │                                                            │
-//! │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   │
-//! │  │   Scanner   │───▶│     LLM     │───▶│  Activator  │   │
-//! │  └─────────────┘    └─────────────┘    └─────────────┘   │
-//! │                                                            │
-//! │  ┌─────────────────────────────────────────────────────┐  │
-//! │  │                 Background Loop                      │  │
-//! │  │   sleep(interval) → scan → analyze → activate        │  │
-//! │  └─────────────────────────────────────────────────────┘  │
-//! │                                                            │
-//! └────────────────────────────────────────────────────────────┘
-//! ```
+//! 4. Persists CausalRelationship records to RocksDB
+//! 5. Emits audit records for provenance
+//! 6. Persists cursor for restart resumption
+//! 7. Adapts interval based on discovery rate
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -30,10 +15,15 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 use context_graph_core::causal::CausalGraph;
+use context_graph_core::traits::TeleologicalMemoryStore;
+use context_graph_core::types::audit::{AuditOperation, AuditRecord};
+use context_graph_core::types::CausalRelationship;
 use context_graph_embeddings::models::CausalModel;
 
 use crate::activator::{ActivatorConfig, E5EmbedderActivator};
@@ -42,10 +32,59 @@ use crate::llm::{CausalDiscoveryLLM, LlmConfig};
 use crate::scanner::{MemoryScanner, ScannerConfig};
 use crate::types::{CausalCandidate, MemoryForAnalysis};
 
+// ============================================================================
+// CURSOR KEY
+// ============================================================================
+
+const CURSOR_KEY: &str = "causal_discovery_cursor";
+
+// ============================================================================
+// DISCOVERY CURSOR
+// ============================================================================
+
+/// Persisted cursor for the background discovery loop.
+///
+/// Serialized as JSON to CF_SYSTEM via `store_processing_cursor`.
+/// On parse failure, the loop starts fresh (no error).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DiscoveryCursor {
+    /// Timestamp of the last processed memory.
+    pub last_timestamp: Option<DateTime<Utc>>,
+    /// ID of the last processed fingerprint.
+    pub last_fingerprint_id: Option<Uuid>,
+    /// Number of completed cycles.
+    pub cycles_completed: u64,
+    /// Total relationships discovered across all cycles.
+    pub total_relationships: u64,
+}
+
+// ============================================================================
+// CYCLE METRICS
+// ============================================================================
+
+/// Metrics from a single background discovery cycle.
+#[derive(Debug, Clone, Default)]
+pub struct CycleMetrics {
+    /// Which cycle number this was.
+    pub cycle_number: u64,
+    /// How many memories were harvested from the store.
+    pub memories_harvested: usize,
+    /// How many relationships were discovered (confirmed by LLM).
+    pub relationships_discovered: usize,
+    /// How many relationships were rejected by LLM.
+    pub relationships_rejected: usize,
+    /// Total wall-clock duration of the cycle.
+    pub total_duration: Duration,
+}
+
+// ============================================================================
+// CONFIG
+// ============================================================================
+
 /// Configuration for the Causal Discovery Service.
 #[derive(Debug, Clone)]
 pub struct CausalDiscoveryConfig {
-    /// Interval between discovery cycles.
+    /// Initial interval between discovery cycles.
     pub interval: Duration,
 
     /// Maximum pairs to analyze per cycle.
@@ -56,6 +95,18 @@ pub struct CausalDiscoveryConfig {
 
     /// Whether to skip already-analyzed pairs.
     pub skip_analyzed: bool,
+
+    /// Whether background discovery is enabled.
+    pub enable_background: bool,
+
+    /// Minimum interval (adaptive floor).
+    pub min_interval: Duration,
+
+    /// Maximum interval (adaptive ceiling).
+    pub max_interval: Duration,
+
+    /// Max consecutive errors before long pause.
+    pub max_consecutive_errors: u32,
 
     /// LLM configuration (includes model path).
     pub llm_config: LlmConfig,
@@ -70,10 +121,14 @@ pub struct CausalDiscoveryConfig {
 impl Default for CausalDiscoveryConfig {
     fn default() -> Self {
         Self {
-            interval: Duration::from_secs(3600), // 1 hour
-            batch_size: 50,
+            interval: Duration::from_secs(120), // 2 minutes
+            batch_size: 100,
             min_confidence: 0.7,
             skip_analyzed: true,
+            enable_background: false, // Explicit opt-in
+            min_interval: Duration::from_secs(30),
+            max_interval: Duration::from_secs(600),
+            max_consecutive_errors: 3,
             llm_config: LlmConfig::default(),
             scanner_config: ScannerConfig::default(),
             activator_config: ActivatorConfig::default(),
@@ -81,36 +136,56 @@ impl Default for CausalDiscoveryConfig {
     }
 }
 
+impl CausalDiscoveryConfig {
+    /// Load config overrides from environment variables.
+    pub fn with_env_overrides(mut self) -> Self {
+        if let Ok(val) = std::env::var("CAUSAL_DISCOVERY_ENABLED") {
+            self.enable_background = val == "true" || val == "1";
+        }
+        if let Ok(val) = std::env::var("CAUSAL_DISCOVERY_INTERVAL_SECS") {
+            if let Ok(secs) = val.parse::<u64>() {
+                self.interval = Duration::from_secs(secs);
+            }
+        }
+        if let Ok(val) = std::env::var("CAUSAL_DISCOVERY_BATCH_SIZE") {
+            if let Ok(size) = val.parse::<usize>() {
+                self.batch_size = size;
+            }
+        }
+        if let Ok(val) = std::env::var("CAUSAL_DISCOVERY_MIN_CONFIDENCE") {
+            if let Ok(conf) = val.parse::<f32>() {
+                self.min_confidence = conf;
+            }
+        }
+        self
+    }
+}
+
+// ============================================================================
+// DISCOVERY CYCLE RESULT (existing type, kept for compatibility)
+// ============================================================================
+
 /// Result of a single discovery cycle.
 #[derive(Debug, Clone)]
 pub struct DiscoveryCycleResult {
     /// When the cycle started.
     pub started_at: DateTime<Utc>,
-
     /// When the cycle completed.
     pub completed_at: DateTime<Utc>,
-
     /// Duration of the cycle.
     pub duration: Duration,
-
     /// Number of candidate pairs found.
     pub candidates_found: usize,
-
     /// Number of relationships confirmed by LLM.
     pub relationships_confirmed: usize,
-
     /// Number of relationships rejected by LLM.
     pub relationships_rejected: usize,
-
     /// Number of E5 embeddings generated.
     pub embeddings_generated: usize,
-
     /// Number of graph edges created.
     pub edges_created: usize,
-
     /// Number of errors encountered.
     pub errors: usize,
-
     /// Error messages (if any).
     pub error_messages: Vec<String>,
 }
@@ -132,61 +207,40 @@ impl Default for DiscoveryCycleResult {
     }
 }
 
+// ============================================================================
+// SERVICE STATUS
+// ============================================================================
+
 /// Service status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceStatus {
-    /// Service is stopped.
     Stopped,
-    /// Service is starting.
     Starting,
-    /// Service is running.
     Running,
-    /// Service is stopping.
     Stopping,
 }
 
+// ============================================================================
+// SERVICE
+// ============================================================================
+
 /// Background service for causal discovery.
 pub struct CausalDiscoveryService {
-    /// Configuration.
     config: CausalDiscoveryConfig,
-
-    /// Local LLM for causal analysis.
     llm: Arc<CausalDiscoveryLLM>,
-
-    /// Memory scanner.
     scanner: RwLock<MemoryScanner>,
-
-    /// E5 activator.
     activator: Arc<E5EmbedderActivator>,
-
-    /// Causal graph.
     causal_graph: Arc<RwLock<CausalGraph>>,
-
-    /// Whether the service is running.
     running: AtomicBool,
-
-    /// Service status.
     status: RwLock<ServiceStatus>,
-
-    /// Last cycle result.
     last_result: RwLock<Option<DiscoveryCycleResult>>,
-
-    /// Shutdown signal sender.
     shutdown_tx: RwLock<Option<mpsc::Sender<()>>>,
-
-    /// CRIT-05 FIX: Store background task JoinHandle so panics are not silently lost
-    /// and stop() can await clean shutdown.
+    /// CRIT-05 FIX: Store background task JoinHandle so panics are not silently lost.
     join_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl CausalDiscoveryService {
     /// Create a new service with the given configuration (test mode only).
-    ///
-    /// # Warning
-    ///
-    /// This constructor creates an E5EmbedderActivator WITHOUT a CausalModel.
-    /// In production (without `test-mode` feature), embedding operations will fail.
-    /// Use `with_models()` for production deployments.
     #[cfg_attr(
         not(feature = "test-mode"),
         deprecated(
@@ -195,17 +249,10 @@ impl CausalDiscoveryService {
         )
     )]
     pub async fn new(config: CausalDiscoveryConfig) -> CausalAgentResult<Self> {
-        // Create LLM from config
         let llm = CausalDiscoveryLLM::with_config(config.llm_config.clone())?;
         let llm = Arc::new(llm);
-
-        // Create causal graph
         let causal_graph = Arc::new(RwLock::new(CausalGraph::new()));
-
-        // Create scanner
         let scanner = MemoryScanner::with_config(config.scanner_config.clone());
-
-        // Create activator
         let activator_config = ActivatorConfig {
             min_confidence: config.min_confidence,
             ..config.activator_config.clone()
@@ -228,35 +275,13 @@ impl CausalDiscoveryService {
     }
 
     /// Create a new service with models for production use.
-    ///
-    /// This is the recommended constructor for production deployments.
-    /// It properly injects the CausalModel into E5EmbedderActivator for real embeddings.
-    ///
-    /// # Arguments
-    ///
-    /// * `shared_llm` - Shared CausalDiscoveryLLM (Qwen2.5-3B) for relationship classification
-    /// * `causal_model` - CausalModel for E5 asymmetric embeddings (768D, ~0.4GB VRAM)
-    /// * `config` - Service configuration
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let causal_model = Arc::new(CausalModel::new(path, config)?);
-    /// causal_model.load().await?;
-    /// let service = CausalDiscoveryService::with_models(shared_llm, causal_model, config);
-    /// ```
     pub fn with_models(
         shared_llm: Arc<CausalDiscoveryLLM>,
         causal_model: Arc<CausalModel>,
         config: CausalDiscoveryConfig,
     ) -> Self {
-        // Create causal graph
         let causal_graph = Arc::new(RwLock::new(CausalGraph::new()));
-
-        // Create scanner
         let scanner = MemoryScanner::with_config(config.scanner_config.clone());
-
-        // Create activator with real CausalModel
         let activator_config = ActivatorConfig {
             min_confidence: config.min_confidence,
             ..config.activator_config.clone()
@@ -299,18 +324,18 @@ impl CausalDiscoveryService {
         self.llm.is_loaded()
     }
 
+    // ========================================================================
+    // DISCOVERY CYCLE (existing, now accepts optional store for persistence)
+    // ========================================================================
+
     /// Run a single discovery cycle.
     ///
-    /// # Arguments
-    ///
-    /// * `memories` - Memories to scan for causal relationships
-    ///
-    /// # Returns
-    ///
-    /// Result of the discovery cycle
+    /// When `store` is `Some`, confirmed relationships are persisted to RocksDB.
+    /// When `None`, only the in-memory CausalGraph is updated (test/on-demand mode).
     pub async fn run_discovery_cycle(
         &self,
         memories: &[MemoryForAnalysis],
+        store: Option<&Arc<dyn TeleologicalMemoryStore>>,
     ) -> CausalAgentResult<DiscoveryCycleResult> {
         let started_at = Utc::now();
         let start = Instant::now();
@@ -347,14 +372,11 @@ impl CausalDiscoveryService {
             "Found candidate pairs"
         );
 
-        // 2. Analyze candidates with LLM
-        let batch: Vec<_> = candidates
-            .iter()
-            .take(self.config.batch_size)
-            .collect();
+        // 2. Analyze candidates with LLM and persist
+        let batch: Vec<_> = candidates.iter().take(self.config.batch_size).collect();
 
         for candidate in batch {
-            match self.process_candidate(candidate).await {
+            match self.process_candidate_with_store(candidate, store).await {
                 Ok(confirmed) => {
                     if confirmed {
                         result.relationships_confirmed += 1;
@@ -381,10 +403,7 @@ impl CausalDiscoveryService {
         result.duration = start.elapsed();
 
         // Store result
-        {
-            let mut last = self.last_result.write();
-            *last = Some(result.clone());
-        }
+        *self.last_result.write() = Some(result.clone());
 
         info!(
             confirmed = result.relationships_confirmed,
@@ -397,8 +416,12 @@ impl CausalDiscoveryService {
         Ok(result)
     }
 
-    /// Process a single candidate pair.
-    async fn process_candidate(&self, candidate: &CausalCandidate) -> CausalAgentResult<bool> {
+    /// Process a single candidate pair, optionally persisting to RocksDB.
+    async fn process_candidate_with_store(
+        &self,
+        candidate: &CausalCandidate,
+        store: Option<&Arc<dyn TeleologicalMemoryStore>>,
+    ) -> CausalAgentResult<bool> {
         debug!(
             cause = %candidate.cause_memory_id,
             effect = %candidate.effect_memory_id,
@@ -421,8 +444,9 @@ impl CausalDiscoveryService {
             return Ok(false);
         }
 
-        // Activate E5 embedding
-        self.activator
+        // Activate E5 embedding - returns (cause_vec, effect_vec)
+        let (cause_vec, effect_vec) = self
+            .activator
             .activate_relationship(
                 candidate.cause_memory_id,
                 candidate.effect_memory_id,
@@ -432,66 +456,165 @@ impl CausalDiscoveryService {
             )
             .await?;
 
+        // Persist to RocksDB if store is provided
+        if let Some(store) = store {
+            let mechanism_type = analysis
+                .mechanism_type
+                .as_ref()
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| "direct".to_string());
+
+            // Build E1 semantic embedding for fallback search.
+            // Use a zero vector since E1 embedding is generated separately
+            // during store_causal_relationship by the storage layer.
+            let e1_semantic = vec![0.0f32; 1024];
+
+            let relationship = CausalRelationship::new(
+                candidate.cause_content.chars().take(500).collect::<String>(),
+                candidate.effect_content.chars().take(500).collect::<String>(),
+                analysis.mechanism.clone(),
+                cause_vec,
+                effect_vec,
+                e1_semantic,
+                format!("{}\n---\n{}", candidate.cause_content, candidate.effect_content),
+                candidate.cause_memory_id,
+                analysis.confidence,
+                mechanism_type,
+            );
+
+            match store.store_causal_relationship(&relationship).await {
+                Ok(id) => {
+                    info!(
+                        id = %id,
+                        cause = %candidate.cause_memory_id,
+                        effect = %candidate.effect_memory_id,
+                        confidence = analysis.confidence,
+                        "Persisted CausalRelationship to RocksDB"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        cause = %candidate.cause_memory_id,
+                        effect = %candidate.effect_memory_id,
+                        error = %e,
+                        "Failed to persist CausalRelationship to RocksDB"
+                    );
+                    return Err(CausalAgentError::StorageError {
+                        message: format!("Failed to persist relationship: {e}"),
+                    });
+                }
+            }
+        }
+
         Ok(true)
     }
 
+    // ========================================================================
+    // BACKGROUND LOOP
+    // ========================================================================
+
     /// Start the background discovery loop.
-    pub async fn start(self: Arc<Self>) -> CausalAgentResult<()> {
+    ///
+    /// # Breaking change
+    /// Now requires a `store` parameter to fetch memories and persist results.
+    pub async fn start(
+        self: Arc<Self>,
+        store: Arc<dyn TeleologicalMemoryStore>,
+    ) -> CausalAgentResult<()> {
         if self.running.swap(true, Ordering::SeqCst) {
             return Err(CausalAgentError::ServiceAlreadyRunning);
         }
 
-        {
-            let mut status = self.status.write();
-            *status = ServiceStatus::Starting;
-        }
+        *self.status.write() = ServiceStatus::Starting;
 
         info!(
             interval_secs = self.config.interval.as_secs(),
             batch_size = self.config.batch_size,
+            enable_background = self.config.enable_background,
             "Starting causal discovery service"
         );
 
+        if !self.config.enable_background {
+            info!("Background discovery disabled (CAUSAL_DISCOVERY_ENABLED != true). Loop will not run.");
+            *self.status.write() = ServiceStatus::Running;
+            self.running.store(false, Ordering::SeqCst);
+            *self.status.write() = ServiceStatus::Stopped;
+            return Ok(());
+        }
+
         // Create shutdown channel
         let (tx, mut rx) = mpsc::channel(1);
-        {
-            let mut shutdown = self.shutdown_tx.write();
-            *shutdown = Some(tx);
-        }
+        *self.shutdown_tx.write() = Some(tx);
 
         // Load model
         self.llm.load().await?;
 
-        {
-            let mut status = self.status.write();
-            *status = ServiceStatus::Running;
-        }
+        *self.status.write() = ServiceStatus::Running;
 
-        // Background loop
+        // Load cursor from store
+        let initial_cursor = self.load_cursor(&store).await;
+
         // CRIT-05 FIX: Store JoinHandle so panics are observable and stop() can await.
         let service = self.clone();
         let handle = tokio::spawn(async move {
+            let mut cursor = initial_cursor;
+            let mut consecutive_errors: u32 = 0;
+            let mut current_interval = service.config.interval;
+
             loop {
                 tokio::select! {
                     _ = rx.recv() => {
                         info!("Received shutdown signal");
                         break;
                     }
-                    _ = tokio::time::sleep(service.config.interval) => {
-                        // CRIT-01 FIX: Emit warn! instead of silent debug! so operators
-                        // know discovery is NOT running. The background loop is a facade:
-                        // it never calls run_discovery_cycle() or fetches memories.
-                        warn!(
-                            "Causal discovery cycle tick: NOT IMPLEMENTED. \
-                             Background loop is running but no discovery occurs. \
-                             Use trigger_causal_discovery MCP tool for on-demand analysis."
-                        );
+                    _ = tokio::time::sleep(current_interval) => {
+                        match service.run_background_tick(&store, &mut cursor).await {
+                            Ok(metrics) => {
+                                consecutive_errors = 0;
+                                current_interval = service.compute_next_interval(&metrics);
+
+                                // Non-fatal cursor save per ARCH-PROV-01
+                                if let Err(e) = service.save_cursor(&store, &cursor).await {
+                                    warn!(error = %e, "Cursor save failed (non-fatal)");
+                                }
+
+                                info!(
+                                    cycle = metrics.cycle_number,
+                                    harvested = metrics.memories_harvested,
+                                    discovered = metrics.relationships_discovered,
+                                    rejected = metrics.relationships_rejected,
+                                    duration_ms = metrics.total_duration.as_millis(),
+                                    next_interval_s = current_interval.as_secs(),
+                                    "Causal discovery cycle complete"
+                                );
+                            }
+                            Err(e) => {
+                                consecutive_errors += 1;
+                                error!(
+                                    error = %e,
+                                    consecutive = consecutive_errors,
+                                    "Causal discovery cycle failed"
+                                );
+
+                                if consecutive_errors >= service.config.max_consecutive_errors {
+                                    error!(
+                                        max = service.config.max_consecutive_errors,
+                                        "Too many consecutive failures, pausing for 1 hour"
+                                    );
+                                    current_interval = Duration::from_secs(3600);
+                                } else {
+                                    // Exponential backoff: 60s, 120s, 240s...
+                                    current_interval = Duration::from_secs(
+                                        60 * 2u64.pow(consecutive_errors - 1)
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            let mut status = service.status.write();
-            *status = ServiceStatus::Stopped;
+            *service.status.write() = ServiceStatus::Stopped;
             service.running.store(false, Ordering::SeqCst);
         });
         *self.join_handle.write() = Some(handle);
@@ -499,22 +622,217 @@ impl CausalDiscoveryService {
         Ok(())
     }
 
+    /// Execute one tick of the background discovery loop.
+    async fn run_background_tick(
+        &self,
+        store: &Arc<dyn TeleologicalMemoryStore>,
+        cursor: &mut DiscoveryCursor,
+    ) -> CausalAgentResult<CycleMetrics> {
+        let cycle_start = Instant::now();
+        let cycle_number = cursor.cycles_completed + 1;
+
+        // Phase 1: Harvest memories from store
+        let memories = self.harvest_memories(store).await?;
+        if memories.is_empty() {
+            cursor.cycles_completed = cycle_number;
+            return Ok(CycleMetrics {
+                cycle_number,
+                memories_harvested: 0,
+                total_duration: cycle_start.elapsed(),
+                ..Default::default()
+            });
+        }
+
+        // Phase 2+3+4: Scan + Analyze + Activate + Persist
+        let result = self
+            .run_discovery_cycle(&memories, Some(store))
+            .await?;
+
+        // Phase 5: Emit audit record (non-fatal per ARCH-PROV-01)
+        let audit_params = serde_json::json!({
+            "cycle": cycle_number,
+            "discovered": result.relationships_confirmed,
+            "rejected": result.relationships_rejected,
+            "harvested": memories.len(),
+            "duration_ms": cycle_start.elapsed().as_millis() as u64,
+        });
+        let audit_record = AuditRecord::new(
+            AuditOperation::RelationshipDiscovered {
+                relationship_type: "causal".to_string(),
+                confidence: if result.relationships_confirmed > 0 {
+                    // Average confidence not available here; use 1.0 as "cycle completed"
+                    1.0
+                } else {
+                    0.0
+                },
+            },
+            Uuid::nil(), // targets the CF, not a single entity
+        )
+        .with_rationale("background_discovery_loop")
+        .with_parameters(audit_params);
+
+        if let Err(e) = store.append_audit_record(&audit_record).await {
+            warn!(error = %e, "Audit write failed (non-fatal per ARCH-PROV-01)");
+        }
+
+        // Update cursor
+        if let Some(last) = memories.last() {
+            cursor.last_timestamp = Some(last.created_at);
+            cursor.last_fingerprint_id = Some(last.id);
+        }
+        cursor.cycles_completed = cycle_number;
+        cursor.total_relationships += result.relationships_confirmed as u64;
+
+        Ok(CycleMetrics {
+            cycle_number,
+            memories_harvested: memories.len(),
+            relationships_discovered: result.relationships_confirmed,
+            relationships_rejected: result.relationships_rejected,
+            total_duration: cycle_start.elapsed(),
+        })
+    }
+
+    // ========================================================================
+    // HARVEST MEMORIES
+    // ========================================================================
+
+    /// Fetch memories from the store for causal discovery.
+    async fn harvest_memories(
+        &self,
+        store: &Arc<dyn TeleologicalMemoryStore>,
+    ) -> CausalAgentResult<Vec<MemoryForAnalysis>> {
+        let fingerprints = store
+            .scan_fingerprints_for_clustering(Some(self.config.batch_size))
+            .await
+            .map_err(|e| CausalAgentError::StorageError {
+                message: format!("scan_fingerprints_for_clustering failed: {e}"),
+            })?;
+
+        let mut memories = Vec::with_capacity(fingerprints.len());
+        for (id, embeddings) in fingerprints {
+            let content = match store.get_content(id).await {
+                Ok(Some(c)) if !c.is_empty() => c,
+                Ok(Some(_)) => {
+                    warn!(id = %id, "Fingerprint has empty content, skipping");
+                    continue;
+                }
+                Ok(None) => {
+                    warn!(id = %id, "Fingerprint has no content, skipping");
+                    continue;
+                }
+                Err(e) => {
+                    warn!(id = %id, error = %e, "Failed to get content, skipping");
+                    continue;
+                }
+            };
+
+            // Get created_at from source metadata if available
+            let created_at = match store.get_source_metadata(id).await {
+                Ok(Some(meta)) => meta.created_at.unwrap_or_else(Utc::now),
+                _ => Utc::now(),
+            };
+
+            memories.push(MemoryForAnalysis {
+                id,
+                content,
+                e1_embedding: embeddings[0].clone(), // E1 is index 0
+                created_at,
+                session_id: None,
+            });
+        }
+
+        info!(count = memories.len(), "Harvested memories for causal discovery");
+        Ok(memories)
+    }
+
+    // ========================================================================
+    // ADAPTIVE INTERVAL
+    // ========================================================================
+
+    /// Compute the next sleep interval based on discovery metrics.
+    pub fn compute_next_interval(&self, metrics: &CycleMetrics) -> Duration {
+        let raw = if metrics.memories_harvested == 0 {
+            Duration::from_secs(600) // 10 min: nothing to process
+        } else if metrics.relationships_discovered == 0 {
+            Duration::from_secs(300) // 5 min: content but no causation
+        } else if metrics.relationships_discovered <= 5 {
+            Duration::from_secs(120) // 2 min: moderate discovery
+        } else {
+            Duration::from_secs(30) // 30s: heavy causal content
+        };
+        raw.max(self.config.min_interval)
+            .min(self.config.max_interval)
+    }
+
+    // ========================================================================
+    // CURSOR PERSISTENCE
+    // ========================================================================
+
+    /// Save the cursor to the store.
+    async fn save_cursor(
+        &self,
+        store: &Arc<dyn TeleologicalMemoryStore>,
+        cursor: &DiscoveryCursor,
+    ) -> CausalAgentResult<()> {
+        let json = serde_json::to_vec(cursor).map_err(|e| CausalAgentError::ParseError {
+            message: format!("Failed to serialize cursor: {e}"),
+        })?;
+        store
+            .store_processing_cursor(CURSOR_KEY, &json)
+            .await
+            .map_err(|e| CausalAgentError::StorageError {
+                message: format!("Failed to store cursor: {e}"),
+            })?;
+        Ok(())
+    }
+
+    /// Load the cursor from the store.
+    async fn load_cursor(
+        &self,
+        store: &Arc<dyn TeleologicalMemoryStore>,
+    ) -> DiscoveryCursor {
+        match store.get_processing_cursor(CURSOR_KEY).await {
+            Ok(Some(bytes)) => {
+                match serde_json::from_slice::<DiscoveryCursor>(&bytes) {
+                    Ok(cursor) => {
+                        info!(
+                            cycles = cursor.cycles_completed,
+                            relationships = cursor.total_relationships,
+                            "Loaded cursor from store"
+                        );
+                        cursor
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Failed to parse cursor, starting fresh");
+                        DiscoveryCursor::default()
+                    }
+                }
+            }
+            Ok(None) => {
+                info!("No cursor found, starting fresh");
+                DiscoveryCursor::default()
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to load cursor, starting fresh");
+                DiscoveryCursor::default()
+            }
+        }
+    }
+
+    // ========================================================================
+    // STOP / STATUS / ACCESSORS
+    // ========================================================================
+
     /// Stop the background discovery loop.
     pub async fn stop(&self) -> CausalAgentResult<()> {
         if !self.running.load(Ordering::SeqCst) {
             return Ok(());
         }
 
-        {
-            let mut status = self.status.write();
-            *status = ServiceStatus::Stopping;
-        }
-
+        *self.status.write() = ServiceStatus::Stopping;
         info!("Stopping causal discovery service");
 
-        // Send shutdown signal
-        // CRIT-04 FIX: Clone sender out of the parking_lot RwLock scope
-        // before .await, since parking_lot guards are !Send.
+        // CRIT-04 FIX: Clone sender out of parking_lot scope before .await
         let tx_clone = {
             let shutdown = self.shutdown_tx.read();
             shutdown.as_ref().cloned()
@@ -526,62 +844,57 @@ impl CausalDiscoveryService {
         // Unload model
         self.llm.unload().await?;
 
-        // CRIT-05 FIX: Await the background task JoinHandle with timeout
-        // to detect panics and ensure clean shutdown.
+        // CRIT-05 FIX: Await JoinHandle with timeout
         if let Some(handle) = self.join_handle.write().take() {
             match tokio::time::timeout(Duration::from_secs(10), handle).await {
                 Ok(Ok(())) => info!("Causal discovery background task completed normally"),
-                Ok(Err(e)) => tracing::error!("Causal discovery background task panicked: {:?}", e),
-                Err(_) => tracing::error!("Causal discovery background task did not shut down within 10 seconds"),
+                Ok(Err(e)) => error!("Causal discovery background task panicked: {:?}", e),
+                Err(_) => error!("Causal discovery background task did not shut down within 10 seconds"),
             }
         }
 
         Ok(())
     }
 
-    /// Get the current service status.
     pub fn status(&self) -> ServiceStatus {
         *self.status.read()
     }
 
-    /// Check if the service is running.
     pub fn is_running(&self) -> bool {
         self.running.load(Ordering::SeqCst)
     }
 
-    /// Get the last cycle result.
     pub fn last_result(&self) -> Option<DiscoveryCycleResult> {
         self.last_result.read().clone()
     }
 
-    /// Get the causal graph.
     pub fn causal_graph(&self) -> &Arc<RwLock<CausalGraph>> {
         &self.causal_graph
     }
 
-    /// Get the configuration.
     pub fn config(&self) -> &CausalDiscoveryConfig {
         &self.config
     }
 
-    /// Get estimated VRAM usage in MB.
     pub fn estimated_vram_mb(&self) -> usize {
         self.llm.estimated_vram_mb()
     }
 }
+
+// ============================================================================
+// TESTS
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn create_test_config() -> CausalDiscoveryConfig {
-        // Find workspace root by looking for Cargo.toml
         let mut workspace_root = std::env::current_dir().unwrap();
         while !workspace_root.join("Cargo.toml").exists()
             || !workspace_root.join("models").exists()
         {
             if !workspace_root.pop() {
-                // Fall back to relative path if we can't find workspace root
                 workspace_root = std::path::PathBuf::from(".");
                 break;
             }
@@ -608,7 +921,6 @@ mod tests {
 
     fn create_test_memory(id: u128, content: &str, hours_ago: i64) -> MemoryForAnalysis {
         use chrono::TimeDelta;
-        use uuid::Uuid;
 
         MemoryForAnalysis {
             id: Uuid::from_u128(id),
@@ -631,7 +943,6 @@ mod tests {
     async fn test_discovery_cycle() {
         let config = create_test_config();
 
-        // Skip test if model not available (e.g., in CI)
         if !config.llm_config.model_path.exists() {
             eprintln!(
                 "Skipping test_discovery_cycle: model not found at {:?}",
@@ -642,19 +953,14 @@ mod tests {
 
         #[allow(deprecated)]
         let service = CausalDiscoveryService::new(config).await.unwrap();
-
-        // Load model
         service.load_model().await.unwrap();
 
-        // Create test memories with causal markers
         let memories = vec![
             create_test_memory(1, "Because of the error, the system crashed", 2),
             create_test_memory(2, "Therefore, users were affected", 1),
         ];
 
-        let result = service.run_discovery_cycle(&memories).await.unwrap();
-
-        // Check that the cycle ran (may find 0 candidates if similarity is too low)
+        let result = service.run_discovery_cycle(&memories, None).await.unwrap();
         assert!(result.errors == 0);
     }
 
@@ -666,5 +972,88 @@ mod tests {
 
         assert_eq!(service.status(), ServiceStatus::Stopped);
         assert!(!service.is_running());
+    }
+
+    #[test]
+    fn test_adaptive_interval_empty() {
+        let config = CausalDiscoveryConfig::default();
+        #[allow(deprecated)]
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let service = rt.block_on(async {
+            CausalDiscoveryService::new(config).await.unwrap()
+        });
+
+        let metrics = CycleMetrics {
+            memories_harvested: 0,
+            ..Default::default()
+        };
+        let interval = service.compute_next_interval(&metrics);
+        assert_eq!(interval, Duration::from_secs(600));
+    }
+
+    #[test]
+    fn test_adaptive_interval_no_discovery() {
+        let config = CausalDiscoveryConfig::default();
+        #[allow(deprecated)]
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let service = rt.block_on(async {
+            CausalDiscoveryService::new(config).await.unwrap()
+        });
+
+        let metrics = CycleMetrics {
+            memories_harvested: 50,
+            relationships_discovered: 0,
+            ..Default::default()
+        };
+        let interval = service.compute_next_interval(&metrics);
+        assert_eq!(interval, Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_adaptive_interval_heavy() {
+        let config = CausalDiscoveryConfig::default();
+        #[allow(deprecated)]
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let service = rt.block_on(async {
+            CausalDiscoveryService::new(config).await.unwrap()
+        });
+
+        let metrics = CycleMetrics {
+            memories_harvested: 50,
+            relationships_discovered: 10,
+            ..Default::default()
+        };
+        let interval = service.compute_next_interval(&metrics);
+        assert_eq!(interval, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn test_cursor_serialization() {
+        let cursor = DiscoveryCursor {
+            last_timestamp: Some(Utc::now()),
+            last_fingerprint_id: Some(Uuid::new_v4()),
+            cycles_completed: 42,
+            total_relationships: 100,
+        };
+        let json = serde_json::to_vec(&cursor).unwrap();
+        let restored: DiscoveryCursor = serde_json::from_slice(&json).unwrap();
+        assert_eq!(restored.cycles_completed, 42);
+        assert_eq!(restored.total_relationships, 100);
+    }
+
+    #[test]
+    fn test_config_env_overrides() {
+        std::env::set_var("CAUSAL_DISCOVERY_ENABLED", "true");
+        std::env::set_var("CAUSAL_DISCOVERY_INTERVAL_SECS", "60");
+        std::env::set_var("CAUSAL_DISCOVERY_BATCH_SIZE", "200");
+
+        let config = CausalDiscoveryConfig::default().with_env_overrides();
+        assert!(config.enable_background);
+        assert_eq!(config.interval, Duration::from_secs(60));
+        assert_eq!(config.batch_size, 200);
+
+        std::env::remove_var("CAUSAL_DISCOVERY_ENABLED");
+        std::env::remove_var("CAUSAL_DISCOVERY_INTERVAL_SECS");
+        std::env::remove_var("CAUSAL_DISCOVERY_BATCH_SIZE");
     }
 }

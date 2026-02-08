@@ -1130,7 +1130,7 @@ async fn phase7_llm_causal_discovery(
     let start = Instant::now();
 
     let cycle_result = service
-        .run_discovery_cycle(&memories_for_analysis)
+        .run_discovery_cycle(&memories_for_analysis, None)
         .await
         .context("Failed to run causal discovery cycle")?;
 

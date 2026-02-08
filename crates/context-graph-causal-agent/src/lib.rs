@@ -63,7 +63,10 @@ pub use activator::E5EmbedderActivator;
 pub use error::{CausalAgentError, CausalAgentResult};
 pub use llm::{CausalDiscoveryLLM, GrammarType, LlmConfig};
 pub use scanner::MemoryScanner;
-pub use service::{CausalDiscoveryConfig, CausalDiscoveryService, DiscoveryCycleResult};
+pub use service::{
+    CausalDiscoveryConfig, CausalDiscoveryService, CycleMetrics, DiscoveryCursor,
+    DiscoveryCycleResult,
+};
 pub use types::{
     CausalAnalysisResult, CausalCandidate, CausalDirectionHint, CausalHint, CausalLinkDirection,
     MemoryForAnalysis,

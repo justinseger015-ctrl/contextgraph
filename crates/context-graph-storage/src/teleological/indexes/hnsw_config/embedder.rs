@@ -12,7 +12,7 @@ use super::distance::DistanceMetric;
 /// - E1Matryoshka128: E1 truncated to 128D for Stage 2 fast filtering
 /// - E5CausalCause: E5 cause vector for asymmetric retrieval (ARCH-15)
 /// - E5CausalEffect: E5 effect vector for asymmetric retrieval (ARCH-15)
-/// - E10MultimodalIntent: E10 intent vector for asymmetric retrieval (ARCH-15)
+/// - E10MultimodalIntent: E10 paraphrase vector for asymmetric retrieval (ARCH-15)
 /// - E10MultimodalContext: E10 context vector for asymmetric retrieval (ARCH-15)
 ///
 /// # Non-HNSW Embedders
@@ -29,10 +29,10 @@ use super::distance::DistanceMetric;
 /// # Asymmetric E10 Indexes (ARCH-15, AP-77)
 ///
 /// E10MultimodalIntent and E10MultimodalContext enable direction-aware retrieval:
-/// - Intent-seeking queries search E10MultimodalContext index using query.e10_as_intent
+/// - Paraphrase-seeking queries search E10MultimodalContext index using query.e10_as_intent
 /// - Context-seeking queries search E10MultimodalIntent index using query.e10_as_context
 ///
-/// This ensures complementary vectors are compared (cause→effect, intent→context).
+/// This ensures complementary vectors are compared (cause→effect, paraphrase→context).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EmbedderIndex {
     /// E1: 1024D semantic (e5-large-v2, Matryoshka-capable)
@@ -65,11 +65,11 @@ pub enum EmbedderIndex {
     /// E10: 768D multimodal (CLIP)
     /// Legacy index using active vector - prefer E10MultimodalIntent/E10MultimodalContext
     E10Multimodal,
-    /// E10 Multimodal Intent: 768D intent vector (ARCH-15)
-    /// Search this index when query seeks context/answers (what context satisfies intent X?)
+    /// E10 Multimodal Paraphrase: 768D paraphrase vector (ARCH-15)
+    /// Search this index when query seeks context/answers (what context matches paraphrase X?)
     E10MultimodalIntent,
     /// E10 Multimodal Context: 768D context vector (ARCH-15)
-    /// Search this index when query seeks intents/goals (what intent does context Y serve?)
+    /// Search this index when query seeks paraphrases (what paraphrase does context Y match?)
     E10MultimodalContext,
     /// E11: 768D entity (KEPLER)
     E11Entity,
@@ -176,7 +176,7 @@ impl EmbedderIndex {
     /// - E1Matryoshka128 (Stage 2 fast filter)
     /// - E5CausalCause (asymmetric cause index, ARCH-15)
     /// - E5CausalEffect (asymmetric effect index, ARCH-15)
-    /// - E10MultimodalIntent (asymmetric intent index, ARCH-15)
+    /// - E10MultimodalIntent (asymmetric paraphrase index, ARCH-15)
     /// - E10MultimodalContext (asymmetric context index, ARCH-15)
     pub fn all_hnsw() -> Vec<Self> {
         vec![
@@ -216,7 +216,7 @@ impl EmbedderIndex {
             Self::E8Graph => Some(E8_DIM),
             Self::E9HDC => Some(E9_DIM),
             Self::E10Multimodal => Some(E10_DIM),
-            Self::E10MultimodalIntent => Some(E10_DIM),   // 768D intent vector
+            Self::E10MultimodalIntent => Some(E10_DIM),   // 768D paraphrase vector
             Self::E10MultimodalContext => Some(E10_DIM), // 768D context vector
             Self::E11Entity => Some(E11_DIM),
             Self::E12LateInteraction => None, // Token-level
@@ -233,7 +233,7 @@ impl EmbedderIndex {
             Self::E5Causal | Self::E5CausalCause | Self::E5CausalEffect => {
                 Some(DistanceMetric::AsymmetricCosine)
             }
-            // E10 asymmetric: intent/context relationships are directional
+            // E10 asymmetric: paraphrase/context relationships are directional
             Self::E10Multimodal | Self::E10MultimodalIntent | Self::E10MultimodalContext => {
                 Some(DistanceMetric::AsymmetricCosine)
             }

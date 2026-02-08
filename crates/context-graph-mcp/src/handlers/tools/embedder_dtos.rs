@@ -20,7 +20,7 @@ pub enum EmbedderId {
     E7,  // V_correctness - Code patterns
     E8,  // V_connectivity - Graph structure
     E9,  // V_robustness - Noise-robust structure
-    E10, // V_multimodality - Intent alignment
+    E10, // V_multimodality - Paraphrase detection
     E11, // V_factuality - Entity knowledge (KEPLER)
     E12, // V_precision - Exact phrase matches
     E13, // V_keyword_precision - Term expansion (sparse)
@@ -78,7 +78,7 @@ impl EmbedderId {
             EmbedderId::E7 => "V_correctness (Code)",
             EmbedderId::E8 => "V_connectivity (Graph)",
             EmbedderId::E9 => "V_robustness (HDC)",
-            EmbedderId::E10 => "V_multimodality (Intent)",
+            EmbedderId::E10 => "V_multimodality (Paraphrase)",
             EmbedderId::E11 => "V_factuality (Entity)",
             EmbedderId::E12 => "V_precision (Phrase)",
             EmbedderId::E13 => "V_keyword_precision (Expansion)",
@@ -97,7 +97,7 @@ impl EmbedderId {
             EmbedderId::E7 => "Code patterns, function signatures",
             EmbedderId::E8 => "Structural relationships (imports, deps)",
             EmbedderId::E9 => "Noise-robust structure",
-            EmbedderId::E10 => "Goal alignment (different words, same intent)",
+            EmbedderId::E10 => "Paraphrase detection (different words, same meaning)",
             EmbedderId::E11 => "Entity knowledge via KEPLER",
             EmbedderId::E12 => "Exact phrase matches (token-level)",
             EmbedderId::E13 => "Term expansion (synonyms)",
@@ -607,7 +607,7 @@ pub struct EmbedderVectorInfo {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AsymmetricVariant {
-    /// Variant name (e.g., "cause", "effect", "source", "target", "intent", "context").
+    /// Variant name (e.g., "cause", "effect", "source", "target", "paraphrase", "context").
     pub variant: String,
     /// Whether this variant vector is present.
     pub present: bool,
@@ -820,73 +820,6 @@ pub struct SearchCrossEmbedderAnomaliesResponse {
     pub low_threshold: f32,
     /// Documents the over-fetch multiplier used when searching candidates.
     pub search_multiplier: usize,
-}
-
-// ============================================================================
-// adaptive_search DTOs
-// ============================================================================
-
-/// Request for adaptive_search tool.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdaptiveSearchRequest {
-    /// Search query - will be auto-classified.
-    pub query: String,
-    /// Maximum results (default: 10).
-    #[serde(default = "default_top_k")]
-    pub top_k: usize,
-    /// Include strategy explanation (default: true).
-    #[serde(default = "default_true")]
-    pub explain_strategy: bool,
-    /// Include content in results (default: false).
-    #[serde(default)]
-    pub include_content: bool,
-}
-
-impl AdaptiveSearchRequest {
-    /// Validate the request.
-    pub fn validate(&self) -> Result<(), String> {
-        if self.query.is_empty() {
-            return Err("Query cannot be empty".to_string());
-        }
-        if self.top_k == 0 || self.top_k > 100 {
-            return Err("topK must be between 1 and 100".to_string());
-        }
-        Ok(())
-    }
-}
-
-/// Classification result for a query.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct QueryClassification {
-    /// Detected query type.
-    pub query_type: String,
-    /// Selected weight profile name.
-    pub selected_profile: String,
-    /// Confidence in the classification (0-1).
-    pub confidence: f32,
-    /// Why this profile was selected.
-    pub reason: String,
-    /// Keywords that triggered the classification.
-    pub trigger_keywords: Vec<String>,
-}
-
-/// Response for adaptive_search tool.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AdaptiveSearchResponse {
-    /// The original query.
-    pub query: String,
-    /// Query classification and strategy explanation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub classification: Option<QueryClassification>,
-    /// Search results (same structure as search_graph).
-    pub results: Vec<EmbedderSearchResult>,
-    /// Total results found.
-    pub total_results: usize,
-    /// Search time in milliseconds.
-    pub search_time_ms: u64,
 }
 
 #[cfg(test)]

@@ -176,7 +176,7 @@ pub struct PipelineStageTiming {
     /// Stage 3: Full 13-space HNSW search.
     pub stage3_full_hnsw: Duration,
 
-    /// Stage 4: Teleological alignment filter.
+    /// Stage 4: Score-based filter.
     pub stage4_teleological: Duration,
 
     /// Stage 5: Late interaction reranking.
@@ -333,14 +333,10 @@ pub struct SearchResultProvenance {
 /// detection patterns triggered the classification.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct QueryClassification {
-    /// Detected query type ("Causal", "Code", "Intent", "General", etc.).
+    /// Detected query type ("Causal", "Code", "General", etc.).
     pub detected_type: String,
     /// Patterns/keywords that triggered this classification.
     pub detection_patterns: Vec<String>,
-    /// Intent mode if applicable ("SeekingIntent", "SeekingContext").
-    pub intent_mode: Option<String>,
-    /// E10 boost applied (1.2x for SeekingIntent, 0.8x for SeekingContext).
-    pub e10_boost_applied: Option<f32>,
 }
 
 /// Contribution of a single embedder to a search result.

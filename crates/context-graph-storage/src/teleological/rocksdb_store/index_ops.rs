@@ -85,9 +85,9 @@ impl RocksDbTeleologicalStore {
             // E10 legacy - uses active vector (whichever is populated)
             EmbedderIndex::E10Multimodal => semantic.e10_active_vector(),
             // E10 asymmetric indexes (ARCH-15, AP-77)
-            // Intent index stores intent vectors - queried when seeking contexts
+            // Paraphrase index stores paraphrase vectors - queried when seeking contexts
             EmbedderIndex::E10MultimodalIntent => semantic.get_e10_as_intent(),
-            // Context index stores context vectors - queried when seeking intents
+            // Context index stores context vectors - queried when seeking paraphrases
             EmbedderIndex::E10MultimodalContext => semantic.get_e10_as_context(),
             EmbedderIndex::E11Entity => &semantic.e11_entity,
             EmbedderIndex::E12LateInteraction => {

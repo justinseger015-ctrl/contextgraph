@@ -295,7 +295,7 @@ pub const CF_EMBEDDING_REGISTRY: &str = "embedding_registry";
 /// Column family for custom weight profiles.
 ///
 /// Stores user-created weight profiles that can be referenced by name
-/// in search_graph, search_by_intent, and adaptive_search.
+/// in search_graph and get_unified_neighbors.
 ///
 /// Key: profile_name bytes (UTF-8, variable length)
 /// Value: [f32; 13] serialized via JSON (~100-200 bytes)

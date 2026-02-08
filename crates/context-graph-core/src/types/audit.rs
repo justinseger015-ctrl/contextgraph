@@ -705,9 +705,9 @@ mod tests {
                 model_version: "1.0".to_string(),
             },
             AuditOperation::SearchPerformed {
-                tool_name: "search_by_intent".to_string(),
+                tool_name: "search_graph".to_string(),
                 results_returned: 5,
-                weight_profile: Some("intent_search".to_string()),
+                weight_profile: Some("semantic_search".to_string()),
                 strategy: Some("Pipeline".to_string()),
             },
             AuditOperation::CausalRelationshipRepaired {
