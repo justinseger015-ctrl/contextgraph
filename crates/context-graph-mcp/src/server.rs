@@ -1,7 +1,7 @@
 //! MCP Server implementation.
 //!
 //! TASK-S001: Updated to use TeleologicalMemoryStore and MultiArrayEmbeddingProvider.
-//! TASK-S003: Added GoalAlignmentCalculator and GoalHierarchy for purpose operations.
+//! TASK-S003: Added teleological scoring for multi-space retrieval operations.
 //! TASK-S004: Replaced stubs with REAL implementations (RocksDB storage).
 //! TASK-INTEG-018: Added TCP transport support with concurrent client handling.
 //!

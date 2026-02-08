@@ -16,7 +16,7 @@
 //! - `lambda_S`: Lambda for semantic term
 //! - `lambda_C`: Lambda for coherence term
 //! - `w_e`: Emotional weight
-//! - `phi`: Phase angle (goal alignment)
+//! - `phi`: Phase angle (topic coherence)
 
 use crate::types::fingerprint::NUM_EMBEDDERS;
 use serde::{Deserialize, Serialize};
@@ -118,7 +118,7 @@ pub struct MultiUtlParams {
     /// Default: 1.0
     pub w_e: f32,
 
-    /// Phase angle phi (goal alignment).
+    /// Phase angle phi (topic coherence).
     ///
     /// Models synchronization vs. desynchronization.
     /// Range: [0, pi].

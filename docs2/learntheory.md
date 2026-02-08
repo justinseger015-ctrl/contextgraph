@@ -138,7 +138,7 @@ The document outlines a plan to formalize the Cognitive Mirror idea into a mathe
 ### Operationalizing the Signals
 The theory's components (Entropy and Coherence) are defined with concrete, measurable signals from a conversation transcript:
 *   **Entropy (ΔS) Signals:** Sentiment volatility, lexical entropy, question density, hedge rate, topic jumps.
-*   **Coherence (ΔC) Signals:** Goal alignment, topical consistency, actionability markers.
+*   **Coherence (ΔC) Signals:** Topic coherence, topical consistency, actionability markers.
 
 These signals can be combined to compute `ΔS`, `ΔC`, and `L` for each turn in a conversation, allowing for real-time tracking of the learning process.
 

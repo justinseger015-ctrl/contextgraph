@@ -96,7 +96,7 @@ Each embedder provides a unique lens on the knowledge graph. The AI model receiv
 | E5 | Word order in causal statements | **Directional signal** - cause→effect preserved |
 | E6 | Exact term repetition | **Precision signal** - keyword matches matter |
 | E11 | Entity names without context | **Knowledge signal** - "Diesel" = database ORM |
-| E10 | Different words, same meaning | **Intent signal** - goal alignment |
+| E10 | Different words, same meaning | **Paraphrase signal** - same meaning, different words |
 
 **When E1 misses something that E7 or E11 finds, that's not because E1 was wrong - it's because E7/E11 captured ADDITIONAL signal that E1 cannot encode in its representation space.**
 
@@ -138,7 +138,7 @@ Each embedder finds what OTHERS MISS. Combined = superior answers.
 | **E5** | V_causality | Causal chains ("why X caused Y") | Direction lost in averaging | Semantic | 1.0 |
 | **E6** | V_selectivity | Exact keyword matches | Diluted by dense averaging | Semantic | 1.0 |
 | **E7** | V_correctness | Code patterns, function signatures | Treats code as natural language | Semantic | 1.0 |
-| **E10** | V_multimodality | Same-goal work (different words) | Misses intent alignment | Semantic | 1.0 |
+| **E10** | V_multimodality | Paraphrase detection (different words) | Cross-lingual paraphrase gaps | Semantic | 1.0 |
 | **E12** | V_precision | Exact phrase matches | Token-level precision lost | Semantic | 1.0 |
 | **E13** | V_keyword | Term expansions (fast→quick) | Sparse term overlap missed | Semantic | 1.0 |
 | **E8** | V_connectivity | Graph structure ("X imports Y") | Relationship structure (e5-large-v2) | Relational | 0.5 |
@@ -525,7 +525,7 @@ Native Claude Code hooks via `.claude/settings.json`:
 | E7 | Code | Code patterns - function signatures, AST structure |
 | E8 | Graph | Structural relationships - imports, dependencies |
 | E9 | HDC | Noise-robust structure - typos, variations |
-| E10 | Intent | Goal alignment - similar purpose, different words |
+| E10 | Paraphrase | Paraphrase detection - same meaning, different words |
 | E11 | Entity | Entity knowledge - named entities, relationships (KEPLER) |
 | E12 | Precision | Exact phrase matches - token-level precision |
 | E13 | Expansion | Term expansion - synonyms, related terms |
@@ -554,7 +554,7 @@ The enrichment system automatically selects and combines multiple embedders base
 | CAUSAL | "why", "caused by", "led to" | E5 (asymmetric causal) |
 | CODE | function names, imports, `fn`, `class` | E7 (code patterns) |
 | ENTITY | Capitalized names, known entities | E11 (KEPLER entity knowledge) |
-| INTENT | "goal", "purpose", "trying to" | E10 (intent alignment) |
+| PARAPHRASE | "same as", "similar to", "means" | E10 (paraphrase detection) |
 | KEYWORD | Quoted terms, technical jargon | E6, E13 (sparse keyword) |
 | TEMPORAL | "before", "after", "yesterday" | E2-E4 (post-retrieval only) |
 
