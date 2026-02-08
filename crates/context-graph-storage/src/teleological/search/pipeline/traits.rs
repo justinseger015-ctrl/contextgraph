@@ -5,7 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicUsize;
-use std::sync::RwLock;
+// HIGH-17 FIX: parking_lot::RwLock is non-poisonable.
+use parking_lot::RwLock;
 use uuid::Uuid;
 
 // ============================================================================
@@ -37,23 +38,23 @@ impl InMemoryTokenStorage {
 
     /// Insert tokens for an ID.
     pub fn insert(&self, id: Uuid, tokens: Vec<Vec<f32>>) {
-        self.tokens.write().unwrap().insert(id, tokens);
+        self.tokens.write().insert(id, tokens);
     }
 
     /// Get number of stored IDs.
     pub fn len(&self) -> usize {
-        self.tokens.read().unwrap().len()
+        self.tokens.read().len()
     }
 
     /// Check if empty.
     pub fn is_empty(&self) -> bool {
-        self.tokens.read().unwrap().is_empty()
+        self.tokens.read().is_empty()
     }
 }
 
 impl TokenStorage for InMemoryTokenStorage {
     fn get_tokens(&self, id: Uuid) -> Option<Vec<Vec<f32>>> {
-        self.tokens.read().unwrap().get(&id).cloned()
+        self.tokens.read().get(&id).cloned()
     }
 }
 
@@ -111,11 +112,11 @@ impl InMemorySpladeIndex {
             return;
         }
 
-        self.doc_norms.write().unwrap().insert(id, norm);
+        self.doc_norms.write().insert(id, norm);
 
         let mut added_terms = HashSet::new();
-        let mut postings = self.posting_lists.write().unwrap();
-        let mut doc_freq = self.doc_freq.write().unwrap();
+        let mut postings = self.posting_lists.write();
+        let mut doc_freq = self.doc_freq.write();
 
         for &(term_id, weight) in sparse {
             if weight.abs() < f32::EPSILON {
@@ -141,9 +142,9 @@ impl SpladeIndex for InMemorySpladeIndex {
             return Vec::new();
         }
 
-        let postings = self.posting_lists.read().unwrap();
-        let doc_norms = self.doc_norms.read().unwrap();
-        let doc_freq = self.doc_freq.read().unwrap();
+        let postings = self.posting_lists.read();
+        let doc_norms = self.doc_norms.read();
+        let doc_freq = self.doc_freq.read();
 
         let mut scores: HashMap<Uuid, f32> = HashMap::new();
         let n_f = n as f32;
@@ -184,7 +185,7 @@ impl SpladeIndex for InMemorySpladeIndex {
 mod e6_test_support {
     use std::collections::{HashMap, HashSet};
     use std::sync::atomic::AtomicUsize;
-    use std::sync::RwLock;
+    use parking_lot::RwLock;
     use uuid::Uuid;
 
     /// Storage interface for E6 sparse (V_selectivity) inverted index.
@@ -224,10 +225,9 @@ mod e6_test_support {
         pub fn add(&self, id: Uuid, sparse: &[(usize, f32)]) {
             self.doc_vectors
                 .write()
-                .unwrap()
                 .insert(id, sparse.to_vec());
 
-            let mut postings = self.posting_lists.write().unwrap();
+            let mut postings = self.posting_lists.write();
             for &(term_id, weight) in sparse {
                 if weight.abs() < f32::EPSILON {
                     continue;
@@ -247,7 +247,7 @@ mod e6_test_support {
                 return Vec::new();
             }
 
-            let postings = self.posting_lists.read().unwrap();
+            let postings = self.posting_lists.read();
             let mut term_counts: HashMap<Uuid, usize> = HashMap::new();
             let mut weighted_scores: HashMap<Uuid, f32> = HashMap::new();
 
@@ -277,7 +277,7 @@ mod e6_test_support {
         }
 
         fn get_sparse(&self, id: Uuid) -> Option<Vec<(usize, f32)>> {
-            self.doc_vectors.read().unwrap().get(&id).cloned()
+            self.doc_vectors.read().get(&id).cloned()
         }
 
         fn len(&self) -> usize {

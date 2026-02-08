@@ -134,14 +134,11 @@ impl RocksDbTeleologicalStore {
 
         if soft {
             // Soft delete: mark as deleted in memory
-            if let Ok(mut deleted) = self.soft_deleted.write() {
-                deleted.insert(id, true);
-            }
+            // MED-11 FIX: parking_lot::RwLock returns guard directly (non-poisonable)
+            self.soft_deleted.write().insert(id, true);
 
             // Invalidate count cache (soft delete changes the effective count)
-            if let Ok(mut count) = self.fingerprint_count.write() {
-                *count = None;
-            }
+            *self.fingerprint_count.write() = None;
         } else {
             // Hard delete: remove from all column families
             let old_fp = deserialize_teleological_fingerprint(&existing.unwrap());
@@ -179,18 +176,14 @@ impl RocksDbTeleologicalStore {
             batch.delete_cf(cf_e12, e12_late_interaction_key(&id));
 
             // Remove from soft-deleted tracking
-            if let Ok(mut deleted) = self.soft_deleted.write() {
-                deleted.remove(&id);
-            }
+            self.soft_deleted.write().remove(&id);
 
             self.db.write(batch).map_err(|e| {
                 TeleologicalStoreError::rocksdb_op("delete_batch", CF_FINGERPRINTS, Some(id), e)
             })?;
 
             // Invalidate count cache
-            if let Ok(mut count) = self.fingerprint_count.write() {
-                *count = None;
-            }
+            *self.fingerprint_count.write() = None;
 
             // Remove from per-embedder indexes
             self.remove_from_indexes(id)

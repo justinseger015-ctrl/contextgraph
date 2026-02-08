@@ -19,17 +19,17 @@ impl EmbedderIndexOps for HnswEmbedderIndex {
 
     fn len(&self) -> usize {
         // Return the number of active (non-removed) IDs
-        self.key_to_id.read().unwrap().len()
+        self.key_to_id.read().len()
     }
 
     #[allow(clippy::readonly_write_lock)] // usearch uses interior mutability via C++ FFI
     fn insert(&self, id: Uuid, vector: &[f32]) -> IndexResult<()> {
         validate_vector(vector, self.config.dimension, self.embedder)?;
 
-        let mut id_to_key = self.id_to_key.write().unwrap();
-        let mut key_to_id = self.key_to_id.write().unwrap();
-        let index = self.index.write().unwrap();
-        let mut next_key = self.next_key.write().unwrap();
+        let mut id_to_key = self.id_to_key.write();
+        let mut key_to_id = self.key_to_id.write();
+        let index = self.index.write();
+        let mut next_key = self.next_key.write();
 
         // Handle duplicate - remove old mapping (usearch may not support true deletion)
         if let Some(&old_key) = id_to_key.get(&id) {
@@ -72,8 +72,8 @@ impl EmbedderIndexOps for HnswEmbedderIndex {
     }
 
     fn remove(&self, id: Uuid) -> IndexResult<bool> {
-        let mut id_to_key = self.id_to_key.write().unwrap();
-        let mut key_to_id = self.key_to_id.write().unwrap();
+        let mut id_to_key = self.id_to_key.write();
+        let mut key_to_id = self.key_to_id.write();
 
         if let Some(key) = id_to_key.remove(&id) {
             // Remove from key_to_id so search won't return this ID
@@ -94,8 +94,8 @@ impl EmbedderIndexOps for HnswEmbedderIndex {
     ) -> IndexResult<Vec<(Uuid, f32)>> {
         validate_vector(query, self.config.dimension, self.embedder)?;
 
-        let index = self.index.read().unwrap();
-        let key_to_id = self.key_to_id.read().unwrap();
+        let index = self.index.read();
+        let key_to_id = self.key_to_id.read();
 
         if key_to_id.is_empty() {
             return Ok(Vec::new());
@@ -151,9 +151,9 @@ impl EmbedderIndexOps for HnswEmbedderIndex {
     }
 
     fn memory_bytes(&self) -> usize {
-        let index = self.index.read().unwrap();
-        let id_to_key = self.id_to_key.read().unwrap();
-        let key_to_id = self.key_to_id.read().unwrap();
+        let index = self.index.read();
+        let id_to_key = self.id_to_key.read();
+        let key_to_id = self.key_to_id.read();
 
         // usearch memory + our mapping overhead
         let usearch_memory = index.memory_usage();

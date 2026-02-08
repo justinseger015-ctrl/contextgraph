@@ -973,6 +973,7 @@ dependencies = [
  "criterion",
  "futures",
  "libc",
+ "parking_lot",
  "rand 0.8.5",
  "rayon",
  "rmp-serde",

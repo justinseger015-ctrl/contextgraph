@@ -22,31 +22,23 @@ use super::store::RocksDbTeleologicalStore;
 use super::types::TeleologicalStoreError;
 
 impl RocksDbTeleologicalStore {
-    /// Deserialize source metadata, trying JSON first then bincode for migration.
+    /// Deserialize source metadata from JSON.
     ///
-    /// JSON is the canonical format (bincode is incompatible with skip_serializing_if).
-    /// Bincode fallback handles data written before the JSON migration.
+    /// JSON is the only supported format. Old bincode data will produce clear errors.
     fn deserialize_source_metadata(bytes: &[u8], id: Uuid) -> CoreResult<SourceMetadata> {
-        // Try JSON first (canonical format)
-        if let Ok(metadata) = serde_json::from_slice::<SourceMetadata>(bytes) {
-            return Ok(metadata);
-        }
-
-        // Try bincode for pre-migration data
-        if let Ok(metadata) = bincode::deserialize::<SourceMetadata>(bytes) {
-            return Ok(metadata);
-        }
-
-        // Both failed - genuine corruption
-        error!(
-            "METADATA ERROR: Failed to deserialize source metadata for fingerprint {}. \
-             Bytes length: {}. Neither JSON nor bincode could parse. Data corrupted.",
-            id, bytes.len()
-        );
-        Err(CoreError::Internal(format!(
-            "Failed to deserialize source metadata for {}: data corruption ({}B, not valid JSON or bincode)",
-            id, bytes.len()
-        )))
+        serde_json::from_slice::<SourceMetadata>(bytes).map_err(|e| {
+            error!(
+                "METADATA ERROR: Failed to deserialize source metadata for fingerprint {}: {}. \
+                 Bytes length: {}. Data is not valid JSON - may be legacy bincode format that \
+                 requires migration.",
+                id, e, bytes.len()
+            );
+            CoreError::Internal(format!(
+                "Failed to deserialize source metadata for {}: {} ({}B, JSON only - \
+                 bincode fallback removed)",
+                id, e, bytes.len()
+            ))
+        })
     }
 
     /// Store source metadata for a fingerprint (internal async wrapper).
@@ -270,15 +262,21 @@ impl RocksDbTeleologicalStore {
                             continue; // Skip malformed keys
                         }
                         if let Ok(id) = Uuid::from_slice(&key) {
-                            // Deserialize metadata (JSON canonical, bincode fallback)
-                            let parsed = serde_json::from_slice::<SourceMetadata>(&value)
-                                .ok()
-                                .or_else(|| bincode::deserialize::<SourceMetadata>(&value).ok());
-                            if let Some(metadata) = parsed {
-                                if let Some(ref path) = metadata.file_path {
-                                    if path == &file_path_owned {
-                                        matching_ids.push(id);
+                            // Deserialize metadata (JSON only)
+                            match serde_json::from_slice::<SourceMetadata>(&value) {
+                                Ok(metadata) => {
+                                    if let Some(ref path) = metadata.file_path {
+                                        if path == &file_path_owned {
+                                            matching_ids.push(id);
+                                        }
                                     }
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to deserialize source metadata for fingerprint {} during file path scan: {}",
+                                        id, e
+                                    );
+                                    // Continue scanning other entries
                                 }
                             }
                         }

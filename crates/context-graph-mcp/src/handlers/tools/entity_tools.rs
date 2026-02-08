@@ -264,7 +264,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: ExtractEntitiesRequest = match serde_json::from_value(args.clone()) {
+        let request: ExtractEntitiesRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "extract_entities: Failed to parse request");
@@ -411,7 +411,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: SearchByEntitiesRequest = match serde_json::from_value(args.clone()) {
+        let request: SearchByEntitiesRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "search_by_entities: Failed to parse request");
@@ -747,7 +747,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: InferRelationshipRequest = match serde_json::from_value(args.clone()) {
+        let request: InferRelationshipRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "infer_relationship: Failed to parse request");
@@ -931,7 +931,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: FindRelatedEntitiesRequest = match serde_json::from_value(args.clone()) {
+        let request: FindRelatedEntitiesRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "find_related_entities: Failed to parse request");
@@ -982,22 +982,9 @@ impl Handlers {
         let entity_e11 = &entity_fingerprint.e11_entity;
         let relation_e11 = &relation_fingerprint.e11_entity;
 
-        // Step 2: Predict target entity embedding
-        // Outgoing (h→t): t̂ = h + r
-        // Incoming (t←h): ĥ = t - r (entity is tail, find heads)
-        let _predicted_embedding = if direction == "outgoing" {
-            KeplerModel::predict_tail(entity_e11, relation_e11)
-        } else {
-            // For incoming, the entity is the tail, we want to find heads
-            // ĥ = t - r where t is the entity
-            entity_e11
-                .iter()
-                .zip(relation_e11.iter())
-                .map(|(t, r)| t - r)
-                .collect::<Vec<f32>>()
-        };
-
-        // Step 3: If search_memories is true, search stored memories for entities
+        // Step 2: Search stored memories for related entities.
+        // TransE scoring (h + r ≈ t) is applied per-candidate below via transe_score(),
+        // rather than via nearest-neighbor search of a predicted embedding vector.
         let mut related_entities: Vec<RelatedEntity> = Vec::new();
 
         if search_memories {
@@ -1178,7 +1165,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: ValidateKnowledgeRequest = match serde_json::from_value(args.clone()) {
+        let request: ValidateKnowledgeRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "validate_knowledge: Failed to parse request");
@@ -1412,7 +1399,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: GetEntityGraphRequest = match serde_json::from_value(args.clone()) {
+        let request: GetEntityGraphRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_entity_graph: Failed to parse request");
@@ -1600,8 +1587,8 @@ impl Handlers {
                 continue;
             }
 
-            // Infer relation using TransE (simplified - just use "related_to" for co-occurrence)
-            // For full TransE inference, we'd embed both entities and find the best relation
+            // Infer relation strength from co-occurrence count (heuristic).
+            // Co-occurrence is used because entity pairs share memory contexts.
             let relation = if cooccurrence_count >= 5 {
                 "strongly_related_to"
             } else if cooccurrence_count >= 2 {

@@ -126,10 +126,10 @@ impl Handlers {
                     ForgetConceptResponse::hard_deleted(node_id)
                 };
 
-                self.tool_result(
-                    id,
-                    serde_json::to_value(response).expect("ForgetConceptResponse should serialize"),
-                )
+                match serde_json::to_value(response) {
+                    Ok(v) => self.tool_result(id, v),
+                    Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+                }
             }
             Ok(false) => {
                 // Store returned false - memory not found (race condition)
@@ -152,12 +152,9 @@ impl Handlers {
 
     /// Handle boost_importance tool call.
     ///
-    /// Per PRD Section 7, importance is computed from:
-    ///   Importance = Frequency_Score × Recency_Weight
-    ///   Frequency_Score = BM25_saturated(log(1+access_count))
-    ///
-    /// This tool increases access_count to boost the computed importance score.
-    /// A positive delta increments access_count, negative decrements (min 0).
+    /// Directly adjusts the `importance` float field on a fingerprint.
+    /// A positive delta increases importance, negative decreases it.
+    /// Final value is clamped to [0.0, 1.0] per BR-MCP-002.
     ///
     /// # Arguments
     /// * `id` - JSON-RPC request ID
@@ -317,11 +314,10 @@ impl Handlers {
                 // Build response using DTO factory method
                 let response = BoostImportanceResponse::new(node_id, old_importance, request.delta);
 
-                self.tool_result(
-                    id,
-                    serde_json::to_value(response)
-                        .expect("BoostImportanceResponse should serialize"),
-                )
+                match serde_json::to_value(response) {
+                    Ok(v) => self.tool_result(id, v),
+                    Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+                }
             }
             Ok(false) => {
                 // Update returned false - memory not found (race condition)

@@ -126,7 +126,17 @@ impl FaissGpuIndex {
 
         // Get vector count from FAISS
         // SAFETY: index_ptr is valid.
-        let vector_count = unsafe { faiss_Index_ntotal(index_ptr.as_ptr()) } as usize;
+        // HIGH-16 FIX: Check for negative error values before casting.
+        let raw_count = unsafe { faiss_Index_ntotal(index_ptr.as_ptr()) };
+        let vector_count = if raw_count < 0 {
+            tracing::error!(
+                raw_count,
+                "FAISS ntotal returned negative value on load (error signal)"
+            );
+            0
+        } else {
+            raw_count as usize
+        };
 
         Ok(Self {
             index_ptr,

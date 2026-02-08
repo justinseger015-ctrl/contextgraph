@@ -86,7 +86,6 @@ impl RocksDbTeleologicalStore {
                 // FAIL FAST: Panic if lock is poisoned (thread panic elsewhere)
                 let is_deleted = soft_deleted
                     .read()
-                    .expect("soft_deleted RwLock poisoned - a thread panicked while holding this lock")
                     .get(&id)
                     .copied()
                     .unwrap_or(false); // Unknown IDs are not deleted
@@ -127,10 +126,9 @@ impl RocksDbTeleologicalStore {
     /// Uses `spawn_blocking` to move O(n) iteration to Tokio's blocking thread pool.
     pub(crate) async fn count_async(&self) -> CoreResult<usize> {
         // Check cache first (outside spawn_blocking since it's fast)
-        if let Ok(cached) = self.fingerprint_count.read() {
-            if let Some(count) = *cached {
-                return Ok(count);
-            }
+        // MED-11 FIX: parking_lot::RwLock returns guard directly (non-poisonable)
+        if let Some(count) = *self.fingerprint_count.read() {
+            return Ok(count);
         }
 
         // Clone Arc-wrapped fields for spawn_blocking closure
@@ -158,7 +156,6 @@ impl RocksDbTeleologicalStore {
                 // FAIL FAST: Panic if lock is poisoned
                 let is_deleted = soft_deleted
                     .read()
-                    .expect("soft_deleted RwLock poisoned - a thread panicked while holding this lock")
                     .get(&id)
                     .copied()
                     .unwrap_or(false); // Unknown IDs are not deleted
@@ -173,9 +170,7 @@ impl RocksDbTeleologicalStore {
         .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
         // Cache the result
-        if let Ok(mut cached) = self.fingerprint_count.write() {
-            *cached = Some(count);
-        }
+        *self.fingerprint_count.write() = Some(count);
 
         Ok(count)
     }
@@ -333,10 +328,8 @@ impl RocksDbTeleologicalStore {
         }
 
         // Purge soft-deleted entries
-        if let Ok(mut deleted) = self.soft_deleted.write() {
-            for (id, _) in deleted.drain() {
-                debug!("Purging soft-deleted entry {} from tracking", id);
-            }
+        for (id, _) in self.soft_deleted.write().drain() {
+            debug!("Purging soft-deleted entry {} from tracking", id);
         }
 
         info!("Compaction complete");
@@ -541,7 +534,6 @@ impl RocksDbTeleologicalStore {
                 // FAIL FAST: Panic if lock is poisoned
                 let is_deleted = soft_deleted
                     .read()
-                    .expect("soft_deleted RwLock poisoned - a thread panicked while holding this lock")
                     .get(&id)
                     .copied()
                     .unwrap_or(false); // Unknown IDs are not deleted
@@ -574,6 +566,63 @@ impl RocksDbTeleologicalStore {
             count = results.len(),
             "Scanned fingerprints for clustering complete"
         );
+        Ok(results)
+    }
+
+    /// List fingerprints without semantic bias (MED-13/14/15 root cause fix).
+    ///
+    /// Scans CF_FINGERPRINTS directly, returning full TeleologicalFingerprint
+    /// objects. Skips soft-deleted entries. Uses spawn_blocking for O(n) scan.
+    pub(crate) async fn list_fingerprints_unbiased_async(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<TeleologicalFingerprint>> {
+        info!(limit = limit, "Scanning fingerprints (unbiased, no semantic query)");
+
+        let db = Arc::clone(&self.db);
+        let soft_deleted = Arc::clone(&self.soft_deleted);
+
+        let results = tokio::task::spawn_blocking(move || -> CoreResult<Vec<TeleologicalFingerprint>> {
+            let cf = db.cf_handle(CF_FINGERPRINTS).ok_or_else(|| {
+                TeleologicalStoreError::ColumnFamilyNotFound {
+                    name: CF_FINGERPRINTS.to_string(),
+                }
+            })?;
+            let iter = db.iterator_cf(cf, rocksdb::IteratorMode::Start);
+
+            let mut results = Vec::with_capacity(limit.min(1024));
+
+            for item in iter {
+                let (key, value) = item.map_err(|e| {
+                    TeleologicalStoreError::rocksdb_op("iterate", CF_FINGERPRINTS, None, e)
+                })?;
+
+                let id = parse_fingerprint_key(&key);
+
+                // Skip soft-deleted
+                let is_deleted = soft_deleted
+                    .read()
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(false);
+                if is_deleted {
+                    continue;
+                }
+
+                let fp = deserialize_teleological_fingerprint(&value);
+                results.push(fp);
+
+                if results.len() >= limit {
+                    break;
+                }
+            }
+
+            Ok(results)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
+
+        info!(count = results.len(), "Unbiased fingerprint scan complete");
         Ok(results)
     }
 }

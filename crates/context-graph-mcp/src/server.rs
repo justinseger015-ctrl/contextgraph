@@ -119,6 +119,9 @@ pub struct McpServer {
     code_watcher_task: Arc<RwLock<Option<JoinHandle<()>>>>,
     /// Flag to signal code watcher shutdown.
     code_watcher_running: Arc<AtomicBool>,
+    /// CRIT-06 FIX: File watcher shutdown flag and thread handle.
+    file_watcher_running: Arc<AtomicBool>,
+    file_watcher_thread: Arc<std::sync::Mutex<Option<std::thread::JoinHandle<()>>>>,
     /// TASK-GRAPHLINK-PHASE1: Background graph builder for K-NN edge computation.
     /// Builds typed edges from embedder agreement patterns.
     graph_builder: Option<Arc<BackgroundGraphBuilder>>,
@@ -575,6 +578,9 @@ impl McpServer {
             // E7-WIRING: Code watcher fields initialized as None/false
             code_watcher_task: Arc::new(RwLock::new(None)),
             code_watcher_running: Arc::new(AtomicBool::new(false)),
+            // CRIT-06: File watcher shutdown flag and thread handle
+            file_watcher_running: Arc::new(AtomicBool::new(false)),
+            file_watcher_thread: Arc::new(std::sync::Mutex::new(None)),
             // TASK-GRAPHLINK-PHASE1: Graph builder for background K-NN edge computation
             graph_builder: Some(graph_builder),
             graph_builder_task: Arc::new(RwLock::new(None)),
@@ -681,7 +687,36 @@ impl McpServer {
         // Stop code watcher if running
         self.stop_code_watcher().await;
 
+        // CRIT-06: Stop file watcher if running
+        self.stop_file_watcher();
+
         info!("Graceful shutdown complete");
+    }
+
+    /// Stop the file watcher thread.
+    ///
+    /// CRIT-06 FIX: Signals the file watcher thread to stop via the atomic flag,
+    /// then joins the thread with a timeout to ensure clean shutdown.
+    fn stop_file_watcher(&self) {
+        if !self.file_watcher_running.load(Ordering::SeqCst) {
+            return;
+        }
+
+        info!("Stopping file watcher...");
+        self.file_watcher_running.store(false, Ordering::SeqCst);
+
+        // Join the thread (with a timeout via try_lock to avoid blocking forever)
+        if let Ok(mut guard) = self.file_watcher_thread.lock() {
+            if let Some(handle) = guard.take() {
+                // The thread checks the flag every 500ms, so it should exit within ~1s.
+                // Use join() which blocks the current thread until the spawned thread finishes.
+                // This is acceptable in shutdown since we are tearing down.
+                match handle.join() {
+                    Ok(()) => info!("File watcher thread stopped"),
+                    Err(_) => error!("File watcher thread panicked"),
+                }
+            }
+        }
     }
 
     /// Start the file watcher if enabled in configuration.
@@ -783,9 +818,14 @@ impl McpServer {
 
         let session_id = self.config.watcher.session_id.clone();
 
+        // CRIT-06 FIX: Set the running flag and pass a clone into the thread
+        // so the loop can be stopped from outside.
+        self.file_watcher_running.store(true, Ordering::SeqCst);
+        let running_flag = Arc::clone(&self.file_watcher_running);
+
         // Spawn file watcher in a dedicated thread to handle the non-Send Receiver
         // We use spawn_blocking + nested tokio runtime for this
-        std::thread::spawn(move || {
+        let thread_handle = std::thread::spawn(move || {
             // Create a new runtime for this thread
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -804,6 +844,7 @@ impl McpServer {
                     Ok(w) => w,
                     Err(e) => {
                         error!(error = %e, "Failed to create file watcher");
+                        running_flag.store(false, Ordering::SeqCst);
                         return;
                     }
                 };
@@ -811,6 +852,7 @@ impl McpServer {
                 // Start watcher
                 if let Err(e) = watcher.start().await {
                     error!(error = %e, "Failed to start file watcher");
+                    running_flag.store(false, Ordering::SeqCst);
                     return;
                 }
 
@@ -823,6 +865,13 @@ impl McpServer {
                 let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
                 loop {
                     interval.tick().await;
+
+                    // CRIT-06 FIX: Check shutdown flag each iteration.
+                    if !running_flag.load(Ordering::SeqCst) {
+                        info!("File watcher received shutdown signal");
+                        break;
+                    }
+
                     match watcher.process_events().await {
                         Ok(count) => {
                             if count > 0 {
@@ -836,6 +885,11 @@ impl McpServer {
                 }
             });
         });
+
+        // Store the thread handle for joining during shutdown
+        if let Ok(mut guard) = self.file_watcher_thread.lock() {
+            *guard = Some(thread_handle);
+        }
 
         info!(
             paths = ?self.config.watcher.watch_paths,
@@ -1420,7 +1474,7 @@ impl McpServer {
         stream: TcpStream,
         peer_addr: SocketAddr,
         handlers: Arc<Handlers>,
-        _request_timeout: u64,
+        request_timeout: u64,
     ) -> Result<()> {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
@@ -1482,8 +1536,29 @@ impl McpServer {
                 continue;
             }
 
-            // Dispatch to handler
-            let response = handlers.dispatch(request).await;
+            // HIGH-15 FIX: Apply request timeout to prevent unbounded request processing.
+            let response = match tokio::time::timeout(
+                Duration::from_secs(request_timeout),
+                handlers.dispatch(request),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(_) => {
+                    error!(
+                        "Request timed out after {}s for peer {}",
+                        request_timeout, peer_addr
+                    );
+                    JsonRpcResponse::error(
+                        None,
+                        crate::protocol::error_codes::TCP_CLIENT_TIMEOUT,
+                        format!(
+                            "Request timed out after {}s. Consider increasing request_timeout.",
+                            request_timeout
+                        ),
+                    )
+                }
+            };
 
             // Handle notifications (no response needed)
             if response.id.is_none() && response.result.is_none() && response.error.is_none() {

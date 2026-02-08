@@ -73,8 +73,8 @@ impl RocksDbTeleologicalStore {
         &self,
         relationship: &CausalRelationship,
     ) -> CoreResult<Uuid> {
-        // 1. Serialize the relationship
-        let serialized = bincode::serialize(relationship).map_err(|e| {
+        // 1. Serialize the relationship as JSON
+        let serialized = serde_json::to_vec(relationship).map_err(|e| {
             error!(
                 "CAUSAL ERROR: Failed to serialize CausalRelationship {}: {}",
                 relationship.id, e
@@ -101,26 +101,70 @@ impl RocksDbTeleologicalStore {
             )));
         }
 
-        // 3. Store in primary CF
-        let cf = self.cf_causal_relationships();
-        let key = causal_relationship_key(&relationship.id);
+        // 3. Atomically store relationship + update secondary index using WriteBatch
+        let cf_rel = self.cf_causal_relationships();
+        let cf_idx = self.cf_causal_by_source();
+        let rel_key = causal_relationship_key(&relationship.id);
+        let idx_key = causal_by_source_key(&relationship.source_fingerprint_id);
 
-        self.db.put_cf(cf, key, &serialized).map_err(|e| {
+        // Read current index list
+        let mut causal_ids: Vec<Uuid> = match self.db.get_cf(cf_idx, &idx_key) {
+            Ok(Some(bytes)) => serde_json::from_slice(&bytes).map_err(|e| {
+                error!(
+                    "CAUSAL ERROR: Failed to deserialize causal_by_source for {}: {}",
+                    relationship.source_fingerprint_id, e
+                );
+                CoreError::Internal(format!(
+                    "Failed to deserialize causal_by_source for {}: {}",
+                    relationship.source_fingerprint_id, e
+                ))
+            })?,
+            Ok(None) => Vec::new(),
+            Err(e) => {
+                error!(
+                    "ROCKSDB ERROR: Failed to read causal_by_source for {}: {}",
+                    relationship.source_fingerprint_id, e
+                );
+                return Err(CoreError::StorageError(format!(
+                    "Failed to read causal_by_source for {}: {}",
+                    relationship.source_fingerprint_id, e
+                )));
+            }
+        };
+
+        // Add causal_id if not already present
+        if !causal_ids.contains(&relationship.id) {
+            causal_ids.push(relationship.id);
+        }
+
+        let idx_serialized = serde_json::to_vec(&causal_ids).map_err(|e| {
+            CoreError::Internal(format!("Failed to serialize causal_by_source list: {}", e))
+        })?;
+
+        // Write both atomically
+        let mut batch = rocksdb::WriteBatch::default();
+        batch.put_cf(cf_rel, &rel_key, &serialized);
+        batch.put_cf(cf_idx, &idx_key, &idx_serialized);
+
+        self.db.write(batch).map_err(|e| {
             error!(
-                "ROCKSDB ERROR: Failed to store causal relationship {}: {}",
+                "ROCKSDB ERROR: Failed to atomically store causal relationship {}: {}",
                 relationship.id, e
             );
             TeleologicalStoreError::rocksdb_op(
-                "put",
+                "write_batch",
                 CF_CAUSAL_RELATIONSHIPS,
                 Some(relationship.id),
                 e,
             )
         })?;
 
-        // 4. Update secondary index (source_fingerprint_id -> Vec<causal_id>)
-        self.update_causal_by_source_index(relationship.source_fingerprint_id, relationship.id)
-            .await?;
+        debug!(
+            source_id = %relationship.source_fingerprint_id,
+            causal_id = %relationship.id,
+            total_count = causal_ids.len(),
+            "Updated causal_by_source index (atomic)"
+        );
 
         // 5. Add to E11 HNSW index if embedding present
         if relationship.has_entity_embedding() {
@@ -152,65 +196,6 @@ impl RocksDbTeleologicalStore {
         Ok(relationship.id)
     }
 
-    /// Update the causal_by_source secondary index.
-    ///
-    /// Adds the causal_id to the list of relationships for this source.
-    async fn update_causal_by_source_index(
-        &self,
-        source_id: Uuid,
-        causal_id: Uuid,
-    ) -> CoreResult<()> {
-        let cf = self.cf_causal_by_source();
-        let key = causal_by_source_key(&source_id);
-
-        // Read existing list (if any)
-        let mut causal_ids: Vec<Uuid> = match self.db.get_cf(cf, key) {
-            Ok(Some(bytes)) => bincode::deserialize(&bytes).unwrap_or_else(|e| {
-                warn!(
-                    "CAUSAL WARNING: Failed to deserialize causal_by_source for {}: {}. Starting fresh.",
-                    source_id, e
-                );
-                Vec::new()
-            }),
-            Ok(None) => Vec::new(),
-            Err(e) => {
-                error!(
-                    "ROCKSDB ERROR: Failed to read causal_by_source for {}: {}",
-                    source_id, e
-                );
-                return Err(CoreError::StorageError(format!(
-                    "Failed to read causal_by_source for {}: {}",
-                    source_id, e
-                )));
-            }
-        };
-
-        // Add causal_id if not already present
-        if !causal_ids.contains(&causal_id) {
-            causal_ids.push(causal_id);
-
-            let serialized = bincode::serialize(&causal_ids).map_err(|e| {
-                CoreError::Internal(format!("Failed to serialize causal_by_source list: {}", e))
-            })?;
-
-            self.db.put_cf(cf, key, &serialized).map_err(|e| {
-                error!(
-                    "ROCKSDB ERROR: Failed to update causal_by_source for {}: {}",
-                    source_id, e
-                );
-                TeleologicalStoreError::rocksdb_op("put", CF_CAUSAL_BY_SOURCE, Some(source_id), e)
-            })?;
-
-            debug!(
-                source_id = %source_id,
-                causal_id = %causal_id,
-                total_count = causal_ids.len(),
-                "Updated causal_by_source index"
-            );
-        }
-
-        Ok(())
-    }
 
     // ========================================================================
     // Retrieve Operations
@@ -232,7 +217,7 @@ impl RocksDbTeleologicalStore {
 
         match self.db.get_cf(cf, key) {
             Ok(Some(bytes)) => {
-                let relationship: CausalRelationship = bincode::deserialize(&bytes).map_err(|e| {
+                let relationship: CausalRelationship = serde_json::from_slice(&bytes).map_err(|e| {
                     error!(
                         "CAUSAL ERROR: Failed to deserialize CausalRelationship {}: {}. Data corruption.",
                         id, e
@@ -279,7 +264,7 @@ impl RocksDbTeleologicalStore {
 
         // Get list of causal_ids from index
         let causal_ids: Vec<Uuid> = match self.db.get_cf(cf, key) {
-            Ok(Some(bytes)) => bincode::deserialize(&bytes).map_err(|e| {
+            Ok(Some(bytes)) => serde_json::from_slice(&bytes).map_err(|e| {
                 error!(
                     "CAUSAL ERROR: Failed to deserialize causal_by_source for {}: {}",
                     source_id, e
@@ -382,14 +367,17 @@ impl RocksDbTeleologicalStore {
                     CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
                 })?;
 
-                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                let relationship: CausalRelationship = match serde_json::from_slice(&value) {
                     Ok(r) => r,
                     Err(e) => {
-                        warn!(
-                            "CAUSAL WARNING: Failed to deserialize relationship during search: {}",
+                        error!(
+                            "CAUSAL ERROR: Failed to deserialize relationship during search: {}",
                             e
                         );
-                        continue;
+                        return Err(CoreError::Internal(format!(
+                            "Failed to deserialize causal relationship during search: {}",
+                            e
+                        )));
                     }
                 };
 
@@ -471,14 +459,17 @@ impl RocksDbTeleologicalStore {
                     CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
                 })?;
 
-                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                let relationship: CausalRelationship = match serde_json::from_slice(&value) {
                     Ok(r) => r,
                     Err(e) => {
-                        warn!(
-                            "CAUSAL WARNING: Failed to deserialize relationship during E5 search: {}",
+                        error!(
+                            "CAUSAL ERROR: Failed to deserialize relationship during E5 search: {}",
                             e
                         );
-                        continue;
+                        return Err(CoreError::Internal(format!(
+                            "Failed to deserialize causal relationship during E5 search: {}",
+                            e
+                        )));
                     }
                 };
 
@@ -573,14 +564,17 @@ impl RocksDbTeleologicalStore {
                     CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
                 })?;
 
-                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                let relationship: CausalRelationship = match serde_json::from_slice(&value) {
                     Ok(r) => r,
                     Err(e) => {
-                        warn!(
-                            "CAUSAL WARNING: Failed to deserialize relationship during hybrid search: {}",
+                        error!(
+                            "CAUSAL ERROR: Failed to deserialize relationship during hybrid search: {}",
                             e
                         );
-                        continue;
+                        return Err(CoreError::Internal(format!(
+                            "Failed to deserialize causal relationship during hybrid search: {}",
+                            e
+                        )));
                     }
                 };
 
@@ -680,14 +674,17 @@ impl RocksDbTeleologicalStore {
                     CoreError::StorageError(format!("Failed to iterate causal_relationships: {}", e))
                 })?;
 
-                let relationship: CausalRelationship = match bincode::deserialize(&value) {
+                let relationship: CausalRelationship = match serde_json::from_slice(&value) {
                     Ok(r) => r,
                     Err(e) => {
-                        warn!(
-                            "CAUSAL WARNING: Failed to deserialize relationship during E8 search: {}",
+                        error!(
+                            "CAUSAL ERROR: Failed to deserialize relationship during E8 search: {}",
                             e
                         );
-                        continue;
+                        return Err(CoreError::Internal(format!(
+                            "Failed to deserialize causal relationship during E8 search: {}",
+                            e
+                        )));
                     }
                 };
 
@@ -945,9 +942,9 @@ impl RocksDbTeleologicalStore {
                     }
                 };
 
-                if bincode::deserialize::<CausalRelationship>(&value).is_err() {
+                if serde_json::from_slice::<CausalRelationship>(&value).is_err() {
                     let key_id = (key.len() == 16).then(|| Uuid::from_slice(&key).ok()).flatten();
-                    warn!(key_len = key.len(), id = ?key_id, "Found corrupted causal relationship");
+                    error!(key_len = key.len(), id = ?key_id, "Found corrupted causal relationship - failed JSON deserialization");
                     corrupted_keys.push((key, key_id));
                 }
             }
@@ -1033,7 +1030,7 @@ impl RocksDbTeleologicalStore {
 
         // Read existing list
         let mut causal_ids: Vec<Uuid> = match self.db.get_cf(cf, key) {
-            Ok(Some(bytes)) => bincode::deserialize(&bytes).map_err(|e| {
+            Ok(Some(bytes)) => serde_json::from_slice(&bytes).map_err(|e| {
                 error!(
                     source_id = %source_id,
                     error = %e,
@@ -1071,7 +1068,7 @@ impl RocksDbTeleologicalStore {
             })?;
         } else {
             // Update with remaining IDs
-            let serialized = bincode::serialize(&causal_ids).map_err(|e| {
+            let serialized = serde_json::to_vec(&causal_ids).map_err(|e| {
                 CoreError::Internal(format!("Failed to serialize causal_by_source list: {}", e))
             })?;
 

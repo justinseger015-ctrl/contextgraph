@@ -17,13 +17,16 @@ fn create_test_search() -> SingleEmbedderSearch {
 }
 
 // Helper function for random floats
+// HIGH-21 FIX: Use AtomicU32 instead of static mut to prevent data race UB.
+// Tests run in parallel by default - static mut without synchronization is UB.
 fn rand_float() -> f32 {
-    // Simple deterministic "random" for testing
-    static mut SEED: u32 = 42;
-    unsafe {
-        SEED = SEED.wrapping_mul(1103515245).wrapping_add(12345);
-        (SEED as f32) / (u32::MAX as f32)
-    }
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static SEED: AtomicU32 = AtomicU32::new(42);
+    let old = SEED.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |s| {
+        Some(s.wrapping_mul(1103515245).wrapping_add(12345))
+    }).unwrap();
+    let new_seed = old.wrapping_mul(1103515245).wrapping_add(12345);
+    (new_seed as f32) / (u32::MAX as f32)
 }
 
 // ========== EMPTY INDEX TESTS ==========

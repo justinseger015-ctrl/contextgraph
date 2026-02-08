@@ -153,7 +153,9 @@ pub struct SearchCodeRequest {
 
     /// Whether to include AST context (scope chain, entity type) if available.
     /// Only affects chunks created by AST chunker.
+    /// NOTE: Accepted from JSON schema but not yet wired into handler (needs AST chunker integration).
     #[serde(rename = "includeAstContext", default)]
+    #[allow(dead_code)]
     pub include_ast_context: bool,
 }
 

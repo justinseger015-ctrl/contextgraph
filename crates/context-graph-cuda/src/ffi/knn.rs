@@ -380,7 +380,16 @@ pub fn compute_core_distances_gpu(
         unsafe { std::slice::from_raw_parts(vectors.as_ptr() as *const u8, vectors_size) };
     d_vectors.copy_from_host(vectors_bytes)?;
 
-    // Set up kernel parameters
+    // Set up kernel parameters (bounds-checked to prevent i32 truncation)
+    if n_points > i32::MAX as usize {
+        return Err(CudaError::CudaRuntimeError {
+            operation: format!(
+                "compute_core_distances_kernel: n_points {} exceeds i32::MAX ({})",
+                n_points, i32::MAX
+            ),
+            code: -1,
+        });
+    }
     let n_points_i32 = n_points as i32;
     let dimension_i32 = dimension as i32;
     let k_i32 = k as i32;
@@ -507,7 +516,20 @@ pub fn compute_pairwise_distances_gpu(
     ];
 
     // Launch kernel
+    // CRIT-07 FIX: Validate total_pairs fits in u32 BEFORE truncating.
+    // If total_pairs > u32::MAX, the old code silently wrapped, launching only
+    // a fraction of needed GPU threads and producing wrong results.
     let total_pairs = num_pairs as u64;
+    if total_pairs > u32::MAX as u64 {
+        return Err(CudaError::CudaRuntimeError {
+            operation: format!(
+                "compute_pairwise_distances_kernel: total_pairs {} exceeds u32::MAX ({})",
+                total_pairs,
+                u32::MAX
+            ),
+            code: -1,
+        });
+    }
     let num_blocks = ((total_pairs as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
     let ret = unsafe {
         cuLaunchKernel(

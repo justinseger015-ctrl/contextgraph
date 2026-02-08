@@ -82,7 +82,7 @@ impl Handlers {
         };
 
         // Parse and validate request
-        let request: GetMemoryNeighborsRequest = match serde_json::from_value(args.clone()) {
+        let request: GetMemoryNeighborsRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_memory_neighbors: Failed to parse request");
@@ -293,7 +293,7 @@ impl Handlers {
         };
 
         // Parse and validate request
-        let request: GetTypedEdgesRequest = match serde_json::from_value(args.clone()) {
+        let request: GetTypedEdgesRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_typed_edges: Failed to parse request");
@@ -363,19 +363,60 @@ impl Handlers {
                 }
             }
         } else {
-            // Query all typed edges from source
-            match edge_repo.get_typed_edges_from(memory_uuid) {
-                Ok(edges) => edges,
-                Err(e) => {
-                    error!(
-                        error = %e,
-                        memory_id = %memory_uuid,
-                        "get_typed_edges: EdgeRepository query failed - NO FALLBACKS"
-                    );
-                    return self.tool_error(
-                        id,
-                        &format!("EdgeRepository query failed: {}. NO FALLBACKS.", e),
-                    );
+            // HIGH-11 FIX: Respect direction parameter
+            match direction.as_str() {
+                "incoming" => {
+                    match edge_repo.get_typed_edges_to(memory_uuid) {
+                        Ok(edges) => edges,
+                        Err(e) => {
+                            error!(
+                                error = %e,
+                                memory_id = %memory_uuid,
+                                direction = "incoming",
+                                "get_typed_edges: Incoming edge query failed - NO FALLBACKS"
+                            );
+                            return self.tool_error(
+                                id,
+                                &format!("EdgeRepository incoming query failed: {}. NO FALLBACKS.", e),
+                            );
+                        }
+                    }
+                }
+                "both" => {
+                    let outgoing = match edge_repo.get_typed_edges_from(memory_uuid) {
+                        Ok(edges) => edges,
+                        Err(e) => {
+                            error!(error = %e, "get_typed_edges: Outgoing edge query failed");
+                            return self.tool_error(id, &format!("Outgoing query failed: {}", e));
+                        }
+                    };
+                    let incoming = match edge_repo.get_typed_edges_to(memory_uuid) {
+                        Ok(edges) => edges,
+                        Err(e) => {
+                            error!(error = %e, "get_typed_edges: Incoming edge query failed");
+                            return self.tool_error(id, &format!("Incoming query failed: {}", e));
+                        }
+                    };
+                    let mut combined = outgoing;
+                    combined.extend(incoming);
+                    combined
+                }
+                _ => {
+                    // "outgoing" or default
+                    match edge_repo.get_typed_edges_from(memory_uuid) {
+                        Ok(edges) => edges,
+                        Err(e) => {
+                            error!(
+                                error = %e,
+                                memory_id = %memory_uuid,
+                                "get_typed_edges: EdgeRepository query failed - NO FALLBACKS"
+                            );
+                            return self.tool_error(
+                                id,
+                                &format!("EdgeRepository query failed: {}. NO FALLBACKS.", e),
+                            );
+                        }
+                    }
                 }
             }
         };
@@ -499,7 +540,7 @@ impl Handlers {
         };
 
         // Parse and validate request
-        let request: TraverseGraphRequest = match serde_json::from_value(args.clone()) {
+        let request: TraverseGraphRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "traverse_graph: Failed to parse request");
@@ -787,7 +828,7 @@ impl Handlers {
         };
 
         // Parse and validate request
-        let request: GetUnifiedNeighborsRequest = match serde_json::from_value(args.clone()) {
+        let request: GetUnifiedNeighborsRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_unified_neighbors: Failed to parse request");

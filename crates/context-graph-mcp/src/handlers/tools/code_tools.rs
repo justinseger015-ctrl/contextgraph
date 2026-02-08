@@ -22,7 +22,7 @@
 //! the AST chunker. This provides more accurate results for code-specific queries.
 
 use serde_json::json;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions};
@@ -65,7 +65,7 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         // Parse and validate request
-        let request: SearchCodeRequest = match serde_json::from_value(args.clone()) {
+        let request: SearchCodeRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "search_code: Failed to parse request");
@@ -275,10 +275,18 @@ impl Handlers {
             .collect();
 
         // E7-WIRING: Optionally search CodeStore for code entities
+        // MED-21 FIX: Log errors instead of silently swallowing with .ok()
         let code_entities = if self.has_code_pipeline() {
-            self.search_code_entities(query, top_k, min_score, request.include_content)
+            match self
+                .search_code_entities(query, top_k, min_score, request.include_content)
                 .await
-                .ok()
+            {
+                Ok(entities) => Some(entities),
+                Err(e) => {
+                    warn!(error = %e, "search_code: CodeStore entity search failed");
+                    None
+                }
+            }
         } else {
             None
         };

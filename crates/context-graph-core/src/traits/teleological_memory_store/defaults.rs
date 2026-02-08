@@ -330,4 +330,12 @@ pub trait TeleologicalMemoryStoreDefaults: Send + Sync {
         let _ = limit; // Suppress unused warning
         Ok(Vec::new())
     }
+
+    async fn list_fingerprints_unbiased_default(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<crate::types::fingerprint::TeleologicalFingerprint>> {
+        let _ = limit;
+        Ok(Vec::new())
+    }
 }

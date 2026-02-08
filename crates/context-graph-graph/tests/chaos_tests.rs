@@ -11,14 +11,11 @@
 //! # Running Chaos Tests
 //!
 //! ```bash
-//! # Compile check only
-//! cargo test --test chaos_tests 2>&1 | head -20
-//!
-//! # Run all chaos tests (they are #[ignore] by default)
-//! cargo test --test chaos_tests -- --ignored --nocapture
+//! # Run all chaos tests (included in regular test suite)
+//! cargo test --test chaos_tests -- --nocapture
 //!
 //! # Run a specific test
-//! cargo test --test chaos_tests test_gpu_oom_detection -- --ignored --nocapture
+//! cargo test --test chaos_tests test_gpu_oom_detection -- --nocapture
 //! ```
 //!
 //! # Test Categories (16 tests total)

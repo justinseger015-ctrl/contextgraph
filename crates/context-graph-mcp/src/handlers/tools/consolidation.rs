@@ -4,10 +4,9 @@
 
 use serde::Deserialize;
 use serde_json::json;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use context_graph_core::traits::TeleologicalSearchOptions;
 use context_graph_core::types::audit::{AuditOperation, AuditRecord};
 
 use crate::handlers::Handlers;
@@ -26,7 +25,7 @@ struct MemoryId(Uuid);
 struct MemoryContent {
     id: MemoryId,
     embedding: Vec<f32>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Populated from storage; used by future text-based consolidation strategies
     text: String,
     alignment: f32,
     access_count: u32,
@@ -76,7 +75,6 @@ struct ConsolidationCandidate {
 struct ConsolidationConfig {
     enabled: bool,
     similarity_threshold: f32,
-    #[allow(dead_code)]
     max_daily_merges: usize,
     theta_diff_threshold: f32,
 }
@@ -125,6 +123,7 @@ impl ConsolidationService {
                     None
                 }
             })
+            .take(self.config.max_daily_merges)
             .collect()
     }
 }
@@ -214,44 +213,19 @@ impl Handlers {
             "trigger_consolidation: Parsed parameters"
         );
 
-        // Get fingerprints from store using semantic search with a broad query.
-        // This retrieves up to max_memories fingerprints for consolidation analysis.
-        //
-        // NOTE: Using semantic search with a generic query because:
-        // 1. search_text("") returns empty (empty strings produce no embeddings)
-        // 2. The store trait does not expose a list_all() or sample() method
-        //
-        // LIMITATION: The query "context memory patterns" may bias retrieval toward
-        // semantically similar memories. A future improvement would be to add a
-        // store.list_recent(limit) method for unbiased sampling.
-        let search_options = TeleologicalSearchOptions::quick(params.max_memories);
-
-        let broad_query = match self
-            .multi_array_provider
-            .embed_all("context memory patterns")
-            .await
-        {
-            Ok(output) => output.fingerprint,
-            Err(e) => {
-                error!(error = %e, "trigger_consolidation: Failed to generate broad query embedding");
-                return self.tool_error(
-                    id,
-                    &format!("Embedding error: Failed to generate query: {}", e),
-                );
-            }
-        };
-
-        let search_results = match self
+        // MED-13 FIX: Use unbiased fingerprint scan instead of semantic search
+        // with hardcoded "context memory patterns" query (which biased retrieval).
+        let unbiased_fingerprints = match self
             .teleological_store
-            .search_semantic(&broad_query, search_options)
+            .list_fingerprints_unbiased(params.max_memories)
             .await
         {
-            Ok(results) => results,
+            Ok(fps) => fps,
             Err(e) => {
                 error!(
                     error = %e,
                     max_memories = params.max_memories,
-                    "trigger_consolidation: Store access failed"
+                    "trigger_consolidation: Unbiased fingerprint scan failed"
                 );
                 return self.tool_error(
                     id,
@@ -261,23 +235,34 @@ impl Handlers {
         };
 
         debug!(
-            fingerprint_count = search_results.len(),
-            "trigger_consolidation: Retrieved fingerprints from store"
+            fingerprint_count = unbiased_fingerprints.len(),
+            "trigger_consolidation: Retrieved fingerprints (unbiased scan)"
         );
 
+        // Batch-fetch content text for consolidation analysis (MED-04 fix)
+        let fp_ids: Vec<Uuid> = unbiased_fingerprints.iter().map(|fp| fp.id).collect();
+        let content_texts = match self.teleological_store.get_content_batch(&fp_ids).await {
+            Ok(texts) => texts,
+            Err(e) => {
+                warn!(error = %e, "trigger_consolidation: Failed to fetch content texts, using empty strings");
+                vec![None; fp_ids.len()]
+            }
+        };
+
         // Convert TeleologicalFingerprint to MemoryContent
-        let mut memory_contents: Vec<MemoryContent> = Vec::with_capacity(search_results.len());
+        let mut memory_contents: Vec<MemoryContent> = Vec::with_capacity(unbiased_fingerprints.len());
         let mut fingerprints: Vec<(Uuid, chrono::DateTime<chrono::Utc>)> = Vec::new();
 
-        for result in search_results.iter() {
-            let fp = &result.fingerprint;
+        for (idx, fp) in unbiased_fingerprints.iter().enumerate() {
             // Use E1 (semantic 1024D) embedding for comparison
             let embedding = fp.semantic.e1_semantic.clone();
 
-            // Use result similarity as alignment proxy
-            let alignment = result.similarity;
+            // No semantic bias score - use 1.0 as neutral alignment
+            let alignment = 1.0;
 
-            let content = MemoryContent::new(MemoryId(fp.id), embedding, String::new(), alignment)
+            let text = content_texts.get(idx).and_then(|c| c.clone()).unwrap_or_default();
+
+            let content = MemoryContent::new(MemoryId(fp.id), embedding, text, alignment)
                 .with_access_count(fp.access_count as u32);
 
             memory_contents.push(content);
@@ -346,7 +331,10 @@ impl Handlers {
                 }
                 pairs
             }
-            _ => Vec::new(),
+            other => {
+                error!(strategy = %other, "trigger_consolidation: Unknown strategy passed validation");
+                return self.tool_error(id, &format!("Unknown strategy '{}'", other));
+            }
         };
 
         // Create consolidation service

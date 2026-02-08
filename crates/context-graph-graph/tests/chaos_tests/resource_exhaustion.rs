@@ -19,7 +19,6 @@ use context_graph_graph::index::gpu_memory::{GpuMemoryConfig, GpuMemoryManager, 
 /// EXPECTED: System remains responsive, new allocations fail gracefully
 /// SOURCE OF TRUTH: Stats work, allocate returns Err not panic
 #[test]
-#[ignore] // Chaos test - run with --ignored
 fn test_graceful_degradation_on_exhaustion() {
     println!("\n=== CHAOS TEST: Graceful Degradation ===");
 
@@ -87,7 +86,6 @@ fn test_graceful_degradation_on_exhaustion() {
 /// EXPECTED: Full capacity available after release
 /// SOURCE OF TRUTH: available == budget, new full allocation succeeds
 #[test]
-#[ignore]
 fn test_recovery_after_resource_release() {
     println!("\n=== CHAOS TEST: Recovery After Release ===");
 
@@ -147,7 +145,6 @@ fn test_recovery_after_resource_release() {
 /// EXPECTED: FaissIndex exhausted, WorkingMemory still works
 /// SOURCE OF TRUTH: Different categories operate independently
 #[test]
-#[ignore]
 fn test_category_budget_exhaustion() {
     println!("\n=== CHAOS TEST: Category Budget Exhaustion ===");
 
@@ -215,7 +212,6 @@ fn test_category_budget_exhaustion() {
 /// EXPECTED: Error messages include context (sizes, limits)
 /// SOURCE OF TRUTH: Error message content
 #[test]
-#[ignore]
 fn test_allocation_rejection_messages() {
     println!("\n=== CHAOS TEST: Allocation Rejection Messages ===");
 

@@ -173,6 +173,10 @@ pub struct CausalDiscoveryService {
 
     /// Shutdown signal sender.
     shutdown_tx: RwLock<Option<mpsc::Sender<()>>>,
+
+    /// CRIT-05 FIX: Store background task JoinHandle so panics are not silently lost
+    /// and stop() can await clean shutdown.
+    join_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl CausalDiscoveryService {
@@ -219,6 +223,7 @@ impl CausalDiscoveryService {
             status: RwLock::new(ServiceStatus::Stopped),
             last_result: RwLock::new(None),
             shutdown_tx: RwLock::new(None),
+            join_handle: RwLock::new(None),
         })
     }
 
@@ -273,6 +278,7 @@ impl CausalDiscoveryService {
             status: RwLock::new(ServiceStatus::Stopped),
             last_result: RwLock::new(None),
             shutdown_tx: RwLock::new(None),
+            join_handle: RwLock::new(None),
         }
     }
 
@@ -462,8 +468,9 @@ impl CausalDiscoveryService {
         }
 
         // Background loop
+        // CRIT-05 FIX: Store JoinHandle so panics are observable and stop() can await.
         let service = self.clone();
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = rx.recv() => {
@@ -483,6 +490,7 @@ impl CausalDiscoveryService {
             *status = ServiceStatus::Stopped;
             service.running.store(false, Ordering::SeqCst);
         });
+        *self.join_handle.write() = Some(handle);
 
         Ok(())
     }
@@ -501,15 +509,28 @@ impl CausalDiscoveryService {
         info!("Stopping causal discovery service");
 
         // Send shutdown signal
-        {
+        // CRIT-04 FIX: Clone sender out of the parking_lot RwLock scope
+        // before .await, since parking_lot guards are !Send.
+        let tx_clone = {
             let shutdown = self.shutdown_tx.read();
-            if let Some(tx) = shutdown.as_ref() {
-                let _ = tx.send(()).await;
-            }
+            shutdown.as_ref().cloned()
+        };
+        if let Some(tx) = tx_clone {
+            let _ = tx.send(()).await;
         }
 
         // Unload model
         self.llm.unload().await?;
+
+        // CRIT-05 FIX: Await the background task JoinHandle with timeout
+        // to detect panics and ensure clean shutdown.
+        if let Some(handle) = self.join_handle.write().take() {
+            match tokio::time::timeout(Duration::from_secs(10), handle).await {
+                Ok(Ok(())) => info!("Causal discovery background task completed normally"),
+                Ok(Err(e)) => tracing::error!("Causal discovery background task panicked: {:?}", e),
+                Err(_) => tracing::error!("Causal discovery background task did not shut down within 10 seconds"),
+            }
+        }
 
         Ok(())
     }

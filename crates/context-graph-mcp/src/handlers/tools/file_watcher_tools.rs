@@ -197,10 +197,10 @@ impl Handlers {
             }
         );
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("ListWatchedFilesResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 
     /// Handle get_file_watcher_stats tool call.
@@ -243,10 +243,10 @@ impl Handlers {
             response.total_files, response.total_chunks
         );
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("GetFileWatcherStatsResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 
     /// Handle delete_file_content tool call.
@@ -420,10 +420,10 @@ impl Handlers {
             message,
         };
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("DeleteFileContentResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 
     /// Handle reconcile_files tool call.
@@ -573,10 +573,10 @@ impl Handlers {
             dry_run: request.dry_run,
         };
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("ReconcileFilesResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 }
 

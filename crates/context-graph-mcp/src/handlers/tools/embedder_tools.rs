@@ -68,7 +68,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: SearchByEmbedderRequest = match serde_json::from_value(args.clone()) {
+        let request: SearchByEmbedderRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "search_by_embedder: Failed to parse request");
@@ -286,7 +286,7 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         // Parse and validate request to provide better error messages
-        let request: GetEmbedderClustersRequest = match serde_json::from_value(args.clone()) {
+        let request: GetEmbedderClustersRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_embedder_clusters: Failed to parse request");
@@ -348,7 +348,7 @@ impl Handlers {
         let start = Instant::now();
 
         // Parse and validate request
-        let request: CompareEmbedderViewsRequest = match serde_json::from_value(args.clone()) {
+        let request: CompareEmbedderViewsRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "compare_embedder_views: Failed to parse request");
@@ -424,6 +424,24 @@ impl Handlers {
             // Get the embedder index for extracting the correct score
             let embedder_index = embedder_id.to_index();
 
+            // HIGH-10 FIX: Batch fetch content if include_content=true
+            let memory_ids: Vec<Uuid> = candidates.iter().map(|c| c.fingerprint.id).collect();
+            let content_map: HashMap<Uuid, String> = if request.include_content && !memory_ids.is_empty() {
+                match self.teleological_store.get_content_batch(&memory_ids).await {
+                    Ok(contents) => {
+                        memory_ids.iter().zip(contents.into_iter())
+                            .filter_map(|(id, content)| content.map(|c| (*id, c)))
+                            .collect()
+                    }
+                    Err(e) => {
+                        error!(error = %e, "compare_embedder_views: Content retrieval FAILED");
+                        return self.tool_error(id, &format!("Content retrieval failed: {}", e));
+                    }
+                }
+            } else {
+                HashMap::new()
+            };
+
             for (rank, cand) in candidates.iter().enumerate() {
                 let memory_id = cand.fingerprint.id;
                 // Use the selected embedder's score from embedder_scores array
@@ -436,7 +454,7 @@ impl Handlers {
                     memory_id,
                     rank: rank + 1,
                     similarity: selected_score,
-                    content: None, // Content would be fetched if include_content=true
+                    content: content_map.get(&memory_id).cloned(),
                 });
             }
 
@@ -565,7 +583,7 @@ impl Handlers {
 
         // Parse request (optional params)
         let request: ListEmbedderIndexesRequest =
-            serde_json::from_value(args.clone()).unwrap_or(ListEmbedderIndexesRequest {
+            serde_json::from_value(args).unwrap_or(ListEmbedderIndexesRequest {
                 include_details: true,
             });
 
@@ -686,7 +704,7 @@ impl Handlers {
     ) -> JsonRpcResponse {
         let start = Instant::now();
 
-        let request: GetMemoryFingerprintRequest = match serde_json::from_value(args.clone()) {
+        let request: GetMemoryFingerprintRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_memory_fingerprint: Failed to parse request");
@@ -956,7 +974,7 @@ impl Handlers {
         id: Option<JsonRpcId>,
         args: serde_json::Value,
     ) -> JsonRpcResponse {
-        let request: CreateWeightProfileRequest = match serde_json::from_value(args.clone()) {
+        let request: CreateWeightProfileRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "create_weight_profile: Failed to parse request");
@@ -1045,7 +1063,7 @@ impl Handlers {
     ) -> JsonRpcResponse {
         let start = Instant::now();
 
-        let request: SearchCrossEmbedderAnomaliesRequest = match serde_json::from_value(args.clone()) {
+        let request: SearchCrossEmbedderAnomaliesRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "search_cross_embedder_anomalies: Failed to parse request");
@@ -1058,9 +1076,21 @@ impl Handlers {
             return self.tool_error(id, &e);
         }
 
-        // Safe: validate() above already confirmed both are valid E1-E13
-        let high_eid = EmbedderId::from_str(&request.high_embedder).expect("validated");
-        let low_eid = EmbedderId::from_str(&request.low_embedder).expect("validated");
+        // MED-22 FIX: Use proper error handling instead of .expect() - defense in depth
+        let high_eid = match EmbedderId::from_str(&request.high_embedder) {
+            Some(eid) => eid,
+            None => {
+                error!(embedder = %request.high_embedder, "search_cross_embedder_anomalies: Invalid high_embedder");
+                return self.tool_error(id, &format!("Invalid high_embedder '{}'", request.high_embedder));
+            }
+        };
+        let low_eid = match EmbedderId::from_str(&request.low_embedder) {
+            Some(eid) => eid,
+            None => {
+                error!(embedder = %request.low_embedder, "search_cross_embedder_anomalies: Invalid low_embedder");
+                return self.tool_error(id, &format!("Invalid low_embedder '{}'", request.low_embedder));
+            }
+        };
         let high_idx = high_eid.to_index();
         let low_idx = low_eid.to_index();
 
@@ -1210,7 +1240,7 @@ impl Handlers {
     ) -> JsonRpcResponse {
         let start = Instant::now();
 
-        let request: AdaptiveSearchRequest = match serde_json::from_value(args.clone()) {
+        let request: AdaptiveSearchRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "adaptive_search: Failed to parse request");

@@ -14,6 +14,7 @@ use context_graph_core::traits::{
     SequenceDirection, SequenceOptions, TeleologicalSearchOptions, TeleologicalSearchResult,
 };
 use context_graph_core::types::SourceMetadata;
+use context_graph_core::types::fingerprint::TeleologicalFingerprint;
 
 use crate::protocol::JsonRpcId;
 use crate::protocol::JsonRpcResponse;
@@ -323,31 +324,61 @@ impl Handlers {
             "get_session_timeline: Fetching session timeline"
         );
 
-        // Build search options for session timeline - use sequence_navigation profile
-        let options = TeleologicalSearchOptions::quick(limit + offset)
-            .with_session_filter(&session_id)
-            .with_weight_profile("sequence_navigation");
-
-        // Use a generic query to get all memories in the session
-        let query_embedding = match self.multi_array_provider.embed_all("session timeline").await {
-            Ok(output) => output.fingerprint,
-            Err(e) => {
-                error!(error = %e, "get_session_timeline: Query embedding FAILED");
-                return self.tool_error(id, &format!("Query embedding failed: {}", e));
-            }
-        };
-
-        let results: Vec<TeleologicalSearchResult> = match self
+        // MED-14 FIX: Use unbiased fingerprint scan instead of semantic search
+        // with hardcoded "session timeline" query (which biased retrieval).
+        // Fetch a generous batch and filter by session via source_metadata.
+        let all_fingerprints = match self
             .teleological_store
-            .search_semantic(&query_embedding, options)
+            .list_fingerprints_unbiased((limit + offset) * 10) // Over-fetch for session filter
             .await
         {
-            Ok(r) => r,
+            Ok(fps) => fps,
             Err(e) => {
-                error!(error = %e, "get_session_timeline: Search FAILED");
-                return self.tool_error(id, &format!("Search failed: {}", e));
+                error!(error = %e, "get_session_timeline: Unbiased scan FAILED");
+                return self.tool_error(id, &format!("Fingerprint scan failed: {}", e));
             }
         };
+
+        // Get source metadata to filter by session
+        let all_ids: Vec<uuid::Uuid> = all_fingerprints.iter().map(|fp| fp.id).collect();
+        let all_metadata = if !all_ids.is_empty() {
+            match self.teleological_store.get_source_metadata_batch(&all_ids).await {
+                Ok(m) => m,
+                Err(e) => {
+                    error!(error = %e, "get_session_timeline: Source metadata retrieval FAILED");
+                    return self.tool_error(id, &format!("Source metadata retrieval failed: {}", e));
+                }
+            }
+        } else {
+            vec![]
+        };
+
+        // Filter to only fingerprints in the requested session
+        let session_fingerprints: Vec<&TeleologicalFingerprint> = all_fingerprints
+            .iter()
+            .zip(all_metadata.iter())
+            .filter(|(_fp, meta): &(&TeleologicalFingerprint, &Option<SourceMetadata>)| {
+                meta.as_ref()
+                    .and_then(|m| m.session_id.as_deref())
+                    .map_or(false, |sid| sid == session_id)
+            })
+            .map(|(fp, _): (&TeleologicalFingerprint, &Option<SourceMetadata>)| fp)
+            .collect();
+
+        // Convert to TeleologicalSearchResult for compatibility with downstream code
+        let results: Vec<TeleologicalSearchResult> = session_fingerprints
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .map(|fp| TeleologicalSearchResult {
+                fingerprint: fp.clone(),
+                similarity: 1.0, // No semantic bias
+                embedder_scores: [0.0; 13],
+                stage_scores: [0.0; 5],
+                content: None,
+                temporal_breakdown: None,
+            })
+            .collect();
 
         // Get current sequence for position labels
         let current_seq = self.current_sequence();
@@ -688,31 +719,52 @@ impl Handlers {
             "compare_session_states: Comparing states"
         );
 
-        // Build search options to get all session memories
-        let options = TeleologicalSearchOptions::quick(COMPARISON_BATCH_SIZE)
-            .with_session_filter(&session_id)
-            .with_weight_profile("sequence_navigation");
-
-        // Use a generic query to get all memories in the session
-        let query_embedding = match self.multi_array_provider.embed_all("session state comparison").await {
-            Ok(output) => output.fingerprint,
-            Err(e) => {
-                error!(error = %e, "compare_session_states: Query embedding FAILED");
-                return self.tool_error(id, &format!("Query embedding failed: {}", e));
-            }
-        };
-
-        let all_memories: Vec<TeleologicalSearchResult> = match self
+        // MED-15 FIX: Use unbiased fingerprint scan instead of semantic search
+        // with hardcoded "session state comparison" query (which biased retrieval).
+        let all_fingerprints = match self
             .teleological_store
-            .search_semantic(&query_embedding, options)
+            .list_fingerprints_unbiased(COMPARISON_BATCH_SIZE * 10)
             .await
         {
-            Ok(r) => r,
+            Ok(fps) => fps,
             Err(e) => {
-                error!(error = %e, "compare_session_states: Search FAILED");
-                return self.tool_error(id, &format!("Search failed: {}", e));
+                error!(error = %e, "compare_session_states: Unbiased scan FAILED");
+                return self.tool_error(id, &format!("Fingerprint scan failed: {}", e));
             }
         };
+
+        // Filter by session using source metadata
+        let scan_ids: Vec<uuid::Uuid> = all_fingerprints.iter().map(|fp| fp.id).collect();
+        let scan_metadata = if !scan_ids.is_empty() {
+            match self.teleological_store.get_source_metadata_batch(&scan_ids).await {
+                Ok(m) => m,
+                Err(e) => {
+                    error!(error = %e, "compare_session_states: Source metadata retrieval FAILED");
+                    return self.tool_error(id, &format!("Source metadata retrieval failed: {}", e));
+                }
+            }
+        } else {
+            vec![]
+        };
+
+        let all_memories: Vec<TeleologicalSearchResult> = all_fingerprints
+            .iter()
+            .zip(scan_metadata.iter())
+            .filter(|(_fp, meta): &(&TeleologicalFingerprint, &Option<SourceMetadata>)| {
+                meta.as_ref()
+                    .and_then(|m| m.session_id.as_deref())
+                    .map_or(false, |sid| sid == session_id)
+            })
+            .take(COMPARISON_BATCH_SIZE)
+            .map(|(fp, _): (&TeleologicalFingerprint, &Option<SourceMetadata>)| TeleologicalSearchResult {
+                fingerprint: fp.clone(),
+                similarity: 1.0,
+                embedder_scores: [0.0; 13],
+                stage_scores: [0.0; 5],
+                content: None,
+                temporal_breakdown: None,
+            })
+            .collect();
 
         // Get source metadata for sequence filtering (FAIL FAST)
         let ids: Vec<uuid::Uuid> = all_memories.iter().map(|r| r.fingerprint.id).collect();

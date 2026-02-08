@@ -23,6 +23,8 @@ tokio = { version = "1.35", features = ["sync", "rt-multi-thread", "macros"] }
 async-trait = "0.1"
 tracing = "0.1"
 rayon = "1.10"
+# HIGH-17/MED-11 FIX: Non-poisonable RwLock to prevent cascading panics
+parking_lot = "0.12"
 sha2 = "0.10"
 # HNSW graph traversal - replaces brute force O(n) with O(log n)
 # TASK-STORAGE-P1-001

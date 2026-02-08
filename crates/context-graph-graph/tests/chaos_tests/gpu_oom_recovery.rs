@@ -19,7 +19,6 @@ use context_graph_graph::index::gpu_memory::{GpuMemoryConfig, GpuMemoryManager, 
 /// EXPECTED: Allocation returns Err(GraphError::GpuResourceAllocation)
 /// SOURCE OF TRUTH: manager.used() unchanged, result.is_err()
 #[test]
-#[ignore] // Chaos test - run with --ignored
 fn test_gpu_oom_detection() {
     println!("\n=== CHAOS TEST: GPU OOM Detection ===");
 
@@ -79,7 +78,6 @@ fn test_gpu_oom_detection() {
 /// EXPECTED: Retry succeeds after freeing memory
 /// SOURCE OF TRUTH: manager.used() == 0 after drop, retry succeeds
 #[test]
-#[ignore]
 fn test_gpu_oom_recovery_with_deallocation() {
     println!("\n=== CHAOS TEST: OOM Recovery After Deallocation ===");
 
@@ -131,7 +129,6 @@ fn test_gpu_oom_recovery_with_deallocation() {
 /// EXPECTED: FaissIndex exhausted, WorkingMemory still works
 /// SOURCE OF TRUTH: stats.category_usage shows isolation
 #[test]
-#[ignore]
 fn test_gpu_cascading_oom_prevention() {
     println!("\n=== CHAOS TEST: Cascading OOM Prevention ===");
 
@@ -194,7 +191,6 @@ fn test_gpu_cascading_oom_prevention() {
 /// EXPECTED: Error message includes requested size or available info
 /// SOURCE OF TRUTH: Error message content
 #[test]
-#[ignore]
 fn test_gpu_oom_error_propagation() {
     println!("\n=== CHAOS TEST: OOM Error Propagation ===");
 

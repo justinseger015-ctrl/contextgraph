@@ -607,19 +607,41 @@ async fn test_sparse_space_search() {
 async fn test_query_with_min_similarity_filter() {
     let (executor, _) = create_populated_executor(10).await;
 
-    let query = MultiEmbeddingQuery {
+    // HIGH-19 FIX: Baseline query with no similarity filter to compare against
+    let baseline_query = MultiEmbeddingQuery {
+        query_text: "test".to_string(),
+        min_similarity: 0.0,
+        ..Default::default()
+    };
+    let baseline_result = executor.execute(baseline_query).await.unwrap();
+
+    // Filtered query with very high threshold
+    let filtered_query = MultiEmbeddingQuery {
         query_text: "test".to_string(),
         min_similarity: 0.99, // Very high threshold
         ..Default::default()
     };
+    let filtered_result = executor.execute(filtered_query).await.unwrap();
 
-    let result = executor.execute(query).await.unwrap();
-    // With high threshold, most results should be filtered
-    // Exact count depends on test data similarity
+    // Baseline must return results for this test to be meaningful
+    assert!(
+        !baseline_result.results.is_empty(),
+        "Baseline query (min_similarity=0.0) must return results for comparison"
+    );
+
+    // With hash-based stub embeddings, cosine similarity between random vectors
+    // is near-zero, so 0.99 threshold should filter out all or nearly all results.
+    assert!(
+        filtered_result.results.len() < baseline_result.results.len(),
+        "min_similarity=0.99 must filter results: got {} filtered vs {} baseline",
+        filtered_result.results.len(),
+        baseline_result.results.len(),
+    );
 
     println!(
-        "[VERIFIED] min_similarity filter applied: {} results",
-        result.results.len()
+        "[VERIFIED] min_similarity filter applied: {} results (baseline: {})",
+        filtered_result.results.len(),
+        baseline_result.results.len()
     );
 }
 

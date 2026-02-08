@@ -68,7 +68,7 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         // Parse and validate request
-        let request: SearchByIntentRequest = match serde_json::from_value(args.clone()) {
+        let request: SearchByIntentRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "search_by_intent: Failed to parse request");
@@ -92,9 +92,22 @@ impl Handlers {
         let strategy = request.parse_strategy();
         let enable_rerank = matches!(strategy, SearchStrategy::Pipeline);
 
-        // Use multiplicative boost (ARCH-17) instead of linear blending
-        // E10 ENHANCES E1, it doesn't compete with it
-        let intent_boost_config = IntentBoostConfig::default();
+        // HIGH-09 FIX: Wire blendWithSemantic into IntentBoostConfig
+        // blendWithSemantic controls boost strength: 0.0 = disabled, 1.0 = full boost
+        let blend = request.blend_with_semantic;
+        let intent_boost_config = if blend <= 0.0 {
+            IntentBoostConfig::disabled()
+        } else {
+            let default = IntentBoostConfig::default();
+            IntentBoostConfig {
+                strong_e1_boost: default.strong_e1_boost * blend,
+                medium_e1_boost: default.medium_e1_boost * blend,
+                weak_e1_boost: default.weak_e1_boost * blend,
+                boost_range: default.boost_range * blend,
+                neutral_point: default.neutral_point,
+                enabled: true,
+            }
+        };
 
         info!(
             query_preview = %query_text.chars().take(50).collect::<String>(),
@@ -319,7 +332,7 @@ impl Handlers {
                 filtered_by_score: filtered_count,
                 // Multiplicative boost mode: E10 enhances E1, weights are not applicable
                 // Keeping fields for backward compatibility, but values reflect new approach
-                blend_weight: 0.0,  // Not used in multiplicative boost mode
+                blend_weight: blend,
                 e1_weight: 1.0,     // E1 is THE foundation (ARCH-12)
                 direction_modifier: 1.0, // No modifier - E5-base-v2 uses natural prefix asymmetry
             },

@@ -509,7 +509,7 @@ impl SearchByIntentRequest {
 
         // Validate strategy if provided
         if let Some(ref strat) = self.strategy {
-            let valid = ["multi_space", "pipeline"];
+            let valid = ["multi_space", "pipeline", "e1_only"];
             if !valid.contains(&strat.as_str()) {
                 return Err(format!(
                     "strategy must be one of {:?}, got '{}'",
@@ -519,11 +519,14 @@ impl SearchByIntentRequest {
         }
 
         // Validate weight profile if provided
+        // MED-12 FIX: Sync with all profiles defined in context_graph_core::weights
         if let Some(ref profile) = self.weight_profile {
             let valid = [
-                "intent_search", "intent_enhanced", "balanced", "semantic_search",
-                "code_search", "causal_reasoning", "fact_checking", "temporal_navigation",
-                "category_weighted", "sequence_navigation", "conversation_history",
+                "semantic_search", "causal_reasoning", "code_search", "fact_checking",
+                "intent_search", "intent_enhanced", "graph_reasoning", "temporal_navigation",
+                "sequence_navigation", "conversation_history", "category_weighted",
+                "typo_tolerant", "pipeline_stage1_recall", "pipeline_stage2_scoring",
+                "pipeline_full", "balanced",
             ];
             if !valid.contains(&profile.as_str()) {
                 return Err(format!(

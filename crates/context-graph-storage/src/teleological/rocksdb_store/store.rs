@@ -9,10 +9,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+// MED-11 FIX: parking_lot::RwLock is non-poisonable. One panic no longer
+// permanently breaks all subsequent operations via poison cascade.
+use parking_lot::RwLock;
 
 use bincode;
 use rocksdb::{Cache, ColumnFamily, Options, WriteBatch, DB};
+use serde_json;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -543,13 +547,16 @@ impl RocksDbTeleologicalStore {
                 }
             };
 
-            // Deserialize causal relationship
-            let relationship: CausalRelationship = match bincode::deserialize(&value) {
+            // Deserialize causal relationship (JSON format)
+            let relationship: CausalRelationship = match serde_json::from_slice(&value) {
                 Ok(r) => r,
                 Err(e) => {
-                    warn!(
-                        "Failed to deserialize causal relationship during E11 index rebuild: {}",
-                        e
+                    let key_id = (_key.len() == 16)
+                        .then(|| Uuid::from_slice(&_key).ok())
+                        .flatten();
+                    error!(
+                        "Failed to deserialize causal relationship {:?} during E11 index rebuild: {}",
+                        key_id, e
                     );
                     error_count += 1;
                     continue;
@@ -683,9 +690,7 @@ impl RocksDbTeleologicalStore {
         })?;
 
         // Invalidate count cache
-        if let Ok(mut count) = self.fingerprint_count.write() {
-            *count = None;
-        }
+        *self.fingerprint_count.write() = None;
 
         debug!("Stored fingerprint {} ({} bytes)", id, serialized.len());
         Ok(())
@@ -703,14 +708,10 @@ impl RocksDbTeleologicalStore {
 
     /// Check if an ID is soft-deleted.
     ///
-    /// # Panics
-    ///
-    /// Panics if the RwLock is poisoned, indicating a critical thread panic elsewhere.
-    /// This is intentional fail-fast behavior per project requirements.
+    /// MED-11 FIX: Uses parking_lot::RwLock which is non-poisonable.
     pub(crate) fn is_soft_deleted(&self, id: &Uuid) -> bool {
         self.soft_deleted
             .read()
-            .expect("soft_deleted RwLock poisoned - a thread panicked while holding this lock")
             .get(id)
             .copied()
             .unwrap_or(false) // Unknown IDs are not deleted
@@ -757,9 +758,7 @@ impl RocksDbTeleologicalStore {
     /// In normal operation, the cache is automatically invalidated
     /// when fingerprints are stored or deleted.
     pub fn invalidate_count_cache(&self) {
-        if let Ok(mut count) = self.fingerprint_count.write() {
-            *count = None;
-        }
+        *self.fingerprint_count.write() = None;
     }
 
     /// Health check: verify all column families are accessible.

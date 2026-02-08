@@ -230,6 +230,13 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         self.scan_fingerprints_for_clustering_async(limit).await
     }
 
+    async fn list_fingerprints_unbiased(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<context_graph_core::types::fingerprint::TeleologicalFingerprint>> {
+        self.list_fingerprints_unbiased_async(limit).await
+    }
+
     // ==================== Causal Relationship Storage ====================
 
     async fn store_causal_relationship(

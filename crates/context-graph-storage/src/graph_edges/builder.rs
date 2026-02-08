@@ -341,13 +341,16 @@ impl BackgroundGraphBuilder {
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
         // Update stats
+        // CRIT-03 FIX: Acquire pending_queue FIRST, then stats, to match
+        // the lock ordering in enqueue() and prevent ABBA deadlock.
         {
+            let current_queue_size = self.pending_queue.lock().await.len();
             let mut stats = self.stats.lock().await;
             stats.total_processed += processed_count;
             stats.batches_processed += 1;
             stats.total_knn_edges += knn_edges_created;
             stats.total_typed_edges += typed_edges.len();
-            stats.queue_size = self.pending_queue.lock().await.len();
+            stats.queue_size = current_queue_size;
             stats.last_batch_ms = elapsed_ms;
         }
 

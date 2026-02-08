@@ -24,7 +24,6 @@ const CONCURRENT_WRITERS: usize = 100;
 /// EXPECTED: Some allocations succeed, no panics, no deadlocks
 /// SOURCE OF TRUTH: All threads complete, stats.allocation_count consistent
 #[test]
-#[ignore] // Chaos test - run with --ignored
 fn test_100_concurrent_writers() {
     println!("\n=== CHAOS TEST: 100 Concurrent Writers ===");
 
@@ -107,7 +106,6 @@ fn test_100_concurrent_writers() {
 /// EXPECTED: All threads complete without panic
 /// SOURCE OF TRUTH: All threads return true (completed)
 #[test]
-#[ignore]
 fn test_concurrent_read_write_mix() {
     println!("\n=== CHAOS TEST: Concurrent Read/Write Mix ===");
 
@@ -187,7 +185,6 @@ fn test_concurrent_read_write_mix() {
 /// EXPECTED: At most 2 succeed (10KB / 5KB = 2)
 /// SOURCE OF TRUTH: successes <= 2, manager.used() <= budget
 #[test]
-#[ignore]
 fn test_concurrent_allocation_contention() {
     println!("\n=== CHAOS TEST: Concurrent Allocation Contention ===");
 
@@ -262,7 +259,6 @@ fn test_concurrent_allocation_contention() {
 /// EXPECTED: Some succeed, no panics, system remains stable
 /// SOURCE OF TRUTH: used == 0 after release, some herd allocations succeed
 #[test]
-#[ignore]
 fn test_thundering_herd_scenario() {
     println!("\n=== CHAOS TEST: Thundering Herd ===");
 

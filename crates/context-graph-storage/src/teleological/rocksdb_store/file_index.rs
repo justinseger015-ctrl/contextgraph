@@ -63,7 +63,7 @@ impl RocksDbTeleologicalStore {
                 match item {
                     Ok((key, value)) => {
                         // Deserialize the entry
-                        match bincode::deserialize::<FileIndexEntry>(&value) {
+                        match serde_json::from_slice::<FileIndexEntry>(&value) {
                             Ok(entry) => {
                                 entries.push(entry);
                             }
@@ -117,7 +117,7 @@ impl RocksDbTeleologicalStore {
 
         match self.db.get_cf(cf, key) {
             Ok(Some(bytes)) => {
-                let entry: FileIndexEntry = bincode::deserialize(&bytes).map_err(|e| {
+                let entry: FileIndexEntry = serde_json::from_slice(&bytes).map_err(|e| {
                     error!(
                         "FILE_INDEX ERROR: Failed to deserialize entry for '{}': {}. \
                          Data corruption detected.",
@@ -170,7 +170,7 @@ impl RocksDbTeleologicalStore {
         // Get existing entry or create new one
         let mut entry = match self.db.get_cf(cf, key) {
             Ok(Some(bytes)) => {
-                bincode::deserialize::<FileIndexEntry>(&bytes).map_err(|e| {
+                serde_json::from_slice::<FileIndexEntry>(&bytes).map_err(|e| {
                     error!(
                         "FILE_INDEX ERROR: Failed to deserialize entry for '{}': {}",
                         file_path, e
@@ -198,7 +198,7 @@ impl RocksDbTeleologicalStore {
         entry.add_fingerprint(fingerprint_id);
 
         // Serialize and store
-        let bytes = bincode::serialize(&entry).map_err(|e| {
+        let bytes = serde_json::to_vec(&entry).map_err(|e| {
             error!(
                 "FILE_INDEX ERROR: Failed to serialize entry for '{}': {}",
                 file_path, e
@@ -247,7 +247,7 @@ impl RocksDbTeleologicalStore {
         // Get existing entry
         let mut entry = match self.db.get_cf(cf, key) {
             Ok(Some(bytes)) => {
-                bincode::deserialize::<FileIndexEntry>(&bytes).map_err(|e| {
+                serde_json::from_slice::<FileIndexEntry>(&bytes).map_err(|e| {
                     error!(
                         "FILE_INDEX ERROR: Failed to deserialize entry for '{}': {}",
                         file_path, e
@@ -301,7 +301,7 @@ impl RocksDbTeleologicalStore {
             info!("Deleted empty file index entry for '{}'", file_path);
         } else {
             // Update the entry
-            let bytes = bincode::serialize(&entry).map_err(|e| {
+            let bytes = serde_json::to_vec(&entry).map_err(|e| {
                 error!(
                     "FILE_INDEX ERROR: Failed to serialize entry for '{}': {}",
                     file_path, e
@@ -345,7 +345,7 @@ impl RocksDbTeleologicalStore {
         // Get existing entry to count fingerprints
         let count = match self.db.get_cf(cf, key) {
             Ok(Some(bytes)) => {
-                let entry: FileIndexEntry = bincode::deserialize(&bytes).map_err(|e| {
+                let entry: FileIndexEntry = serde_json::from_slice(&bytes).map_err(|e| {
                     error!(
                         "FILE_INDEX ERROR: Failed to deserialize entry for '{}': {}",
                         file_path, e
@@ -432,15 +432,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_file_index_entry_serialization_bincode() {
+    fn test_file_index_entry_serialization_json() {
         let mut entry = FileIndexEntry::new("/test/path.md".to_string());
         entry.add_fingerprint(Uuid::new_v4());
         entry.add_fingerprint(Uuid::new_v4());
 
-        // Test bincode serialization (used for RocksDB storage)
-        let bytes = bincode::serialize(&entry).expect("Serialization should succeed");
+        // Test JSON serialization (used for RocksDB storage)
+        let bytes = serde_json::to_vec(&entry).expect("Serialization should succeed");
         let deserialized: FileIndexEntry =
-            bincode::deserialize(&bytes).expect("Deserialization should succeed");
+            serde_json::from_slice(&bytes).expect("Deserialization should succeed");
 
         assert_eq!(deserialized.file_path, entry.file_path);
         assert_eq!(deserialized.fingerprint_count(), entry.fingerprint_count());

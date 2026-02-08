@@ -547,6 +547,22 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         limit: Option<usize>,
     ) -> CoreResult<Vec<(uuid::Uuid, [Vec<f32>; 13])>>;
 
+    /// List fingerprints without semantic bias (MED-13/14/15 root cause fix).
+    ///
+    /// Scans CF_FINGERPRINTS directly, returning full TeleologicalFingerprint
+    /// objects ordered by storage key (insertion order). This avoids the
+    /// semantic bias introduced by embedding a hardcoded query string.
+    ///
+    /// # Arguments
+    /// * `limit` - Maximum number of fingerprints to return
+    ///
+    /// # Returns
+    /// Vector of TeleologicalFingerprint (skipping soft-deleted entries).
+    async fn list_fingerprints_unbiased(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<TeleologicalFingerprint>>;
+
     // =========================================================================
     // Causal Relationship Storage (CF_CAUSAL_RELATIONSHIPS)
     // =========================================================================

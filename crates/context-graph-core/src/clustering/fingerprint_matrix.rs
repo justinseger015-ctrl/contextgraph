@@ -287,7 +287,8 @@ impl FingerprintMatrix {
         values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         let mut max_gap = 0.0f32;
         let mut gap_position = 0.5f32;
-        for i in 0..(values.len() - 1) {
+        // MED-20 FIX: Use saturating_sub to prevent usize underflow on empty
+        for i in 0..values.len().saturating_sub(1) {
             let gap = values[i + 1] - values[i];
             if gap > max_gap {
                 max_gap = gap;

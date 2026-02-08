@@ -398,7 +398,7 @@ pub const CF_EMB_4: &str = "emb_4";
 pub const CF_EMB_5: &str = "emb_5";
 
 /// Column family for E7_Code (ModelId=6) quantized embeddings.
-/// Quantization: PQ-8 (8 bytes compressed from 256D).
+/// Quantization: PQ-8 (8 bytes compressed from 1536D).
 pub const CF_EMB_6: &str = "emb_6";
 
 /// Column family for E8_Graph (ModelId=7) quantized embeddings.
@@ -414,7 +414,7 @@ pub const CF_EMB_8: &str = "emb_8";
 pub const CF_EMB_9: &str = "emb_9";
 
 /// Column family for E11_Entity (ModelId=10) quantized embeddings.
-/// Quantization: Float8E4M3 (384 bytes from 384D).
+/// Quantization: Float8E4M3 (768 bytes from 768D).
 pub const CF_EMB_10: &str = "emb_10";
 
 /// Column family for E12_LateInteraction (ModelId=11) quantized embeddings.
@@ -1023,9 +1023,9 @@ pub fn quantized_embedder_cf_options(cache: &Cache) -> Options {
     opts
 }
 
-/// Get all 24 teleological column family descriptors.
+/// Get all 21 teleological column family descriptors.
 ///
-/// Returns 24 descriptors: 5 original + 3 teleological + 1 content + 1 source_metadata
+/// Returns 21 descriptors: 5 original + 1 E6 inverted + 1 content + 1 source_metadata
 /// + 1 file_index + 1 topic_portfolio + 1 e12_late_interaction + 1 entity_provenance
 /// + 2 audit + 2 lifecycle provenance + 2 phase 5 + 1 phase 6 + 1 custom weight profiles + 2 legacy.
 ///
@@ -1460,7 +1460,7 @@ pub fn get_causal_cf_descriptors(cache: &Cache) -> Vec<ColumnFamilyDescriptor> {
 
 /// Get ALL column family descriptors (teleological + embedder + code + causal).
 ///
-/// Returns 44 descriptors total: 24 teleological + 13 quantized embedder + 5 code + 2 causal.
+/// Returns 41 descriptors total: 21 teleological + 13 quantized embedder + 5 code + 2 causal.
 ///
 /// # Arguments
 /// * `cache` - Shared block cache (recommended: 256MB via `Cache::new_lru_cache`)

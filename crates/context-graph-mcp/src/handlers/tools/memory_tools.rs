@@ -84,7 +84,6 @@ pub enum IntentMode {
 mod intent_mod {
     pub const INTENT_TO_CONTEXT: f32 = 1.2;
     pub const CONTEXT_TO_INTENT: f32 = 0.8;
-    pub const SAME_DIRECTION: f32 = 1.0;
 }
 
 /// Detect intent mode from query text.
@@ -493,6 +492,9 @@ impl Handlers {
                     use context_graph_core::types::audit::EmbeddingVersionRecord;
                     use std::collections::HashMap;
 
+                    // NOTE: These are static descriptors, not dynamic model versions.
+                    // The embedding provider does not currently expose runtime model metadata.
+                    // Stale embedding detection requires the provider to report version changes.
                     let mut embedder_versions = HashMap::new();
                     embedder_versions.insert("E1".to_string(), "pretrained-semantic-1024d".to_string());
                     embedder_versions.insert("E2".to_string(), "temporal-recent-decay".to_string());
@@ -1090,7 +1092,12 @@ impl Handlers {
         }
 
         // GAP-1: Explicit custom weights override everything (including custom profiles)
+        // HIGH-08 FIX: Validate weights BEFORE applying (AP-NAV-02)
         if let Some(weights) = custom_weights {
+            if let Err(e) = context_graph_core::weights::validate_weights(&weights) {
+                error!(error = %e, "search_graph: invalid custom weights");
+                return self.tool_error(id, &format!("Invalid custom weights: {}", e));
+            }
             options = options.with_custom_weights(weights);
         }
 
@@ -1320,6 +1327,25 @@ impl Handlers {
 
                 // Truncate to requested top_k after reranking
                 results.truncate(top_k);
+
+                // CRIT-01 FIX: Wire record_access() into search results path.
+                // This increments access_count and updates accessed_at for each
+                // returned fingerprint, enabling memory decay (BM25 importance).
+                // Non-blocking: failures logged but don't fail the search.
+                for result in &mut results {
+                    result.fingerprint.record_access();
+                    if let Err(e) = self
+                        .teleological_store
+                        .update(result.fingerprint.clone())
+                        .await
+                    {
+                        warn!(
+                            error = %e,
+                            memory_id = %result.fingerprint.id,
+                            "search_graph: Failed to persist access count update"
+                        );
+                    }
+                }
 
                 // Collect IDs for batch operations
                 let ids: Vec<uuid::Uuid> = results.iter().map(|r| r.fingerprint.id).collect();

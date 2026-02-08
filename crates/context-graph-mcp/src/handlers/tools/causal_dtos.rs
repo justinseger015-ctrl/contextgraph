@@ -573,86 +573,6 @@ pub struct SourceInfo {
     pub display_string: Option<String>,
 }
 
-impl SourceInfo {
-    /// Create SourceInfo for an MDFileChunk source with line numbers.
-    pub fn from_md_file(
-        file_path: String,
-        start_line: Option<u32>,
-        end_line: Option<u32>,
-        chunk_index: Option<u32>,
-        total_chunks: Option<u32>,
-    ) -> Self {
-        let display = Self::format_display_string(
-            &file_path,
-            start_line,
-            end_line,
-            chunk_index,
-            total_chunks,
-        );
-
-        Self {
-            source_type: "MDFileChunk".to_string(),
-            file_path: Some(file_path),
-            start_line,
-            end_line,
-            chunk_index,
-            total_chunks,
-            hook_type: None,
-            tool_name: None,
-            display_string: Some(display),
-        }
-    }
-
-    /// Create SourceInfo for a HookDescription source.
-    pub fn from_hook(hook_type: String, tool_name: Option<String>) -> Self {
-        let display = match &tool_name {
-            Some(tool) => format!("hook:{}:{}", hook_type, tool),
-            None => format!("hook:{}", hook_type),
-        };
-
-        Self {
-            source_type: "HookDescription".to_string(),
-            file_path: None,
-            start_line: None,
-            end_line: None,
-            chunk_index: None,
-            total_chunks: None,
-            hook_type: Some(hook_type),
-            tool_name,
-            display_string: Some(display),
-        }
-    }
-
-    /// Format a display string for file sources.
-    ///
-    /// Examples:
-    /// - "/docs/guide.md:15-42 (chunk 3/5)"
-    /// - "/docs/guide.md:15-42"
-    /// - "/docs/guide.md (chunk 3/5)"
-    fn format_display_string(
-        file_path: &str,
-        start_line: Option<u32>,
-        end_line: Option<u32>,
-        chunk_index: Option<u32>,
-        total_chunks: Option<u32>,
-    ) -> String {
-        let mut display = file_path.to_string();
-
-        // Add line range if available
-        if let (Some(start), Some(end)) = (start_line, end_line) {
-            display = format!("{}:{}-{}", display, start, end);
-        } else if let Some(start) = start_line {
-            display = format!("{}:{}", display, start);
-        }
-
-        // Add chunk info if available
-        if let (Some(idx), Some(total)) = (chunk_index, total_chunks) {
-            display = format!("{} (chunk {}/{})", display, idx + 1, total);
-        }
-
-        display
-    }
-}
 
 /// Response for search_causes tool.
 #[derive(Debug, Clone, Serialize)]
@@ -772,14 +692,6 @@ pub struct CausalChainHop {
 
 impl CausalChainHop {
     /// Create a new hop with computed cumulative strength.
-    ///
-    /// # Arguments
-    /// * `memory_id` - UUID of the memory
-    /// * `hop_index` - 0-based index
-    /// * `base_similarity` - Raw cosine similarity
-    /// * `asymmetric_similarity` - E5 asymmetric similarity
-    /// * `prior_strength` - Cumulative strength from prior hops (1.0 for first hop)
-    /// * `causal_direction` - Direction of this memory
     pub fn new(
         memory_id: Uuid,
         hop_index: usize,
@@ -804,7 +716,8 @@ impl CausalChainHop {
         }
     }
 
-    /// Add content to this hop.
+    /// Add content to this hop (used in tests).
+    #[cfg(test)]
     pub fn with_content(mut self, content: String) -> Self {
         self.content = Some(content);
         self
@@ -852,8 +765,9 @@ pub struct CausalChainMetadata {
     pub total_candidates_evaluated: usize,
 }
 
+#[cfg(test)]
 impl GetCausalChainResponse {
-    /// Create an empty response (no chain found).
+    /// Create an empty response (no chain found). Used in tests.
     pub fn empty(anchor_id: Uuid, direction: &str, max_hops: usize, min_similarity: f32) -> Self {
         Self {
             anchor_id,
@@ -876,7 +790,6 @@ impl GetCausalChainResponse {
         if self.chain.is_empty() {
             return 0.0;
         }
-        // The last hop's cumulative_strength is the total score
         self.chain.last().map(|h| h.cumulative_strength).unwrap_or(0.0)
     }
 }

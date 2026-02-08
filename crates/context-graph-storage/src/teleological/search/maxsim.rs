@@ -343,7 +343,7 @@ pub fn compute_maxsim_direct(query_tokens: &[Vec<f32>], doc_tokens: &[Vec<f32>])
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::sync::RwLock;
+    use parking_lot::RwLock;
     use std::time::Instant;
 
     // In-memory mock for testing
@@ -359,13 +359,13 @@ mod tests {
         }
 
         fn insert(&self, id: Uuid, tokens: Vec<Vec<f32>>) {
-            self.tokens.write().unwrap().insert(id, tokens);
+            self.tokens.write().insert(id, tokens);
         }
     }
 
     impl TokenStorage for MockTokenStorage {
         fn get_tokens(&self, id: Uuid) -> Option<Vec<Vec<f32>>> {
-            self.tokens.read().unwrap().get(&id).cloned()
+            self.tokens.read().get(&id).cloned()
         }
     }
 

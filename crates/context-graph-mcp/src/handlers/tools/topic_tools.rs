@@ -196,10 +196,10 @@ impl Handlers {
         if tier == 0 {
             debug!("get_topic_portfolio: Tier 0 - returning empty portfolio");
             let response = TopicPortfolioResponse::empty_tier_0();
-            return self.tool_result(
-                id,
-                serde_json::to_value(response).expect("TopicPortfolioResponse should serialize"),
-            );
+            return match serde_json::to_value(response) {
+                Ok(v) => self.tool_result(id, v),
+                Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+            };
         }
 
         // TASK-INTEG-TOPIC: Get topics from cluster_manager
@@ -231,10 +231,10 @@ impl Handlers {
             total_topics
         );
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("TopicPortfolioResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 
     /// Handle get_topic_stability tool call.
@@ -305,10 +305,10 @@ impl Handlers {
             "get_topic_stability: Returning stability response"
         );
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("TopicStabilityResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 
     /// Handle detect_topics tool call.
@@ -511,10 +511,10 @@ impl Handlers {
                     )),
                 };
 
-                self.tool_result(
-                    id,
-                    serde_json::to_value(response).expect("DetectTopicsResponse should serialize"),
-                )
+                match serde_json::to_value(response) {
+                    Ok(v) => self.tool_result(id, v),
+                    Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+                }
             }
             Err(e) => {
                 self.tool_error(id, &format!("Clustering error: {}", e))
@@ -615,10 +615,10 @@ impl Handlers {
                 "get_divergence_alerts: Insufficient memories for divergence detection"
             );
             let response = DivergenceAlertsResponse::no_alerts();
-            return self.tool_result(
-                id,
-                serde_json::to_value(response).expect("DivergenceAlertsResponse should serialize"),
-            );
+            return match serde_json::to_value(response) {
+                Ok(v) => self.tool_result(id, v),
+                Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+            };
         }
 
         // Step 3: Sort by created_at descending (most recent first)
@@ -702,10 +702,10 @@ impl Handlers {
             response.severity
         );
 
-        self.tool_result(
-            id,
-            serde_json::to_value(response).expect("DivergenceAlertsResponse should serialize"),
-        )
+        match serde_json::to_value(response) {
+            Ok(v) => self.tool_result(id, v),
+            Err(e) => self.tool_error(id, &format!("Response serialization failed: {}", e)),
+        }
     }
 }
 

@@ -194,12 +194,18 @@ impl Handlers {
             };
 
             // Get source metadata (optional)
-            let source_metadata = self
+            // MED-21 FIX: Log errors instead of silently swallowing with .ok()
+            let source_metadata = match self
                 .teleological_store
                 .get_source_metadata(*uuid)
                 .await
-                .ok()
-                .flatten();
+            {
+                Ok(meta) => meta,
+                Err(e) => {
+                    warn!(error = %e, memory_id = %uuid, "trigger_causal_discovery: Failed to read source_metadata");
+                    None
+                }
+            };
 
             memories_for_analysis.push(MemoryForGraphAnalysis {
                 id: *uuid,

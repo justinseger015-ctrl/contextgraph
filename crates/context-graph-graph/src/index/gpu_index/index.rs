@@ -185,11 +185,23 @@ impl FaissGpuIndex {
     }
 
     /// Get total number of vectors in index (from FAISS).
+    ///
+    /// # HIGH-16 FIX
+    /// FAISS returns `i64`. Negative values (e.g. -1) indicate errors.
+    /// Old code cast directly to `usize`, turning -1 into `usize::MAX`.
     #[inline]
     pub fn ntotal(&self) -> usize {
         // SAFETY: index_ptr is valid.
         let count = unsafe { faiss_Index_ntotal(self.index_ptr.as_ptr()) };
-        count as usize
+        if count < 0 {
+            tracing::error!(
+                raw_count = count,
+                "FAISS ntotal returned negative value (error signal)"
+            );
+            0
+        } else {
+            count as usize
+        }
     }
 
     /// Get the number of vectors tracked by this wrapper.

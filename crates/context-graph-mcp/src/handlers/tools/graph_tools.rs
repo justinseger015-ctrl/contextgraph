@@ -340,7 +340,7 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         // Parse and validate request
-        let request: GetGraphPathRequest = match serde_json::from_value(args.clone()) {
+        let request: GetGraphPathRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "get_graph_path: Failed to parse request");
@@ -589,7 +589,7 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         // Parse and validate request
-        let request: DiscoverGraphRelationshipsRequest = match serde_json::from_value(args.clone()) {
+        let request: DiscoverGraphRelationshipsRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "discover_graph_relationships: Failed to parse request");
@@ -673,12 +673,18 @@ impl Handlers {
             };
 
             // Get source metadata (optional - for source_type and file_path)
-            let source_metadata = self
+            // MED-21 FIX: Log errors instead of silently swallowing with .ok()
+            let source_metadata = match self
                 .teleological_store
                 .get_source_metadata(*uuid)
                 .await
-                .ok()
-                .flatten();
+            {
+                Ok(meta) => meta,
+                Err(e) => {
+                    warn!(error = %e, memory_id = %uuid, "discover_graph_relationships: Failed to read source_metadata");
+                    None
+                }
+            };
 
             memories_for_analysis.push(MemoryForGraphAnalysis {
                 id: *uuid,
@@ -824,7 +830,7 @@ impl Handlers {
         args: serde_json::Value,
     ) -> JsonRpcResponse {
         // Parse and validate request
-        let request: ValidateGraphLinkRequest = match serde_json::from_value(args.clone()) {
+        let request: ValidateGraphLinkRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
                 error!(error = %e, "validate_graph_link: Failed to parse request");

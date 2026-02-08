@@ -41,7 +41,9 @@
 //! - [Elastic Weighted RRF](https://www.elastic.co/blog/weighted-reciprocal-rank-fusion-rrf)
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+// HIGH-17/MED-11 FIX: parking_lot::RwLock is non-poisonable.
+use parking_lot::RwLock;
 
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -98,14 +100,10 @@ fn get_fingerprint_raw_sync(db: &DB, id: Uuid) -> Result<Option<Vec<u8>>, Teleol
 /// Check if an ID is soft-deleted (sync version for spawn_blocking).
 /// Takes Arc<RwLock<HashMap>> to avoid expensive HashMap cloning before spawn_blocking.
 ///
-/// # Panics
-///
-/// Panics if the RwLock is poisoned, indicating a critical thread panic elsewhere.
-/// This is intentional fail-fast behavior per project requirements.
+/// MED-11 FIX: Uses parking_lot::RwLock (non-poisonable).
 fn is_soft_deleted_sync(soft_deleted: &Arc<RwLock<HashMap<Uuid, bool>>>, id: &Uuid) -> bool {
     soft_deleted
         .read()
-        .expect("soft_deleted RwLock poisoned - a thread panicked while holding this lock")
         .get(id)
         .copied()
         .unwrap_or(false) // False here is correct: unknown IDs are not deleted

@@ -450,6 +450,24 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
         Ok(results)
     }
 
+    async fn list_fingerprints_unbiased(
+        &self,
+        limit: usize,
+    ) -> CoreResult<Vec<TeleologicalFingerprint>> {
+        debug!(limit = limit, "Listing fingerprints (unbiased) from in-memory store");
+        let mut results = Vec::new();
+        for entry in self.data.iter() {
+            if self.deleted.contains_key(entry.key()) {
+                continue;
+            }
+            results.push(entry.value().clone());
+            if results.len() >= limit {
+                break;
+            }
+        }
+        Ok(results)
+    }
+
     // ==================== Causal Relationship Storage ====================
 
     async fn store_causal_relationship(

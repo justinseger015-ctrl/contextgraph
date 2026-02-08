@@ -391,6 +391,35 @@ impl EdgeRepository {
         Ok(edges)
     }
 
+    /// Get all typed edges pointing TO a target node (incoming edges).
+    ///
+    /// HIGH-11 FIX: No secondary index exists for target lookups, so this
+    /// performs a full CF scan and filters by target UUID in deserialized edges.
+    /// This is O(n) over all typed edges.
+    pub fn get_typed_edges_to(&self, target: Uuid) -> GraphEdgeStorageResult<Vec<TypedEdge>> {
+        let cf = self.db.cf_handle(cf_names::TYPED_EDGES).ok_or(
+            GraphEdgeStorageError::ColumnFamilyNotFound {
+                name: cf_names::TYPED_EDGES,
+            },
+        )?;
+
+        let iter = self.db.iterator_cf(&cf, IteratorMode::Start);
+
+        let mut edges = Vec::new();
+        for item in iter {
+            let (_key, value) = item.map_err(|e| {
+                GraphEdgeStorageError::rocksdb("get_typed_edges_to", cf_names::TYPED_EDGES, e)
+            })?;
+
+            let edge = deserialize_typed_edge(&value)?;
+            if edge.target() == target {
+                edges.push(edge);
+            }
+        }
+
+        Ok(edges)
+    }
+
     // =========================================================================
     // Batch Operations
     // =========================================================================

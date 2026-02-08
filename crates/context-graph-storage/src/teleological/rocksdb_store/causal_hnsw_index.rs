@@ -20,7 +20,8 @@
 //! - E11 def: V_factuality 768D per constitution.yaml
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+// HIGH-17 FIX: parking_lot::RwLock is non-poisonable.
+use parking_lot::RwLock;
 
 use tracing::{debug, error, info};
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
@@ -168,10 +169,10 @@ impl CausalE11Index {
             }
         }
 
-        let mut id_to_key = self.id_to_key.write().unwrap();
-        let mut key_to_id = self.key_to_id.write().unwrap();
-        let index = self.index.write().unwrap();
-        let mut next_key = self.next_key.write().unwrap();
+        let mut id_to_key = self.id_to_key.write();
+        let mut key_to_id = self.key_to_id.write();
+        let index = self.index.write();
+        let mut next_key = self.next_key.write();
 
         // Handle duplicate - remove old mapping
         if let Some(&old_key) = id_to_key.get(&id) {
@@ -238,8 +239,8 @@ impl CausalE11Index {
             )));
         }
 
-        let index = self.index.read().unwrap();
-        let key_to_id = self.key_to_id.read().unwrap();
+        let index = self.index.read();
+        let key_to_id = self.key_to_id.read();
 
         if key_to_id.is_empty() {
             return Ok(Vec::new());
@@ -290,8 +291,8 @@ impl CausalE11Index {
     /// The vector remains in the usearch index (usearch doesn't support deletion)
     /// but won't be returned in search results.
     pub fn remove(&self, id: Uuid) -> bool {
-        let mut id_to_key = self.id_to_key.write().unwrap();
-        let mut key_to_id = self.key_to_id.write().unwrap();
+        let mut id_to_key = self.id_to_key.write();
+        let mut key_to_id = self.key_to_id.write();
 
         if let Some(key) = id_to_key.remove(&id) {
             key_to_id.remove(&key);
@@ -307,7 +308,7 @@ impl CausalE11Index {
     /// This counts only non-removed entries. The usearch index may contain
     /// more vectors due to soft-deletion.
     pub fn len(&self) -> usize {
-        self.key_to_id.read().unwrap().len()
+        self.key_to_id.read().len()
     }
 
     /// Check if the index is empty.
@@ -317,14 +318,14 @@ impl CausalE11Index {
 
     /// Check if a causal relationship ID exists in the index.
     pub fn contains(&self, id: Uuid) -> bool {
-        self.id_to_key.read().unwrap().contains_key(&id)
+        self.id_to_key.read().contains_key(&id)
     }
 
     /// Get memory usage in bytes.
     pub fn memory_bytes(&self) -> usize {
-        let index = self.index.read().unwrap();
-        let id_to_key = self.id_to_key.read().unwrap();
-        let key_to_id = self.key_to_id.read().unwrap();
+        let index = self.index.read();
+        let id_to_key = self.id_to_key.read();
+        let key_to_id = self.key_to_id.read();
 
         let usearch_memory = index.memory_usage();
         let overhead = std::mem::size_of::<CausalE11Index>();
@@ -356,10 +357,10 @@ impl CausalE11Index {
             panic!("FAIL FAST: Failed to reserve capacity: {}", e)
         });
 
-        *self.index.write().unwrap() = new_index;
-        self.id_to_key.write().unwrap().clear();
-        self.key_to_id.write().unwrap().clear();
-        *self.next_key.write().unwrap() = 0;
+        *self.index.write() = new_index;
+        self.id_to_key.write().clear();
+        self.key_to_id.write().clear();
+        *self.next_key.write() = 0;
 
         info!("Cleared CausalE11Index");
     }

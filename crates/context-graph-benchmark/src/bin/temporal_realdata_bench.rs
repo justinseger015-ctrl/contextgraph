@@ -646,7 +646,8 @@ fn run_direction_filtering(
 
         for _ in 0..queries_per_session {
             // Pick an anchor point (not at boundaries)
-            let anchor_idx = rng.gen_range(1..session.chunks.len() - 1);
+            // MED-20 FIX: Use saturating_sub to prevent usize underflow
+            let anchor_idx = rng.gen_range(1..session.chunks.len().saturating_sub(1));
             let anchor = &session.chunks[anchor_idx];
 
             let Some(anchor_fp) = embedded.get(&anchor.id) else { continue };

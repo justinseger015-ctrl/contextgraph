@@ -3,7 +3,9 @@
 //! Contains the `HnswEmbedderIndex` struct and helper functions for usearch integration.
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+// HIGH-17 FIX: parking_lot::RwLock is non-poisonable. One panic no longer
+// permanently breaks all subsequent HNSW operations via poison cascade.
+use parking_lot::RwLock;
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 use uuid::Uuid;
 
@@ -204,11 +206,11 @@ impl HnswEmbedderIndex {
 
     /// Check if a vector ID exists in the index.
     pub fn contains(&self, id: Uuid) -> bool {
-        self.id_to_key.read().unwrap().contains_key(&id)
+        self.id_to_key.read().contains_key(&id)
     }
 
     /// Get all vector IDs in the index.
     pub fn ids(&self) -> Vec<Uuid> {
-        self.id_to_key.read().unwrap().keys().copied().collect()
+        self.id_to_key.read().keys().copied().collect()
     }
 }

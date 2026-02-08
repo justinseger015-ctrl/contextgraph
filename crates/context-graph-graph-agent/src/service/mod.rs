@@ -117,6 +117,9 @@ pub struct GraphDiscoveryService {
     status: RwLock<ServiceStatus>,
     last_result: RwLock<Option<DiscoveryCycleResult>>,
     shutdown_tx: RwLock<Option<mpsc::Sender<()>>>,
+    /// CRIT-05 FIX: Store background task JoinHandle so panics are not silently lost
+    /// and stop() can await clean shutdown instead of spin-looping.
+    join_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl GraphDiscoveryService {
@@ -162,6 +165,7 @@ impl GraphDiscoveryService {
             status: RwLock::new(ServiceStatus::Stopped),
             last_result: RwLock::new(None),
             shutdown_tx: RwLock::new(None),
+            join_handle: RwLock::new(None),
         }
     }
 
@@ -204,6 +208,7 @@ impl GraphDiscoveryService {
             status: RwLock::new(ServiceStatus::Stopped),
             last_result: RwLock::new(None),
             shutdown_tx: RwLock::new(None),
+            join_handle: RwLock::new(None),
         }
     }
 
@@ -427,7 +432,8 @@ impl GraphDiscoveryService {
 
         let service = Arc::clone(&self);
 
-        tokio::spawn(async move {
+        // CRIT-05 FIX: Store JoinHandle so panics are observable and stop() can await.
+        let handle = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     _ = shutdown_rx.recv() => {
@@ -445,6 +451,7 @@ impl GraphDiscoveryService {
             service.running.store(false, Ordering::SeqCst);
             *service.status.write() = ServiceStatus::Stopped;
         });
+        *self.join_handle.write() = Some(handle);
 
         Ok(())
     }
@@ -461,9 +468,14 @@ impl GraphDiscoveryService {
             let _ = tx.send(()).await;
         }
 
-        // Wait for shutdown
-        while self.is_running() {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+        // CRIT-05 + HIGH-12 FIX: Replace infinite spin-loop with awaiting the
+        // JoinHandle with a timeout. This detects panics and avoids busy-waiting.
+        if let Some(handle) = self.join_handle.write().take() {
+            match tokio::time::timeout(Duration::from_secs(10), handle).await {
+                Ok(Ok(())) => info!("Graph discovery background task completed normally"),
+                Ok(Err(e)) => tracing::error!("Graph discovery background task panicked: {:?}", e),
+                Err(_) => tracing::error!("Graph discovery background task did not shut down within 10 seconds"),
+            }
         }
 
         info!("Graph discovery service stopped");

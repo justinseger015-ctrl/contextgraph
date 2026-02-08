@@ -18,7 +18,6 @@ use context_graph_graph::index::gpu_memory::{GpuMemoryConfig, GpuMemoryManager, 
 /// EXPECTED: used == 0 after all cycles, no leaks
 /// SOURCE OF TRUTH: manager.used() == baseline after 10000 cycles
 #[test]
-#[ignore] // Chaos test - run with --ignored
 fn test_allocation_deallocation_cycling() {
     println!("\n=== CHAOS TEST: 10000 Allocation/Deallocation Cycles ===");
 
@@ -66,7 +65,6 @@ fn test_allocation_deallocation_cycling() {
 /// EXPECTED: System tracks totals correctly (not real GPU fragmentation)
 /// SOURCE OF TRUTH: available memory accounts for freed chunks
 #[test]
-#[ignore]
 fn test_fragmentation_under_pressure() {
     println!("\n=== CHAOS TEST: Fragmentation Under Pressure ===");
 
@@ -136,7 +134,6 @@ fn test_fragmentation_under_pressure() {
 /// EXPECTED: is_low_memory() returns true when usage > 90%
 /// SOURCE OF TRUTH: is_low_memory() state change
 #[test]
-#[ignore]
 fn test_low_memory_threshold_warning() {
     println!("\n=== CHAOS TEST: Low Memory Threshold Warning ===");
 
@@ -215,7 +212,6 @@ fn test_low_memory_threshold_warning() {
 /// EXPECTED: Invariant: used + available == budget always holds
 /// SOURCE OF TRUTH: Verify invariant at each iteration
 #[test]
-#[ignore]
 fn test_memory_usage_accounting_accuracy() {
     println!("\n=== CHAOS TEST: Memory Accounting Accuracy ===");
 

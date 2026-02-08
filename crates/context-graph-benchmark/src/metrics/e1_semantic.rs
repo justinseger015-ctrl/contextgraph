@@ -546,7 +546,8 @@ fn compute_silhouette_for_topics<K: Eq + std::hash::Hash + Clone>(
                 .filter(|(other_id, _)| *other_id != *id)
                 .map(|(_, other_emb)| 1.0 - cosine_similarity(emb, other_emb))
                 .sum::<f64>()
-                / (members.len() - 1) as f64;
+                // MED-19 FIX: Guard against division by zero
+                / (members.len().saturating_sub(1).max(1)) as f64;
 
             // b(i) = minimum average distance to points in other clusters
             let b_i: f64 = topic_embeddings
