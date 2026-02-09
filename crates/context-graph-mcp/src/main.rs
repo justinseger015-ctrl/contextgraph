@@ -423,6 +423,13 @@ fn apply_overrides(config: &mut Config, cli: &CliArgs) {
         info!("ENV override: utl.mode = production (storage is rocksdb)");
         config.utl.mode = "production".to_string();
     }
+
+    // Override file watcher enabled from environment
+    if let Ok(watcher_env) = env::var("CONTEXT_GRAPH_WATCHER_ENABLED") {
+        let enabled = watcher_env == "1" || watcher_env.to_lowercase() == "true";
+        info!("ENV override: watcher.enabled = {}", enabled);
+        config.watcher.enabled = enabled;
+    }
 }
 
 /// Determine warm_first mode from CLI and environment.

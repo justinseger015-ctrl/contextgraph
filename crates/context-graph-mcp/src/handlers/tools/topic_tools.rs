@@ -243,7 +243,8 @@ impl Handlers {
             };
         }
 
-        // TASK-INTEG-TOPIC: Get topics from cluster_manager
+        // TASK-INTEG-TOPIC: Get topics and stability from cluster_manager
+        // (cluster_manager owns the real stability_tracker that gets updated during recluster)
         let cluster_manager = self.cluster_manager.read();
         let topics_map = cluster_manager.get_topics();
 
@@ -252,9 +253,8 @@ impl Handlers {
 
         let total_topics = topics.len();
 
-        // Get stability metrics from stability_tracker
-        let stability_tracker = self.stability_tracker.read();
-        let churn_rate = stability_tracker.current_churn();
+        // Get stability metrics from cluster_manager's internal stability tracker
+        let churn_rate = cluster_manager.current_churn();
 
         let response = TopicPortfolioResponse {
             topics,
@@ -319,15 +319,15 @@ impl Handlers {
             "get_topic_stability: Processing stability request"
         );
 
-        // TASK-INTEG-TOPIC: Get real stability metrics from stability_tracker
-        let stability_tracker = self.stability_tracker.read();
-        let churn_rate = stability_tracker.current_churn();
-        let average_churn = stability_tracker.average_churn(request.hours as i64);
+        // Get stability metrics from cluster_manager's internal stability tracker
+        // (the tracker that actually receives snapshots during recluster)
+        let cluster_manager = self.cluster_manager.read();
+        let churn_rate = cluster_manager.current_churn();
+        let average_churn = cluster_manager.average_churn(request.hours as i64);
 
         let high_churn_warning = TopicStabilityResponse::is_high_churn(churn_rate);
 
         // Get phase breakdown from cluster manager topics
-        let cluster_manager = self.cluster_manager.read();
         let topics = cluster_manager.get_topics();
         let phases = compute_phase_breakdown(topics);
 
@@ -489,6 +489,12 @@ impl Handlers {
             // Run HDBSCAN reclustering
             match cluster_manager.recluster() {
                 Ok(result) => {
+                    // Compute churn after reclustering (compares current snapshot to ~1 hour ago).
+                    // recluster() already calls take_stability_snapshot() internally,
+                    // but track_churn() was never called — this is the fix.
+                    let churn = cluster_manager.track_churn();
+                    info!(churn = churn, "detect_topics: Computed churn after reclustering");
+
                     let topics_after = cluster_manager.get_topics();
                     let total_after = topics_after.len();
 

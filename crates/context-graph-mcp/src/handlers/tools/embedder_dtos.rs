@@ -354,6 +354,9 @@ pub struct GetEmbedderClustersResponse {
     pub total_clusters: usize,
     /// Time in milliseconds.
     pub time_ms: u64,
+    /// Hint when no clusters are available (e.g. detect_topics needs to be called first).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 // ============================================================================

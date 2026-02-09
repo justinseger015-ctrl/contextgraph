@@ -1302,6 +1302,31 @@ impl Handlers {
             }
         }
 
+        // HYBRID-VALIDATION: Blend TransE score with memory evidence
+        // TransE alone measures embedding proximity, not factual correctness.
+        // Evidence from stored memories provides grounding.
+        let support_count = supporting_memories.len();
+        let contradict_count = contradicting_memories.len();
+        let no_evidence = support_count == 0 && contradict_count == 0;
+
+        let (hybrid_confidence, hybrid_validation, evidence_adjusted) = if no_evidence && confidence > 0.33 {
+            // TransE says valid/uncertain but no memory support — can't verify
+            (confidence * 0.5, "unverified".to_string(), true)
+        } else if contradict_count > support_count {
+            // More contradictions than support — evidence disagrees with TransE
+            let evidence_factor = (support_count as f32) / (support_count as f32 + contradict_count as f32);
+            (confidence * 0.6 + evidence_factor * 0.4, "contradicted_by_evidence".to_string(), true)
+        } else if !no_evidence {
+            // Blend: 60% TransE + 40% evidence
+            let evidence_score = (support_count as f32 - contradict_count as f32)
+                / (support_count as f32 + contradict_count as f32);
+            let evidence_factor = (evidence_score + 1.0) / 2.0; // Map [-1,1] to [0,1]
+            (confidence * 0.6 + evidence_factor * 0.4, validation.to_string(), true)
+        } else {
+            // No evidence, low TransE — keep original
+            (confidence, validation.to_string(), false)
+        };
+
         // Build entity DTOs
         let subject_entities = extract_entity_mentions(subject);
         let object_entities = extract_entity_mentions(object);
@@ -1341,8 +1366,8 @@ impl Handlers {
                 object: object_dto,
             },
             transe_score,
-            confidence,
-            validation: validation.to_string(),
+            confidence: hybrid_confidence,
+            validation: hybrid_validation.clone(),
             supporting_memories: if supporting_memories.is_empty() {
                 None
             } else {
@@ -1353,16 +1378,19 @@ impl Handlers {
             } else {
                 Some(contradicting_memories)
             },
+            evidence_adjusted: if evidence_adjusted { Some(true) } else { None },
         };
 
         info!(
             transe_score = transe_score,
-            confidence = confidence,
-            validation = %validation,
-            supporting_count = response.supporting_memories.as_ref().map(|v| v.len()).unwrap_or(0),
-            contradicting_count = response.contradicting_memories.as_ref().map(|v| v.len()).unwrap_or(0),
+            raw_confidence = confidence,
+            hybrid_confidence = hybrid_confidence,
+            validation = %hybrid_validation,
+            evidence_adjusted = evidence_adjusted,
+            supporting_count = support_count,
+            contradicting_count = contradict_count,
             elapsed_ms = elapsed_ms,
-            "validate_knowledge: Completed TransE validation"
+            "validate_knowledge: Completed hybrid TransE + evidence validation"
         );
 
         self.tool_result(

@@ -156,14 +156,17 @@ impl Handlers {
             .map(|v| v as f32)
             .unwrap_or(TeleologicalFingerprint::DEFAULT_IMPORTANCE);
 
-        // E4-FIX: Get session sequence for E4 (V_ordering) embedding
-        let session_sequence = self.get_next_sequence();
-        // SESSION-ID-FIX: Priority: tool argument > env var > stored session_id
+        // SESSION-ID-FIX: Priority: tool argument > env var > stored session_id > auto-generate
+        // MUST resolve session ID BEFORE get_next_sequence() because auto-generation
+        // via set_session_id() resets the sequence counter.
+        // Uses get_or_init_session_id() for atomic check-and-set (no TOCTOU race).
         let session_id = args
             .get("sessionId")
             .and_then(|v| v.as_str())
             .map(String::from)
-            .or_else(|| self.get_session_id());
+            .or_else(|| Some(self.get_or_init_session_id()));
+        // E4-FIX: Get session sequence AFTER session ID resolution
+        let session_sequence = self.get_next_sequence();
 
         // PHASE-1.2: Extract operator_id for provenance tracking
         let operator_id = args
@@ -1546,19 +1549,40 @@ impl Handlers {
                 {
                     let default_profile = get_weight_profile("semantic_search")
                         .unwrap_or([1.0 / 13.0; 13]);
-                    let resolved_weights = custom_weights
+                    let mut resolved_weights = custom_weights
                         .or_else(|| effective_weight_profile.as_ref()
                             .and_then(|p| self.custom_profiles.read().get(p).copied()))
                         .or_else(|| effective_weight_profile.as_ref()
                             .and_then(|p| get_weight_profile(p)))
                         .unwrap_or(default_profile);
 
-                    // Active embedders depend on search strategy
-                    let (active_indices, strategy_label) = match strategy {
+                    // Apply exclude_embedders to resolved_weights (mirrors resolve_weights_sync)
+                    if !exclude_embedder_names.is_empty() {
+                        for name in &exclude_embedder_names {
+                            let idx = match name.as_str() {
+                                "E1" => 0, "E2" => 1, "E3" => 2, "E4" => 3, "E5" => 4,
+                                "E6" => 5, "E7" => 6, "E8" => 7, "E9" => 8, "E10" => 9,
+                                "E11" => 10, "E12" => 11, "E13" => 12, _ => continue,
+                            };
+                            resolved_weights[idx] = 0.0;
+                        }
+                        let sum: f32 = resolved_weights.iter().sum();
+                        if sum > 0.0 {
+                            for w in resolved_weights.iter_mut() {
+                                *w /= sum;
+                            }
+                        }
+                    }
+
+                    // Active embedders depend on search strategy, filtered by exclusions
+                    let (strategy_indices, strategy_label) = match strategy {
                         SearchStrategy::E1Only => (vec![0usize], "E1 HNSW only"),
                         SearchStrategy::MultiSpace => (vec![0, 4, 6, 7, 9, 10], "E1+E5+E7+E8+E10+E11 RRF fusion"),
                         SearchStrategy::Pipeline => (vec![0, 4, 6, 7, 9, 10], "E13+E1+E5+E7+E8+E11 recall → 6-embedder RRF scoring"),
                     };
+                    let active_indices: Vec<usize> = strategy_indices.into_iter()
+                        .filter(|idx| resolved_weights[*idx] > 0.0)
+                        .collect();
 
                     let mut active_weights = serde_json::Map::new();
                     let mut ignored_weights = serde_json::Map::new();

@@ -26,7 +26,7 @@ mod sparse;
 pub mod weight_projection;
 
 pub use causal::{
-    CausalModel, CAUSAL_DIMENSION, CAUSAL_LATENCY_BUDGET_MS, CAUSAL_MAX_TOKENS,
+    CausalModel, TrainableProjection, CAUSAL_DIMENSION, CAUSAL_LATENCY_BUDGET_MS, CAUSAL_MAX_TOKENS,
     DEFAULT_ATTENTION_WINDOW,
 };
 pub use contextual::{

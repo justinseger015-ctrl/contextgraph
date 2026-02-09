@@ -921,6 +921,10 @@ pub struct ValidateKnowledgeResponse {
     /// Memory IDs that may contradict this triple.
     #[serde(rename = "contradictingMemories", skip_serializing_if = "Option::is_none")]
     pub contradicting_memories: Option<Vec<Uuid>>,
+
+    /// Whether confidence/validation were adjusted by memory evidence.
+    #[serde(rename = "evidenceAdjusted", skip_serializing_if = "Option::is_none")]
+    pub evidence_adjusted: Option<bool>,
 }
 
 /// A knowledge triple DTO.

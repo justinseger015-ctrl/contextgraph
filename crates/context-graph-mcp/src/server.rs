@@ -704,6 +704,26 @@ impl McpServer {
             Err(e) => warn!("Failed to start background graph builder: {}", e),
         }
 
+        // BACKFILL: If edge repository has no data, trigger full rebuild for previous-session memories
+        if let Some(ref builder) = self.graph_builder {
+            let needs_rebuild = self.handlers.edge_repository()
+                .map(|repo| repo.is_empty().unwrap_or(true))
+                .unwrap_or(false);
+            if needs_rebuild {
+                info!("Edge repository empty - scheduling full K-NN graph rebuild for existing fingerprints");
+                let builder_clone = Arc::clone(builder);
+                tokio::spawn(async move {
+                    match builder_clone.rebuild_all().await {
+                        Ok(result) => info!(
+                            "K-NN graph rebuild complete: {} fingerprints processed, {} K-NN edges + {} typed edges in {}ms",
+                            result.total_processed, result.total_knn_edges, result.total_typed_edges, result.elapsed_ms
+                        ),
+                        Err(e) => error!("K-NN graph rebuild failed: {}", e),
+                    }
+                });
+            }
+        }
+
         loop {
             line.clear();
 

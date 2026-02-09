@@ -407,8 +407,13 @@ impl Topic {
         let weighted = profile.weighted_agreement();
         let confidence = (weighted / max_weighted_agreement()).clamp(0.0, 1.0);
 
+        // Deterministic topic ID from sorted member UUIDs.
+        // Same members always produce the same topic ID, which is essential
+        // for accurate churn tracking (topic stability across reclusters).
+        let id = Self::deterministic_id(&members);
+
         Self {
-            id: Uuid::new_v4(),
+            id,
             name: None,
             profile,
             contributing_spaces,
@@ -490,6 +495,25 @@ impl Topic {
     pub fn update_contributing_spaces(&mut self) {
         self.contributing_spaces = self.profile.dominant_spaces();
         self.confidence = self.compute_confidence();
+    }
+
+    /// Compute a deterministic topic ID from member UUIDs.
+    ///
+    /// Same set of members always produces the same topic ID regardless of
+    /// input order. This is essential for accurate churn tracking — without
+    /// deterministic IDs, every recluster produces "new" topics even when
+    /// the membership hasn't changed, causing churn to always read 1.0.
+    fn deterministic_id(members: &[Uuid]) -> Uuid {
+        if members.is_empty() {
+            return Uuid::nil();
+        }
+        let mut sorted: Vec<Uuid> = members.to_vec();
+        sorted.sort();
+        let mut bytes = Vec::with_capacity(sorted.len() * 16);
+        for id in &sorted {
+            bytes.extend_from_slice(id.as_bytes());
+        }
+        Uuid::new_v5(&Uuid::NAMESPACE_OID, &bytes)
     }
 }
 
@@ -1040,5 +1064,40 @@ mod tests {
         assert!(p5.is_topic(), "weighted 2.5 should be topic");
 
         println!("[PASS] test_constitution_examples - all verified");
+    }
+
+    #[test]
+    fn test_deterministic_topic_id_same_members() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let c = Uuid::new_v4();
+
+        // Same members in different order produce the same ID
+        let id1 = Topic::deterministic_id(&[a, b, c]);
+        let id2 = Topic::deterministic_id(&[c, a, b]);
+        let id3 = Topic::deterministic_id(&[b, c, a]);
+        assert_eq!(id1, id2);
+        assert_eq!(id2, id3);
+        println!("[PASS] deterministic_id: same members, different order → same ID");
+    }
+
+    #[test]
+    fn test_deterministic_topic_id_different_members() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let c = Uuid::new_v4();
+        let d = Uuid::new_v4();
+
+        let id1 = Topic::deterministic_id(&[a, b, c]);
+        let id2 = Topic::deterministic_id(&[a, b, d]);
+        assert_ne!(id1, id2);
+        println!("[PASS] deterministic_id: different members → different ID");
+    }
+
+    #[test]
+    fn test_deterministic_topic_id_empty() {
+        let id = Topic::deterministic_id(&[]);
+        assert_eq!(id, Uuid::nil());
+        println!("[PASS] deterministic_id: empty members → nil UUID");
     }
 }

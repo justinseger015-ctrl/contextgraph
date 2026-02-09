@@ -550,12 +550,19 @@ impl BackgroundGraphBuilder {
         let mut total_typed_edges = 0;
 
         for chunk in all_ids.chunks(self.config.max_batch_size) {
-            // Queue all IDs in this chunk
+            // Queue all IDs in this chunk, preserving any concurrently-enqueued items
             {
                 let mut queue = self.pending_queue.lock().await;
-                queue.clear(); // Clear any pending items
+                // Drain existing items so concurrent store_memory enqueues aren't lost
+                let saved: Vec<Uuid> = queue.drain(..).collect();
                 for id in chunk {
                     queue.push_back(*id);
+                }
+                // Re-enqueue saved items at the back so they'll be processed next
+                for id in saved {
+                    if !chunk.contains(&id) {
+                        queue.push_back(id);
+                    }
                 }
             }
 

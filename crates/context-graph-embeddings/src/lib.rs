@@ -62,6 +62,7 @@ pub mod provider;
 pub mod pruning;
 pub mod quantization;
 pub mod storage;
+pub mod training;
 pub mod traits;
 pub mod types;
 pub mod warm;

@@ -30,11 +30,14 @@ use context_graph_core::types::audit::{AuditOperation, AuditRecord};
 
 use crate::protocol::{JsonRpcId, JsonRpcResponse};
 
+use context_graph_core::teleological::Embedder;
+
 use super::embedder_dtos::{
     AllEmbedderScores, AsymmetricVariant,
     CompareEmbedderViewsRequest, CompareEmbedderViewsResponse, CreateWeightProfileRequest,
-    CreateWeightProfileResponse, EmbedderAnomaly, EmbedderId, EmbedderIndexInfo, EmbedderRanking,
-    EmbedderSearchResult, EmbedderVectorInfo, GetEmbedderClustersRequest,
+    CreateWeightProfileResponse, EmbedderAnomaly, EmbedderCluster, EmbedderId,
+    EmbedderIndexInfo, EmbedderRanking, EmbedderSearchResult, EmbedderVectorInfo,
+    GetEmbedderClustersRequest, GetEmbedderClustersResponse,
     GetMemoryFingerprintRequest, GetMemoryFingerprintResponse, ListEmbedderIndexesRequest,
     ListEmbedderIndexesResponse, RankedMemory,
     SearchByEmbedderRequest, SearchByEmbedderResponse, SearchCrossEmbedderAnomaliesRequest,
@@ -269,23 +272,20 @@ impl Handlers {
     ///
     /// Explore clusters of memories in a specific embedder's space.
     ///
-    /// # Status: NOT IMPLEMENTED
+    /// Reads pre-computed clusters from the MultiSpaceClusterManager (HDBSCAN + BIRCH).
     ///
-    /// This tool requires cuML HDBSCAN clustering on GPU, which is not yet implemented.
-    /// Returns an error until the clustering infrastructure is in place.
+    /// # Algorithm
     ///
-    /// # Planned Algorithm
-    ///
-    /// 1. Get all memories from the system
-    /// 2. Extract the selected embedder's vectors
-    /// 3. Run cuML HDBSCAN clustering on GPU
-    /// 4. Return clusters with optional samples
+    /// 1. Read clusters for the selected embedder from cluster_manager
+    /// 2. Filter by min_cluster_size, sort by size descending
+    /// 3. Optionally include sample memory IDs and content snippets
     pub(crate) async fn call_get_embedder_clusters(
         &self,
         id: Option<JsonRpcId>,
         args: serde_json::Value,
     ) -> JsonRpcResponse {
-        // Parse and validate request to provide better error messages
+        let start = Instant::now();
+
         let request: GetEmbedderClustersRequest = match serde_json::from_value(args) {
             Ok(req) => req,
             Err(e) => {
@@ -299,7 +299,6 @@ impl Handlers {
             return self.tool_error(id, &e);
         }
 
-        // Validate embedder exists
         let embedder_id = match request.embedder_id() {
             Some(eid) => eid,
             None => {
@@ -311,23 +310,102 @@ impl Handlers {
             }
         };
 
-        warn!(
+        let embedder = match Embedder::from_index(embedder_id.to_index()) {
+            Some(e) => e,
+            None => {
+                return self.tool_error(id, &format!("Invalid embedder index: {}", embedder_id.to_index()));
+            }
+        };
+
+        // Read clusters from MultiSpaceClusterManager
+        // parking_lot::RwLockReadGuard is !Send — must drop before .await
+        let (cluster_info, total_clusters, total_memories) = {
+            let cluster_manager = self.cluster_manager.read();
+            let clusters = cluster_manager.get_clusters(embedder);
+
+            let mut cluster_vec: Vec<_> = clusters.values()
+                .filter(|c| c.member_count as usize >= request.min_cluster_size)
+                .collect();
+            cluster_vec.sort_by(|a, b| b.member_count.cmp(&a.member_count));
+            cluster_vec.truncate(request.top_clusters);
+
+            let total_clusters = clusters.len();
+            let total_mem = cluster_manager.total_memories();
+
+            // Collect cluster info and member IDs while lock is held
+            let data: Vec<(i32, usize, Vec<Uuid>)> = cluster_vec.iter().map(|c| {
+                let members: Vec<Uuid> = if request.include_samples {
+                    cluster_manager.get_cluster_members(embedder, c.id)
+                        .into_iter()
+                        .take(request.samples_per_cluster)
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                (c.id, c.member_count as usize, members)
+            }).collect();
+
+            (data, total_clusters, total_mem)
+        };
+        // Lock dropped here
+
+        // Build response clusters with optional content samples
+        let mut response_clusters = Vec::new();
+        for (cluster_id, size, members) in &cluster_info {
+            let mut sample_ids = None;
+            let mut sample_snippets = None;
+
+            if request.include_samples && !members.is_empty() {
+                if let Ok(contents) = self.teleological_store.get_content_batch(members).await {
+                    let snippets: Vec<String> = contents.iter()
+                        .filter_map(|opt| opt.as_ref())
+                        .map(|s| if s.len() > 100 { format!("{}...", &s[..100]) } else { s.clone() })
+                        .collect();
+                    if !snippets.is_empty() {
+                        sample_snippets = Some(snippets);
+                    }
+                }
+                sample_ids = Some(members.clone());
+            }
+
+            response_clusters.push(EmbedderCluster {
+                cluster_id: *cluster_id as usize,
+                size: *size,
+                sample_ids,
+                sample_snippets,
+                description: None,
+            });
+        }
+
+        // Provide a hint when clusters are empty so users know what to do
+        let hint = if total_clusters == 0 && total_memories == 0 {
+            Some("No clusters available. Call detect_topics first to trigger clustering, or store more memories.".to_string())
+        } else if total_clusters == 0 {
+            Some("No clusters found for this embedder. Try calling detect_topics to refresh clustering.".to_string())
+        } else {
+            None
+        };
+
+        let response = GetEmbedderClustersResponse {
+            embedder: request.embedder.clone(),
+            embedder_perspective: embedder_id.name().to_string(),
+            clusters: response_clusters,
+            total_memories,
+            total_clusters,
+            time_ms: start.elapsed().as_millis() as u64,
+            hint,
+        };
+
+        info!(
             embedder = %request.embedder,
-            embedder_name = %embedder_id.name(),
-            "get_embedder_clusters: Tool NOT IMPLEMENTED - requires cuML HDBSCAN"
+            total_clusters = total_clusters,
+            returned_clusters = cluster_info.len(),
+            total_memories = total_memories,
+            elapsed_ms = response.time_ms,
+            "get_embedder_clusters: Completed"
         );
 
-        // Return honest error instead of fake single-cluster results
-        self.tool_error(
-            id,
-            &format!(
-                "get_embedder_clusters is not yet implemented. \
-                 Clustering in {} space requires cuML HDBSCAN on GPU, \
-                 which is planned but not yet available. \
-                 Use search_by_embedder for similarity-based queries instead.",
-                embedder_id.name()
-            ),
-        )
+        self.tool_result(id, serde_json::to_value(response).unwrap_or_else(|_| json!({})))
     }
 
     /// compare_embedder_views tool implementation.

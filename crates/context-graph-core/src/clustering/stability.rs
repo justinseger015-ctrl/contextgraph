@@ -147,11 +147,20 @@ impl TopicStabilityTracker {
     /// Stores topic IDs and member counts. Old snapshots (>24h) are cleaned.
     pub fn take_snapshot(&mut self, topics: &[Topic]) {
         let snapshot = TopicSnapshot::from_topics(topics);
+        tracing::debug!(
+            topic_count = topics.len(),
+            total_snapshots = self.snapshots.len() + 1,
+            "Stability: snapshot recorded"
+        );
         self.snapshots.push_back(snapshot);
         self.cleanup_old_snapshots();
     }
 
-    /// Compute churn by comparing current state to ~1 hour ago.
+    /// Compute churn by comparing current state to a previous snapshot.
+    ///
+    /// Prefers comparing to a snapshot from ~1 hour ago for stable long-term tracking.
+    /// Falls back to the oldest available snapshot when no hour-old snapshot exists,
+    /// so that churn is meaningful even in sessions shorter than 1 hour.
     ///
     /// churn = |symmetric_difference| / |union|
     /// where symmetric_difference = topics_added + topics_removed
@@ -164,16 +173,30 @@ impl TopicStabilityTracker {
         let now = Utc::now();
         let one_hour_ago = now - Duration::hours(1);
 
-        // Find closest snapshot to 1 hour ago (iterate from back for efficiency)
+        // Need at least 2 snapshots (previous + current) to compute churn
+        if self.snapshots.len() < 2 {
+            self.current_churn = 0.0;
+            self.churn_history.push_back((now, 0.0));
+            self.cleanup_old_churn_history(now);
+            return 0.0;
+        }
+
+        // Prefer snapshot from ~1 hour ago for stable long-term tracking
         let old_snapshot = self
             .snapshots
             .iter()
             .rev()
             .find(|s| s.timestamp <= one_hour_ago);
 
+        // Fall back to oldest snapshot if no hour-old snapshot exists
+        // (ensures churn is meaningful even in short sessions)
+        let old_snapshot = old_snapshot.or_else(|| self.snapshots.front());
+
         // Compute churn if we have both old and current snapshots
         let churn = match (old_snapshot, self.snapshots.back()) {
-            (Some(old), Some(current)) => self.compute_churn(old, current),
+            (Some(old), Some(current)) if old.timestamp != current.timestamp => {
+                self.compute_churn(old, current)
+            }
             _ => 0.0,
         };
 

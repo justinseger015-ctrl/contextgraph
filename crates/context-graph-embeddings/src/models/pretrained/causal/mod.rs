@@ -30,7 +30,7 @@ mod forward;
 mod loader;
 mod marker_detection;
 mod model;
-mod weights;
+pub(crate) mod weights;
 
 #[cfg(test)]
 mod tests;
@@ -41,3 +41,4 @@ pub use config::{
 };
 
 pub use model::CausalModel;
+pub use weights::TrainableProjection;

@@ -475,6 +475,27 @@ impl MultiSpaceClusterManager {
         // Re-synthesize topics after reclustering
         self.synthesize_topics()?;
 
+        // --- Provenance: mega-topic detection ---
+        let total_fingerprints = self.spaces.iter().map(|s| s.memory_ids.len()).max().unwrap_or(0);
+        if total_fingerprints > 10 {
+            for topic in self.topics.values() {
+                if topic.member_count() > total_fingerprints / 2 {
+                    tracing::warn!(
+                        topic_id = %topic.id,
+                        member_count = topic.member_count(),
+                        total_fingerprints = total_fingerprints,
+                        pct = (topic.member_count() * 100) / total_fingerprints.max(1),
+                        total_topics = self.topics.len(),
+                        "Mega-topic: absorbs {}% of all memories \
+                         (provenance: {} topics from {} fingerprints)",
+                        (topic.member_count() * 100) / total_fingerprints.max(1),
+                        self.topics.len(),
+                        total_fingerprints
+                    );
+                }
+            }
+        }
+
         Ok(ReclusterResult {
             total_clusters,
             per_space_clusters,
@@ -786,8 +807,48 @@ impl MultiSpaceClusterManager {
             components.entry(root).or_default().push(memory_ids[i]);
         }
 
+        // MAX-TOPIC-SIZE: Break mega-components via E1 sub-clustering.
+        // Union-Find's transitive closure can merge unrelated memories (A~B, B~C → A~C).
+        // If a component exceeds 40% of all memories, split by E1 (Semantic) cluster IDs.
+        let max_component_size = (n * 2) / 5; // 40% of total
+        let mut final_components: HashMap<usize, Vec<Uuid>> = HashMap::new();
+        let mut next_root = n;
+
+        for (root, members) in components {
+            if members.len() > max_component_size && members.len() > 10 {
+                tracing::info!(
+                    component_size = members.len(),
+                    max_allowed = max_component_size,
+                    "Splitting mega-component into sub-topics via E1 clusters"
+                );
+
+                // Sub-cluster: group by E1 (Semantic) cluster assignment
+                let mut sub_groups: HashMap<i32, Vec<Uuid>> = HashMap::new();
+                for member_id in &members {
+                    let cluster_id = mem_clusters
+                        .get(member_id)
+                        .and_then(|clusters| clusters.get(&Embedder::Semantic))
+                        .copied()
+                        .unwrap_or(-1); // Noise cluster
+                    sub_groups.entry(cluster_id).or_default().push(*member_id);
+                }
+
+                if sub_groups.len() > 1 {
+                    for (_, sub_members) in sub_groups {
+                        final_components.insert(next_root, sub_members);
+                        next_root += 1;
+                    }
+                } else {
+                    // E1 didn't split — keep the mega-component
+                    final_components.insert(root, members);
+                }
+            } else {
+                final_components.insert(root, members);
+            }
+        }
+
         // Create topics from groups with >= 2 members
-        for members in components.into_values() {
+        for members in final_components.into_values() {
             if members.len() < 2 {
                 continue;
             }
@@ -797,6 +858,10 @@ impl MultiSpaceClusterManager {
 
             // Only create topic if profile meets threshold
             if !profile.is_topic() {
+                tracing::debug!(
+                    members = members.len(),
+                    "Skipping sub-group: topic profile below threshold after mega-split"
+                );
                 continue;
             }
 
@@ -992,6 +1057,16 @@ impl MultiSpaceClusterManager {
     /// Get clusters for a specific space.
     pub fn get_clusters(&self, embedder: Embedder) -> &HashMap<i32, Cluster> {
         &self.spaces[embedder.index()].clusters
+    }
+
+    /// Get member IDs for a specific cluster in a specific space.
+    pub fn get_cluster_members(&self, embedder: Embedder, cluster_id: i32) -> Vec<Uuid> {
+        self.spaces[embedder.index()]
+            .memberships
+            .iter()
+            .filter(|(_, m)| m.cluster_id == cluster_id)
+            .map(|(id, _)| *id)
+            .collect()
     }
 
     /// Get total number of memories inserted.

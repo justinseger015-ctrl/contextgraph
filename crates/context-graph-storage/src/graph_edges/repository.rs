@@ -139,6 +139,20 @@ impl EdgeRepository {
         }
     }
 
+    /// Check if the edge repository has any stored K-NN edges.
+    ///
+    /// Returns `true` if the embedder_edges column family has no entries.
+    pub fn is_empty(&self) -> GraphEdgeStorageResult<bool> {
+        let cf = self.db.cf_handle(cf_names::EMBEDDER_EDGES).ok_or(
+            GraphEdgeStorageError::ColumnFamilyNotFound {
+                name: cf_names::EMBEDDER_EDGES,
+            },
+        )?;
+        let mut iter = self.db.raw_iterator_cf(&cf);
+        iter.seek_to_first();
+        Ok(!iter.valid())
+    }
+
     /// Delete K-NN edges for a source node in a specific embedder space.
     pub fn delete_embedder_edges(
         &self,

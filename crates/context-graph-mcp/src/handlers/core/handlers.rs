@@ -14,7 +14,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use tracing::{info, warn};
 
-use context_graph_core::clustering::{MultiSpaceClusterManager, TopicStabilityTracker};
+use context_graph_core::clustering::MultiSpaceClusterManager;
 use context_graph_core::memory::{CodeEmbeddingProvider, CodeStorage};
 use context_graph_core::monitoring::LayerStatusProvider;
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore};
@@ -43,10 +43,6 @@ pub struct Handlers {
     /// Multi-space cluster manager for topic detection and clustering.
     /// TASK-INTEG-TOPIC: Added for topic tools integration.
     pub(in crate::handlers) cluster_manager: Arc<RwLock<MultiSpaceClusterManager>>,
-
-    /// Topic stability tracker for portfolio-level stability metrics.
-    /// TASK-INTEG-TOPIC: Added for topic tools integration.
-    pub(in crate::handlers) stability_tracker: Arc<RwLock<TopicStabilityTracker>>,
 
     /// Session sequence counter for E4 (V_ordering) embeddings.
     /// Monotonically increasing within a session, used to track memory ordering.
@@ -138,7 +134,6 @@ impl Handlers {
     /// * `multi_array_provider` - 13-embedding generator
     /// * `layer_status_provider` - Provider for layer status information
     /// * `cluster_manager` - Multi-space cluster manager for topic detection
-    /// * `stability_tracker` - Topic stability tracker for portfolio metrics
     /// * `graph_discovery_service` - REQUIRED LLM-based graph relationship discovery
     #[allow(dead_code)]
     pub fn with_all(
@@ -146,7 +141,6 @@ impl Handlers {
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
         layer_status_provider: Arc<dyn LayerStatusProvider>,
         cluster_manager: Arc<RwLock<MultiSpaceClusterManager>>,
-        stability_tracker: Arc<RwLock<TopicStabilityTracker>>,
         graph_discovery_service: Arc<GraphDiscoveryService>,
     ) -> Self {
         info!("Creating Handlers with_all - NO FALLBACKS, LLM required");
@@ -155,7 +149,6 @@ impl Handlers {
             multi_array_provider,
             layer_status_provider,
             cluster_manager,
-            stability_tracker,
             // E4-FIX: Initialize session sequence counter and session ID
             session_sequence_counter: Arc::new(AtomicU64::new(0)),
             current_session_id: Arc::new(RwLock::new(None)),
@@ -187,7 +180,6 @@ impl Handlers {
     /// * `multi_array_provider` - 13-embedding generator
     /// * `layer_status_provider` - Provider for layer status information
     /// * `cluster_manager` - Multi-space cluster manager for topic detection
-    /// * `stability_tracker` - Topic stability tracker for portfolio metrics
     /// * `code_store` - Code storage backend for code entities
     /// * `code_embedding_provider` - E7 code embedding provider
     /// * `graph_discovery_service` - REQUIRED LLM-based graph relationship discovery
@@ -197,7 +189,6 @@ impl Handlers {
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
         layer_status_provider: Arc<dyn LayerStatusProvider>,
         cluster_manager: Arc<RwLock<MultiSpaceClusterManager>>,
-        stability_tracker: Arc<RwLock<TopicStabilityTracker>>,
         code_store: Arc<dyn CodeStorage>,
         code_embedding_provider: Arc<dyn CodeEmbeddingProvider>,
         graph_discovery_service: Arc<GraphDiscoveryService>,
@@ -208,7 +199,6 @@ impl Handlers {
             multi_array_provider,
             layer_status_provider,
             cluster_manager,
-            stability_tracker,
             session_sequence_counter: Arc::new(AtomicU64::new(0)),
             current_session_id: Arc::new(RwLock::new(None)),
             code_store: Some(code_store),
@@ -255,14 +245,12 @@ impl Handlers {
 
         let cluster_manager = MultiSpaceClusterManager::with_defaults()
             .expect("Default cluster manager should always succeed");
-        let stability_tracker = TopicStabilityTracker::new();
 
         Self {
             teleological_store,
             multi_array_provider,
             layer_status_provider,
             cluster_manager: Arc::new(RwLock::new(cluster_manager)),
-            stability_tracker: Arc::new(RwLock::new(stability_tracker)),
             session_sequence_counter: Arc::new(AtomicU64::new(0)),
             current_session_id: Arc::new(RwLock::new(None)),
             code_store: None,
@@ -287,8 +275,8 @@ impl Handlers {
 
     /// Create handlers with default clustering components.
     ///
-    /// This is a convenience constructor that creates default cluster manager
-    /// and stability tracker. Use `with_all` for full control over dependencies.
+    /// This is a convenience constructor that creates default cluster manager.
+    /// Use `with_all` for full control over dependencies.
     /// NO FALLBACKS - Requires graph_discovery_service. LLM must be loaded.
     #[allow(dead_code)]
     pub fn with_defaults(
@@ -299,26 +287,18 @@ impl Handlers {
     ) -> Self {
         info!("Creating Handlers with_defaults - NO FALLBACKS, LLM required");
 
-        // Create default cluster manager
         let cluster_manager = MultiSpaceClusterManager::with_defaults()
             .expect("Default cluster manager should always succeed");
-
-        // Create default stability tracker
-        let stability_tracker = TopicStabilityTracker::new();
 
         Self {
             teleological_store,
             multi_array_provider,
             layer_status_provider,
             cluster_manager: Arc::new(RwLock::new(cluster_manager)),
-            stability_tracker: Arc::new(RwLock::new(stability_tracker)),
-            // E4-FIX: Initialize session sequence counter and session ID
             session_sequence_counter: Arc::new(AtomicU64::new(0)),
             current_session_id: Arc::new(RwLock::new(None)),
-            // E7-WIRING: Code pipeline disabled by default
             code_store: None,
             code_embedding_provider: None,
-            // TASK-GRAPHLINK: Graph linking disabled by default
             edge_repository: None,
             graph_builder: None,
             // GRAPH-AGENT: REQUIRED - NO FALLBACKS
@@ -364,14 +344,12 @@ impl Handlers {
 
         let cluster_manager = MultiSpaceClusterManager::with_defaults()
             .expect("Default cluster manager should always succeed");
-        let stability_tracker = TopicStabilityTracker::new();
 
         Self {
             teleological_store,
             multi_array_provider,
             layer_status_provider,
             cluster_manager: Arc::new(RwLock::new(cluster_manager)),
-            stability_tracker: Arc::new(RwLock::new(stability_tracker)),
             session_sequence_counter: Arc::new(AtomicU64::new(0)),
             current_session_id: Arc::new(RwLock::new(None)),
             code_store: None,
@@ -502,6 +480,30 @@ impl Handlers {
     pub fn set_session_id(&self, session_id: Option<String>) {
         *self.current_session_id.write() = session_id;
         self.reset_sequence();
+    }
+
+    /// Atomically get or initialize the session ID.
+    ///
+    /// If no session ID exists (neither env var nor stored), generates a new UUID
+    /// and stores it. Uses a single write lock to prevent TOCTOU races where
+    /// concurrent calls could generate different session IDs.
+    /// Does NOT reset the sequence counter (caller should call get_next_sequence after).
+    pub fn get_or_init_session_id(&self) -> String {
+        // Fast path: check env var first (no lock needed)
+        if let Ok(env_id) = std::env::var("CLAUDE_SESSION_ID") {
+            return env_id;
+        }
+
+        // Single write lock for atomic check-and-set
+        let mut guard = self.current_session_id.write();
+        if let Some(existing) = guard.as_ref() {
+            return existing.clone();
+        }
+
+        let new_id = uuid::Uuid::new_v4().to_string();
+        tracing::info!(session_id = %new_id, "Auto-generated session ID for this server session");
+        *guard = Some(new_id.clone());
+        new_id
     }
 
     /// Get the current sequence number without incrementing.
@@ -652,14 +654,12 @@ impl Handlers {
     pub async fn persist_topic_portfolio(&self) -> Result<usize, context_graph_core::error::CoreError> {
         // Extract all data from locks BEFORE any async operations
         let (session_id, portfolio, churn_rate) = {
-            // Get stability metrics from tracker
-            let stability_tracker = self.stability_tracker.read();
-            let churn_rate = stability_tracker.current_churn();
+            // Get stability metrics from cluster_manager's internal tracker
+            let cluster_manager = self.cluster_manager.read();
+            let churn_rate = cluster_manager.current_churn();
             // Entropy is no longer tracked via UTL processor
             let entropy = 0.0_f32;
 
-            // Export portfolio from cluster manager
-            let cluster_manager = self.cluster_manager.read();
             let session_id = format!("session-{}", chrono::Utc::now().timestamp_millis());
             let portfolio = cluster_manager.export_portfolio(&session_id, churn_rate, entropy);
 

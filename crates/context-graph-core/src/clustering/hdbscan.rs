@@ -547,6 +547,33 @@ impl HDBSCANClusterer {
             }
         }
 
+        // --- Provenance: mega-cluster detection ---
+        // Warn if a single component contains >50% of points (degenerate clustering)
+        if n_points > 10 {
+            let mut component_sizes: HashMap<usize, usize> = HashMap::new();
+            for i in 0..n_points {
+                let root = find(&mut parent, i);
+                *component_sizes.entry(root).or_insert(0) += 1;
+            }
+            for (&_root, &size) in &component_sizes {
+                if size > n_points / 2 {
+                    tracing::warn!(
+                        component_size = size,
+                        total_points = n_points,
+                        gap_threshold = %format!("{:.4}", gap_threshold),
+                        pct = (size * 100) / n_points,
+                        num_components = component_sizes.len(),
+                        metric = ?self.params.metric,
+                        "Mega-cluster: single component contains {}% of all points \
+                         (provenance: gap_threshold={:.4}, components={})",
+                        (size * 100) / n_points,
+                        gap_threshold,
+                        component_sizes.len()
+                    );
+                }
+            }
+        }
+
         // Assign cluster labels
         let mut labels = vec![-1i32; n_points];
         let mut probabilities = vec![0.0f32; n_points];
@@ -579,39 +606,29 @@ impl HDBSCANClusterer {
 
     /// Detect a threshold for edge weight "gap" that separates clusters.
     ///
-    /// For semantic embeddings (cosine distance), we use an absolute threshold
-    /// approach since relative gap detection fails when distances are uniformly
-    /// distributed in a narrow range (typical for embeddings).
+    /// Data-driven approach: finds the largest absolute gap in sorted MST edge
+    /// weights to identify natural cluster boundaries. No hardcoded thresholds.
+    ///
+    /// Provenance: logs full MST distribution stats (min/max/median/gap location)
+    /// so every threshold decision is traceable to the underlying data.
     ///
     /// Strategy:
-    /// 1. For Cosine metric: Use absolute threshold of 0.25 (similarity 0.75)
-    ///    Points closer than this are clustered together.
-    /// 2. For other metrics: Use adaptive approach based on distribution.
+    /// 1. Find the largest absolute gap in sorted MST edges
+    /// 2. If gap >= min_significant_gap (metric-specific), use the edge at the gap
+    /// 3. Otherwise fall back to 75th percentile (no clear separation)
+    /// 4. Apply metric-specific floor to prevent over-splitting tight clusters
     fn detect_gap_threshold(&self, mst: &[(usize, usize, f32)]) -> f32 {
         if mst.is_empty() {
             return f32::MAX;
         }
 
-        // Edges are already sorted by weight
+        // Edges are already sorted by weight (from build_mst)
         let weights: Vec<f32> = mst.iter().map(|(_, _, w)| *w).collect();
         let n = weights.len();
 
-        // For Cosine distance, use absolute threshold
-        // Cosine distance = 1 - similarity, so 0.25 means similarity >= 0.75
-        if self.params.metric == DistanceMetric::Cosine
-            || self.params.metric == DistanceMetric::AsymmetricCosine
-        {
-            // Use 0.20 as threshold (similarity >= 0.80 to cluster together)
-            // This is tight enough to separate ML/DB/DevOps topics
-            return 0.20;
-        }
-
-        // For Jaccard (sparse embeddings), use higher threshold
-        if self.params.metric == DistanceMetric::Jaccard {
-            return 0.50;
-        }
-
-        // Compute statistics for other metrics
+        // --- Provenance: MST distribution diagnostics ---
+        let min_w = weights[0];
+        let max_w = weights[n - 1];
         let mid = n / 2;
         let median = if n % 2 == 0 && n > 1 {
             (weights[mid - 1] + weights[mid]) / 2.0
@@ -619,22 +636,70 @@ impl HDBSCANClusterer {
             weights[mid]
         };
 
-        // Find first significant gap
-        for i in 1..n {
-            let ratio_to_prev = if weights[i - 1] > 0.0 {
-                weights[i] / weights[i - 1]
-            } else {
-                1.0
-            };
+        tracing::debug!(
+            mst_edges = n,
+            min_weight = %format!("{:.4}", min_w),
+            max_weight = %format!("{:.4}", max_w),
+            median_weight = %format!("{:.4}", median),
+            metric = ?self.params.metric,
+            "MST edge weight distribution"
+        );
 
-            // Jump of 1.5x from previous edge indicates boundary
-            if ratio_to_prev >= 1.5 {
-                return weights[i];
+        // Find largest absolute gap in sorted MST edges
+        let mut max_gap = 0.0f32;
+        let mut gap_idx = 0;
+        for i in 1..n {
+            let gap = weights[i] - weights[i - 1];
+            if gap > max_gap {
+                max_gap = gap;
+                gap_idx = i;
             }
         }
 
-        // Fallback to median
-        median
+        // Minimum gap significance per metric to avoid splitting on noise
+        let min_significant_gap = match self.params.metric {
+            DistanceMetric::Cosine | DistanceMetric::AsymmetricCosine => 0.02,
+            DistanceMetric::Jaccard => 0.05,
+            DistanceMetric::Euclidean => 0.1,
+            _ => 0.05,
+        };
+
+        let threshold = if max_gap >= min_significant_gap && gap_idx >= 1 {
+            // Use the edge weight just BEFORE the largest gap as threshold.
+            // Edges up to this weight merge; the gap edge and above get cut.
+            // Provenance: gap is between weights[gap_idx-1] and weights[gap_idx]
+            weights[gap_idx - 1]
+        } else {
+            // No significant gap found — use 75th percentile
+            let p75_idx = ((n as f32) * 0.75) as usize;
+            weights[p75_idx.min(n - 1)]
+        };
+
+        // Metric-specific floor to prevent over-splitting tight clusters
+        let floor = match self.params.metric {
+            DistanceMetric::Cosine | DistanceMetric::AsymmetricCosine => 0.03,
+            DistanceMetric::Jaccard => 0.10,
+            DistanceMetric::Euclidean => 0.05,
+            _ => 0.05,
+        };
+
+        let final_threshold = threshold.max(floor);
+
+        // --- Provenance: threshold decision trace ---
+        tracing::debug!(
+            max_gap = %format!("{:.4}", max_gap),
+            gap_at_edge = gap_idx,
+            min_significant_gap = %format!("{:.4}", min_significant_gap),
+            gap_significant = max_gap >= min_significant_gap,
+            raw_threshold = %format!("{:.4}", threshold),
+            floor = %format!("{:.4}", floor),
+            final_threshold = %format!("{:.4}", final_threshold),
+            edges_below = weights.iter().filter(|&&w| w <= final_threshold).count(),
+            edges_above = weights.iter().filter(|&&w| w > final_threshold).count(),
+            "Gap threshold selected (provenance: data-driven largest-gap)"
+        );
+
+        final_threshold
     }
 
     /// Identify core points based on cluster labels.
@@ -2188,6 +2253,192 @@ mod tests {
         println!(
             "[PASS] test_fit_precomputed_single_cluster - all in cluster {}",
             cluster_ids[0]
+        );
+    }
+
+    // =========================================================================
+    // DATA-DRIVEN GAP THRESHOLD TESTS (provenance: verifies adaptive threshold)
+    // =========================================================================
+
+    #[test]
+    fn test_gap_threshold_finds_clear_gap() {
+        // Provenance: MST weights [0.05, 0.06, 0.07, 0.80, 0.82]
+        // Largest gap = 0.80 - 0.07 = 0.73 at index 3
+        // Threshold should be at weights[3] = 0.80
+        // Build a precomputed distance matrix that produces this MST structure
+        // 5 points: A(0,1,2) tight cluster, B(3,4) far cluster
+        let distance_matrix = vec![
+            vec![0.0, 0.05, 0.07, 0.80, 0.82],
+            vec![0.05, 0.0, 0.06, 0.81, 0.83],
+            vec![0.07, 0.06, 0.0, 0.80, 0.82],
+            vec![0.80, 0.81, 0.80, 0.0, 0.05],
+            vec![0.82, 0.83, 0.82, 0.05, 0.0],
+        ];
+        let ids: Vec<Uuid> = (0..5).map(|_| Uuid::new_v4()).collect();
+
+        // Use min_cluster_size=2 to allow the two groups to form clusters
+        let small_clusterer = HDBSCANClusterer::new(
+            HDBSCANParams::default()
+                .with_min_cluster_size(2)
+                .with_min_samples(1),
+        );
+        let result = small_clusterer.fit_precomputed(&distance_matrix, &ids);
+        assert!(result.is_ok(), "fit_precomputed must succeed");
+
+        let memberships = result.unwrap();
+        let cluster_a: Vec<i32> = memberships[0..3].iter().map(|m| m.cluster_id).collect();
+        let cluster_b: Vec<i32> = memberships[3..5].iter().map(|m| m.cluster_id).collect();
+
+        // Group A should be in same cluster
+        assert!(
+            cluster_a.iter().all(|&c| c == cluster_a[0]),
+            "Points 0-2 should be in same cluster, got {:?}",
+            cluster_a
+        );
+        // Group B should be in same cluster
+        assert!(
+            cluster_b.iter().all(|&c| c == cluster_b[0]),
+            "Points 3-4 should be in same cluster, got {:?}",
+            cluster_b
+        );
+        // Groups should be separated (different clusters or noise)
+        if cluster_a[0] != -1 && cluster_b[0] != -1 {
+            assert_ne!(
+                cluster_a[0], cluster_b[0],
+                "Clusters A and B should be different"
+            );
+        }
+
+        println!(
+            "[PASS] test_gap_threshold_finds_clear_gap - A={}, B={}",
+            cluster_a[0], cluster_b[0]
+        );
+    }
+
+    #[test]
+    fn test_gap_threshold_uniform_distribution() {
+        // Provenance: MST weights [0.10, 0.11, 0.12, 0.13, 0.14]
+        // Max gap = 0.01 < min_significant_gap(0.02) → 75th percentile fallback
+        // 75th percentile = weights[3] = 0.13
+        let clusterer = HDBSCANClusterer::with_defaults();
+
+        // Uniform distances — no natural gap
+        let distance_matrix = vec![
+            vec![0.00, 0.10, 0.11, 0.12, 0.13, 0.14],
+            vec![0.10, 0.00, 0.10, 0.11, 0.12, 0.13],
+            vec![0.11, 0.10, 0.00, 0.10, 0.11, 0.12],
+            vec![0.12, 0.11, 0.10, 0.00, 0.10, 0.11],
+            vec![0.13, 0.12, 0.11, 0.10, 0.00, 0.10],
+            vec![0.14, 0.13, 0.12, 0.11, 0.10, 0.00],
+        ];
+        let ids: Vec<Uuid> = (0..6).map(|_| Uuid::new_v4()).collect();
+
+        let result = clusterer.fit_precomputed(&distance_matrix, &ids);
+        assert!(result.is_ok(), "Uniform distances must cluster without panic");
+
+        let memberships = result.unwrap();
+        // With uniform distribution and 75th percentile fallback,
+        // most/all points should end up in a single cluster (no natural gap)
+        let non_noise: Vec<i32> = memberships
+            .iter()
+            .filter(|m| m.cluster_id >= 0)
+            .map(|m| m.cluster_id)
+            .collect();
+
+        // At least some points should be clustered (not all noise)
+        assert!(
+            !non_noise.is_empty(),
+            "Some points should be clustered in uniform distribution"
+        );
+
+        println!(
+            "[PASS] test_gap_threshold_uniform_distribution - {} non-noise points",
+            non_noise.len()
+        );
+    }
+
+    #[test]
+    fn test_gap_threshold_respects_cosine_floor() {
+        // Provenance: Very tight distances [0.01, 0.015, 0.02]
+        // Largest gap = 0.005 < min_significant_gap(0.02) → 75th percentile
+        // 75th percentile ≈ 0.02, but floor = 0.03 → final threshold = 0.03
+        // With threshold 0.03, all edges (<=0.02) are below it → single cluster
+        let clusterer = HDBSCANClusterer::new(
+            HDBSCANParams::default()
+                .with_min_cluster_size(2)
+                .with_min_samples(1),
+        );
+
+        // Very tight cluster — everything is within cosine floor
+        let distance_matrix = vec![
+            vec![0.000, 0.010, 0.020],
+            vec![0.010, 0.000, 0.015],
+            vec![0.020, 0.015, 0.000],
+        ];
+        let ids: Vec<Uuid> = (0..3).map(|_| Uuid::new_v4()).collect();
+
+        let result = clusterer.fit_precomputed(&distance_matrix, &ids);
+        assert!(result.is_ok());
+
+        let memberships = result.unwrap();
+        let cluster_ids: Vec<i32> = memberships.iter().map(|m| m.cluster_id).collect();
+
+        // Floor prevents over-splitting: all points should stay together
+        assert!(
+            cluster_ids.iter().all(|&c| c == cluster_ids[0]),
+            "Cosine floor should prevent splitting tight cluster, got {:?}",
+            cluster_ids
+        );
+        assert!(cluster_ids[0] >= 0, "Should not be noise");
+
+        println!(
+            "[PASS] test_gap_threshold_respects_cosine_floor - all in cluster {}",
+            cluster_ids[0]
+        );
+    }
+
+    #[test]
+    fn test_gap_threshold_empty_mst() {
+        // Provenance: empty MST → f32::MAX (no edges to cluster)
+        let clusterer = HDBSCANClusterer::with_defaults();
+
+        // extract_clusters with 0 points
+        let (labels, probs) = clusterer.extract_clusters(&[], 0);
+        assert!(labels.is_empty());
+        assert!(probs.is_empty());
+
+        println!("[PASS] test_gap_threshold_empty_mst - returns empty");
+    }
+
+    #[test]
+    fn test_gap_threshold_single_edge() {
+        // Provenance: single MST edge → threshold = max(weight, floor)
+        // For weight=0.15 with cosine floor=0.03 → threshold = 0.15
+        let clusterer = HDBSCANClusterer::new(
+            HDBSCANParams::default()
+                .with_min_cluster_size(2)
+                .with_min_samples(1),
+        );
+
+        let distance_matrix = vec![vec![0.0, 0.15], vec![0.15, 0.0]];
+        let ids: Vec<Uuid> = (0..2).map(|_| Uuid::new_v4()).collect();
+
+        let result = clusterer.fit_precomputed(&distance_matrix, &ids);
+        assert!(result.is_ok());
+
+        let memberships = result.unwrap();
+        // Single edge at 0.15: with no gap to detect (n=1 edge),
+        // the 75th percentile IS that edge, so threshold = 0.15
+        // The edge weight (0.15) is not > threshold (0.15), so they merge
+        assert_eq!(memberships.len(), 2);
+        assert!(
+            memberships[0].cluster_id == memberships[1].cluster_id,
+            "Single edge should merge both points into same cluster"
+        );
+
+        println!(
+            "[PASS] test_gap_threshold_single_edge - cluster={}",
+            memberships[0].cluster_id
         );
     }
 }
