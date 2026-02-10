@@ -176,69 +176,34 @@ IMPORTANT: Correlation, semantic similarity, or topical overlap are NOT causatio
 
     /// Default system prompt for single-text causal analysis.
     ///
-    /// Generates structured causal analysis with 1-3 paragraph descriptions.
-    /// Descriptions enable semantic search of causal relationships.
+    /// V3 Structured Criteria prompt — 6-step decision procedure with explicit
+    /// forward/backward marker classification. Benchmarked at 73.3% direction
+    /// accuracy (+13.3% over V1), 559ms avg latency (1.8x faster), 0.80
+    /// confidence separation (+38% over V1). See docs/LLM_PROMPT_EXPERIMENT_ANALYSIS.md.
     const fn default_single_text_system_prompt() -> &'static str {
-        r#"You analyze text for causal content and generate rich causal descriptions.
+        r#"You are a causal text classifier. Follow these EXACT decision steps.
 
-TASK: Determine if the text describes causes, effects, or is causal in nature.
+OUTPUT: {"is_causal":true/false,"direction":"cause"/"effect"/"neutral","confidence":0.0-1.0,"key_phrases":[],"description":"...","asymmetry_strength":0.0-1.0,"cause_entities":[],"effect_entities":[]}
 
-OUTPUT FORMAT (JSON):
-{"is_causal":true/false,"direction":"cause"/"effect"/"neutral","confidence":0.0-1.0,"key_phrases":[],"description":"...","asymmetry_strength":0.0-1.0,"cause_entities":[],"effect_entities":[]}
+STEP 1 — SCAN for causal markers:
+  Forward: "causes", "leads to", "results in", "triggers", "produces", "drives"
+  Backward: "caused by", "results from", "due to", "driven by", "stems from"
+  If NO markers found → is_causal=false, direction="neutral", confidence<0.3
 
-DIRECTION CLASSIFICATION:
-- "cause": Text describes something that CAUSES other things
-  Example: "High cortisol levels cause memory impairment"
+STEP 2 — DETERMINE DIRECTION:
+  If text has FORWARD markers (X causes Y) → direction="cause"
+  If text has BACKWARD markers (Y caused by X) → direction="effect"
+  If BOTH or AMBIGUOUS → direction="neutral"
 
-- "effect": Text describes something that IS CAUSED by other things
-  Example: "Memory impairment results from chronic stress"
+STEP 3 — CALIBRATE CONFIDENCE:
+  Explicit markers ("causes", "leads to"): 0.85-0.95
+  Implicit causation ("damages", "triggers"): 0.65-0.80
+  Correlational only: 0.3-0.5
+  No causal content: 0.0-0.2
 
-- "neutral": Either non-causal OR equally describes both cause and effect
-
-KEY_PHRASES: Extract 1-3 causal markers (e.g., "causes", "leads to", "results from")
-
-ASYMMETRY_STRENGTH: How directional is the relationship? [0.0-1.0]
-- 1.0: Strongly directional (A clearly causes B, not vice versa)
-- 0.5: Moderate asymmetry
-- 0.0: Bidirectional or symmetric
-
-CAUSE_ENTITIES: Array of cause entity spans with character offsets into the original text.
-Each entry: {"start": char_offset, "end": char_offset, "label": "entity name"}
-Identify the key cause entities/phrases. Offsets MUST point into the input text.
-
-EFFECT_ENTITIES: Array of effect entity spans with character offsets into the original text.
-Each entry: {"start": char_offset, "end": char_offset, "label": "entity name"}
-Identify the key effect entities/phrases. Offsets MUST point into the input text.
-
-If confidence < 0.5, set cause_entities and effect_entities to empty arrays.
-
-DESCRIPTION (CRITICAL - generate when confidence >= 0.5):
-Write 1-3 paragraphs explaining the causal relationship.
-
-Paragraph 1 - RELATIONSHIP: State the causal relationship clearly.
-"X causes Y" or "Y is an effect of X"
-
-Paragraph 2 - MECHANISM: Explain HOW or WHY this causal link exists.
-Evidence, process, or mechanism details.
-
-Paragraph 3 - CONTEXT: Implications, scope, or conditions.
-When does this apply? What are the consequences?
-
-Use \n to separate paragraphs within the description string.
-
-If confidence < 0.5, set description to empty string "".
-
-EXAMPLE OUTPUT (causal):
-{"is_causal":true,"direction":"cause","confidence":0.9,"key_phrases":["causes","leads to"],"description":"High cortisol levels cause memory impairment by damaging hippocampal neurons.\n\nThe mechanism involves prolonged glucocorticoid exposure triggering oxidative stress and reducing synaptic plasticity in the hippocampus.\n\nThis relationship is particularly relevant in chronic stress conditions and aging.","asymmetry_strength":0.9,"cause_entities":[{"start":0,"end":20,"label":"high cortisol levels"}],"effect_entities":[{"start":27,"end":44,"label":"memory impairment"}]}
-
-EXAMPLE OUTPUT (non-causal):
-{"is_causal":false,"direction":"neutral","confidence":0.1,"key_phrases":[],"description":"","asymmetry_strength":0.0,"cause_entities":[],"effect_entities":[]}
-
-CONFIDENCE:
-- 0.9-1.0: Clear causal language with explicit markers
-- 0.7-0.8: Implicit causation, strong language
-- 0.5-0.6: Possible causation, weaker indicators
-- 0.0-0.4: No clear causal content"#
+STEP 4 — EXTRACT key_phrases (causal markers found in Step 1)
+STEP 5 — WRITE description explaining the mechanism (empty if confidence < 0.5)
+STEP 6 — SET asymmetry_strength and entity spans"#
     }
 
     /// System prompt for extracting ALL causal relationships from text.

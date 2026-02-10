@@ -1,0 +1,129 @@
+{
+  "benchmark_name": "causal_e2e_bench",
+  "timestamp": "2026-02-09T23:20:13.462133456+00:00",
+  "phase": "6.3_adversarial_robustness",
+  "metrics": {
+    "total_cases": 23,
+    "correct_rejections": 16,
+    "false_detections": 1,
+    "rejection_rate": 0.9411764705882353,
+    "per_category": [
+      {
+        "category": "correlation_not_causation",
+        "total": 3,
+        "correct": 3,
+        "accuracy": 1.0
+      },
+      {
+        "category": "factual_non_causal",
+        "total": 3,
+        "correct": 3,
+        "accuracy": 1.0
+      },
+      {
+        "category": "hypothetical",
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      {
+        "category": "near_miss",
+        "total": 3,
+        "correct": 3,
+        "accuracy": 1.0
+      },
+      {
+        "category": "negated",
+        "total": 3,
+        "correct": 2,
+        "accuracy": 0.6666666666666666
+      },
+      {
+        "category": "nested",
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      {
+        "category": "reversed_direction",
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      {
+        "category": "spurious",
+        "total": 2,
+        "correct": 2,
+        "accuracy": 1.0
+      },
+      {
+        "category": "temporal_conflation",
+        "total": 3,
+        "correct": 3,
+        "accuracy": 1.0
+      }
+    ],
+    "asymmetric_analysis": [
+      {
+        "text": "The fire alarm was caused by the fire truck arriving",
+        "category": "reversed_direction",
+        "detected_direction": "Cause",
+        "forward_sim": 1.0200001001358032,
+        "backward_sim": 0.8500000238418579,
+        "asymmetry_ratio": 1.2000000841477314
+      },
+      {
+        "text": "Ambulance sirens are triggered by heart attacks at hospitals",
+        "category": "reversed_direction",
+        "detected_direction": "Cause",
+        "forward_sim": 1.0200001001358032,
+        "backward_sim": 0.8500000238418579,
+        "asymmetry_ratio": 1.2000000841477314
+      },
+      {
+        "text": "Wearing a seatbelt causes an increase in car accidents",
+        "category": "spurious",
+        "detected_direction": "Effect",
+        "forward_sim": 0.8500000238418579,
+        "backward_sim": 0.6800000071525574,
+        "asymmetry_ratio": 1.2500000219134721
+      },
+      {
+        "text": "What causes people to be born on Tuesdays?",
+        "category": "spurious",
+        "detected_direction": "Cause",
+        "forward_sim": 1.0200001001358032,
+        "backward_sim": 0.8500000238418579,
+        "asymmetry_ratio": 1.2000000841477314
+      },
+      {
+        "text": "Pollution causes respiratory illness which triggers healthcare costs that lead to economic burden",
+        "category": "nested",
+        "detected_direction": "Cause",
+        "forward_sim": 1.0200001001358032,
+        "backward_sim": 0.8500000238418579,
+        "asymmetry_ratio": 1.2000000841477314
+      },
+      {
+        "text": "Why does poverty lead to poor education which leads to more poverty?",
+        "category": "nested",
+        "detected_direction": "Effect",
+        "forward_sim": 0.8500000238418579,
+        "backward_sim": 0.6800000071525574,
+        "asymmetry_ratio": 1.2500000219134721
+      }
+    ]
+  },
+  "pass": true,
+  "targets": {
+    "min_rejection_rate": 0.8,
+    "min_detection_rate": 0.6,
+    "max_false_positive_rate": 0.2
+  },
+  "actual": {
+    "overall_accuracy": 0.9565217391304348,
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.058823529411764705,
+    "rejection_rate": 0.9411764705882353
+  }
+}

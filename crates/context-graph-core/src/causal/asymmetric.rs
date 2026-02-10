@@ -520,10 +520,8 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "investigate",
         "debug",
         "troubleshoot",
-        // Trigger patterns
-        "triggers",
+        // Trigger patterns ("trigger" subsumes "triggers", "triggered", "what triggers")
         "trigger",
-        "what triggers",
         "source of",
         "origin of",
         // Attribution patterns
@@ -544,7 +542,8 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         // ===== Phase 3 Additions: Scientific/Technical Cause Patterns =====
         // Attribution/causation verbs (passive voice patterns)
         "is attributed to",
-        "is driven by",
+        // "driven by" subsumes "is driven by"; active forms "drives ", "what drives" below
+        "driven by",
         "is mediated by",
         "contributes to",
         "accounts for",
@@ -562,7 +561,7 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         // Root cause analysis patterns
         "factor in",
         "factors in",
-        "root of the",
+        // "root of" (line above) already subsumes "root of the"
         "basis of",
         "basis for",
         "driving force",
@@ -612,6 +611,13 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "manipulated variable",
         "treatment group",
         "intervention study",
+        // ===== Benchmark Gap Fixes =====
+        // "causes " in both cause AND effect lists — cancels out so compound effect
+        // phrases ("causes an increase") still win; standalone "X causes Y" ties → Cause
+        "causes ",
+        // Active "drives" — "What drives X?" / "X drives Y" is cause-seeking
+        "what drives",
+        "drives ",
     ];
 
     // Effect-seeking indicators: user has a cause and wants the effects
@@ -634,8 +640,10 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "what does it do",
         "what will it do",
         "then what",
-        // Downstream patterns
+        // Downstream patterns — all three tense variants needed (not substrings of each other)
         "leads to",
+        "lead to",
+        "led to",
         "downstream",
         "cascades to",
         "cascading",
@@ -656,8 +664,10 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "complications",
         "sequelae",
         // ===== Phase 3 Additions: Scientific/Technical Effect Patterns =====
-        // Outcome/result patterns (document text patterns)
+        // Outcome/result patterns — all three tense variants needed (not substrings of each other)
         "results in",
+        "result in",
+        "resulted in",
         "causes an increase",
         "causes a decrease",
         "produces a decrease",
@@ -727,6 +737,10 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
         "response variable",
         "experimental outcome",
         "study endpoint",
+        // ===== Benchmark Gap Fix =====
+        // "causes " in both cause AND effect lists — cancels out so compound effect
+        // phrases ("causes an increase") still win; standalone "X causes Y" ties → Cause
+        "causes ",
     ];
 
     // Score-based detection for disambiguation

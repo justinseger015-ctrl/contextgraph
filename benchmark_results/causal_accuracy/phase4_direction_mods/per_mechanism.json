@@ -1,0 +1,132 @@
+{
+  "benchmark_name": "causal_accuracy_bench",
+  "timestamp": "2026-02-09T23:20:05.775208148+00:00",
+  "phase": "4.2_per_mechanism_modifiers",
+  "metrics": {
+    "mechanisms": [
+      {
+        "mechanism": "direct",
+        "example_pairs": [
+          [
+            "Smoking causes lung cancer",
+            "Lung cancer is caused by smoking"
+          ],
+          [
+            "Heat melts ice",
+            "Ice melts when heated"
+          ],
+          [
+            "Gravity pulls objects downward",
+            "Objects fall due to gravity"
+          ],
+          [
+            "Acid corrodes metal",
+            "Metal corrodes when exposed to acid"
+          ],
+          [
+            "Sunlight drives photosynthesis",
+            "Photosynthesis is driven by sunlight"
+          ]
+        ],
+        "recommended_cause_to_effect": 1.4,
+        "recommended_effect_to_cause": 0.6,
+        "forward_backward_ratio": 2.3333333333333335
+      },
+      {
+        "mechanism": "mediated",
+        "example_pairs": [
+          [
+            "Stress raises cortisol which damages neurons",
+            "Neuron damage results from cortisol elevated by stress"
+          ],
+          [
+            "Deforestation increases CO2 which warms climate",
+            "Climate warming traces back through CO2 to deforestation"
+          ],
+          [
+            "Poor diet causes obesity which increases heart disease",
+            "Heart disease risk rises through obesity from poor diet"
+          ],
+          [
+            "Education improves literacy which boosts employment",
+            "Employment improves through literacy gains from education"
+          ],
+          [
+            "Exercise releases endorphins which reduce pain",
+            "Pain reduction follows from endorphins released by exercise"
+          ]
+        ],
+        "recommended_cause_to_effect": 1.2,
+        "recommended_effect_to_cause": 0.8,
+        "forward_backward_ratio": 1.4999999999999998
+      },
+      {
+        "mechanism": "feedback",
+        "example_pairs": [
+          [
+            "Anxiety causes insomnia which worsens anxiety",
+            "Insomnia worsens anxiety which then deepens insomnia"
+          ],
+          [
+            "Inflation reduces spending which slows economy causing more inflation",
+            "Economic slowdown from reduced spending feeds back into inflation"
+          ],
+          [
+            "Stress causes poor sleep which increases stress",
+            "Poor sleep from stress creates a cycle of worsening stress"
+          ],
+          [
+            "Debt causes interest which increases debt",
+            "Interest on debt accumulates creating larger debt"
+          ],
+          [
+            "Population growth increases resource use which limits population",
+            "Resource limits from population growth constrain further growth"
+          ]
+        ],
+        "recommended_cause_to_effect": 1.05,
+        "recommended_effect_to_cause": 0.95,
+        "forward_backward_ratio": 1.105263157894737
+      },
+      {
+        "mechanism": "temporal",
+        "example_pairs": [
+          [
+            "Earthquake preceded the tsunami by fifteen minutes",
+            "The tsunami arrived fifteen minutes after the earthquake"
+          ],
+          [
+            "Seed germination occurs days before the first leaf appears",
+            "First leaf emergence follows days after seed germination"
+          ],
+          [
+            "Infection precedes fever by twelve to twenty-four hours",
+            "Fever develops twelve to twenty-four hours after infection begins"
+          ],
+          [
+            "Lightning occurs moments before thunder is heard",
+            "Thunder is heard moments after lightning strikes"
+          ],
+          [
+            "Injury triggers inflammation which peaks after forty-eight hours",
+            "Peak inflammation occurs forty-eight hours post injury"
+          ]
+        ],
+        "recommended_cause_to_effect": 1.3,
+        "recommended_effect_to_cause": 0.7,
+        "forward_backward_ratio": 1.8571428571428574
+      }
+    ]
+  },
+  "pass": true,
+  "targets": {
+    "max_ratio": 3.0,
+    "min_ratio": 1.0
+  },
+  "actual": {
+    "feedback_ratio": 1.105263157894737,
+    "direct_ratio": 2.3333333333333335,
+    "temporal_ratio": 1.8571428571428574,
+    "mediated_ratio": 1.4999999999999998
+  }
+}

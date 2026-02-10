@@ -1,0 +1,45 @@
+{
+  "benchmark_name": "causal_accuracy_bench",
+  "timestamp": "2026-02-09T23:20:05.774985708+00:00",
+  "phase": "3.4_query_intent_detection",
+  "metrics": {
+    "three_class_accuracy": 0.825,
+    "cause_precision": 1.0,
+    "cause_recall": 0.7666666666666667,
+    "effect_precision": 1.0,
+    "effect_recall": 0.7666666666666667,
+    "unknown_precision": 0.5882352941176471,
+    "unknown_recall": 1.0,
+    "total_queries": 80,
+    "direction_detection": {
+      "accuracy": 0.7666666666666667,
+      "cause_precision": 1.0,
+      "cause_recall": 0.7666666666666667,
+      "effect_precision": 1.0,
+      "effect_recall": 0.7666666666666667,
+      "direction_f1": 0.8679245283018869,
+      "confusion_matrix": {
+        "true_cause_pred_cause": 23,
+        "true_cause_pred_effect": 0,
+        "true_cause_pred_unknown": 7,
+        "true_effect_pred_cause": 0,
+        "true_effect_pred_effect": 23,
+        "true_effect_pred_unknown": 7,
+        "true_unknown_pred_cause": 0,
+        "true_unknown_pred_effect": 0,
+        "true_unknown_pred_unknown": 20
+      }
+    }
+  },
+  "pass": true,
+  "targets": {
+    "min_3class_accuracy": 0.7
+  },
+  "actual": {
+    "effect_precision": 1.0,
+    "cause_recall": 0.7666666666666667,
+    "effect_recall": 0.7666666666666667,
+    "three_class_accuracy": 0.825,
+    "cause_precision": 1.0
+  }
+}

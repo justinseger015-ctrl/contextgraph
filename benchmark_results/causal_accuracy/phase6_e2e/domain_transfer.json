@@ -1,0 +1,115 @@
+{
+  "benchmark_name": "causal_e2e_bench",
+  "timestamp": "2026-02-09T23:20:13.461942076+00:00",
+  "phase": "6.2_domain_transfer",
+  "metrics": {
+    "per_domain": [
+      {
+        "domain": "biomedical",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "economics",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "climate_science",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "software_engineering",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "psychology",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "physics",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "sociology",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "history",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "nutrition",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      },
+      {
+        "domain": "cybersecurity",
+        "total_samples": 12,
+        "correct": 12,
+        "accuracy": 1.0,
+        "cause_accuracy": 1.0,
+        "effect_accuracy": 1.0,
+        "non_causal_accuracy": 1.0
+      }
+    ],
+    "overall_accuracy": 1.0,
+    "accuracy_variance": 0.0,
+    "min_domain_accuracy": 1.0,
+    "max_domain_accuracy": 1.0,
+    "weakest_domain": "biomedical"
+  },
+  "pass": true,
+  "targets": {
+    "max_variance": 0.0225,
+    "min_domain_accuracy": 0.5,
+    "min_overall_accuracy": 0.7
+  },
+  "actual": {
+    "accuracy_variance": 0.0,
+    "min_domain_accuracy": 1.0,
+    "overall_accuracy": 1.0
+  }
+}

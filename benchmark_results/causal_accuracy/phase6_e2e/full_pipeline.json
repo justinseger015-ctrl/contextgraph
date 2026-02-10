@@ -1,0 +1,27 @@
+{
+  "benchmark_name": "causal_e2e_bench",
+  "timestamp": "2026-02-09T23:20:13.461552669+00:00",
+  "phase": "6.1_full_pipeline",
+  "metrics": {
+    "total_pairs": 12,
+    "llm_detected_causal": 0,
+    "llm_direction_correct": 0,
+    "llm_confidence_mean": 0.19999999999999998,
+    "embeddings_generated": 0,
+    "pipeline_latency_ms": 1419,
+    "per_pair_latency_ms": 118.25,
+    "llm_f1": 0.0,
+    "direction_accuracy": 0.0
+  },
+  "pass": false,
+  "targets": {
+    "min_direction_accuracy": 0.6,
+    "min_f1": 0.7
+  },
+  "actual": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "direction_accuracy": 0.0,
+    "f1": 0.0
+  }
+}

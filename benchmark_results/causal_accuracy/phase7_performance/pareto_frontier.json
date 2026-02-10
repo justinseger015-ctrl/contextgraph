@@ -1,0 +1,104 @@
+{
+  "benchmark_name": "causal_perf_bench",
+  "timestamp": "2026-02-09T23:19:21.926843418+00:00",
+  "phase": "7.3_pareto_frontier",
+  "metrics": {
+    "tradeoff_points": [
+      {
+        "description": "intent_detection_only",
+        "accuracy": 0.9,
+        "latency_us": 1.331,
+        "throughput_per_sec": 751291.9968469777
+      },
+      {
+        "description": "intent_plus_asymmetric",
+        "accuracy": 1.0,
+        "latency_us": 1.2714,
+        "throughput_per_sec": 786485.5359018063
+      },
+      {
+        "description": "cosine_plus_intent_plus_asymmetric",
+        "accuracy": 1.0,
+        "latency_us": 2.2495,
+        "throughput_per_sec": 444525.22949615156
+      }
+    ],
+    "modifier_impact": [
+      {
+        "cause_to_effect_mod": 1.0,
+        "effect_to_cause_mod": 1.0,
+        "forward_backward_ratio": 1.0,
+        "computation_ns": 0.19516
+      },
+      {
+        "cause_to_effect_mod": 1.1,
+        "effect_to_cause_mod": 0.8999999999999999,
+        "forward_backward_ratio": 1.2222222222222223,
+        "computation_ns": 0.19422
+      },
+      {
+        "cause_to_effect_mod": 1.2,
+        "effect_to_cause_mod": 0.8,
+        "forward_backward_ratio": 1.5,
+        "computation_ns": 0.19381
+      },
+      {
+        "cause_to_effect_mod": 1.3,
+        "effect_to_cause_mod": 0.7,
+        "forward_backward_ratio": 1.8571428571428572,
+        "computation_ns": 0.19423
+      },
+      {
+        "cause_to_effect_mod": 1.4,
+        "effect_to_cause_mod": 0.6000000000000001,
+        "forward_backward_ratio": 2.333333333333333,
+        "computation_ns": 0.19392
+      },
+      {
+        "cause_to_effect_mod": 1.5,
+        "effect_to_cause_mod": 0.5,
+        "forward_backward_ratio": 3.0,
+        "computation_ns": 0.19381
+      },
+      {
+        "cause_to_effect_mod": 1.6,
+        "effect_to_cause_mod": 0.3999999999999999,
+        "forward_backward_ratio": 4.000000000000001,
+        "computation_ns": 0.19381
+      },
+      {
+        "cause_to_effect_mod": 1.7,
+        "effect_to_cause_mod": 0.30000000000000004,
+        "forward_backward_ratio": 5.666666666666667,
+        "computation_ns": 0.1936
+      },
+      {
+        "cause_to_effect_mod": 1.8,
+        "effect_to_cause_mod": 0.19999999999999996,
+        "forward_backward_ratio": 9.000000000000002,
+        "computation_ns": 0.19715
+      },
+      {
+        "cause_to_effect_mod": 1.9,
+        "effect_to_cause_mod": 0.10000000000000009,
+        "forward_backward_ratio": 18.999999999999982,
+        "computation_ns": 0.27263
+      },
+      {
+        "cause_to_effect_mod": 2.0,
+        "effect_to_cause_mod": 0.0,
+        "forward_backward_ratio": 0.0,
+        "computation_ns": 0.23291
+      }
+    ],
+    "optimal_operating_point": "intent_plus_asymmetric"
+  },
+  "pass": true,
+  "targets": {
+    "tradeoff_points_measured": 3.0
+  },
+  "actual": {
+    "modifier_points": 11.0,
+    "tradeoff_points": 3.0
+  }
+}

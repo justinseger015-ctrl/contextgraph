@@ -1,0 +1,52 @@
+{
+  "benchmark_name": "causal_perf_bench",
+  "timestamp": "2026-02-09T23:19:21.877597851+00:00",
+  "phase": "7.2_throughput",
+  "metrics": {
+    "operations": [
+      {
+        "operation": "detect_causal_query_intent",
+        "batch_size": 100000,
+        "total_time_ms": 118.0,
+        "throughput_per_sec": 842599.6119154707,
+        "target_per_sec": 100000.0,
+        "pass": true
+      },
+      {
+        "operation": "compute_asymmetric_similarity",
+        "batch_size": 1000000,
+        "total_time_ms": 0.0,
+        "throughput_per_sec": 1054743286.0316128,
+        "target_per_sec": 1000000.0,
+        "pass": true
+      },
+      {
+        "operation": "cosine_similarity_768d",
+        "batch_size": 500000,
+        "total_time_ms": 454.0,
+        "throughput_per_sec": 1100765.2412081885,
+        "target_per_sec": 500000.0,
+        "pass": true
+      },
+      {
+        "operation": "intent_plus_asymmetric_pipeline",
+        "batch_size": 100000,
+        "total_time_ms": 126.0,
+        "throughput_per_sec": 790170.1006287154,
+        "target_per_sec": 50000.0,
+        "pass": true
+      }
+    ],
+    "overall_pass": true
+  },
+  "pass": true,
+  "targets": {
+    "all_targets_met": 1.0
+  },
+  "actual": {
+    "detect_causal_query_intent_per_sec": 842599.6119154707,
+    "intent_plus_asymmetric_pipeline_per_sec": 790170.1006287154,
+    "cosine_similarity_768d_per_sec": 1100765.2412081885,
+    "compute_asymmetric_similarity_per_sec": 1054743286.0316128
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "benchmark_name": "causal_perf_bench",
+  "timestamp": "2026-02-09T23:19:21.176627180+00:00",
+  "phase": "7.1_latency_budget",
+  "metrics": {
+    "operations": [
+      {
+        "operation": "detect_causal_query_intent",
+        "samples": 10000,
+        "mean_us": 1.6029546999999968,
+        "median_us": 1.376,
+        "p95_us": 1.918,
+        "p99_us": 2.638,
+        "min_us": 0.751,
+        "max_us": 719.644,
+        "target_us": 10.0,
+        "hard_limit_us": 50.0,
+        "pass": true
+      },
+      {
+        "operation": "compute_asymmetric_similarity",
+        "samples": 100000,
+        "mean_us": 0.02074333999997168,
+        "median_us": 0.021,
+        "p95_us": 0.021,
+        "p99_us": 0.021,
+        "min_us": 0.01,
+        "max_us": 118.574,
+        "target_us": 1.0,
+        "hard_limit_us": 5.0,
+        "pass": true
+      },
+      {
+        "operation": "cosine_similarity_768d",
+        "samples": 100000,
+        "mean_us": 0.9461655099990759,
+        "median_us": 0.886,
+        "p95_us": 0.907,
+        "p99_us": 1.063,
+        "min_us": 0.844,
+        "max_us": 887.447,
+        "target_us": 5.0,
+        "hard_limit_us": 20.0,
+        "pass": true
+      },
+      {
+        "operation": "cosine_similarity_1024d",
+        "samples": 100000,
+        "mean_us": 1.2735028399991677,
+        "median_us": 1.188,
+        "p95_us": 1.22,
+        "p99_us": 2.106,
+        "min_us": 1.146,
+        "max_us": 546.584,
+        "target_us": 7.0,
+        "hard_limit_us": 30.0,
+        "pass": true
+      },
+      {
+        "operation": "intent_detect_plus_asymmetric",
+        "samples": 10000,
+        "mean_us": 1.186122199999993,
+        "median_us": 1.115,
+        "p95_us": 1.616,
+        "p99_us": 2.283,
+        "min_us": 0.761,
+        "max_us": 83.827,
+        "target_us": 15.0,
+        "hard_limit_us": 60.0,
+        "pass": true
+      }
+    ],
+    "pure_code_summary": {
+      "detect_intent_mean_us": 1.6029546999999968,
+      "asymmetric_sim_mean_us": 0.02074333999997168,
+      "cosine_sim_mean_us": 0.9461655099990759,
+      "all_within_budget": true
+    }
+  },
+  "pass": true,
+  "targets": {
+    "all_within_hard_limit": 1.0
+  },
+  "actual": {
+    "cosine_768d_mean_us": 0.9461655099990759,
+    "asymmetric_sim_mean_us": 0.02074333999997168,
+    "intent_detect_mean_us": 1.6029546999999968
+  }
+}
