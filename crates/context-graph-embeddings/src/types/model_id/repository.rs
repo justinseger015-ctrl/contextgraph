@@ -14,7 +14,7 @@ impl ModelId {
     pub const fn model_repo(&self) -> Option<&'static str> {
         match self {
             Self::Semantic => Some("intfloat/e5-large-v2"),
-            Self::Causal => Some("allenai/longformer-base-4096"),
+            Self::Causal => Some("nomic-ai/nomic-embed-text-v1.5"),
             Self::Sparse => Some("naver/splade-cocondenser-ensembledistil"),
             Self::Code => Some("Qodo/Qodo-Embed-1-1.5B"),
             Self::Graph => Some("sentence-transformers/paraphrase-MiniLM-L6-v2"),

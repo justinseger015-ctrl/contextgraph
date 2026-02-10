@@ -59,7 +59,7 @@ pub use custom::{
 pub use factory::DefaultModelFactory;
 pub use memory_tracker::MemoryTracker;
 pub use pretrained::{
-    // CausalModel (E5) - Longformer
+    // CausalModel (E5) - nomic-embed-text-v1.5
     CausalModel,
     // CodeModel (E7) - Qodo-Embed-1-1.5B (Qwen2-based)
     CodeModel,
@@ -91,7 +91,6 @@ pub use pretrained::{
     CODE_MODEL_NAME,
     CODE_NATIVE_DIMENSION,
     CODE_PROJECTED_DIMENSION,
-    DEFAULT_ATTENTION_WINDOW,
     ENTITY_DIMENSION,
     ENTITY_LATENCY_BUDGET_MS,
     ENTITY_MAX_TOKENS,

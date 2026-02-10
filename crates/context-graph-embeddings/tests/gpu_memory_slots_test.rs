@@ -173,7 +173,7 @@ fn test_allocate_all_13_embedders_within_budget() {
             100_000_000,
             "E4: 100MB (512D)",
         ),
-        (Embedder::Causal, 150_000_000, "E5: 150MB (768D Longformer)"),
+        (Embedder::Causal, 150_000_000, "E5: 150MB (768D nomic-embed)"),
         (Embedder::Sparse, 50_000_000, "E6: 50MB sparse SPLADE"),
         (Embedder::Code, 300_000_000, "E7: 300MB (1536D Qodo)"),
         (Embedder::Emotional, 150_000_000, "E8: 150MB (1024D e5-large-v2)"),

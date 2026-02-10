@@ -1,102 +1,91 @@
-//! Longformer weight structures.
+//! NomicBERT weight structures for the causal embedding model (E5).
 //!
-//! This module contains the tensor weight structures for embedding layers,
-//! attention mechanisms, feed-forward networks, and complete model weights.
+//! This module contains tensor weight structures for the nomic-embed-text-v1.5
+//! model: embeddings, fused QKV attention, SwiGLU FFN, and layer norms.
 //!
-//! # Asymmetric Causal Projections
+//! # Causal Projection Weights
 //!
 //! The `CausalProjectionWeights` struct provides learned projection matrices
-//! for creating asymmetric cause/effect embeddings. These are initialized as
-//! perturbed identity matrices to create immediate asymmetry without training.
+//! for creating asymmetric cause/effect embeddings during fine-tuning.
+//! For the base nomic model, asymmetry comes from instruction prefixes instead.
 
 use candle_core::{DType, Device, Tensor};
 use rand::Rng;
 
 use crate::error::{EmbeddingError, EmbeddingResult};
 
-use super::config::LongformerConfig;
+use super::config::NomicConfig;
 
 /// Seed for causal projection initialization (deterministic).
 pub const CAUSAL_PROJECTION_SEED: u64 = 0xCA05A1;
 
-/// Longformer embedding weights.
+/// NomicBERT embedding weights.
+///
+/// No position embeddings — nomic uses rotary PE applied in the attention layer.
 #[derive(Debug)]
-pub struct LongformerEmbeddingWeights {
+pub struct NomicEmbeddingWeights {
     /// Word embeddings: [vocab_size, hidden_size]
     pub word_embeddings: Tensor,
-    /// Position embeddings: [max_position, hidden_size]
-    pub position_embeddings: Tensor,
     /// Token type embeddings: [type_vocab_size, hidden_size]
     pub token_type_embeddings: Tensor,
-    /// LayerNorm weight: [hidden_size]
+    /// Embedding LayerNorm weight: [hidden_size]
     pub layer_norm_weight: Tensor,
-    /// LayerNorm bias: [hidden_size]
+    /// Embedding LayerNorm bias: [hidden_size]
     pub layer_norm_bias: Tensor,
 }
 
-/// Longformer self-attention weights (includes global attention).
+/// NomicBERT attention weights with fused QKV.
+///
+/// Uses a single fused Wqkv projection [3*hidden_size, hidden_size] instead of
+/// separate Q, K, V matrices. This is split at runtime into Q, K, V.
 #[derive(Debug)]
-pub struct LongformerAttentionWeights {
-    /// Query projection: [hidden_size, hidden_size]
-    pub query_weight: Tensor,
-    /// Query bias: [hidden_size]
-    pub query_bias: Tensor,
-    /// Key projection: [hidden_size, hidden_size]
-    pub key_weight: Tensor,
-    /// Key bias: [hidden_size]
-    pub key_bias: Tensor,
-    /// Value projection: [hidden_size, hidden_size]
-    pub value_weight: Tensor,
-    /// Value bias: [hidden_size]
-    pub value_bias: Tensor,
+pub struct NomicAttentionWeights {
+    /// Fused Q+K+V projection: [3*hidden_size, hidden_size]
+    pub wqkv_weight: Tensor,
     /// Output projection: [hidden_size, hidden_size]
-    pub output_weight: Tensor,
-    /// Output bias: [hidden_size]
-    pub output_bias: Tensor,
-    /// Attention output LayerNorm weight: [hidden_size]
-    pub layer_norm_weight: Tensor,
-    /// Attention output LayerNorm bias: [hidden_size]
-    pub layer_norm_bias: Tensor,
-    // Note: Global attention weights omitted for simplicity in initial implementation.
-    // For full sliding window + global attention, we would include:
-    // query_global_weight, key_global_weight, value_global_weight, etc.
+    pub out_proj_weight: Tensor,
+    /// Attention LayerNorm weight (norm1): [hidden_size]
+    pub norm1_weight: Tensor,
+    /// Attention LayerNorm bias (norm1): [hidden_size]
+    pub norm1_bias: Tensor,
 }
 
-/// Longformer FFN weights.
+/// NomicBERT SwiGLU FFN weights.
+///
+/// SwiGLU uses two parallel projections (gate and up), then:
+///   output = fc2(SiLU(fc11(x)) * fc12(x))
 #[derive(Debug)]
-pub struct LongformerFfnWeights {
-    /// Intermediate projection: [intermediate_size, hidden_size]
-    pub intermediate_weight: Tensor,
-    /// Intermediate bias: [intermediate_size]
-    pub intermediate_bias: Tensor,
-    /// Output projection: [hidden_size, intermediate_size]
-    pub output_weight: Tensor,
-    /// Output bias: [hidden_size]
-    pub output_bias: Tensor,
-    /// Output LayerNorm weight: [hidden_size]
-    pub layer_norm_weight: Tensor,
-    /// Output LayerNorm bias: [hidden_size]
-    pub layer_norm_bias: Tensor,
+pub struct NomicFfnWeights {
+    /// Gate projection (SwiGLU): [intermediate_size, hidden_size]
+    pub fc11_weight: Tensor,
+    /// Up projection (SwiGLU): [intermediate_size, hidden_size]
+    pub fc12_weight: Tensor,
+    /// Down projection: [hidden_size, intermediate_size]
+    pub fc2_weight: Tensor,
+    /// FFN LayerNorm weight (norm2): [hidden_size]
+    pub norm2_weight: Tensor,
+    /// FFN LayerNorm bias (norm2): [hidden_size]
+    pub norm2_bias: Tensor,
 }
 
-/// Longformer encoder layer weights.
+/// NomicBERT encoder layer weights.
 #[derive(Debug)]
-pub struct LongformerEncoderLayerWeights {
-    /// Self-attention weights.
-    pub attention: LongformerAttentionWeights,
-    /// FFN weights.
-    pub ffn: LongformerFfnWeights,
+pub struct NomicEncoderLayerWeights {
+    /// Attention weights (fused QKV + output + norm1).
+    pub attention: NomicAttentionWeights,
+    /// FFN weights (SwiGLU fc11/fc12/fc2 + norm2).
+    pub ffn: NomicFfnWeights,
 }
 
-/// Complete Longformer model weights.
+/// Complete NomicBERT model weights.
 #[derive(Debug)]
-pub struct LongformerWeights {
+pub struct NomicWeights {
     /// Model configuration.
-    pub config: LongformerConfig,
-    /// Embedding layer weights.
-    pub embeddings: LongformerEmbeddingWeights,
+    pub config: NomicConfig,
+    /// Embedding layer weights (word + token_type + LayerNorm, no position).
+    pub embeddings: NomicEmbeddingWeights,
     /// Encoder layer weights.
-    pub encoder_layers: Vec<LongformerEncoderLayerWeights>,
+    pub encoder_layers: Vec<NomicEncoderLayerWeights>,
     /// GPU device reference.
     pub(crate) device: &'static Device,
 }
@@ -110,31 +99,13 @@ const PROJECTION_INIT_STD: f64 = 0.02;
 
 /// Learned projection weights for asymmetric cause/effect embeddings.
 ///
-/// These projections transform the base Longformer embedding into
-/// cause-role and effect-role vectors. The projections are initialized
-/// as perturbed identity matrices (I + N(0, 0.02)) to create immediate
-/// asymmetry without requiring fine-tuning.
+/// These projections transform the base embedding into cause-role and
+/// effect-role vectors. For the base nomic model, asymmetry comes from
+/// instruction prefixes instead. These projections are available for
+/// future fine-tuning of dedicated projection heads.
 ///
-/// # Architecture
-///
-/// ```text
-/// base_embedding [768D]
-///        |
-///    +---+---+
-///    |       |
-/// W_cause  W_effect
-///    |       |
-/// cause_vec effect_vec
-/// [768D]    [768D]
-/// ```
-///
-/// # Why Perturbed Identity?
-///
-/// 1. **Immediate asymmetry**: Different random perturbations create distinct
-///    projections from the start
-/// 2. **Preserved semantics**: Identity component ensures the base meaning is retained
-/// 3. **No training required**: Works out-of-the-box without fine-tuning
-/// 4. **Deterministic**: Same seed produces same weights across runs
+/// Initialized as perturbed identity matrices (I + N(0, 0.02)) to create
+/// immediate asymmetry without requiring fine-tuning.
 #[derive(Debug)]
 pub struct CausalProjectionWeights {
     /// Cause projection matrix: [hidden_size, hidden_size]
@@ -170,7 +141,7 @@ pub struct TrainableProjection {
     pub effect_projection_var: candle_core::Var,
     /// Trainable effect bias [hidden_size].
     pub effect_bias_var: candle_core::Var,
-    /// Hidden size (768 for Longformer-base).
+    /// Hidden size (768 for nomic-embed).
     pub hidden_size: usize,
 }
 
@@ -256,37 +227,43 @@ impl TrainableProjection {
             self.effect_bias_var.as_tensor().clone(),
         );
 
-        // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| crate::error::EmbeddingError::InternalError {
                 message: format!("Failed to create checkpoint dir: {}", e),
             })?;
         }
 
-        // Build views with owned data kept alive
         let tensor_data: Vec<(String, Vec<f32>, Vec<usize>)> = tensors
             .iter()
             .map(|(k, v)| {
-                let data: Vec<f32> = v.flatten_all().unwrap().to_vec1().unwrap();
+                let data: Vec<f32> = v
+                    .flatten_all()
+                    .map_err(|e| crate::error::EmbeddingError::InternalError {
+                        message: format!("Flatten tensor '{}' failed: {}", k, e),
+                    })?
+                    .to_vec1()
+                    .map_err(|e| crate::error::EmbeddingError::InternalError {
+                        message: format!("to_vec1 tensor '{}' failed: {}", k, e),
+                    })?;
                 let shape: Vec<usize> = v.shape().dims().to_vec();
-                (k.clone(), data, shape)
+                Ok((k.clone(), data, shape))
             })
-            .collect();
+            .collect::<Result<Vec<_>, crate::error::EmbeddingError>>()?;
 
         let views: Vec<(String, safetensors::tensor::TensorView<'_>)> = tensor_data
             .iter()
             .map(|(k, data, shape)| {
-                (
-                    k.clone(),
-                    safetensors::tensor::TensorView::new(
-                        safetensors::Dtype::F32,
-                        shape.clone(),
-                        bytemuck::cast_slice(data.as_slice()),
-                    )
-                    .unwrap(),
+                let view = safetensors::tensor::TensorView::new(
+                    safetensors::Dtype::F32,
+                    shape.clone(),
+                    bytemuck::cast_slice(data.as_slice()),
                 )
+                .map_err(|e| crate::error::EmbeddingError::InternalError {
+                    message: format!("TensorView for '{}' failed: {}", k, e),
+                })?;
+                Ok((k.clone(), view))
             })
-            .collect();
+            .collect::<Result<Vec<_>, crate::error::EmbeddingError>>()?;
 
         safetensors::tensor::serialize_to_file(
             views.iter().map(|(k, v)| (k.clone(), v.clone())),
@@ -411,29 +388,14 @@ impl TrainableProjection {
 
 impl CausalProjectionWeights {
     /// Initialize projection weights as perturbed identity matrices.
-    ///
-    /// Creates W_cause = I + N(0, 0.02) and W_effect = I + N(0, 0.02) with
-    /// different random perturbations to create asymmetry.
-    ///
-    /// # Arguments
-    ///
-    /// * `hidden_size` - Dimension of embeddings (768 for Longformer-base)
-    /// * `device` - Device to create tensors on
-    /// * `seed` - Random seed for reproducibility
-    ///
-    /// # Returns
-    ///
-    /// Initialized CausalProjectionWeights
     pub fn initialize(
         hidden_size: usize,
         device: &Device,
         seed: u64,
     ) -> EmbeddingResult<Self> {
-        // Use seeded RNG for reproducibility
         use rand::SeedableRng;
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
-        // Create perturbed identity for cause projection
         let cause_data = create_perturbed_identity(hidden_size, &mut rng, PROJECTION_INIT_STD);
         let cause_projection =
             Tensor::from_slice(&cause_data, (hidden_size, hidden_size), device)
@@ -445,7 +407,6 @@ impl CausalProjectionWeights {
                     message: format!("Failed to convert cause projection dtype: {}", e),
                 })?;
 
-        // Create perturbed identity for effect projection (different perturbation)
         let effect_data = create_perturbed_identity(hidden_size, &mut rng, PROJECTION_INIT_STD);
         let effect_projection =
             Tensor::from_slice(&effect_data, (hidden_size, hidden_size), device)
@@ -457,7 +418,6 @@ impl CausalProjectionWeights {
                     message: format!("Failed to convert effect projection dtype: {}", e),
                 })?;
 
-        // Initialize biases to small random values (not zero, to add asymmetry)
         let cause_bias_data: Vec<f32> = (0..hidden_size)
             .map(|_| rng.gen_range(-0.01f32..0.01f32))
             .collect();
@@ -487,16 +447,6 @@ impl CausalProjectionWeights {
     }
 
     /// Apply cause projection to an embedding.
-    ///
-    /// Computes: cause_vec = base_embedding @ W_cause^T + b_cause
-    ///
-    /// # Arguments
-    ///
-    /// * `embedding` - Input embedding tensor [1, hidden_size]
-    ///
-    /// # Returns
-    ///
-    /// Projected cause embedding [1, hidden_size]
     pub fn project_cause(&self, embedding: &Tensor) -> EmbeddingResult<Tensor> {
         let projected = embedding
             .matmul(
@@ -519,16 +469,6 @@ impl CausalProjectionWeights {
     }
 
     /// Apply effect projection to an embedding.
-    ///
-    /// Computes: effect_vec = base_embedding @ W_effect^T + b_effect
-    ///
-    /// # Arguments
-    ///
-    /// * `embedding` - Input embedding tensor [1, hidden_size]
-    ///
-    /// # Returns
-    ///
-    /// Projected effect embedding [1, hidden_size]
     pub fn project_effect(&self, embedding: &Tensor) -> EmbeddingResult<Tensor> {
         let projected = embedding
             .matmul(
@@ -558,10 +498,7 @@ fn create_perturbed_identity<R: Rng>(size: usize, rng: &mut R, std: f64) -> Vec<
     for i in 0..size {
         for j in 0..size {
             let idx = i * size + j;
-            // Identity component
             let identity: f32 = if i == j { 1.0 } else { 0.0 };
-            // Random perturbation from normal distribution
-            // Using Box-Muller transform for normal distribution
             let u1: f64 = rng.gen_range(0.0001f64..1.0f64);
             let u2: f64 = rng.gen_range(0.0f64..1.0f64);
             let normal: f64 = (-2.0_f64 * u1.ln()).sqrt() * (2.0_f64 * std::f64::consts::PI * u2).cos();

@@ -628,7 +628,7 @@ pub struct ProductionMultiArrayProvider {
     /// E4-FIX: Stored as concrete type to allow `embed_with_instruction()` calls
     /// for passing sequence numbers via "sequence:N" instruction.
     e4_temporal_positional: Arc<DenseEmbedderAdapter>,
-    /// E5: Causal embedder (Longformer, 768D) - DUAL embedder for asymmetric similarity
+    /// E5: Causal embedder (nomic-embed-text-v1.5, 768D) - DUAL embedder for asymmetric similarity
     ///
     /// Per ARCH-15: Uses CausalDualEmbedderAdapter to produce genuinely different
     /// vectors for cause vs effect roles.

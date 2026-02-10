@@ -6,7 +6,8 @@
 //! # Asymmetric Dual Embeddings
 //!
 //! The `embed_dual()` method produces genuinely different cause and effect vectors
-//! through marker detection, weighted pooling, and learned projections.
+//! through instruction-prefix-based asymmetric encoding. Two separate forward passes
+//! with different instruction prefixes produce differentiated embeddings.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,41 +20,37 @@ use crate::gpu::init_gpu;
 use crate::traits::{EmbeddingModel, SingleModelConfig};
 use crate::types::{InputType, ModelEmbedding, ModelId, ModelInput};
 
-use super::config::DEFAULT_ATTENTION_WINDOW;
 use super::forward::{gpu_forward, gpu_forward_dual};
-use super::loader::load_longformer_weights;
-use super::weights::{CausalProjectionWeights, LongformerWeights, CAUSAL_PROJECTION_SEED};
+use super::loader::load_nomic_weights;
+use super::weights::NomicWeights;
 
-/// Internal state that varies based on feature flags.
-#[allow(dead_code)]
+/// Internal state for CausalModel weight management.
 pub(crate) enum ModelState {
     /// Unloaded - no weights in memory.
     Unloaded,
 
-    /// Loaded with candle model and tokenizer (GPU-accelerated).
+    /// Loaded with NomicBERT model and tokenizer (GPU-accelerated).
     Loaded {
-        /// Longformer model weights on GPU.
-        weights: LongformerWeights,
-        /// Causal projection weights for asymmetric embeddings.
-        projection: CausalProjectionWeights,
+        /// NomicBERT model weights on GPU.
+        weights: NomicWeights,
         /// HuggingFace tokenizer for text encoding (boxed to reduce enum size).
         tokenizer: Box<Tokenizer>,
     },
 }
 
-/// Causal embedding model using allenai/longformer-base-4096.
+/// Causal embedding model using nomic-ai/nomic-embed-text-v1.5.
 ///
 /// This model produces 768D vectors optimized for causal reasoning.
-/// Uses sliding window attention + global attention for efficient
-/// processing of documents up to 4096 tokens.
+/// Uses rotary position embeddings and SwiGLU FFN for efficient
+/// processing of documents up to 8192 tokens (capped at 512 for causal).
 ///
-/// # Attention Mechanism
+/// # Architecture
 ///
-/// Longformer uses a combination of:
-/// - **Sliding window attention**: Each token attends to `window_size` neighbors
-/// - **Global attention**: Selected tokens (e.g., [CLS]) attend to all tokens
-///
-/// This allows O(n x w) complexity instead of O(n^2) for long sequences.
+/// NomicBERT with:
+/// - Rotary position embeddings (RoPE, base=1000, full head_dim)
+/// - Fused QKV projections (no separate Q/K/V weights)
+/// - SwiGLU activation in FFN
+/// - Contrastive pre-training for isotropic embeddings
 ///
 /// # Construction
 ///
@@ -74,29 +71,13 @@ pub(crate) enum ModelState {
 /// ```
 pub struct CausalModel {
     /// Model weights and inference engine.
-    #[allow(dead_code)]
     model_state: std::sync::RwLock<ModelState>,
 
     /// Path to model weights directory.
-    #[allow(dead_code)]
     model_path: PathBuf,
-
-    /// Configuration for this model instance.
-    #[allow(dead_code)]
-    config: SingleModelConfig,
 
     /// Whether model weights are loaded and ready.
     loaded: AtomicBool,
-
-    /// Memory used by model weights (bytes).
-    #[allow(dead_code)]
-    memory_size: usize,
-
-    /// Attention window size for sliding window attention.
-    attention_window: usize,
-
-    /// Token indices that receive global attention (e.g., [CLS] at 0).
-    global_attention_tokens: Vec<usize>,
 }
 
 impl CausalModel {
@@ -106,24 +87,12 @@ impl CausalModel {
     // Per ARCH-15: "E5 Causal MUST use asymmetric similarity with separate
     // cause/effect vector encodings - cause→effect direction matters"
     //
-    // These prefixes instruct the model to encode the text from different
-    // causal perspectives, producing genuinely different embeddings for
-    // cause vs effect roles.
+    // These prefixes leverage nomic-embed's contrastive training to produce
+    // genuinely different embeddings for cause vs effect roles.
+    //
+    // Canonical definitions live in config.rs (CAUSE_INSTRUCTION, EFFECT_INSTRUCTION)
+    // to ensure gpu_forward_dual() and embed_as_cause/effect use identical strings.
     // =========================================================================
-
-    /// Instruction prefix for encoding text as a potential CAUSE.
-    ///
-    /// When text is embedded with this prefix, the resulting vector is optimized
-    /// for finding effects that this text could produce.
-    pub const CAUSE_INSTRUCTION: &'static str =
-        "Represent this text as a cause that produces effects: ";
-
-    /// Instruction prefix for encoding text as a potential EFFECT.
-    ///
-    /// When text is embedded with this prefix, the resulting vector is optimized
-    /// for finding causes that could have produced this text.
-    pub const EFFECT_INSTRUCTION: &'static str =
-        "Represent this text as an effect produced by causes: ";
 
     /// Create a new CausalModel instance.
     ///
@@ -145,37 +114,8 @@ impl CausalModel {
         Ok(Self {
             model_state: std::sync::RwLock::new(ModelState::Unloaded),
             model_path: model_path.to_path_buf(),
-            config,
             loaded: AtomicBool::new(false),
-            memory_size: 0,
-            attention_window: DEFAULT_ATTENTION_WINDOW,
-            global_attention_tokens: vec![0], // [CLS] token by default
         })
-    }
-
-    /// Configure which token indices receive global attention.
-    ///
-    /// By default, only the [CLS] token (index 0) has global attention.
-    /// Additional tokens can be added for task-specific needs.
-    ///
-    /// # Arguments
-    /// * `tokens` - Indices of tokens that should attend globally
-    pub fn set_global_attention_tokens(&mut self, tokens: &[usize]) {
-        self.global_attention_tokens = tokens.to_vec();
-    }
-
-    /// Get the attention window size for sliding attention.
-    #[inline]
-    #[must_use]
-    pub fn attention_window(&self) -> usize {
-        self.attention_window
-    }
-
-    /// Get the current global attention token indices.
-    #[inline]
-    #[must_use]
-    pub fn global_attention_tokens(&self) -> &[usize] {
-        &self.global_attention_tokens
     }
 
     /// Load model weights into memory.
@@ -184,9 +124,8 @@ impl CausalModel {
     ///
     /// 1. Initialize CUDA device
     /// 2. Load config.json and tokenizer.json
-    /// 3. Load model.safetensors
+    /// 3. Load model.safetensors (NomicBERT weights)
     /// 4. Transfer all weight tensors to GPU VRAM
-    /// 5. Initialize causal projection weights
     pub async fn load(&self) -> EmbeddingResult<()> {
         // Initialize GPU device
         let device = init_gpu().map_err(|e| EmbeddingError::GpuError {
@@ -208,20 +147,14 @@ impl CausalModel {
                 )),
             })?;
 
-        // Load weights from safetensors
-        let weights = load_longformer_weights(&self.model_path, device)?;
-
-        // Initialize causal projection weights for asymmetric embeddings
-        let projection = CausalProjectionWeights::initialize(
-            weights.config.hidden_size,
-            device,
-            CAUSAL_PROJECTION_SEED,
-        )?;
+        // Load NomicBERT weights from safetensors
+        let weights = load_nomic_weights(&self.model_path, device)?;
 
         tracing::info!(
-            "CausalModel loaded: {} layers, hidden_size={}, with marker detection + causal projections",
+            "CausalModel loaded: nomic-embed-text-v1.5, {} layers, hidden_size={}, RoPE base={}",
             weights.config.num_hidden_layers,
-            weights.config.hidden_size
+            weights.config.hidden_size,
+            weights.config.rotary_emb_base
         );
 
         // Update state
@@ -234,7 +167,6 @@ impl CausalModel {
 
         *state = ModelState::Loaded {
             weights,
-            projection,
             tokenizer: Box::new(tokenizer),
         };
         self.loaded.store(true, Ordering::SeqCst);
@@ -276,92 +208,89 @@ impl CausalModel {
     // ASYMMETRIC DUAL EMBEDDING METHODS
     // =========================================================================
     //
-    // These methods produce differentiated cause/effect vectors using:
+    // These methods produce differentiated cause/effect vectors using
+    // instruction-prefix-based asymmetric encoding with nomic-embed-text-v1.5.
     //
-    // 1. Causal marker detection (cause: "because", "due to"; effect: "therefore", "results in")
-    // 2. Marker-weighted pooling (2.5x boost on relevant markers)
-    // 3. Learned projections (W_cause, W_effect perturbed identities)
-    //
-    // The marker-weighted pooling creates genuine asymmetry by emphasizing
-    // different parts of the input for cause vs effect embeddings.
+    // Two separate forward passes with different instruction prefixes produce
+    // genuinely different embeddings for cause vs effect roles.
     // =========================================================================
 
     /// Embed text as a potential CAUSE in causal relationships.
     ///
-    /// Uses marker-weighted pooling with cause indicators boosted (because, due to, etc.)
-    /// and applies the W_cause projection matrix.
-    ///
-    /// # Arguments
-    /// * `content` - Text content to embed as a cause
-    ///
-    /// # Returns
-    /// 768D embedding vector with cause-role semantics
+    /// Uses instruction prefix "search_query: Identify the cause in: " to
+    /// produce a cause-role embedding via a single forward pass.
     pub async fn embed_as_cause(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
-        let (cause_vec, _) = self.embed_dual(content).await?;
-        Ok(cause_vec)
+        self.embed_single_role(content, super::config::CAUSE_INSTRUCTION).await
     }
 
     /// Embed text as a potential EFFECT in causal relationships.
     ///
-    /// Uses marker-weighted pooling with effect indicators boosted (therefore, results in, etc.)
-    /// and applies the W_effect projection matrix.
-    ///
-    /// # Arguments
-    /// * `content` - Text content to embed as an effect
-    ///
-    /// # Returns
-    /// 768D embedding vector with effect-role semantics
+    /// Uses instruction prefix "search_query: Identify the effect of: " to
+    /// produce an effect-role embedding via a single forward pass.
     pub async fn embed_as_effect(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
-        let (_, effect_vec) = self.embed_dual(content).await?;
-        Ok(effect_vec)
+        self.embed_single_role(content, super::config::EFFECT_INSTRUCTION).await
+    }
+
+    /// Embed text with a single instruction prefix (one forward pass).
+    async fn embed_single_role(&self, content: &str, instruction: &str) -> EmbeddingResult<Vec<f32>> {
+        self.ensure_initialized()?;
+
+        let state = self
+            .model_state
+            .read()
+            .map_err(|e| EmbeddingError::InternalError {
+                message: format!("CausalModel failed to acquire read lock: {}", e),
+            })?;
+
+        match &*state {
+            ModelState::Loaded { weights, tokenizer } => {
+                let text = format!("{}{}", instruction, content);
+                let vec = gpu_forward(&text, weights, tokenizer)?;
+                if vec.len() != 768 {
+                    return Err(EmbeddingError::InternalError {
+                        message: format!(
+                            "E5 single-role embedding dimension error: got {}, expected 768",
+                            vec.len()
+                        ),
+                    });
+                }
+                Ok(vec)
+            }
+            ModelState::Unloaded => Err(EmbeddingError::NotInitialized {
+                model_id: ModelId::Causal,
+            }),
+        }
     }
 
     /// Embed text as BOTH cause and effect roles simultaneously.
     ///
-    /// Produces two differentiated 768D vectors from a single encoder pass.
-    /// Asymmetry comes from TWO sources:
-    /// 1. Marker-weighted pooling with different weights for cause vs effect
-    /// 2. Learned projection matrices (W_cause, W_effect)
-    ///
-    /// # Architecture
+    /// Produces two differentiated 768D vectors via two encoder passes
+    /// with different instruction prefixes.
     ///
     /// ```text
     /// Input Text
     ///     |
-    /// [Tokenize + Detect Causal Markers]
-    ///     |
-    /// [Encoder] (single pass)
-    ///     |
-    ///     +---------------------------+
-    ///     |                           |
-    /// [Cause-Weighted Pool]    [Effect-Weighted Pool]
-    /// (boost: because, due to) (boost: therefore, results)
-    ///     |                           |
-    /// [W_cause Projection]     [W_effect Projection]
-    ///     |                           |
-    /// [L2 Normalize]           [L2 Normalize]
-    ///     |                           |
-    /// cause_vec (768D)         effect_vec (768D)
+    ///     +--------------------------------------+
+    ///     |                                      |
+    /// "search_query: Identify cause..."    "search_query: Identify effect..."
+    ///     |                                      |
+    /// [Full Forward Pass]                 [Full Forward Pass]
+    ///     |                                      |
+    /// cause_vec (768D)                    effect_vec (768D)
     /// ```
-    ///
-    /// # Arguments
-    /// * `content` - Text content to embed in both roles
-    ///
-    /// # Returns
-    /// Tuple of (cause_vector, effect_vector), each 768D
     pub async fn embed_dual(&self, content: &str) -> EmbeddingResult<(Vec<f32>, Vec<f32>)> {
         self.embed_dual_guided(content, None).await
     }
 
     /// Embed text as BOTH cause and effect roles with optional LLM guidance.
     ///
-    /// When guidance is provided, LLM-identified entity spans and key phrases
-    /// are injected into the marker detection pipeline, catching implicit/domain-specific
-    /// causation that static word lists miss.
+    /// The guidance parameter is accepted for API compatibility with callers
+    /// that provide LLM-extracted hints. With nomic-embed, asymmetry comes
+    /// from instruction prefixes, so guidance is not used for embedding.
     pub async fn embed_dual_guided(
         &self,
         content: &str,
-        guidance: Option<&context_graph_core::traits::CausalHintGuidance>,
+        _guidance: Option<&context_graph_core::traits::CausalHintGuidance>,
     ) -> EmbeddingResult<(Vec<f32>, Vec<f32>)> {
         self.ensure_initialized()?;
 
@@ -375,11 +304,10 @@ impl CausalModel {
         match &*state {
             ModelState::Loaded {
                 weights,
-                projection,
                 tokenizer,
             } => {
                 let (cause_vec, effect_vec) =
-                    gpu_forward_dual(content, weights, projection, tokenizer, guidance)?;
+                    gpu_forward_dual(content, weights, tokenizer)?;
 
                 // Validate dimensions (fail fast on implementation error)
                 if cause_vec.len() != 768 || effect_vec.len() != 768 {
@@ -476,6 +404,15 @@ impl EmbeddingModel for CausalModel {
     }
 }
 
-// Implement Send and Sync manually since RwLock is involved
+// SAFETY: CausalModel is Send + Sync because:
+// - model_state: std::sync::RwLock<ModelState> is Send + Sync
+// - model_path: PathBuf is Send + Sync
+// - loaded: AtomicBool is Send + Sync
+// The manual impls are needed because ModelState::Loaded contains Tokenizer
+// (from the `tokenizers` crate) and NomicWeights (holding candle Tensors with
+// raw GPU pointers). These types are safe to share across threads because:
+// - Tokenizer is immutable after construction (only used for encode())
+// - Candle Tensors use Arc internally and are thread-safe for reads
+// - All GPU operations are serialized through the RwLock
 unsafe impl Send for CausalModel {}
 unsafe impl Sync for CausalModel {}

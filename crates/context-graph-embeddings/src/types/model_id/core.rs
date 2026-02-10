@@ -14,7 +14,7 @@ use super::tokenizer::TokenizerFamily;
 /// | TemporalRecent | Exponential decay | 512 | Custom |
 /// | TemporalPeriodic | Fourier basis | 512 | Custom |
 /// | TemporalPositional | Sinusoidal PE | 512 | Custom |
-/// | Causal | Longformer | 768 | Pretrained |
+/// | Causal | nomic-embed-v1.5 | 768 | Pretrained |
 /// | Sparse | SPLADE | ~30K sparse | Pretrained |
 /// | Code | Qodo-Embed-1-1.5B | 1536 | Pretrained |
 /// | Graph | e5-large-v2 | 1024 | Pretrained |
@@ -45,7 +45,7 @@ pub enum ModelId {
     TemporalPeriodic = 2,
     /// E4: Temporal position using sinusoidal encoding (512D, custom)
     TemporalPositional = 3,
-    /// E5: Causal embedding using allenai/longformer-base-4096 (768D)
+    /// E5: Causal embedding using nomic-ai/nomic-embed-text-v1.5 (768D)
     Causal = 4,
     /// E6: Sparse lexical using naver/splade-cocondenser (~30K sparse -> 1536D projected)
     Sparse = 5,
@@ -132,7 +132,7 @@ impl ModelId {
     ///
     /// # Returns
     /// - Code (Qodo-Embed): 32768 tokens (Qwen2's extended context)
-    /// - Causal (Longformer): 4096 tokens
+    /// - Causal (nomic-embed): 512 tokens (capped from 8192 for causal use)
     /// - CLIP (Multimodal): 77 tokens
     /// - Most others: 512 tokens
     /// - Custom models: effectively unlimited (no tokenization)
@@ -140,7 +140,7 @@ impl ModelId {
     pub const fn max_tokens(&self) -> usize {
         match self {
             Self::Code => 32768,    // Qodo-Embed-1-1.5B (Qwen2) supports 32K context
-            Self::Causal => 4096,   // Longformer's extended context
+            Self::Causal => 512,    // nomic-embed-text-v1.5 (capped from 8192)
             Self::Multimodal => 77, // CLIP text encoder limit
             Self::TemporalRecent
             | Self::TemporalPeriodic
@@ -160,7 +160,7 @@ impl ModelId {
     pub const fn tokenizer_family(&self) -> TokenizerFamily {
         match self {
             Self::Semantic => TokenizerFamily::BertWordpiece, // e5 uses BERT tokenizer
-            Self::Causal => TokenizerFamily::RobertaBpe,      // Longformer uses RoBERTa
+            Self::Causal => TokenizerFamily::BertWordpiece,    // nomic-embed uses BERT tokenizer
             Self::Sparse => TokenizerFamily::BertWordpiece,   // SPLADE uses BERT
             Self::Code => TokenizerFamily::BertWordpiece,     // Qodo-Embed uses BERT tokenizer
             Self::Graph => TokenizerFamily::BertWordpiece,    // MiniLM uses BERT

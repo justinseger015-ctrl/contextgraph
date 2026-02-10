@@ -7,7 +7,7 @@
 pub enum TokenizerFamily {
     /// BERT WordPiece tokenization (e5, SPLADE, MiniLM, ColBERT)
     BertWordpiece,
-    /// RoBERTa BPE tokenization (Longformer)
+    /// RoBERTa BPE tokenization (KEPLER)
     RobertaBpe,
     /// SentencePiece BPE tokenization (legacy, unused)
     SentencePieceBpe,

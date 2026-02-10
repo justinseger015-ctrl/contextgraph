@@ -16,7 +16,7 @@
 //!
 //! ## Pretrained Models (require model files)
 //! - E1: SemanticModel (intfloat/e5-large-v2)
-//! - E5: CausalModel (Longformer)
+//! - E5: CausalModel (nomic-embed-text-v1.5)
 //! - E6: SparseModel (SPLADE)
 //! - E7: CodeModel (CodeBERT)
 //! - E8: GraphModel (sentence-transformers)

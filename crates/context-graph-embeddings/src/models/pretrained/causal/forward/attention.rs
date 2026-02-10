@@ -1,39 +1,155 @@
-//! Self-attention forward pass for Longformer model.
+//! Self-attention with Rotary Position Embeddings for NomicBERT.
 //!
-//! This module implements multi-head self-attention with Q, K, V projections.
-//!
-//! # Current Implementation Status
-//!
-//! This implementation uses **standard full attention**, NOT the Longformer sliding
-//! window + global attention mechanism. The asymmetric cause/effect embeddings come
-//! solely from learned projection matrices (W_cause, W_effect), NOT from marker-weighted
-//! attention.
-//!
-//! As of 2026-01-21 benchmarks, E5 contributes -0.7% (negative) on real data because
-//! the perturbed identity projections produce cause/effect vectors with ~0.97-0.99
-//! cosine similarity - essentially no meaningful asymmetry.
+//! Implements fused QKV projection and non-interleaved RoPE.
+//! Key differences from standard BERT attention:
+//! - Single Wqkv [3*hidden, hidden] instead of separate Q/K/V weights
+//! - No biases in QKV or output projections
+//! - Rotary position embeddings (base=1000, fraction=1.0) instead of learned position embeddings
 
 use candle_core::Tensor;
 
 use crate::error::{EmbeddingError, EmbeddingResult};
 
-use super::super::config::LongformerConfig;
-use super::super::weights::LongformerAttentionWeights;
+use super::super::config::NomicConfig;
+use super::super::weights::NomicAttentionWeights;
 
-/// Dimensions for Q/K/V projection operations.
-struct ProjectionDims {
-    batch_size: usize,
+/// Precompute rotary embedding cos/sin tables for the given sequence length.
+///
+/// Returns (cos, sin) tensors each of shape [seq_len, rotary_dim/2].
+pub fn compute_rotary_freqs(
     seq_len: usize,
-    hidden_size: usize,
+    head_dim: usize,
+    base: f64,
+    fraction: f64,
+    device: &candle_core::Device,
+) -> EmbeddingResult<(Tensor, Tensor)> {
+    let rotary_dim = (head_dim as f64 * fraction) as usize;
+    let half_dim = rotary_dim / 2;
+
+    // Inverse frequencies: 1 / (base^(2i/rotary_dim)) for i in 0..half_dim
+    let inv_freq: Vec<f32> = (0..half_dim)
+        .map(|i| 1.0 / base.powf(2.0 * i as f64 / rotary_dim as f64) as f32)
+        .collect();
+
+    // Compute angles: angles[p][i] = p * inv_freq[i]
+    let mut angles = vec![0.0f32; seq_len * half_dim];
+    for p in 0..seq_len {
+        for i in 0..half_dim {
+            angles[p * half_dim + i] = p as f32 * inv_freq[i];
+        }
+    }
+
+    let angle_tensor =
+        Tensor::from_slice(&angles, (seq_len, half_dim), device).map_err(|e| {
+            EmbeddingError::GpuError {
+                message: format!("RoPE angle tensor failed: {}", e),
+            }
+        })?;
+
+    let cos = angle_tensor.cos().map_err(|e| EmbeddingError::GpuError {
+        message: format!("RoPE cos failed: {}", e),
+    })?;
+
+    let sin = angle_tensor.sin().map_err(|e| EmbeddingError::GpuError {
+        message: format!("RoPE sin failed: {}", e),
+    })?;
+
+    Ok((cos, sin))
 }
 
-/// Run self-attention forward pass.
+/// Apply rotary position embeddings (non-interleaved half-split).
+///
+/// x: [batch, heads, seq_len, head_dim]
+/// cos/sin: [seq_len, half_dim]
+///
+/// Non-interleaved: split head_dim into first and second halves:
+///   new[..., :half] = x[..., :half] * cos - x[..., half:] * sin
+///   new[..., half:] = x[..., half:] * cos + x[..., :half] * sin
+fn apply_rotary_emb(
+    x: &Tensor,
+    cos: &Tensor,
+    sin: &Tensor,
+) -> EmbeddingResult<Tensor> {
+    let head_dim = x.dim(3).map_err(|e| EmbeddingError::GpuError {
+        message: format!("RoPE get head_dim failed: {}", e),
+    })?;
+    let half = head_dim / 2;
+
+    let x1 = x.narrow(3, 0, half).map_err(|e| EmbeddingError::GpuError {
+        message: format!("RoPE narrow x1 failed: {}", e),
+    })?;
+    let x2 = x
+        .narrow(3, half, half)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE narrow x2 failed: {}", e),
+        })?;
+
+    // Reshape cos/sin from [seq_len, half] to [1, 1, seq_len, half]
+    let cos_4d = cos
+        .unsqueeze(0)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE cos unsqueeze 0 failed: {}", e),
+        })?
+        .unsqueeze(0)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE cos unsqueeze 1 failed: {}", e),
+        })?;
+    let sin_4d = sin
+        .unsqueeze(0)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE sin unsqueeze 0 failed: {}", e),
+        })?
+        .unsqueeze(0)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE sin unsqueeze 1 failed: {}", e),
+        })?;
+
+    // o1 = x1 * cos - x2 * sin
+    let o1 = x1
+        .broadcast_mul(&cos_4d)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE o1 mul cos failed: {}", e),
+        })?
+        .broadcast_sub(
+            &x2.broadcast_mul(&sin_4d)
+                .map_err(|e| EmbeddingError::GpuError {
+                    message: format!("RoPE o1 mul sin failed: {}", e),
+                })?,
+        )
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE o1 sub failed: {}", e),
+        })?;
+
+    // o2 = x2 * cos + x1 * sin
+    let o2 = x2
+        .broadcast_mul(&cos_4d)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE o2 mul cos failed: {}", e),
+        })?
+        .broadcast_add(
+            &x1.broadcast_mul(&sin_4d)
+                .map_err(|e| EmbeddingError::GpuError {
+                    message: format!("RoPE o2 mul sin failed: {}", e),
+                })?,
+        )
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!("RoPE o2 add failed: {}", e),
+        })?;
+
+    Tensor::cat(&[&o1, &o2], 3).map_err(|e| EmbeddingError::GpuError {
+        message: format!("RoPE cat failed: {}", e),
+    })
+}
+
+/// Self-attention forward pass with fused QKV and rotary position embeddings.
 pub fn self_attention_forward(
     hidden_states: &Tensor,
-    attention: &LongformerAttentionWeights,
+    attention: &NomicAttentionWeights,
     attention_mask: &Tensor,
-    config: &LongformerConfig,
+    config: &NomicConfig,
     layer_idx: usize,
+    cos: &Tensor,
+    sin: &Tensor,
 ) -> EmbeddingResult<Tensor> {
     let (batch_size, seq_len, hidden_size) =
         hidden_states
@@ -42,80 +158,59 @@ pub fn self_attention_forward(
                 message: format!("CausalModel layer {} get dims failed: {}", layer_idx, e),
             })?;
 
-    let head_dim = config.hidden_size / config.num_attention_heads;
+    let num_heads = config.num_attention_heads;
+    let head_dim = hidden_size / num_heads;
 
-    // Flatten to [batch*seq, hidden] for Candle matmul compatibility
+    // Flatten for matmul: [batch*seq, hidden]
     let hidden_flat = hidden_states
         .reshape((batch_size * seq_len, hidden_size))
         .map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel layer {} flatten failed: {}", layer_idx, e),
+        })?;
+
+    // Fused QKV: [batch*seq, hidden] x [3*hidden, hidden]^T = [batch*seq, 3*hidden]
+    let qkv = hidden_flat
+        .matmul(
+            &attention
+                .wqkv_weight
+                .t()
+                .map_err(|e| EmbeddingError::GpuError {
+                    message: format!(
+                        "CausalModel layer {} Wqkv transpose failed: {}",
+                        layer_idx, e
+                    ),
+                })?,
+        )
+        .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CausalModel layer {} flatten hidden failed: {}",
+                "CausalModel layer {} Wqkv matmul failed: {}",
                 layer_idx, e
             ),
         })?;
 
-    // Q, K, V projections
-    let dims = ProjectionDims {
-        batch_size,
-        seq_len,
-        hidden_size,
-    };
-    let query = project_qkv(
-        &hidden_flat,
-        &attention.query_weight,
-        &attention.query_bias,
-        &dims,
-        layer_idx,
-        "Q",
-    )?;
-    let key = project_qkv(
-        &hidden_flat,
-        &attention.key_weight,
-        &attention.key_bias,
-        &dims,
-        layer_idx,
-        "K",
-    )?;
-    let value = project_qkv(
-        &hidden_flat,
-        &attention.value_weight,
-        &attention.value_bias,
-        &dims,
-        layer_idx,
-        "V",
-    )?;
+    // Reshape to [batch, seq, 3, heads, head_dim]
+    let qkv = qkv
+        .reshape((batch_size, seq_len, 3, num_heads, head_dim))
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!(
+                "CausalModel layer {} QKV reshape failed: {}",
+                layer_idx, e
+            ),
+        })?;
 
-    // Reshape to [batch, heads, seq_len, head_dim]
-    let query = reshape_for_attention(
-        &query,
-        batch_size,
-        seq_len,
-        config.num_attention_heads,
-        head_dim,
-        layer_idx,
-        "Q",
-    )?;
-    let key = reshape_for_attention(
-        &key,
-        batch_size,
-        seq_len,
-        config.num_attention_heads,
-        head_dim,
-        layer_idx,
-        "K",
-    )?;
-    let value = reshape_for_attention(
-        &value,
-        batch_size,
-        seq_len,
-        config.num_attention_heads,
-        head_dim,
-        layer_idx,
-        "V",
-    )?;
+    // Extract Q, K, V → [batch, heads, seq, head_dim]
+    let q = extract_qkv_component(&qkv, 0, layer_idx, "Q")?;
+    let k = extract_qkv_component(&qkv, 1, layer_idx, "K")?;
+    let v = extract_qkv_component(&qkv, 2, layer_idx, "V")?;
 
-    // K^T with contiguous() for matmul
-    let key_t = key
+    // Apply RoPE to Q and K
+    let q = apply_rotary_emb(&q, cos, sin)?;
+    let k = apply_rotary_emb(&k, cos, sin)?;
+
+    // Scaled dot-product attention: softmax(QK^T / sqrt(d)) V
+    let scale = (head_dim as f64).sqrt();
+
+    let k_t = k
         .transpose(2, 3)
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
@@ -131,12 +226,15 @@ pub fn self_attention_forward(
             ),
         })?;
 
-    // Attention scores
-    let scores = query.matmul(&key_t).map_err(|e| EmbeddingError::GpuError {
-        message: format!("CausalModel layer {} QK matmul failed: {}", layer_idx, e),
-    })?;
+    let scores = q
+        .matmul(&k_t)
+        .map_err(|e| EmbeddingError::GpuError {
+            message: format!(
+                "CausalModel layer {} QK matmul failed: {}",
+                layer_idx, e
+            ),
+        })?;
 
-    let scale = (head_dim as f64).sqrt();
     let scores = (scores / scale).map_err(|e| EmbeddingError::GpuError {
         message: format!(
             "CausalModel layer {} attention scale failed: {}",
@@ -144,25 +242,24 @@ pub fn self_attention_forward(
         ),
     })?;
 
-    // Apply attention mask
     let scores = scores
         .broadcast_add(attention_mask)
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CausalModel layer {} attention mask add failed: {}",
+                "CausalModel layer {} attention mask failed: {}",
                 layer_idx, e
             ),
         })?;
 
-    let attention_probs =
+    let attn_probs =
         candle_nn::ops::softmax(&scores, candle_core::D::Minus1).map_err(|e| {
             EmbeddingError::GpuError {
                 message: format!("CausalModel layer {} softmax failed: {}", layer_idx, e),
             }
         })?;
 
-    let context = attention_probs
-        .matmul(&value)
+    let context = attn_probs
+        .matmul(&v)
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
                 "CausalModel layer {} context matmul failed: {}",
@@ -170,7 +267,7 @@ pub fn self_attention_forward(
             ),
         })?;
 
-    // Reshape back
+    // Reshape back: [batch, heads, seq, head_dim] → [batch, seq, hidden]
     let context = context
         .transpose(1, 2)
         .map_err(|e| EmbeddingError::GpuError {
@@ -186,7 +283,7 @@ pub fn self_attention_forward(
                 layer_idx, e
             ),
         })?
-        .reshape((batch_size, seq_len, config.hidden_size))
+        .reshape((batch_size, seq_len, hidden_size))
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
                 "CausalModel layer {} context reshape failed: {}",
@@ -194,17 +291,20 @@ pub fn self_attention_forward(
             ),
         })?;
 
-    // Output projection
+    // Output projection (no bias for NomicBERT)
     let context_flat = context
         .reshape((batch_size * seq_len, hidden_size))
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel layer {} O flatten failed: {}", layer_idx, e),
+            message: format!(
+                "CausalModel layer {} output flatten failed: {}",
+                layer_idx, e
+            ),
         })?;
 
-    let output = context_flat
+    context_flat
         .matmul(
             &attention
-                .output_weight
+                .out_proj_weight
                 .t()
                 .map_err(|e| EmbeddingError::GpuError {
                     message: format!(
@@ -225,77 +325,36 @@ pub fn self_attention_forward(
                 "CausalModel layer {} output reshape failed: {}",
                 layer_idx, e
             ),
-        })?;
-
-    output
-        .broadcast_add(&attention.output_bias)
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel layer {} output bias failed: {}", layer_idx, e),
         })
 }
 
-/// Project hidden states to Q, K, or V.
-fn project_qkv(
-    hidden_flat: &Tensor,
-    weight: &Tensor,
-    bias: &Tensor,
-    dims: &ProjectionDims,
+/// Extract Q, K, or V from the fused QKV tensor.
+///
+/// qkv: [batch, seq, 3, heads, head_dim] → component: [batch, heads, seq, head_dim]
+fn extract_qkv_component(
+    qkv: &Tensor,
+    index: usize,
     layer_idx: usize,
     name: &str,
 ) -> EmbeddingResult<Tensor> {
-    let projected = hidden_flat
-        .matmul(&weight.t().map_err(|e| EmbeddingError::GpuError {
-            message: format!(
-                "CausalModel layer {} {} transpose failed: {}",
-                layer_idx, name, e
-            ),
-        })?)
+    qkv.narrow(2, index, 1)
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CausalModel layer {} {} matmul failed: {}",
+                "CausalModel layer {} {} narrow failed: {}",
                 layer_idx, name, e
             ),
         })?
-        .reshape((dims.batch_size, dims.seq_len, dims.hidden_size))
+        .squeeze(2)
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CausalModel layer {} {} reshape failed: {}",
-                layer_idx, name, e
-            ),
-        })?;
-
-    projected
-        .broadcast_add(bias)
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!(
-                "CausalModel layer {} {} bias failed: {}",
-                layer_idx, name, e
-            ),
-        })
-}
-
-/// Reshape tensor for multi-head attention.
-fn reshape_for_attention(
-    tensor: &Tensor,
-    batch_size: usize,
-    seq_len: usize,
-    num_heads: usize,
-    head_dim: usize,
-    layer_idx: usize,
-    name: &str,
-) -> EmbeddingResult<Tensor> {
-    tensor
-        .reshape((batch_size, seq_len, num_heads, head_dim))
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!(
-                "CausalModel layer {} {} head reshape failed: {}",
+                "CausalModel layer {} {} squeeze failed: {}",
                 layer_idx, name, e
             ),
         })?
         .transpose(1, 2)
         .map_err(|e| EmbeddingError::GpuError {
             message: format!(
-                "CausalModel layer {} {} transpose 1,2 failed: {}",
+                "CausalModel layer {} {} transpose failed: {}",
                 layer_idx, name, e
             ),
         })?

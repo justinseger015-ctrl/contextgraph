@@ -27,7 +27,6 @@ pub mod weight_projection;
 
 pub use causal::{
     CausalModel, TrainableProjection, CAUSAL_DIMENSION, CAUSAL_LATENCY_BUDGET_MS, CAUSAL_MAX_TOKENS,
-    DEFAULT_ATTENTION_WINDOW,
 };
 pub use contextual::{
     context_pooling_weights, detect_context_markers, intent_pooling_weights,

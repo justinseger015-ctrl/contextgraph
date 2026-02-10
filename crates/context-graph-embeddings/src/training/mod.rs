@@ -34,7 +34,7 @@
 //! - [`trainer`]: Training loop with momentum encoder
 //! - [`evaluation`]: Directional accuracy, MRR, AUC metrics
 //! - [`distillation`]: Online LLM→embedder teaching loop
-//! - [`lora`]: LoRA adapters for Longformer attention
+//! - [`lora`]: LoRA adapters for NomicBERT attention
 //! - [`multitask`]: Direction classification + mechanism prediction heads
 
 pub mod data;

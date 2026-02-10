@@ -123,7 +123,7 @@ pub trait ModelFactory: Send + Sync {
     /// | TemporalRecent | 10 MB |
     /// | TemporalPeriodic | 10 MB |
     /// | TemporalPositional | 10 MB |
-    /// | Causal (Longformer) | 600 MB |
+    /// | Causal (nomic-embed) | 547 MB |
     /// | Sparse (SPLADE) | 500 MB |
     /// | Code (CodeBERT) | 500 MB |
     /// | Graph (MiniLM) | 100 MB |

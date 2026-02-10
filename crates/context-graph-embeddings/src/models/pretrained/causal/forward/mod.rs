@@ -1,31 +1,20 @@
-//! Forward pass functions for Longformer model.
-//!
-//! This module implements the neural network forward pass including
-//! embeddings computation, encoder layers, and output pooling.
+//! Forward pass for NomicBERT (nomic-embed-text-v1.5).
 //!
 //! # Submodules
 //!
-//! - `ops`: LayerNorm, mean pooling, marker-weighted pooling, L2 normalization
-//! - `attention`: Multi-head self-attention (standard, not sliding window)
-//! - `encoder`: Encoder layers and FFN
+//! - `ops`: LayerNorm, mean pooling, L2 normalization
+//! - `attention`: Fused QKV self-attention with rotary position embeddings
+//! - `encoder`: Encoder layers with SwiGLU FFN
 //!
-//! # Dual Forward Pass for Asymmetric Embeddings
+//! # Dual Forward Pass for Asymmetric Causal Embeddings
 //!
-//! The `gpu_forward_dual()` function produces differentiated cause/effect embeddings:
-//! 1. Tokenize input text + detect causal markers (because, causes, therefore, etc.)
-//! 2. Run encoder once with standard attention
-//! 3. Marker-weighted pooling with differentiated weights:
-//!    - Cause embedding: boost cause markers (because, due to), reduce effect markers
-//!    - Effect embedding: boost effect markers (therefore, results in), reduce cause markers
-//! 4. Apply W_cause/W_effect projections
-//! 5. L2 normalize both vectors
+//! `gpu_forward_dual()` produces differentiated cause/effect embeddings
+//! via two separate forward passes with different instruction prefixes:
+//! - Cause: "search_query: Identify the cause in: {text}"
+//! - Effect: "search_query: Identify the effect of: {text}"
 //!
-//! # Asymmetry Sources
-//!
-//! Meaningful asymmetry comes from TWO sources:
-//! 1. **Marker-weighted pooling**: Cause markers get 2.5x weight for cause embedding,
-//!    effect markers get 2.5x weight for effect embedding
-//! 2. **Learned projections**: W_cause and W_effect are perturbed identity matrices
+//! This leverages nomic-embed's contrastive training to naturally create
+//! different vector representations for different instruction contexts.
 
 mod attention;
 mod encoder;
@@ -37,22 +26,21 @@ use tokenizers::Tokenizer;
 use crate::error::{EmbeddingError, EmbeddingResult};
 use crate::types::ModelId;
 
-use super::config::{LongformerConfig, CAUSAL_MAX_TOKENS};
-use super::marker_detection::detect_causal_markers_with_hints;
-use super::weights::{CausalProjectionWeights, LongformerWeights};
+use super::config::CAUSAL_MAX_TOKENS;
+use super::weights::NomicWeights;
 
 use encoder::run_encoder;
 pub use ops::layer_norm;
-use ops::{l2_normalize, marker_weighted_pooling, mean_pooling};
+use ops::{l2_normalize, mean_pooling};
 
-/// GPU-accelerated forward pass for Longformer.
+/// GPU-accelerated forward pass for NomicBERT.
 ///
-/// Note: This implementation uses standard full attention (not sliding window)
-/// for simplicity. For very long sequences (>512 tokens), sliding window
-/// attention would be more efficient.
+/// Tokenizes input, computes embeddings (word + token_type + LayerNorm),
+/// runs encoder layers with RoPE attention and SwiGLU FFN,
+/// then mean-pools and L2-normalizes.
 pub fn gpu_forward(
     text: &str,
-    weights: &LongformerWeights,
+    weights: &NomicWeights,
     tokenizer: &Tokenizer,
 ) -> EmbeddingResult<Vec<f32>> {
     let device = weights.device;
@@ -73,7 +61,7 @@ pub fn gpu_forward(
         .map(|&m| m as f32)
         .collect();
 
-    // Truncate to max_position_embeddings if needed
+    // Truncate to max tokens
     let max_len = config.max_position_embeddings.min(CAUSAL_MAX_TOKENS);
     let seq_len = token_ids.len().min(max_len);
     let token_ids = &token_ids[..seq_len];
@@ -93,7 +81,7 @@ pub fn gpu_forward(
             }
         })?;
 
-    // Token type IDs (all zeros for Longformer)
+    // Token type IDs (all zeros for NomicBERT)
     let token_type_ids: Vec<u32> = vec![0u32; seq_len];
     let token_type_tensor =
         Tensor::from_slice(&token_type_ids, (1, seq_len), device).map_err(|e| {
@@ -102,26 +90,12 @@ pub fn gpu_forward(
             }
         })?;
 
-    // Position IDs
-    let position_ids: Vec<u32> = (0..seq_len as u32).collect();
-    let position_tensor = Tensor::from_slice(&position_ids, (1, seq_len), device).map_err(|e| {
-        EmbeddingError::GpuError {
-            message: format!("CausalModel position_ids tensor failed: {}", e),
-        }
-    })?;
-
     // === EMBEDDING LAYER ===
-    let embeddings = compute_embeddings(
-        &input_ids,
-        &position_tensor,
-        &token_type_tensor,
-        weights,
-        config,
-        seq_len,
-    )?;
+    // NomicBERT: word + token_type + LayerNorm (no position embeddings — RoPE in attention)
+    let embeddings = compute_embeddings(&input_ids, &token_type_tensor, weights, seq_len)?;
 
     // === ENCODER LAYERS ===
-    let hidden_states = run_encoder(embeddings, &attention_mask_tensor, weights, config, seq_len)?;
+    let hidden_states = run_encoder(embeddings, &attention_mask_tensor, weights)?;
 
     // === POOLING ===
     let pooled = mean_pooling(&hidden_states, &attention_mask_tensor)?;
@@ -143,15 +117,18 @@ pub fn gpu_forward(
     Ok(vector)
 }
 
-/// Compute embeddings from input tokens.
+/// Compute embeddings: word + token_type + LayerNorm.
+///
+/// NomicBERT has no position embeddings — position information comes from
+/// rotary position embeddings (RoPE) applied in the attention layer.
 fn compute_embeddings(
     input_ids: &Tensor,
-    position_tensor: &Tensor,
     token_type_tensor: &Tensor,
-    weights: &LongformerWeights,
-    config: &LongformerConfig,
+    weights: &NomicWeights,
     seq_len: usize,
 ) -> EmbeddingResult<Tensor> {
+    let config = &weights.config;
+
     let word_embeds = weights
         .embeddings
         .word_embeddings
@@ -169,25 +146,6 @@ fn compute_embeddings(
         .reshape((1, seq_len, config.hidden_size))
         .map_err(|e| EmbeddingError::GpuError {
             message: format!("CausalModel word embedding reshape failed: {}", e),
-        })?;
-
-    let position_embeds = weights
-        .embeddings
-        .position_embeddings
-        .index_select(
-            &position_tensor
-                .flatten_all()
-                .map_err(|e| EmbeddingError::GpuError {
-                    message: format!("CausalModel flatten position_ids failed: {}", e),
-                })?,
-            0,
-        )
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel position embedding lookup failed: {}", e),
-        })?
-        .reshape((1, seq_len, config.hidden_size))
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel position embedding reshape failed: {}", e),
         })?;
 
     let token_type_embeds = weights
@@ -209,15 +167,11 @@ fn compute_embeddings(
             message: format!("CausalModel token_type embedding reshape failed: {}", e),
         })?;
 
-    // Sum embeddings
+    // Sum embeddings (no position embeddings for NomicBERT)
     let embeddings = word_embeds
-        .add(&position_embeds)
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel embedding add 1 failed: {}", e),
-        })?
         .add(&token_type_embeds)
         .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel embedding add 2 failed: {}", e),
+            message: format!("CausalModel embedding add failed: {}", e),
         })?;
 
     // Apply LayerNorm to embeddings
@@ -235,180 +189,34 @@ fn compute_embeddings(
 
 /// GPU-accelerated dual forward pass for cause/effect embeddings.
 ///
-/// Produces two distinct 768D vectors from a single encoder pass:
-/// - cause_vec: Marker-weighted pooling emphasizing cause indicators + W_cause projection
-/// - effect_vec: Marker-weighted pooling emphasizing effect indicators + W_effect projection
-///
-/// # Architecture
-///
-/// Asymmetry comes from TWO sources:
-/// 1. Marker-weighted pooling: Different weights for cause/effect marker tokens
-/// 2. Learned projections: W_cause and W_effect with different perturbations
+/// Produces two distinct 768D vectors via two encoder passes with
+/// different instruction prefixes. This leverages nomic-embed's contrastive
+/// training where different instruction prefixes produce genuinely different
+/// embedding spaces.
 ///
 /// ```text
 /// Input Text
 ///     |
-/// [Tokenize + Detect Causal Markers]
-///     |
-/// [Compute Embeddings]
-///     |
-/// [Encoder Layers] (single pass)
-///     |
-///     +---------------------------+
-///     |                           |
-/// [Cause-Weighted Pooling]   [Effect-Weighted Pooling]
-/// (boost: because, due to)   (boost: therefore, results in)
-///     |                           |
-/// [W_cause Projection]       [W_effect Projection]
-///     |                           |
-/// [L2 Normalize]             [L2 Normalize]
-///     |                           |
-/// cause_vec (768D)           effect_vec (768D)
+///     +--------------------------------------+
+///     |                                      |
+/// "search_query: Identify cause..."    "search_query: Identify effect..."
+///     |                                      |
+/// [Tokenize + Embed + Encode]         [Tokenize + Embed + Encode]
+///     |                                      |
+/// [Mean Pool + L2 Normalize]          [Mean Pool + L2 Normalize]
+///     |                                      |
+/// cause_vec (768D)                    effect_vec (768D)
 /// ```
-///
-/// # Arguments
-///
-/// * `text` - Input text content
-/// * `weights` - Longformer model weights
-/// * `projection` - Causal projection weights (W_cause, W_effect)
-/// * `tokenizer` - HuggingFace tokenizer
-///
-/// # Returns
-///
-/// Tuple of (cause_vec, effect_vec), each 768D L2-normalized
 pub fn gpu_forward_dual(
     text: &str,
-    weights: &LongformerWeights,
-    projection: &CausalProjectionWeights,
+    weights: &NomicWeights,
     tokenizer: &Tokenizer,
-    hint_guidance: Option<&context_graph_core::traits::CausalHintGuidance>,
 ) -> EmbeddingResult<(Vec<f32>, Vec<f32>)> {
-    let device = weights.device;
-    let config = &weights.config;
+    let cause_text = format!("{}{}", super::config::CAUSE_INSTRUCTION, text);
+    let effect_text = format!("{}{}", super::config::EFFECT_INSTRUCTION, text);
 
-    // === TOKENIZATION ===
-    let encoding = tokenizer
-        .encode(text, true)
-        .map_err(|e| EmbeddingError::TokenizationError {
-            model_id: ModelId::Causal,
-            message: format!("CausalModel tokenization failed: {}", e),
-        })?;
-
-    let token_ids: Vec<u32> = encoding.get_ids().to_vec();
-    let attention_mask: Vec<f32> = encoding
-        .get_attention_mask()
-        .iter()
-        .map(|&m| m as f32)
-        .collect();
-
-    // Truncate to max_position_embeddings if needed
-    let max_len = config.max_position_embeddings.min(CAUSAL_MAX_TOKENS);
-    let seq_len = token_ids.len().min(max_len);
-    let token_ids = &token_ids[..seq_len];
-    let attention_mask = &attention_mask[..seq_len];
-
-    // === CAUSAL MARKER DETECTION ===
-    // Detect cause/effect indicator words, enhanced with LLM guidance if available
-    let markers = detect_causal_markers_with_hints(text, &encoding, hint_guidance);
-
-    // Generate per-token weights for cause and effect embeddings
-    let cause_weights = markers.cause_weights(seq_len);
-    let effect_weights = markers.effect_weights(seq_len);
-
-    // Log marker detection for debugging
-    if markers.cause_marker_indices.len() + markers.effect_marker_indices.len() > 0 {
-        tracing::debug!(
-            "E5 causal markers detected: {} cause ({} static + {} LLM), {} effect ({} static + {} LLM), strength: {:.2}, boost: {:.2}",
-            markers.cause_marker_indices.len(),
-            markers.static_cause_count,
-            markers.llm_cause_count,
-            markers.effect_marker_indices.len(),
-            markers.static_effect_count,
-            markers.llm_effect_count,
-            markers.causal_strength,
-            markers.effective_boost,
-        );
-    }
-
-    // === CREATE GPU TENSORS ===
-    let input_ids = Tensor::from_slice(token_ids, (1, seq_len), device).map_err(|e| {
-        EmbeddingError::GpuError {
-            message: format!("CausalModel input_ids tensor failed: {}", e),
-        }
-    })?;
-
-    let attention_mask_tensor =
-        Tensor::from_slice(attention_mask, (1, seq_len), device).map_err(|e| {
-            EmbeddingError::GpuError {
-                message: format!("CausalModel attention_mask tensor failed: {}", e),
-            }
-        })?;
-
-    // Token type IDs (all zeros for Longformer)
-    let token_type_ids: Vec<u32> = vec![0u32; seq_len];
-    let token_type_tensor =
-        Tensor::from_slice(&token_type_ids, (1, seq_len), device).map_err(|e| {
-            EmbeddingError::GpuError {
-                message: format!("CausalModel token_type tensor failed: {}", e),
-            }
-        })?;
-
-    // Position IDs
-    let position_ids: Vec<u32> = (0..seq_len as u32).collect();
-    let position_tensor = Tensor::from_slice(&position_ids, (1, seq_len), device).map_err(|e| {
-        EmbeddingError::GpuError {
-            message: format!("CausalModel position_ids tensor failed: {}", e),
-        }
-    })?;
-
-    // === EMBEDDING LAYER ===
-    let embeddings = compute_embeddings(
-        &input_ids,
-        &position_tensor,
-        &token_type_tensor,
-        weights,
-        config,
-        seq_len,
-    )?;
-
-    // === ENCODER LAYERS (single pass) ===
-    let hidden_states = run_encoder(embeddings, &attention_mask_tensor, weights, config, seq_len)?;
-
-    // === MARKER-WEIGHTED POOLING ===
-    // Create differentiated embeddings by weighting causal markers differently
-    let cause_pooled = marker_weighted_pooling(&hidden_states, &attention_mask_tensor, &cause_weights)?;
-    let effect_pooled = marker_weighted_pooling(&hidden_states, &attention_mask_tensor, &effect_weights)?;
-
-    // === DUAL PROJECTION ===
-    // Apply W_cause projection to cause-pooled embedding
-    let cause_projected = projection.project_cause(&cause_pooled)?;
-    // Apply W_effect projection to effect-pooled embedding
-    let effect_projected = projection.project_effect(&effect_pooled)?;
-
-    // === L2 NORMALIZATION ===
-    let cause_normalized = l2_normalize(&cause_projected)?;
-    let effect_normalized = l2_normalize(&effect_projected)?;
-
-    // === CONVERT TO VEC<F32> ===
-    let cause_vec: Vec<f32> = cause_normalized
-        .flatten_all()
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel flatten cause output failed: {}", e),
-        })?
-        .to_vec1()
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel cause to_vec1 failed: {}", e),
-        })?;
-
-    let effect_vec: Vec<f32> = effect_normalized
-        .flatten_all()
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel flatten effect output failed: {}", e),
-        })?
-        .to_vec1()
-        .map_err(|e| EmbeddingError::GpuError {
-            message: format!("CausalModel effect to_vec1 failed: {}", e),
-        })?;
+    let cause_vec = gpu_forward(&cause_text, weights, tokenizer)?;
+    let effect_vec = gpu_forward(&effect_text, weights, tokenizer)?;
 
     Ok((cause_vec, effect_vec))
 }

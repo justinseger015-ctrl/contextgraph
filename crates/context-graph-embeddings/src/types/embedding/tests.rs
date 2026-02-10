@@ -397,7 +397,7 @@ mod tests {
             (ModelId::TemporalRecent, 512),     // E2: Custom exponential decay
             (ModelId::TemporalPeriodic, 512),   // E3: Custom Fourier basis
             (ModelId::TemporalPositional, 512), // E4: Custom sinusoidal PE
-            (ModelId::Causal, 768),             // E5: Longformer
+            (ModelId::Causal, 768),             // E5: nomic-embed-text-v1.5
             (ModelId::Sparse, 30522),           // E6: SPLADE (sparse vocab)
             (ModelId::Code, 1536),              // E7: Qodo-Embed-1-1.5B native
             (ModelId::Graph, 1024),             // E8: e5-large-v2 (upgraded from MiniLM 384D)

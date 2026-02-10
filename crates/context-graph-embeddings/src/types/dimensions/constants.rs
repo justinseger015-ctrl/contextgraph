@@ -20,7 +20,7 @@ pub const TEMPORAL_PERIODIC_NATIVE: usize = 512;
 /// E4: Temporal-Positional native dimension (custom sinusoidal PE)
 pub const TEMPORAL_POSITIONAL_NATIVE: usize = 512;
 
-/// E5: Causal embedding native dimension (Longformer)
+/// E5: Causal embedding native dimension (nomic-embed-text-v1.5)
 pub const CAUSAL_NATIVE: usize = 768;
 
 /// E6: Sparse lexical native dimension (SPLADE vocab size, ~5% active)

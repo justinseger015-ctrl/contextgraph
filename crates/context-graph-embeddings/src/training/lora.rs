@@ -1,4 +1,4 @@
-//! LoRA (Low-Rank Adaptation) adapters for Longformer attention.
+//! LoRA (Low-Rank Adaptation) adapters for NomicBERT attention.
 //!
 //! Rank-16 LoRA on Q, V attention projections:
 //! - ~2.4M additional trainable parameters
@@ -31,9 +31,9 @@ pub struct LoraConfig {
     pub alpha: f32,
     /// Dropout rate for LoRA (default: 0.1).
     pub dropout: f32,
-    /// Hidden size of the base model (default: 768 for Longformer).
+    /// Hidden size of the base model (default: 768 for NomicBERT).
     pub hidden_size: usize,
-    /// Number of encoder layers (default: 12 for Longformer-base).
+    /// Number of encoder layers (default: 12 for NomicBERT).
     pub num_layers: usize,
     /// Whether to apply LoRA to query projections.
     pub apply_query: bool,

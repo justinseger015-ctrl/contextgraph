@@ -1,6 +1,6 @@
 //! Multi-task training heads for causal embedder.
 //!
-//! Joint objectives sharing the Longformer encoder:
+//! Joint objectives sharing the NomicBERT encoder:
 //! - **Task A**: Contrastive causal pair matching (primary — handled by loss.rs)
 //! - **Task B**: Direction classification (cause→effect vs effect→cause vs none)
 //! - **Task C**: Mechanism type prediction (biological, economic, etc.)
