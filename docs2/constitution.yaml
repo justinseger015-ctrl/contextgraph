@@ -90,8 +90,8 @@ coding_standards:
   serialization:
     rule: "JSON for provenance/metadata/audit. Bincode for dense vectors/indexes ONLY."
     critical: "bincode + skip_serializing_if = SILENT CORRUPTION of optional fields"
-    json_cfs: [source_metadata, audit_log, merge_history, importance_history, topic_portfolio, embedding_registry, custom_weight_profiles]
-    bincode_cfs: [e12_late_interaction, file_index, tool_call_index, consolidation_recommendations, "code_*"]
+    json_cfs: [source_metadata, audit_log, merge_history, importance_history, topic_portfolio, embedding_registry, custom_weight_profiles, code_entities, code_file_index, code_name_index, code_signature_index]
+    bincode_cfs: [e12_late_interaction, file_index, tool_call_index, consolidation_recommendations, code_e7_embeddings]
 
   concurrency:
     - "parking_lot::RwLock/Mutex — non-poisoning, ~5-10x faster than std::sync"

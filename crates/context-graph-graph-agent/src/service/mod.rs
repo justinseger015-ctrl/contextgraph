@@ -133,6 +133,7 @@ impl GraphDiscoveryService {
     /// This constructor creates an E8Activator WITHOUT a GraphModel.
     /// In production (without `test-mode` feature), embedding operations will fail.
     /// Use `with_models()` for production deployments.
+    #[allow(deprecated)]
     pub fn new(shared_llm: Arc<CausalDiscoveryLLM>) -> Self {
         Self::with_config(shared_llm, GraphDiscoveryConfig::default())
     }

@@ -58,12 +58,10 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 // ============================================================================
 // CLI Arguments

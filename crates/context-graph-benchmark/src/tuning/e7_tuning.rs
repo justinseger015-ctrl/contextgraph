@@ -578,7 +578,7 @@ impl SimulatedScoreProvider {
         self.seed.hash(&mut hasher);
         let h = hasher.finish();
 
-        (h as f32 / u64::MAX as f32)
+        h as f32 / u64::MAX as f32
     }
 }
 

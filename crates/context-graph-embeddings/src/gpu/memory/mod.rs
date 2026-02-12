@@ -45,7 +45,7 @@
 //!
 //! // Safe concurrent allocations
 //! if pool.allocate("activation_cache", 8 * 1024 * 1024 * 1024).is_ok() {
-//!     println!("Allocated activation cache, {} bytes available", pool.available());
+//!     println!("Allocated activation cache, {} bytes available", pool.available().unwrap());
 //! }
 //! ```
 

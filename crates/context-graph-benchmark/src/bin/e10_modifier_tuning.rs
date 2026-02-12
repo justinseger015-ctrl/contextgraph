@@ -24,7 +24,6 @@
 //!     --data-dir data/e10_benchmark
 //! ```
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::hash::{Hash, Hasher};
@@ -354,7 +353,7 @@ fn evaluate_modifiers(
     let mut ranks: Vec<f64> = Vec::new();
     let mut hits_at_1 = 0;
 
-    for (i, (query, relevant, irrelevant)) in embeddings.iter().enumerate() {
+    for (_i, (query, relevant, irrelevant)) in embeddings.iter().enumerate() {
         // Query intent vs document context (intent→context direction)
         let sim_relevant = compute_modified_similarity(
             &query.as_intent,

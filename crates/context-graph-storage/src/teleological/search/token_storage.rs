@@ -24,7 +24,7 @@
 use std::sync::Arc;
 
 use rocksdb::{ColumnFamily, DB};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use super::pipeline::TokenStorage;
@@ -229,7 +229,7 @@ impl RocksDbTokenStorage {
     /// Batch retrieve tokens for multiple memories.
     ///
     /// Returns a vector of (id, tokens) pairs for all found memories.
-    /// Missing memories are silently skipped.
+    /// Missing memories are logged at warn level and skipped.
     ///
     /// # Performance
     /// Uses RocksDB multi_get for efficient batch retrieval.
@@ -254,7 +254,12 @@ impl RocksDbTokenStorage {
                     output.push((ids[i], tokens));
                 }
                 Ok(None) => {
-                    // Skip missing - not an error
+                    warn!(
+                        memory_id = %ids[i],
+                        batch_size = ids.len(),
+                        "Token data missing for memory in batch retrieval — \
+                         memory may have been deleted or tokens were never stored"
+                    );
                 }
                 Err(e) => {
                     error!("Failed to get tokens for {} in batch: {}", ids[i], e);

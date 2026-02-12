@@ -16,7 +16,7 @@
 use crate::error::{CudaError, CudaResult};
 use crate::ffi::cuda_driver::{
     cuCtxCreate_v2, cuCtxDestroy_v2, cuCtxSetCurrent, cuDeviceGet, cuDeviceGetAttribute,
-    cuDeviceGetName, cuInit, cuMemGetInfo_v2, CUcontext, CUdevice, CUresult,
+    cuDeviceGetName, cuInit, cuMemGetInfo_v2, CUcontext, CUdevice,
     CUDA_ERROR_INVALID_DEVICE, CUDA_ERROR_NO_DEVICE, CUDA_SUCCESS,
     CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
 };

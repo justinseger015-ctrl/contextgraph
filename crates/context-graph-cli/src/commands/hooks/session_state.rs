@@ -83,6 +83,7 @@ impl SessionCache {
     }
 
     /// Check if cache has a snapshot.
+    #[allow(dead_code)] // Used in tests across the crate
     pub fn is_warm() -> bool {
         SESSION_CACHE.lock().ok().map(|g| g.is_some()).unwrap_or(false)
     }

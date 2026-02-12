@@ -14,7 +14,7 @@
 //! similarity fusion (AP-73).
 
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration, Timelike, Datelike};
+use chrono::{DateTime, Utc, Duration};
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};

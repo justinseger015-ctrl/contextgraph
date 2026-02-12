@@ -47,7 +47,7 @@ use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 use uuid::Uuid;
 
-use context_graph_benchmark::realdata::loader::{ChunkRecord, DatasetLoader, RealDataset};
+use context_graph_benchmark::realdata::loader::{DatasetLoader, RealDataset};
 use context_graph_core::graph_linking::{
     build_asymmetric_knn, EdgeBuilder, EdgeBuilderConfig, EmbedderEdge, KnnGraph, NnDescent,
     NnDescentConfig,

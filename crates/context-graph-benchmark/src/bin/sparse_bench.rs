@@ -16,18 +16,15 @@
 //!   --synthetic --num-documents 100 --num-queries 20
 //! ```
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use anyhow::Result;
 use clap::Parser;
 use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
-use uuid::Uuid;
 
-use context_graph_benchmark::realdata::{DatasetLoader, RealDataset};
 
 #[cfg(feature = "real-embeddings")]
 use context_graph_benchmark::realdata::embedder::EmbeddedDataset;

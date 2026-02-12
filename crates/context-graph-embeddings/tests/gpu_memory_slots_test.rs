@@ -272,24 +272,24 @@ fn test_gpu_memory_pool_pressure_level() {
 
     // Low pressure
     pool.allocate("test1", 400).expect("allocate 40%");
-    assert_eq!(pool.pressure_level(), MemoryPressure::Low);
-    println!("40% utilization: {:?}", pool.pressure_level());
+    assert_eq!(pool.pressure_level().unwrap(), MemoryPressure::Low);
+    println!("40% utilization: {:?}", pool.pressure_level().unwrap());
 
     // Add more to get Medium
     pool.allocate("test2", 200).expect("allocate +20%");
-    assert_eq!(pool.pressure_level(), MemoryPressure::Medium);
-    println!("60% utilization: {:?}", pool.pressure_level());
+    assert_eq!(pool.pressure_level().unwrap(), MemoryPressure::Medium);
+    println!("60% utilization: {:?}", pool.pressure_level().unwrap());
 
     // Add more to get High
     pool.allocate("test3", 250).expect("allocate +25%");
-    assert_eq!(pool.pressure_level(), MemoryPressure::High);
-    println!("85% utilization: {:?}", pool.pressure_level());
+    assert_eq!(pool.pressure_level().unwrap(), MemoryPressure::High);
+    println!("85% utilization: {:?}", pool.pressure_level().unwrap());
 
     // Add more to get Critical
     pool.allocate("test4", 110).expect("allocate +11%");
-    assert_eq!(pool.pressure_level(), MemoryPressure::Critical);
-    assert!(pool.should_evict());
-    println!("96% utilization: {:?}", pool.pressure_level());
+    assert_eq!(pool.pressure_level().unwrap(), MemoryPressure::Critical);
+    assert!(pool.should_evict().unwrap());
+    println!("96% utilization: {:?}", pool.pressure_level().unwrap());
 
     println!("[PASS] GpuMemoryPool pressure_level() works correctly");
 }

@@ -39,7 +39,6 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::PathBuf;
 
-use chrono::Utc;
 
 use context_graph_benchmark::realdata::config::{EmbedderName, UnifiedBenchmarkConfig};
 use context_graph_benchmark::realdata::report::{generate_console_summary, ReportGenerator};

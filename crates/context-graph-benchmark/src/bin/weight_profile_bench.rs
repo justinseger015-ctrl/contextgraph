@@ -19,7 +19,6 @@
 //! cargo run -p context-graph-benchmark --bin weight-profile-bench
 //! ```
 
-use std::collections::HashMap;
 use std::time::Instant;
 
 use context_graph_core::weights::{get_weight_profile, get_profile_names, WEIGHT_PROFILES};

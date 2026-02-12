@@ -200,7 +200,18 @@ impl GpuModelLoader {
         }
 
         // Try to load pooler (optional - some models don't have it)
-        let pooler = load_pooler(&vb, &config, model_dir, prefix).ok();
+        let pooler = match load_pooler(&vb, &config, model_dir, prefix) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                tracing::warn!(
+                    model_dir = %model_dir.display(),
+                    error = %e,
+                    "Pooler layer not loaded — model may lack pooler weights. \
+                     Downstream embeddings will use mean pooling instead of pooler output."
+                );
+                None
+            }
+        };
 
         let weights = BertWeights {
             config,

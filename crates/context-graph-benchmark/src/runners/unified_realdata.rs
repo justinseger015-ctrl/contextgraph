@@ -29,13 +29,12 @@ use std::time::Instant;
 use chrono::Utc;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use context_graph_core::types::fingerprint::SemanticFingerprint;
 
 use crate::realdata::config::{EmbedderName, FusionStrategy, UnifiedBenchmarkConfig};
-use crate::realdata::ground_truth::{GroundTruthGenerator, QueryGroundTruth, UnifiedGroundTruth};
+use crate::realdata::ground_truth::{GroundTruthGenerator, UnifiedGroundTruth};
 use crate::realdata::loader::{DatasetLoader, RealDataset};
 use crate::realdata::results::{
     AblationImpact, AblationResults, BenchmarkMetadata, BenchmarkTimings, ConstitutionalCompliance,
@@ -228,28 +227,28 @@ impl UnifiedRealdataBenchmarkRunner {
     pub fn run_without_embedding(&mut self) -> Result<UnifiedBenchmarkResults, RunnerError> {
         let start_time = Utc::now();
         let benchmark_start = Instant::now();
-        let mut timings = BenchmarkTimings::default();
+        let mut _timings = BenchmarkTimings::default();
 
         // Load dataset
         let load_start = Instant::now();
         if self.dataset.is_none() {
             self.load_dataset()?;
         }
-        timings.load_dataset_ms = load_start.elapsed().as_millis() as u64;
+        _timings.load_dataset_ms = load_start.elapsed().as_millis() as u64;
 
         // Inject temporal metadata
         let temporal_start = Instant::now();
         if self.temporal_metadata.is_none() {
             self.inject_temporal_metadata()?;
         }
-        timings.temporal_injection_ms = temporal_start.elapsed().as_millis() as u64;
+        _timings.temporal_injection_ms = temporal_start.elapsed().as_millis() as u64;
 
         // Generate ground truth
         let gt_start = Instant::now();
         if self.ground_truth.is_none() {
             self.generate_ground_truth()?;
         }
-        timings.ground_truth_ms = gt_start.elapsed().as_millis() as u64;
+        _timings.ground_truth_ms = gt_start.elapsed().as_millis() as u64;
 
         // Generate synthetic results (for testing)
         let per_embedder_results = self.generate_synthetic_results();
@@ -258,7 +257,7 @@ impl UnifiedRealdataBenchmarkRunner {
         let recommendations = self.generate_recommendations(&per_embedder_results, &None);
 
         let end_time = Utc::now();
-        timings.total_ms = benchmark_start.elapsed().as_millis() as u64;
+        _timings.total_ms = benchmark_start.elapsed().as_millis() as u64;
 
         let dataset = self.dataset.as_ref().unwrap();
         let ground_truth = self.ground_truth.as_ref().unwrap();
@@ -737,7 +736,7 @@ impl UnifiedRealdataBenchmarkRunner {
 
         // AP-73: Temporal embedders not in similarity fusion
         // This is enforced by our fusion strategy not including E2-E4
-        let temporal_in_config: Vec<_> = self.config.embedders.iter()
+        let _temporal_in_config: Vec<_> = self.config.embedders.iter()
             .filter(|e| EmbedderName::temporal().contains(e))
             .collect();
         compliance.check_ap_73(&self.config.embedders);
@@ -795,7 +794,7 @@ impl UnifiedRealdataBenchmarkRunner {
         }
 
         // Enhancement recommendations
-        let e1_mrr = per_embedder.get(&EmbedderName::E1Semantic).map(|r| r.mrr_at_10).unwrap_or(0.0);
+        let _e1_mrr = per_embedder.get(&EmbedderName::E1Semantic).map(|r| r.mrr_at_10).unwrap_or(0.0);
         for embedder in [EmbedderName::E5Causal, EmbedderName::E7Code, EmbedderName::E10Multimodal] {
             if let Some(result) = per_embedder.get(&embedder) {
                 if result.contribution_vs_e1 > 0.05 {

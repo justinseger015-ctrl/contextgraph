@@ -81,35 +81,60 @@ impl Memex for RocksDbMemex {
 
 impl RocksDbMemex {
     /// Get approximate key count for a column family.
+    ///
+    /// # Errors
+    /// Returns error if the RocksDB property read fails (disk error, CF corruption, etc.).
+    /// FAIL FAST: never silently return 0 on error — callers must handle failures.
     pub(crate) fn get_approximate_count(&self, cf_name: &str) -> Result<u64, StorageError> {
         let cf = self.get_cf(cf_name)?;
 
-        // RocksDB estimate-num-keys property
         let count = self
             .db
             .property_int_value_cf(cf, "rocksdb.estimate-num-keys")
-            .ok()
-            .flatten()
-            .unwrap_or(0);
+            .map_err(|e| {
+                tracing::error!(
+                    cf = cf_name,
+                    error = %e,
+                    "RocksDB property read failed for estimate-num-keys"
+                );
+                StorageError::Internal(format!(
+                    "RocksDB property read failed for CF '{}': {}",
+                    cf_name, e
+                ))
+            })?
+            .unwrap_or(0); // None means property not available (valid for empty CFs)
 
         Ok(count)
     }
 
     /// Get total storage size across all column families.
+    ///
+    /// # Errors
+    /// Returns error if any RocksDB property read fails.
+    /// FAIL FAST: a failed property read indicates storage issues that must be surfaced.
     pub(crate) fn get_storage_size(&self) -> Result<u64, StorageError> {
         let mut total_bytes = 0u64;
 
         for cf_name in cf_names::ALL {
             let cf = self.get_cf(cf_name)?;
 
-            // Get SST file size for this CF
-            if let Some(size) = self
+            let size = self
                 .db
                 .property_int_value_cf(cf, "rocksdb.total-sst-files-size")
-                .ok()
-                .flatten()
-            {
-                total_bytes += size;
+                .map_err(|e| {
+                    tracing::error!(
+                        cf = cf_name,
+                        error = %e,
+                        "RocksDB property read failed for total-sst-files-size"
+                    );
+                    StorageError::Internal(format!(
+                        "RocksDB property read failed for CF '{}': {}",
+                        cf_name, e
+                    ))
+                })?;
+
+            if let Some(s) = size {
+                total_bytes += s;
             }
         }
 

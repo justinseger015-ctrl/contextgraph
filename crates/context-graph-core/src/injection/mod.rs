@@ -28,8 +28,9 @@ pub use budget::{
 };
 pub use candidate::{
     InjectionCandidate, InjectionCategory, MAX_DIVERSITY_BONUS, MAX_RECENCY_FACTOR,
-    MAX_WEIGHTED_AGREEMENT, MIN_DIVERSITY_BONUS, MIN_RECENCY_FACTOR, TOKEN_MULTIPLIER,
+    MIN_DIVERSITY_BONUS, MIN_RECENCY_FACTOR, TOKEN_MULTIPLIER,
 };
+pub use crate::clustering::MAX_WEIGHTED_AGREEMENT;
 pub use pipeline::{InjectionError, InjectionPipeline};
 pub use priority::{DiversityBonus, PriorityRanker, RecencyFactor};
 pub use result::InjectionResult;

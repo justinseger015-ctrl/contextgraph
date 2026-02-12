@@ -13,6 +13,12 @@
 //! Each code entity is stored with its full SemanticFingerprint (all 13 embeddings).
 //! This enables multi-space search: E7 for code patterns, E1 for semantic meaning,
 //! E5 for causal understanding, etc.
+//!
+//! # Serialization
+//!
+//! - **CodeEntity, CodeFileIndexEntry, Vec\<Uuid\> indexes**: JSON (metadata/indexes)
+//! - **SemanticFingerprint**: bincode (dense vectors)
+//! - Per constitution: "JSON for provenance/metadata/audit. Bincode for dense vectors only."
 
 use super::error::{CodeStorageError, CodeStorageResult};
 use crate::teleological::column_families::{
@@ -28,6 +34,10 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
+
+// Constitution: "JSON for provenance/metadata/audit. Bincode for dense vectors only."
+// CodeEntity and CodeFileIndexEntry are metadata → JSON.
+// SemanticFingerprint is dense vectors → bincode (kept).
 
 /// E7 embedding dimension (Qodo-Embed-1-1.5B).
 /// Kept for validation - E7 within SemanticFingerprint should be 1536D.
@@ -180,11 +190,11 @@ impl CodeStore {
 
         let id_bytes = entity.id.as_bytes();
 
-        // Serialize entity
-        let entity_bytes = bincode::serialize(entity)
+        // Serialize entity as JSON (metadata, not dense vectors)
+        let entity_bytes = serde_json::to_vec(entity)
             .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
 
-        // Serialize full fingerprint (all 13 embeddings)
+        // Serialize full fingerprint as bincode (dense vectors)
         let fingerprint_bytes = bincode::serialize(fingerprint)
             .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
 
@@ -231,7 +241,7 @@ impl CodeStore {
 
         match self.db.get_cf(&self.cf_entities()?, id_bytes)? {
             Some(bytes) => {
-                let entity: CodeEntity = bincode::deserialize(&bytes)
+                let entity: CodeEntity = serde_json::from_slice(&bytes)
                     .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
                 Ok(Some(entity))
             }
@@ -367,7 +377,7 @@ impl CodeStore {
     pub fn get_file_index(&self, file_path: &str) -> CodeStorageResult<Option<CodeFileIndexEntry>> {
         match self.db.get_cf(&self.cf_file_index()?, file_path.as_bytes())? {
             Some(bytes) => {
-                let entry: CodeFileIndexEntry = bincode::deserialize(&bytes)
+                let entry: CodeFileIndexEntry = serde_json::from_slice(&bytes)
                     .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
                 Ok(Some(entry))
             }
@@ -424,7 +434,7 @@ impl CodeStore {
                 }
             }
 
-            let entry: CodeFileIndexEntry = bincode::deserialize(&value)
+            let entry: CodeFileIndexEntry = serde_json::from_slice(&value)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
             files.push((path, entry.entity_count()));
@@ -463,7 +473,7 @@ impl CodeStore {
                 break;
             }
 
-            let ids: Vec<Uuid> = bincode::deserialize(&value)
+            let ids: Vec<Uuid> = serde_json::from_slice(&value)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
             for id in ids {
@@ -483,7 +493,7 @@ impl CodeStore {
     pub fn search_by_exact_name(&self, name: &str) -> CodeStorageResult<Vec<CodeEntity>> {
         match self.db.get_cf(&self.cf_name_index()?, name.as_bytes())? {
             Some(bytes) => {
-                let ids: Vec<Uuid> = bincode::deserialize(&bytes)
+                let ids: Vec<Uuid> = serde_json::from_slice(&bytes)
                     .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
                 let mut entities = Vec::with_capacity(ids.len());
@@ -510,7 +520,7 @@ impl CodeStore {
 
         match self.db.get_cf(&self.cf_signature_index()?, &hash)? {
             Some(bytes) => {
-                let ids: Vec<Uuid> = bincode::deserialize(&bytes)
+                let ids: Vec<Uuid> = serde_json::from_slice(&bytes)
                     .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
                 let mut entities = Vec::with_capacity(ids.len());
@@ -694,7 +704,7 @@ impl CodeStore {
 
         for item in iter {
             let (_key, value) = item?;
-            let entity: CodeEntity = bincode::deserialize(&value)
+            let entity: CodeEntity = serde_json::from_slice(&value)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
             total_entities += 1;
@@ -740,7 +750,7 @@ impl CodeStore {
         let key = file_path.as_bytes();
 
         let mut entry = match self.db.get_cf(&cf, key)? {
-            Some(bytes) => bincode::deserialize(&bytes)
+            Some(bytes) => serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?,
             None => CodeFileIndexEntry::new(
                 file_path.to_string(),
@@ -751,7 +761,7 @@ impl CodeStore {
 
         entry.add_entity(entity_id);
 
-        let bytes = bincode::serialize(&entry)
+        let bytes = serde_json::to_vec(&entry)
             .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
         self.db.put_cf(&cf, key, bytes)?;
 
@@ -763,7 +773,7 @@ impl CodeStore {
         let key = file_path.as_bytes();
 
         if let Some(bytes) = self.db.get_cf(&cf, key)? {
-            let mut entry: CodeFileIndexEntry = bincode::deserialize(&bytes)
+            let mut entry: CodeFileIndexEntry = serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
             entry.remove_entity(entity_id);
@@ -771,7 +781,7 @@ impl CodeStore {
             if entry.is_empty() {
                 self.db.delete_cf(&cf, key)?;
             } else {
-                let bytes = bincode::serialize(&entry)
+                let bytes = serde_json::to_vec(&entry)
                     .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
                 self.db.put_cf(&cf, key, bytes)?;
             }
@@ -785,14 +795,14 @@ impl CodeStore {
         let key = name.as_bytes();
 
         let mut ids: Vec<Uuid> = match self.db.get_cf(&cf, key)? {
-            Some(bytes) => bincode::deserialize(&bytes)
+            Some(bytes) => serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?,
             None => Vec::new(),
         };
 
         if !ids.contains(&entity_id) {
             ids.push(entity_id);
-            let bytes = bincode::serialize(&ids)
+            let bytes = serde_json::to_vec(&ids)
                 .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
             self.db.put_cf(&cf, key, bytes)?;
         }
@@ -805,7 +815,7 @@ impl CodeStore {
         let key = name.as_bytes();
 
         if let Some(bytes) = self.db.get_cf(&cf, key)? {
-            let mut ids: Vec<Uuid> = bincode::deserialize(&bytes)
+            let mut ids: Vec<Uuid> = serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
             if let Some(pos) = ids.iter().position(|&id| id == entity_id) {
@@ -814,7 +824,7 @@ impl CodeStore {
                 if ids.is_empty() {
                     self.db.delete_cf(&cf, key)?;
                 } else {
-                    let bytes = bincode::serialize(&ids)
+                    let bytes = serde_json::to_vec(&ids)
                         .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
                     self.db.put_cf(&cf, key, bytes)?;
                 }
@@ -829,14 +839,14 @@ impl CodeStore {
         let key = Self::hash_signature(signature);
 
         let mut ids: Vec<Uuid> = match self.db.get_cf(&cf, &key)? {
-            Some(bytes) => bincode::deserialize(&bytes)
+            Some(bytes) => serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?,
             None => Vec::new(),
         };
 
         if !ids.contains(&entity_id) {
             ids.push(entity_id);
-            let bytes = bincode::serialize(&ids)
+            let bytes = serde_json::to_vec(&ids)
                 .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
             self.db.put_cf(&cf, &key, bytes)?;
         }
@@ -853,7 +863,7 @@ impl CodeStore {
         let key = Self::hash_signature(signature);
 
         if let Some(bytes) = self.db.get_cf(&cf, &key)? {
-            let mut ids: Vec<Uuid> = bincode::deserialize(&bytes)
+            let mut ids: Vec<Uuid> = serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
             if let Some(pos) = ids.iter().position(|&id| id == entity_id) {
@@ -862,7 +872,7 @@ impl CodeStore {
                 if ids.is_empty() {
                     self.db.delete_cf(&cf, &key)?;
                 } else {
-                    let bytes = bincode::serialize(&ids)
+                    let bytes = serde_json::to_vec(&ids)
                         .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
                     self.db.put_cf(&cf, &key, bytes)?;
                 }

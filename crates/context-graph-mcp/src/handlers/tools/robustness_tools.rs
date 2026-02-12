@@ -41,7 +41,7 @@ use crate::protocol::JsonRpcResponse;
 
 use super::robustness_dtos::{
     BlindSpotCandidate, ResultSource, RobustSearchMetadata, RobustSearchResult, RobustSourceInfo,
-    SearchRobustRequest, SearchRobustResponse, E1_WEAKNESS_THRESHOLD, E9_DISCOVERY_THRESHOLD,
+    SearchRobustRequest, SearchRobustResponse,
 };
 
 use super::super::Handlers;
@@ -478,6 +478,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::robustness_dtos::{E1_WEAKNESS_THRESHOLD, E9_DISCOVERY_THRESHOLD};
 
     #[test]
     fn test_cosine_similarity_identical() {

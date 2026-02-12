@@ -189,7 +189,7 @@ impl E6SparseBenchmarkRunner {
 
         // Run sparsity analysis
         let sp_start = Instant::now();
-        let (sparse_vectors, sparsity_analysis) = self.run_sparsity_analysis(&dataset);
+        let (_sparse_vectors, sparsity_analysis) = self.run_sparsity_analysis(&dataset);
         let sp_time = sp_start.elapsed();
 
         // Run ablation study if enabled
@@ -326,7 +326,7 @@ impl E6SparseBenchmarkRunner {
         let vectors: Vec<SparseVectorStats> = dataset
             .documents
             .iter()
-            .map(|doc| {
+            .map(|_doc| {
                 // Simulate E6 characteristics:
                 // - ~1500 active terms
                 // - ~30K vocabulary size

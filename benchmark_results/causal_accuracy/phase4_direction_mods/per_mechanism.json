@@ -1,6 +1,6 @@
 {
   "benchmark_name": "causal_accuracy_bench",
-  "timestamp": "2026-02-09T23:20:05.775208148+00:00",
+  "timestamp": "2026-02-12T12:13:11.107738457+00:00",
   "phase": "4.2_per_mechanism_modifiers",
   "metrics": {
     "mechanisms": [
@@ -120,13 +120,13 @@
   },
   "pass": true,
   "targets": {
-    "max_ratio": 3.0,
-    "min_ratio": 1.0
+    "min_ratio": 1.0,
+    "max_ratio": 3.0
   },
   "actual": {
-    "feedback_ratio": 1.105263157894737,
+    "mediated_ratio": 1.4999999999999998,
     "direct_ratio": 2.3333333333333335,
-    "temporal_ratio": 1.8571428571428574,
-    "mediated_ratio": 1.4999999999999998
+    "feedback_ratio": 1.105263157894737,
+    "temporal_ratio": 1.8571428571428574
   }
 }

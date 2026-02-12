@@ -617,6 +617,7 @@ pub struct DivergenceAlert {
 #[derive(Debug, Clone)]
 pub struct RecentConversationTurn {
     /// Memory ID
+    #[allow(dead_code)] // Part of Clone+Debug DTO
     pub id: String,
     /// Content text (summary or full)
     pub content: Option<String>,

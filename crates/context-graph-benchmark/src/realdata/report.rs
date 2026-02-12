@@ -8,10 +8,7 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use super::config::EmbedderName;
-use super::results::{
-    AblationResults, CrossEmbedderAnalysis, EmbedderResults, FusionResults,
-    UnifiedBenchmarkResults,
-};
+use super::results::UnifiedBenchmarkResults;
 
 /// Report generator for unified benchmark results.
 pub struct ReportGenerator {

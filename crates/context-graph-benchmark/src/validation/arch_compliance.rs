@@ -325,7 +325,7 @@ impl ArchComplianceValidator {
         ).with_priority(CheckPriority::High);
 
         // Verify fusion strategies exist
-        let strategies = [
+        let _strategies = [
             FusionStrategy::E1Only,
             FusionStrategy::MultiSpace,
             FusionStrategy::Pipeline,

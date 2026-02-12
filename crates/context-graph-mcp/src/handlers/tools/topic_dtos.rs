@@ -18,6 +18,8 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub use context_graph_core::clustering::{MAX_WEIGHTED_AGREEMENT, TOPIC_THRESHOLD};
+
 // ============================================================================
 // CONSTANTS
 // ============================================================================
@@ -36,12 +38,6 @@ pub const DEFAULT_DIVERGENCE_LOOKBACK: u32 = 2;
 
 /// Maximum lookback hours for divergence alerts.
 pub const MAX_DIVERGENCE_LOOKBACK: u32 = 48;
-
-/// Maximum weighted agreement per constitution (7 semantic + 2*0.5 relational + 1*0.5 structural).
-pub const MAX_WEIGHTED_AGREEMENT: f32 = 8.5;
-
-/// Topic threshold per ARCH-09.
-pub const TOPIC_THRESHOLD: f32 = 2.5;
 
 /// Churn threshold for high churn warning.
 pub const CHURN_THRESHOLD: f32 = 0.5;

@@ -557,7 +557,7 @@ impl E1SemanticDatasetGenerator {
     fn generate_same_topic_query(
         &mut self,
         documents: &[SemanticDocument],
-        ground_truth: &SemanticGroundTruth,
+        _ground_truth: &SemanticGroundTruth,
     ) -> Option<SemanticQuery> {
         let doc = documents.choose(&mut self.rng)?;
         let topic_id = doc.topic_id;
@@ -641,7 +641,7 @@ impl E1SemanticDatasetGenerator {
     fn generate_cross_domain_query(
         &mut self,
         documents: &[SemanticDocument],
-        ground_truth: &SemanticGroundTruth,
+        _ground_truth: &SemanticGroundTruth,
     ) -> Option<SemanticQuery> {
         // Pick a generic concept that might appear across domains
         let cross_domain_concepts = [
@@ -660,7 +660,7 @@ impl E1SemanticDatasetGenerator {
         // Find documents that might match this concept (from any domain)
         // For synthetic data, we'll mark some random docs as relevant
         let num_relevant = self.rng.gen_range(5..20);
-        let mut sampled: Vec<_> = documents.choose_multiple(&mut self.rng, num_relevant).collect();
+        let sampled: Vec<_> = documents.choose_multiple(&mut self.rng, num_relevant).collect();
 
         let relevant_docs: HashSet<Uuid> = sampled.iter().map(|d| d.id).collect();
         let relevance_scores: HashMap<Uuid, f64> =

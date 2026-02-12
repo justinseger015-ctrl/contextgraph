@@ -57,7 +57,6 @@ use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemory
 // Code watcher dependencies
 use crate::adapters::CodeStoreAdapter;
 use context_graph_embeddings::adapters::E7CodeEmbeddingProvider;
-use context_graph_embeddings::traits::EmbeddingModel;
 use context_graph_storage::code::CodeStore;
 
 use context_graph_embeddings::{

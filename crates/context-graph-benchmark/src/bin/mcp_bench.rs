@@ -13,16 +13,11 @@
 //! 3. Searches via search_graph MCP tool
 //! 4. Compares MCP multi-space search vs E1-only cosine similarity baseline
 
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use std::sync::Arc;
-use std::time::Instant;
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use uuid::Uuid;
 
 // Challenging corpus with overlapping semantic domains

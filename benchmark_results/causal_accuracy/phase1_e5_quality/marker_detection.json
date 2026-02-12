@@ -1,30 +1,30 @@
 {
   "benchmark_name": "causal_accuracy_bench",
-  "timestamp": "2026-02-09T23:20:05.774723977+00:00",
+  "timestamp": "2026-02-12T12:13:11.106319608+00:00",
   "phase": "1.2_marker_detection",
   "metrics": {
-    "overall_accuracy": 0.96,
+    "overall_accuracy": 0.97,
     "cause_precision": 1.0,
     "cause_recall": 1.0,
     "cause_f1": 1.0,
     "effect_precision": 1.0,
-    "effect_recall": 0.9,
-    "effect_f1": 0.9473684210526316,
-    "unknown_precision": 0.8333333333333334,
+    "effect_recall": 0.925,
+    "effect_f1": 0.961038961038961,
+    "unknown_precision": 0.8695652173913043,
     "unknown_recall": 1.0,
-    "unknown_f1": 0.9090909090909091,
+    "unknown_f1": 0.9302325581395349,
     "total_samples": 100
   },
   "pass": true,
   "targets": {
-    "min_cause_f1": 0.7,
     "min_overall_accuracy": 0.7,
+    "min_cause_f1": 0.7,
     "min_effect_f1": 0.7
   },
   "actual": {
-    "overall_accuracy": 0.96,
-    "unknown_f1": 0.9090909090909091,
+    "unknown_f1": 0.9302325581395349,
     "cause_f1": 1.0,
-    "effect_f1": 0.9473684210526316
+    "overall_accuracy": 0.97,
+    "effect_f1": 0.961038961038961
   }
 }

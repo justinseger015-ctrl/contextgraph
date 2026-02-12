@@ -276,7 +276,7 @@ pub fn compute_noise_robustness(
     let mut mrr_degradation = Vec::new();
     mrr_degradation.push((0.0, baseline_mrr));
 
-    let mut precision_degradation = Vec::new();
+    let precision_degradation = Vec::new();
 
     for (noise_str, mrr) in noisy_results {
         if let Ok(noise) = noise_str.parse::<f64>() {

@@ -104,7 +104,7 @@ impl AsymmetricValidator {
         if let Some(ratios) = measured_ratios {
             for (embedder, &ratio) in ratios {
                 if EmbedderName::asymmetric().contains(embedder) {
-                    let (check, metrics, recommendation) = Self::test_asymmetric_ratio(*embedder, ratio);
+                    let (check, _metrics, recommendation) = Self::test_asymmetric_ratio(*embedder, ratio);
 
                     result.embedder_metrics.insert(*embedder, AsymmetricMetrics {
                         asymmetric_ratio: ratio,

@@ -13,6 +13,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::clustering::MAX_WEIGHTED_AGREEMENT;
 use crate::teleological::Embedder;
 
 // =============================================================================
@@ -152,9 +153,6 @@ pub const MIN_DIVERSITY_BONUS: f32 = 0.8;
 
 /// Maximum diversity bonus (strong agreement >= 5.0).
 pub const MAX_DIVERSITY_BONUS: f32 = 1.5;
-
-/// Maximum weighted agreement per constitution (8.5).
-pub const MAX_WEIGHTED_AGREEMENT: f32 = 8.5;
 
 /// A candidate memory for context injection with computed scores.
 ///

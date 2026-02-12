@@ -482,6 +482,7 @@ pub struct UniqueFind {
 pub struct ListEmbedderIndexesRequest {
     /// Include detailed stats (default: true).
     #[serde(default = "default_true")]
+    #[allow(dead_code)] // Deserialized from user input
     pub include_details: bool,
 }
 

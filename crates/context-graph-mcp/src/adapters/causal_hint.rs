@@ -85,6 +85,7 @@ impl LlmCausalHintProvider {
     }
 
     /// Create with custom minimum confidence threshold.
+    #[allow(dead_code)] // Builder method for downstream consumers
     pub fn with_min_confidence(mut self, min_confidence: f32) -> Self {
         self.min_confidence = min_confidence.clamp(0.0, 1.0);
         self
@@ -94,6 +95,7 @@ impl LlmCausalHintProvider {
     ///
     /// This should be called during startup to preload the model.
     /// Returns error if model loading fails.
+    #[allow(dead_code)] // Setup method for production initialization
     pub async fn load_model(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.llm
             .load()

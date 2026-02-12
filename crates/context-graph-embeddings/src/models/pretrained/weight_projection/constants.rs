@@ -1,5 +1,7 @@
 //! Constants for the learned weight projection model.
 
+pub use context_graph_core::clustering::{MAX_WEIGHTED_AGREEMENT, TOPIC_THRESHOLD as WEIGHTED_AGREEMENT_THRESHOLD};
+
 /// Number of embedders in the system.
 pub const NUM_EMBEDDERS: usize = 13;
 
@@ -35,10 +37,3 @@ pub const DEFAULT_CATEGORY_WEIGHTS: [f32; NUM_EMBEDDERS] = [
     1.0, // E12 Late Interaction (semantic)
     1.0, // E13 SPLADE (semantic)
 ];
-
-/// Maximum weighted agreement (for fallback computation).
-/// 7×1.0 (semantic) + 2×0.5 (relational) + 1×0.5 (structural) = 8.5
-pub const MAX_WEIGHTED_AGREEMENT: f32 = 8.5;
-
-/// Threshold for weighted agreement (from constitution).
-pub const WEIGHTED_AGREEMENT_THRESHOLD: f32 = 2.5;
