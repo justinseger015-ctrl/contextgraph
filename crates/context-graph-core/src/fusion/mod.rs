@@ -46,6 +46,10 @@ pub enum FusionStrategy {
     /// Weighted Reciprocal Rank Fusion (recommended per ARCH-18)
     #[default]
     WeightedRRF,
+    /// Score-Weighted RRF: uses E5 score magnitude in RRF contribution.
+    /// For E5: `contribution = weight * score / (rank + K)` (preserves signal strength).
+    /// For all other embedders: standard RRF `weight / (rank + K)`.
+    ScoreWeightedRRF,
 }
 
 /// A single embedder's ranked results
@@ -134,18 +138,45 @@ impl FusedResult {
 /// assert_eq!(results.len(), 1);
 /// ```
 pub fn weighted_rrf(rankings: &[EmbedderRanking], top_k: usize) -> Vec<FusedResult> {
+    // Standard RRF is score-weighted RRF with no score-weighted embedders
+    score_weighted_rrf(rankings, &[], top_k)
+}
+
+/// Score-Weighted RRF: uses raw similarity scores for specific embedders.
+///
+/// For score-weighted embedders (e.g., E5 causal): `contribution = weight * score / (rank + 1 + k)`
+/// For standard embedders: `contribution = weight / (rank + 1 + k)` (normal RRF)
+///
+/// This preserves E5 score magnitude information that standard RRF discards.
+/// An E5 score of 0.58 (strong causal signal) contributes more than 0.12 (weak) at the same rank.
+///
+/// # Arguments
+///
+/// * `rankings` - Rankings from each embedder
+/// * `score_weighted_embedders` - Set of embedder names that should use score-weighted variant
+/// * `top_k` - Number of results to return
+pub fn score_weighted_rrf(
+    rankings: &[EmbedderRanking],
+    score_weighted_embedders: &[&str],
+    top_k: usize,
+) -> Vec<FusedResult> {
     let mut doc_scores: HashMap<Uuid, (f32, Vec<String>)> = HashMap::new();
 
     for ranking in rankings {
-        // Skip zero-weight embedders
         if ranking.weight <= 0.0 {
             continue;
         }
 
-        for (rank, (doc_id, _similarity)) in ranking.ranked_docs.iter().enumerate() {
-            // RRF formula: weight / (rank + 1 + k)
-            // rank is 0-based, so we add 1 to make it 1-based
-            let rrf_contribution = ranking.weight / (rank as f32 + 1.0 + RRF_K);
+        let use_score_weighting = score_weighted_embedders.contains(&ranking.embedder_name.as_str());
+
+        for (rank, (doc_id, similarity)) in ranking.ranked_docs.iter().enumerate() {
+            let rrf_contribution = if use_score_weighting {
+                // Score-weighted: magnitude of similarity modulates contribution
+                ranking.weight * similarity / (rank as f32 + 1.0 + RRF_K)
+            } else {
+                // Standard RRF: rank-only
+                ranking.weight / (rank as f32 + 1.0 + RRF_K)
+            };
 
             let entry = doc_scores.entry(*doc_id).or_insert((0.0, Vec::new()));
             entry.0 += rrf_contribution;
@@ -164,7 +195,6 @@ pub fn weighted_rrf(rankings: &[EmbedderRanking], top_k: usize) -> Vec<FusedResu
         })
         .collect();
 
-    // Sort by fused score descending
     results.sort_by(|a, b| {
         b.fused_score
             .partial_cmp(&a.fused_score)
@@ -265,6 +295,7 @@ pub fn fuse_rankings(
     match strategy {
         FusionStrategy::WeightedSum => weighted_sum(rankings, top_k),
         FusionStrategy::WeightedRRF => weighted_rrf(rankings, top_k),
+        FusionStrategy::ScoreWeightedRRF => score_weighted_rrf(rankings, &["E5"], top_k),
     }
 }
 
@@ -527,5 +558,62 @@ mod tests {
 
         let ranking3 = EmbedderRanking::from_index(6, 0.4, vec![]);
         assert_eq!(ranking3.embedder_name, "E7");
+    }
+
+    #[test]
+    fn test_score_weighted_rrf_e5_uses_score() {
+        // E5 with same rank but different scores should produce different contributions
+        let rankings = vec![
+            EmbedderRanking::new("E1", 1.0, vec![
+                (make_uuid(1), 0.9),
+                (make_uuid(2), 0.8),
+            ]),
+            EmbedderRanking::new("E5", 1.0, vec![
+                (make_uuid(1), 0.58), // Strong causal signal
+                (make_uuid(2), 0.12), // Weak causal signal
+            ]),
+        ];
+
+        let results = score_weighted_rrf(&rankings, &["E5"], 10);
+
+        // Doc 1 should be ranked higher because E5 has higher score
+        // E1 contributions are the same for both (standard RRF)
+        // E5 doc 1: 1.0 * 0.58 / (1 + 60) = 0.00951
+        // E5 doc 2: 1.0 * 0.12 / (2 + 60) = 0.00194
+        assert_eq!(results[0].doc_id, make_uuid(1));
+
+        // In standard RRF, E5 doc 1 and doc 2 would have same rank difference as E1
+        let standard_results = weighted_rrf(&rankings, 10);
+        // Both should have doc 1 on top, but score gap should be larger with score-weighted
+        let sw_gap = results[0].fused_score - results[1].fused_score;
+        let std_gap = standard_results[0].fused_score - standard_results[1].fused_score;
+        assert!(sw_gap > std_gap, "Score-weighted gap {} should be larger than standard gap {}", sw_gap, std_gap);
+    }
+
+    #[test]
+    fn test_score_weighted_rrf_non_e5_unchanged() {
+        // Non-E5 embedders should produce same results as standard RRF
+        let rankings = vec![
+            EmbedderRanking::new("E1", 1.0, vec![
+                (make_uuid(1), 0.9),
+            ]),
+        ];
+
+        let sw_results = score_weighted_rrf(&rankings, &["E5"], 10);
+        let std_results = weighted_rrf(&rankings, 10);
+
+        assert_eq!(sw_results.len(), std_results.len());
+        assert!((sw_results[0].fused_score - std_results[0].fused_score).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_fuse_rankings_score_weighted_variant() {
+        let rankings = vec![
+            EmbedderRanking::new("E1", 1.0, vec![(make_uuid(1), 0.9)]),
+        ];
+        let results = fuse_rankings(&rankings, FusionStrategy::ScoreWeightedRRF, 10);
+        assert_eq!(results.len(), 1);
+        // E1 is not in score-weighted list, so should behave like standard RRF
+        assert!((results[0].fused_score - 1.0 / 61.0).abs() < 0.0001);
     }
 }

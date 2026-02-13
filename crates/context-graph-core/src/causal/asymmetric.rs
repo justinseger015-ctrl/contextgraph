@@ -2093,18 +2093,18 @@ mod tests {
 
     #[test]
     fn test_causal_gate_new_thresholds() {
-        // Score above 0.30 → boosted (trained model: causal content mean=0.384)
-        let boosted = apply_causal_gate(0.5, 0.35, true);
+        // Score above CAUSAL_THRESHOLD (0.12) → boosted (trained model: causal content mean=0.170)
+        let boosted = apply_causal_gate(0.5, 0.15, true);
         assert!((boosted - 0.5 * causal_gate::CAUSAL_BOOST).abs() < 0.001);
 
-        // Score below 0.22 → demoted (trained model: non-causal content mean=0.140)
-        let demoted = apply_causal_gate(0.5, 0.15, true);
+        // Score below NON_CAUSAL_THRESHOLD (0.06) → demoted (trained model: non-causal mean=0.011)
+        let demoted = apply_causal_gate(0.5, 0.03, true);
         assert!((demoted - 0.5 * causal_gate::NON_CAUSAL_DEMOTION).abs() < 0.001);
 
-        // Score in ambiguous zone (0.22-0.30) → unchanged
-        let unchanged = apply_causal_gate(0.5, 0.26, true);
+        // Score in ambiguous zone (0.06-0.12) → unchanged
+        let unchanged = apply_causal_gate(0.5, 0.09, true);
         assert_eq!(unchanged, 0.5);
 
-        println!("[VERIFIED] Causal gate respects calibrated thresholds");
+        println!("[VERIFIED] Causal gate respects calibrated thresholds (0.12/0.06)");
     }
 }

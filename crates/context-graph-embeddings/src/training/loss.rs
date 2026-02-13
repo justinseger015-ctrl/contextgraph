@@ -27,6 +27,13 @@ pub struct LossConfig {
     pub lambda_soft: f32,
     /// Minimum E1 similarity threshold to exclude potential false negatives.
     pub false_negative_threshold: f32,
+    /// Scale factor for hard negative logits in InfoNCE (default: 2.0).
+    /// Hard negatives (top-3 most similar incorrect pairs) get their logits
+    /// multiplied by this factor before softmax, amplifying gradient signal.
+    /// Set to 1.0 to disable hard negative mining.
+    pub hard_negative_scale: f32,
+    /// Number of hard negatives per sample to amplify (default: 3).
+    pub hard_negative_count: usize,
 }
 
 impl Default for LossConfig {
@@ -39,6 +46,8 @@ impl Default for LossConfig {
             lambda_separation: 0.1,
             lambda_soft: 0.2,
             false_negative_threshold: 0.8,
+            hard_negative_scale: 2.0,
+            hard_negative_count: 3,
         }
     }
 }
@@ -92,6 +101,7 @@ impl DirectionalContrastiveLoss {
         effect_vecs: &Tensor,
     ) -> EmbeddingResult<Tensor> {
         let tau = self.config.temperature as f64;
+        let n = cause_vecs.dim(0).map_err(map_candle)?;
 
         // Cosine similarity matrix: [N, N] where sim[i,j] = cos(cause_i, effect_j)
         let sim_matrix = cause_vecs
@@ -103,13 +113,71 @@ impl DirectionalContrastiveLoss {
             .affine(1.0 / tau, 0.0)
             .map_err(map_candle)?;
 
+        // Online hard negative mining: amplify top-k hardest negative logits per row
+        // This focuses gradient signal on the most confusing negatives, improving separation.
+        // Semi-hard strategy: only amplify negatives with sim < positive sim (avoid mislabeled).
+        let logits = if n > 2 && self.config.hard_negative_scale > 1.0 {
+            self.apply_hard_negative_mining(&logits, n)?
+        } else {
+            logits
+        };
+
         // Labels: diagonal (each cause_i pairs with effect_i)
-        let n = cause_vecs.dim(0).map_err(map_candle)?;
         let labels = Tensor::arange(0u32, n as u32, cause_vecs.device())
             .map_err(map_candle)?;
 
         // Differentiable cross-entropy via gather (maintains computation graph)
         candle_nn::loss::cross_entropy(&logits, &labels).map_err(map_candle)
+    }
+
+    /// Apply online hard negative mining by scaling up the hardest negative logits.
+    ///
+    /// For each row i, identifies the top-k off-diagonal logits that are below
+    /// the diagonal (positive) logit (semi-hard strategy), and multiplies them
+    /// by `hard_negative_scale`. This amplifies gradient on confusing negatives.
+    fn apply_hard_negative_mining(
+        &self,
+        logits: &Tensor,
+        n: usize,
+    ) -> EmbeddingResult<Tensor> {
+        let scale = self.config.hard_negative_scale;
+        let k = self.config.hard_negative_count.min(n - 1);
+
+        // Extract logits to CPU for mask computation
+        let logits_data: Vec<Vec<f32>> = (0..n)
+            .map(|i| {
+                logits
+                    .get(i)
+                    .and_then(|row| row.to_vec1::<f32>())
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("Hard negative mining: failed to extract logit row {}: {}", i, e);
+                        vec![0.0; n]
+                    })
+            })
+            .collect();
+
+        // Build scaling mask: 1.0 for normal, `scale` for hard negatives
+        let mut mask_data = vec![1.0f32; n * n];
+        for i in 0..n {
+            let positive_logit = logits_data[i][i]; // diagonal = positive
+            // Collect off-diagonal (negative) logits with their indices
+            let mut negatives: Vec<(usize, f32)> = logits_data[i]
+                .iter()
+                .enumerate()
+                .filter(|&(j, &val)| j != i && val < positive_logit) // semi-hard: only below positive
+                .map(|(j, &val)| (j, val))
+                .collect();
+            // Sort descending by logit value — highest negatives are "hardest"
+            negatives.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            // Scale top-k hardest
+            for &(j, _) in negatives.iter().take(k) {
+                mask_data[i * n + j] = scale;
+            }
+        }
+
+        let mask = Tensor::from_vec(mask_data, (n, n), logits.device())
+            .map_err(map_candle)?;
+        logits.mul(&mask).map_err(map_candle)
     }
 
     /// Compute directional margin loss.

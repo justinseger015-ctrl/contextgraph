@@ -112,7 +112,7 @@ pub use code::{
 // Fusion strategies (ARCH-18) - Weighted RRF for multi-embedder fusion
 pub use fusion::{
     FusionStrategy, EmbedderRanking, FusedResult, RRF_K,
-    fuse_rankings, weighted_rrf, weighted_sum, normalize_minmax,
+    fuse_rankings, weighted_rrf, weighted_sum, score_weighted_rrf, normalize_minmax,
 };
 
 // Graph asymmetric similarity (E8) - directional graph embeddings

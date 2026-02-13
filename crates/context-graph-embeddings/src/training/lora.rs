@@ -41,6 +41,10 @@ pub struct LoraConfig {
     pub apply_query: bool,
     /// Whether to apply LoRA to value projections.
     pub apply_value: bool,
+    /// Whether to apply LoRA to key projections (default: false).
+    /// Adding K projections increases trainable parameters by ~50% but may
+    /// improve attention pattern diversity for causal structure detection.
+    pub apply_key: bool,
 }
 
 impl Default for LoraConfig {
@@ -53,6 +57,7 @@ impl Default for LoraConfig {
             num_layers: 12,
             apply_query: true,
             apply_value: true,
+            apply_key: false,
         }
     }
 }
@@ -67,7 +72,7 @@ impl LoraConfig {
     pub fn total_params(&self) -> usize {
         let per_adapter = 2 * self.hidden_size * self.rank; // A + B
         let adapters_per_layer =
-            self.apply_query as usize + self.apply_value as usize;
+            self.apply_query as usize + self.apply_value as usize + self.apply_key as usize;
         per_adapter * adapters_per_layer * self.num_layers
     }
 }
@@ -174,6 +179,8 @@ pub struct LoraLayers {
     pub query_adapters: Vec<LoraAdapter>,
     /// Per-layer LoRA adapters for value projections.
     pub value_adapters: Vec<LoraAdapter>,
+    /// Per-layer LoRA adapters for key projections (optional, WS5 enhancement).
+    pub key_adapters: Vec<LoraAdapter>,
     /// Configuration.
     pub config: LoraConfig,
     /// Whether dropout is active (true during training, false during inference).
@@ -188,6 +195,7 @@ impl LoraLayers {
 
         let mut query_adapters = Vec::new();
         let mut value_adapters = Vec::new();
+        let mut key_adapters = Vec::new();
 
         for _layer in 0..config.num_layers {
             if config.apply_query {
@@ -208,11 +216,21 @@ impl LoraLayers {
                     device,
                 )?);
             }
+            if config.apply_key {
+                key_adapters.push(LoraAdapter::new(
+                    config.hidden_size,
+                    config.rank,
+                    scale,
+                    config.dropout,
+                    device,
+                )?);
+            }
         }
 
         Ok(Self {
             query_adapters,
             value_adapters,
+            key_adapters,
             config,
             training: Cell::new(false),
         })
@@ -227,6 +245,9 @@ impl LoraLayers {
         for adapter in &self.value_adapters {
             vars.extend(adapter.trainable_vars());
         }
+        for adapter in &self.key_adapters {
+            vars.extend(adapter.trainable_vars());
+        }
         vars
     }
 
@@ -235,38 +256,38 @@ impl LoraLayers {
         self.query_adapters
             .iter()
             .chain(self.value_adapters.iter())
+            .chain(self.key_adapters.iter())
             .map(|a| a.num_params())
             .sum()
     }
 
-    /// Apply LoRA to a query projection output at a given layer.
-    ///
-    /// When `self.training` is true, applies dropout for regularization.
-    pub fn apply_query(&self, layer: usize, x: &Tensor) -> EmbeddingResult<Tensor> {
-        if layer < self.query_adapters.len() {
+    /// Apply LoRA adapter at a given layer (training/inference mode aware).
+    fn apply_adapter(&self, adapters: &[LoraAdapter], layer: usize, x: &Tensor) -> EmbeddingResult<Tensor> {
+        if layer < adapters.len() {
             if self.training.get() {
-                self.query_adapters[layer].forward_train(x)
+                adapters[layer].forward_train(x)
             } else {
-                self.query_adapters[layer].forward(x)
+                adapters[layer].forward(x)
             }
         } else {
             Tensor::zeros_like(x).map_err(map_candle)
         }
     }
 
+    /// Apply LoRA to a query projection output at a given layer.
+    pub fn apply_query(&self, layer: usize, x: &Tensor) -> EmbeddingResult<Tensor> {
+        self.apply_adapter(&self.query_adapters, layer, x)
+    }
+
     /// Apply LoRA to a value projection output at a given layer.
-    ///
-    /// When `self.training` is true, applies dropout for regularization.
     pub fn apply_value(&self, layer: usize, x: &Tensor) -> EmbeddingResult<Tensor> {
-        if layer < self.value_adapters.len() {
-            if self.training.get() {
-                self.value_adapters[layer].forward_train(x)
-            } else {
-                self.value_adapters[layer].forward(x)
-            }
-        } else {
-            Tensor::zeros_like(x).map_err(map_candle)
-        }
+        self.apply_adapter(&self.value_adapters, layer, x)
+    }
+
+    /// Apply LoRA to a key projection output at a given layer.
+    /// Only active when `apply_key = true` in LoraConfig.
+    pub fn apply_key(&self, layer: usize, x: &Tensor) -> EmbeddingResult<Tensor> {
+        self.apply_adapter(&self.key_adapters, layer, x)
     }
 
     /// Set training mode (enables/disables dropout in LoRA forward pass).
@@ -316,6 +337,7 @@ impl LoraLayers {
 
         let mut query_adapters = Vec::new();
         let mut value_adapters = Vec::new();
+        let mut key_adapters = Vec::new();
 
         for i in 0..config.num_layers {
             if config.apply_query {
@@ -332,19 +354,28 @@ impl LoraLayers {
                 let b = Var::from_tensor(&b_tensor).map_err(map_candle)?;
                 value_adapters.push(LoraAdapter { a, b, scale, dropout: config.dropout });
             }
+            if config.apply_key {
+                let a_tensor = load_tensor(&format!("lora.key.{}.a", i))?;
+                let b_tensor = load_tensor(&format!("lora.key.{}.b", i))?;
+                let a = Var::from_tensor(&a_tensor).map_err(map_candle)?;
+                let b = Var::from_tensor(&b_tensor).map_err(map_candle)?;
+                key_adapters.push(LoraAdapter { a, b, scale, dropout: config.dropout });
+            }
         }
 
         tracing::info!(
-            "Loaded LoRA weights from {}: {} query + {} value adapters, {} total params",
+            "Loaded LoRA weights from {}: {} query + {} value + {} key adapters, {} total params",
             path.display(),
             query_adapters.len(),
             value_adapters.len(),
-            query_adapters.iter().chain(value_adapters.iter()).map(|a| a.num_params()).sum::<usize>(),
+            key_adapters.len(),
+            query_adapters.iter().chain(value_adapters.iter()).chain(key_adapters.iter()).map(|a| a.num_params()).sum::<usize>(),
         );
 
         Ok(Self {
             query_adapters,
             value_adapters,
+            key_adapters,
             config,
             training: Cell::new(false),
         })

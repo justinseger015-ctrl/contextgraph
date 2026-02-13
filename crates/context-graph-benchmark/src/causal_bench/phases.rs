@@ -39,6 +39,12 @@ pub struct BenchConfig {
     /// Pre-computed E1 semantic scores keyed by "{query_id}_{pair_id}".
     /// Populated lazily before Phases 4/6/7 when GPU provider has E1.
     pub e1_score_cache: OnceCell<HashMap<String, f32>>,
+    /// Enable E12 ColBERT MaxSim reranking in simulated search.
+    /// When true, applies token-level MaxSim reranking to Stage 2 results.
+    pub enable_rerank: bool,
+    /// E12 rerank interpolation weight (default: 0.4).
+    /// Formula: final = (1 - weight) * stage2_score + weight * maxsim_proxy
+    pub rerank_weight: f32,
 }
 
 impl BenchConfig {
@@ -118,6 +124,8 @@ impl Default for BenchConfig {
             provider: Arc::new(super::provider::SyntheticProvider::new()),
             pair_score_cache: OnceCell::new(),
             e1_score_cache: OnceCell::new(),
+            enable_rerank: false,
+            rerank_weight: 0.4,
         }
     }
 }
@@ -858,6 +866,43 @@ fn simulate_ranked_search(
         .collect();
 
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    // E12 ColBERT MaxSim reranking pass (AP-74)
+    // Simulates token-level reranking using word overlap as a proxy for MaxSim.
+    // Real MaxSim operates on 128D token embeddings; this proxy uses n-gram overlap
+    // which correlates with MaxSim for same-domain pairs.
+    if config.enable_rerank {
+        let top_k = 20.min(scored.len()); // rerank top-20 candidates
+        let rerank_weight = config.rerank_weight;
+
+        let query_words: Vec<String> = query.query
+            .split_whitespace()
+            .filter(|w| w.len() > 3)
+            .map(|w| w.to_lowercase())
+            .collect();
+
+        // Only rerank the top-k candidates, leave rest in place
+        for i in 0..top_k {
+            let pair_id = &scored[i].0;
+            if let Some(pair) = pairs.iter().find(|p| p.id == *pair_id) {
+                let all_words: Vec<&str> = pair.cause_text.split_whitespace()
+                    .chain(pair.effect_text.split_whitespace())
+                    .collect();
+                let total_words = all_words.len().max(1);
+
+                let overlap = all_words.iter()
+                    .filter(|w| w.len() > 3 && query_words.iter().any(|qw| qw == &w.to_lowercase()))
+                    .count();
+
+                let maxsim_proxy = (overlap as f32 / total_words as f32).min(1.0);
+                scored[i].1 = (1.0 - rerank_weight) * scored[i].1 + rerank_weight * maxsim_proxy;
+            }
+        }
+
+        // Re-sort the top-k region
+        scored[..top_k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    }
+
     scored.into_iter().map(|(id, _)| id).collect()
 }
 

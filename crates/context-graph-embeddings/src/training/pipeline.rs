@@ -1048,6 +1048,10 @@ impl CausalTrainingPipeline {
             tensors.insert(format!("lora.value.{}.a", i), adapter.a.as_tensor().clone());
             tensors.insert(format!("lora.value.{}.b", i), adapter.b.as_tensor().clone());
         }
+        for (i, adapter) in self.lora.key_adapters.iter().enumerate() {
+            tensors.insert(format!("lora.key.{}.a", i), adapter.a.as_tensor().clone());
+            tensors.insert(format!("lora.key.{}.b", i), adapter.b.as_tensor().clone());
+        }
 
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| EmbeddingError::InternalError {

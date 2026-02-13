@@ -435,6 +435,30 @@ pub fn self_attention_forward_with_lora(
         message: format!("CausalModel layer {} LoRA V add failed: {}", layer_idx, e),
     })?;
 
+    // Apply LoRA deltas to K only when key adapters exist (apply_key=true)
+    // Skip entirely when apply_key=false to avoid wasted VRAM allocation on zero tensors
+    let k = if !lora_layers.key_adapters.is_empty() {
+        let k_delta = lora_layers.apply_key(layer_idx, &hidden_flat)?;
+        let k_delta = k_delta
+            .reshape((batch_size, seq_len, num_heads, head_dim))
+            .map_err(|e| EmbeddingError::GpuError {
+                message: format!("CausalModel layer {} LoRA K reshape failed: {}", layer_idx, e),
+            })?
+            .transpose(1, 2)
+            .map_err(|e| EmbeddingError::GpuError {
+                message: format!("CausalModel layer {} LoRA K transpose failed: {}", layer_idx, e),
+            })?
+            .contiguous()
+            .map_err(|e| EmbeddingError::GpuError {
+                message: format!("CausalModel layer {} LoRA K contiguous failed: {}", layer_idx, e),
+            })?;
+        k.add(&k_delta).map_err(|e| EmbeddingError::GpuError {
+            message: format!("CausalModel layer {} LoRA K add failed: {}", layer_idx, e),
+        })?
+    } else {
+        k
+    };
+
     // Apply RoPE to Q and K
     let q = apply_rotary_emb(&q, cos, sin)?;
     let k = apply_rotary_emb(&k, cos, sin)?;

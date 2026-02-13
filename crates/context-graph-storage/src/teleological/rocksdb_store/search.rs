@@ -881,7 +881,7 @@ fn search_pipeline_sync(
                 })
                 .filter(|(_, score, _, _)| *score >= options.min_similarity)
                 .collect(),
-            FusionStrategy::WeightedRRF => {
+            FusionStrategy::WeightedRRF | FusionStrategy::ScoreWeightedRRF => {
                 let semantic_indices = [
                     (0, "E1", adjusted_weights[0]),
                     (4, "E5", adjusted_weights[4]),
@@ -908,7 +908,8 @@ fn search_pipeline_sync(
                     }
                 }
 
-                let fused = fuse_rankings(&embedder_rankings, FusionStrategy::WeightedRRF, stage2_k * 2);
+                // Use ScoreWeightedRRF when requested: E5 contribution preserves score magnitude
+                let fused = fuse_rankings(&embedder_rankings, options.fusion_strategy, stage2_k * 2);
 
                 let candidate_map: HashMap<Uuid, ([f32; 13], SemanticFingerprint)> = candidate_data
                     .into_iter()
@@ -919,9 +920,6 @@ fn search_pipeline_sync(
                     .into_iter()
                     .filter_map(|f| {
                         candidate_map.get(&f.doc_id).map(|(scores, semantic)| {
-                            // RRF scores are in range [0, ~1.0] for typical result sets.
-                            // max possible = sum(weight_i / (1 + k)) across active embedders.
-                            // We leave them as-is for consistent comparison with min_similarity.
                             (f.doc_id, f.fused_score, *scores, semantic.clone())
                         })
                     })
@@ -944,12 +942,43 @@ fn search_pipeline_sync(
         return Ok(Vec::new());
     }
 
-    // Truncate to final top_k (E12 MaxSim reranking is not yet implemented per AP-74)
+    // STAGE 3: E12 COLBERT MAXSIM RERANKING (AP-74)
+    // If enabled, compute MaxSim between query tokens and candidate e12_late_interaction tokens,
+    // then interpolate with stage2 fusion score.
+    if options.enable_rerank && !query.e12_late_interaction.is_empty() {
+        let rerank_weight = options.rerank_weight;
+        let mut reranked = Vec::with_capacity(scored_candidates.len());
+
+        for (id, stage2_score, embedder_scores, semantic) in scored_candidates {
+            let maxsim_score = if !semantic.e12_late_interaction.is_empty() {
+                context_graph_core::retrieval::distance::max_sim(
+                    &query.e12_late_interaction,
+                    &semantic.e12_late_interaction,
+                )
+            } else {
+                0.0
+            };
+
+            // Interpolate: final = (1 - weight) * stage2 + weight * maxsim
+            let final_score = (1.0 - rerank_weight) * stage2_score + rerank_weight * maxsim_score;
+            reranked.push((id, final_score, embedder_scores, semantic));
+        }
+
+        reranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        info!(
+            "Stage 3 E12 MaxSim rerank complete: {} candidates reranked (weight={})",
+            reranked.len(),
+            rerank_weight
+        );
+        scored_candidates = reranked;
+    }
+
     scored_candidates.truncate(options.top_k);
 
     debug!(
-        "Pipeline 2-stage search: {} final results (E12 MaxSim reranking not yet implemented)",
-        scored_candidates.len()
+        "Pipeline search: {} final results (rerank={})",
+        scored_candidates.len(),
+        options.enable_rerank
     );
 
     // BUILD FINAL RESULTS
