@@ -464,14 +464,13 @@ pub fn gpu_forward_dual_trainable_tensor(
     lora_layers: &crate::training::lora::LoraLayers,
     projection: &super::weights::TrainableProjection,
 ) -> EmbeddingResult<(Tensor, Tensor)> {
-    // Use search_document: prefix for BOTH cause and effect to match training distribution.
-    // The projection heads provide cause/effect asymmetry.
-    let cause_text = format!("search_document: {}", text);
-    let effect_text = format!("search_document: {}", text);
+    // Use search_document: prefix to match training distribution.
+    // Cause/effect asymmetry comes from the projection heads, not the prefix.
+    let prefixed_text = format!("search_document: {}", text);
 
-    // LoRA-augmented forward for both cause and effect instruction prefixes
-    let cause_emb = gpu_forward_with_lora_tensor(&cause_text, weights, tokenizer, lora_layers)?;
-    let effect_emb = gpu_forward_with_lora_tensor(&effect_text, weights, tokenizer, lora_layers)?;
+    // LoRA-augmented forward pass (same input for both roles; projection heads differentiate)
+    let cause_emb = gpu_forward_with_lora_tensor(&prefixed_text, weights, tokenizer, lora_layers)?;
+    let effect_emb = gpu_forward_with_lora_tensor(&prefixed_text, weights, tokenizer, lora_layers)?;
 
     // Apply trainable projections (gradients flow through Var tensors)
     let cause_proj = projection.project_cause_trainable(&cause_emb)?;

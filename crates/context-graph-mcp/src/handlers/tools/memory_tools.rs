@@ -1694,7 +1694,7 @@ fn get_e5_causal_weight(profile_name: &str) -> f32 {
 /// After LoRA training, E5 scores are calibrated (0.05-0.58 range). Binary gate:
 /// - E5 >= 0.04 (CAUSAL_THRESHOLD) → "definitely causal" → 1.10x boost
 /// - E5 <= 0.008 (NON_CAUSAL_THRESHOLD) → "definitely non-causal" → 0.85x demotion
-/// - E5 in (0.06, 0.12) → ambiguous dead zone → no change
+/// - E5 in (0.008, 0.04) → ambiguous dead zone → no change
 ///
 /// This is Occam's razor: the simplest model that matches E5's actual signal.
 ///
