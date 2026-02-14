@@ -29,6 +29,16 @@ use crate::teleological::serialization::deserialize_teleological_fingerprint;
 use super::store::RocksDbTeleologicalStore;
 use super::types::TeleologicalStoreError;
 
+/// Key prefix for soft-delete markers persisted in CF_SYSTEM.
+/// Format: "soft_deleted::{uuid}" -> "1"
+pub(crate) const SOFT_DELETE_PREFIX: &str = "soft_deleted::";
+
+/// Build the CF_SYSTEM key for a soft-delete marker.
+#[inline]
+pub(crate) fn soft_delete_key(id: &Uuid) -> String {
+    format!("{}{}", SOFT_DELETE_PREFIX, id)
+}
+
 impl RocksDbTeleologicalStore {
     /// Store a fingerprint (internal async wrapper).
     pub(crate) async fn store_async(
@@ -137,9 +147,23 @@ impl RocksDbTeleologicalStore {
         }
 
         if soft {
-            // Soft delete: mark as deleted in memory
+            // Soft delete: mark as deleted in memory AND persist to RocksDB
             // MED-11 FIX: parking_lot::RwLock returns guard directly (non-poisonable)
             self.soft_deleted.write().insert(id, true);
+
+            // SEC-06-FIX: Persist soft-delete marker to CF_SYSTEM so it survives restart
+            let cf_system = self
+                .get_cf(crate::column_families::cf_names::SYSTEM)
+                .map_err(|e| CoreError::StorageError(format!("CF_SYSTEM not found: {e}")))?;
+            let sd_key = soft_delete_key(&id);
+            self.db
+                .put_cf(cf_system, sd_key.as_bytes(), b"1")
+                .map_err(|e| {
+                    CoreError::StorageError(format!(
+                        "Failed to persist soft-delete marker for {}: {}",
+                        id, e
+                    ))
+                })?;
 
             // Invalidate count cache (soft delete changes the effective count)
             *self.fingerprint_count.write() = None;
@@ -198,8 +222,13 @@ impl RocksDbTeleologicalStore {
             let cf_e12 = self.get_cf(CF_E12_LATE_INTERACTION)?;
             batch.delete_cf(cf_e12, e12_late_interaction_key(&id));
 
-            // Remove from soft-deleted tracking
+            // Remove from soft-deleted tracking (memory + persisted marker)
             self.soft_deleted.write().remove(&id);
+            let cf_system = self
+                .get_cf(crate::column_families::cf_names::SYSTEM)
+                .map_err(|e| CoreError::StorageError(format!("CF_SYSTEM not found: {e}")))?;
+            let sd_key = soft_delete_key(&id);
+            batch.delete_cf(cf_system, sd_key.as_bytes());
 
             self.db.write(batch).map_err(|e| {
                 TeleologicalStoreError::rocksdb_op("delete_batch", CF_FINGERPRINTS, Some(id), e)

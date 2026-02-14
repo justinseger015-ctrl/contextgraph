@@ -79,14 +79,117 @@ use super::super::Handlers;
 // SIMPLE ENTITY MENTION EXTRACTION
 // ============================================================================
 
+/// Classify a canonical entity ID into a known type using a static knowledge base.
+///
+/// Returns `(EntityType, confidence)`. KB matches get confidence 1.0,
+/// unmatched entities remain Unknown with confidence 0.5.
+fn classify_entity(canonical: &str) -> (EntityType, f32) {
+    // Static knowledge base mapping canonical IDs to entity types.
+    // KEPLER handles deeper relationship discovery, but this provides
+    // correct type annotations for the extract_entities API response.
+    static KB: std::sync::LazyLock<std::collections::HashMap<&'static str, EntityType>> =
+        std::sync::LazyLock::new(|| {
+            let mut m = std::collections::HashMap::new();
+            // Programming Languages
+            for lang in [
+                "rust", "python", "javascript", "typescript", "java", "go", "golang",
+                "c", "c++", "cpp", "c#", "csharp", "ruby", "swift", "kotlin", "scala",
+                "haskell", "elixir", "erlang", "clojure", "lua", "perl", "php", "r",
+                "julia", "zig", "nim", "dart", "sql", "bash", "shell", "powershell",
+                "assembly", "wasm", "webassembly", "solidity", "move",
+            ] {
+                m.insert(lang, EntityType::ProgrammingLanguage);
+            }
+            // Databases
+            for db in [
+                "postgresql", "postgres", "mysql", "mariadb", "sqlite", "mongodb",
+                "redis", "cassandra", "dynamodb", "couchdb", "neo4j", "elasticsearch",
+                "opensearch", "rocksdb", "leveldb", "cockroachdb", "tidb", "vitess",
+                "clickhouse", "influxdb", "timescaledb", "scylladb", "foundationdb",
+                "memcached", "etcd", "meilisearch", "pinecone", "weaviate", "qdrant",
+                "milvus", "chromadb", "supabase", "firebase", "fauna", "planetscale",
+                "neon", "turso", "surrealdb", "duckdb", "snowflake", "bigquery",
+                "redshift", "databricks", "diesel",
+            ] {
+                m.insert(db, EntityType::Database);
+            }
+            // Cloud
+            for cloud in [
+                "aws", "azure", "gcp", "google cloud", "digitalocean", "heroku",
+                "vercel", "netlify", "cloudflare", "fly.io", "railway", "render",
+                "s3", "ec2", "lambda", "ecs", "eks", "fargate", "rds", "sqs", "sns",
+                "cloudfront", "route53", "iam", "vpc", "kinesis", "dynamodb",
+                "us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1",
+            ] {
+                m.insert(cloud, EntityType::Cloud);
+            }
+            // Frameworks
+            for fw in [
+                "react", "angular", "vue", "svelte", "next.js", "nextjs", "nuxt",
+                "remix", "gatsby", "express", "fastapi", "django", "flask", "rails",
+                "spring", "spring boot", "springboot", "actix", "axum", "rocket",
+                "warp", "hyper", "tokio", "serde", "diesel", "sqlx", "sea-orm",
+                "node.js", "nodejs", "deno", "bun", "electron", "tauri",
+                "tensorflow", "pytorch", "keras", "scikit-learn", "pandas", "numpy",
+                "docker", "kubernetes", "k8s", "terraform", "ansible", "helm",
+                "prometheus", "grafana", "datadog", "jenkins", "github actions",
+                "webpack", "vite", "esbuild", "rollup", "turbopack",
+                "tailwind", "bootstrap", "material-ui", "chakra-ui",
+                "jest", "pytest", "junit", "mocha", "cypress", "playwright",
+                "graphql", "grpc", "protobuf", "openapi", "swagger",
+                "jwt", "oauth", "oauth2", "saml", "oidc",
+            ] {
+                m.insert(fw, EntityType::Framework);
+            }
+            // Companies
+            for company in [
+                "google", "microsoft", "apple", "amazon", "meta", "facebook",
+                "netflix", "uber", "airbnb", "stripe", "shopify", "github",
+                "gitlab", "bitbucket", "atlassian", "jira", "confluence",
+                "slack", "discord", "zoom", "twilio", "sendgrid",
+                "anthropic", "openai", "deepmind", "hugging face", "huggingface",
+                "nvidia", "intel", "amd", "arm", "qualcomm",
+                "hashicorp", "datadog", "elastic", "confluent", "mongodb inc",
+                "redhat", "canonical", "suse", "ibm", "oracle", "sap",
+                "cloudflare inc", "fastly", "akamai",
+            ] {
+                m.insert(company, EntityType::Company);
+            }
+            // Technical Terms
+            for term in [
+                "api", "rest", "http", "https", "tcp", "udp", "websocket",
+                "ssl", "tls", "dns", "cdn", "vpn", "ssh", "ftp",
+                "json", "xml", "yaml", "toml", "csv", "protobuf",
+                "ci/cd", "devops", "sre", "mlops", "devsecops",
+                "microservices", "monolith", "serverless", "faas",
+                "oom", "cors", "csrf", "xss", "sqli",
+                "rrf", "hnsw", "hdbscan", "lora", "rlhf",
+                "gpu", "cpu", "tpu", "fpga", "cuda", "vram",
+                "llm", "rag", "embeddings", "transformers", "attention",
+                "cnn", "rnn", "lstm", "gnn", "gan", "vae",
+                "transe", "kepler", "bert", "gpt",
+            ] {
+                m.insert(term, EntityType::TechnicalTerm);
+            }
+            m
+        });
+
+    if let Some(&entity_type) = KB.get(canonical) {
+        (entity_type, 1.0)
+    } else {
+        (EntityType::Unknown, 0.5)
+    }
+}
+
 /// Extract potential entity mentions from text.
 ///
-/// This is a simple extraction that identifies potential entity mentions:
+/// Identifies potential entity mentions via:
 /// - Capitalized words (proper nouns)
-/// - Known technical patterns
+/// - Known technical patterns (underscores, dashes)
+/// - Knowledge base lookup for type classification
 ///
-/// KEPLER embeddings handle the actual entity relationship discovery.
-/// This function just identifies candidate mentions for display/API purposes.
+/// KEPLER embeddings handle deeper entity relationship discovery.
+/// This function identifies candidate mentions with type annotations for API responses.
 fn extract_entity_mentions(text: &str) -> EntityMetadata {
     let mut entities = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -109,11 +212,12 @@ fn extract_entity_mentions(text: &str) -> EntityMetadata {
             let canonical = clean.to_lowercase();
             if !seen.contains(&canonical) {
                 seen.insert(canonical.clone());
+                let (entity_type, confidence) = classify_entity(&canonical);
                 entities.push(EntityLink {
                     surface_form: clean.to_string(),
                     canonical_id: canonical,
-                    entity_type: EntityType::Unknown,
-                    confidence: 1.0, // Phase 3a: Default to 1.0 for heuristic extraction
+                    entity_type,
+                    confidence,
                 });
             }
         }

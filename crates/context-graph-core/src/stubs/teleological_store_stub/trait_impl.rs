@@ -517,6 +517,10 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
         Ok(results)
     }
 
+    async fn count_causal_relationships(&self) -> CoreResult<usize> {
+        Ok(self.causal_relationships.len())
+    }
+
     async fn search_causal_relationships(
         &self,
         query_embedding: &[f32],

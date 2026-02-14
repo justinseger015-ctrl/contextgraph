@@ -153,7 +153,7 @@ impl Handlers {
         let importance = args
             .get("importance")
             .and_then(|v| v.as_f64())
-            .map(|v| v as f32)
+            .map(|v| (v as f32).clamp(0.0, 1.0))
             .unwrap_or(TeleologicalFingerprint::DEFAULT_IMPORTANCE);
 
         // SESSION-ID-FIX: Priority: tool argument > env var > stored session_id > auto-generate

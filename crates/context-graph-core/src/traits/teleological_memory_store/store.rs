@@ -734,6 +734,15 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         config: &crate::types::MultiEmbedderConfig,
     ) -> CoreResult<Vec<crate::types::CausalSearchResult>>;
 
+    /// Count total stored causal relationships.
+    ///
+    /// # Returns
+    /// Total count of causal relationships across all sources.
+    ///
+    /// # Errors
+    /// - `CoreError::StorageError` - Storage backend failure
+    async fn count_causal_relationships(&self) -> CoreResult<usize>;
+
     // ==================== Audit Log (Phase 1.1) ====================
 
     /// Append an audit record to the append-only audit log.

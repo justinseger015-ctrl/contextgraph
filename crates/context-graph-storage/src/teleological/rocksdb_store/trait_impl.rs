@@ -260,6 +260,10 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
         RocksDbTeleologicalStore::get_causal_relationships_by_source(self, source_id).await
     }
 
+    async fn count_causal_relationships(&self) -> CoreResult<usize> {
+        RocksDbTeleologicalStore::count_causal_relationships(self).await
+    }
+
     async fn search_causal_relationships(
         &self,
         query_embedding: &[f32],

@@ -317,8 +317,32 @@ impl Handlers {
             }
         };
 
-        // Read clusters from MultiSpaceClusterManager
+        // Auto-populate cluster manager from storage if empty (e.g. after MCP restart).
         // parking_lot::RwLockReadGuard is !Send — must drop before .await
+        let needs_clustering = {
+            let cm = self.cluster_manager.read();
+            cm.total_memories() == 0
+        };
+        if needs_clustering {
+            if let Ok(fingerprints) = self.teleological_store.scan_fingerprints_for_clustering(None).await {
+                if !fingerprints.is_empty() {
+                    info!(
+                        count = fingerprints.len(),
+                        "get_embedder_clusters: Auto-loading fingerprints and clustering"
+                    );
+                    let mut cm = self.cluster_manager.write();
+                    cm.clear_all_spaces();
+                    for (fp_id, cluster_array) in &fingerprints {
+                        let _ = cm.insert(*fp_id, cluster_array);
+                    }
+                    if let Err(e) = cm.recluster() {
+                        warn!(error = %e, "get_embedder_clusters: Auto-recluster failed");
+                    }
+                }
+            }
+        }
+
+        // Read clusters from MultiSpaceClusterManager
         let (cluster_info, total_clusters, total_memories) = {
             let cluster_manager = self.cluster_manager.read();
             let clusters = cluster_manager.get_clusters(embedder);

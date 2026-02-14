@@ -190,9 +190,11 @@ impl Handlers {
             }
         } else {
             // No query provided - use unbiased fingerprint listing with sequence ordering
+            // Fetch extra to account for session filtering
+            let fetch_limit = if session_only { window_size as usize * 4 } else { window_size as usize * 2 };
             let unbiased = match self
                 .teleological_store
-                .list_fingerprints_unbiased(window_size as usize * 2)
+                .list_fingerprints_unbiased(fetch_limit)
                 .await
             {
                 Ok(fps) => fps,
@@ -206,13 +208,43 @@ impl Handlers {
                 .into_iter()
                 .map(|fp| TeleologicalSearchResult {
                     fingerprint: fp,
-                    similarity: 1.0, // No semantic bias
+                    similarity: 1.0, // No semantic bias - ordered by sequence
                     embedder_scores: [0.0; 13],
                     stage_scores: [0.0; 5],
                     content: None,
                     temporal_breakdown: None,
                 })
                 .collect()
+        };
+
+        // SEC-SESSION: Post-filter by session_id when sessionOnly=true.
+        // The store layer doesn't filter by session during search, so we do it here
+        // using source_metadata to check session_id matches.
+        let results = if session_only {
+            if let Some(ref target_sid) = session_id {
+                let result_ids: Vec<uuid::Uuid> = results.iter().map(|r| r.fingerprint.id).collect();
+                let metadata_batch = self
+                    .teleological_store
+                    .get_source_metadata_batch(&result_ids)
+                    .await
+                    .unwrap_or_else(|_| vec![None; result_ids.len()]);
+
+                results
+                    .into_iter()
+                    .zip(metadata_batch.into_iter())
+                    .filter(|(_r, meta)| {
+                        meta.as_ref()
+                            .and_then(|m| m.session_id.as_ref())
+                            .map(|sid| sid == target_sid)
+                            .unwrap_or(false)
+                    })
+                    .map(|(r, _)| r)
+                    .collect()
+            } else {
+                results
+            }
+        } else {
+            results
         };
 
         // Limit results to window size
@@ -579,55 +611,45 @@ impl Handlers {
 
         options.temporal_options.sequence_options = Some(seq_opts);
 
-        // MCP-12 FIX: When no explicit semanticFilter is provided, skip semantic search
-        // entirely and return results based on sequence ordering from the anchor point.
-        // Using a hardcoded "memory chain traversal" string would bias retrieval.
-        let results: Vec<TeleologicalSearchResult> = if let Some(filter_text) = semantic_filter {
-            // User provided an explicit semantic filter - use semantic search
-            let query_embedding = match self.multi_array_provider.embed_all(filter_text).await {
+        // Determine query embedding: either from user's semantic filter or from anchor's own E1 vector.
+        // Using the anchor's E1 embedding finds semantically related memories with real similarity scores.
+        let query_embedding = if let Some(filter_text) = semantic_filter {
+            // User provided an explicit semantic filter - embed it
+            match self.multi_array_provider.embed_all(filter_text).await {
                 Ok(output) => output.fingerprint,
                 Err(e) => {
                     error!(error = %e, "traverse_memory_chain: Query embedding FAILED");
                     return self.tool_error(id, &format!("Query embedding failed: {}", e));
                 }
-            };
-
-            match self
-                .teleological_store
-                .search_semantic(&query_embedding, options)
-                .await
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    error!(error = %e, "traverse_memory_chain: Search FAILED");
-                    return self.tool_error(id, &format!("Search failed: {}", e));
-                }
             }
         } else {
-            // No semantic filter - use unbiased listing for sequence-based traversal
-            let unbiased = match self
-                .teleological_store
-                .list_fingerprints_unbiased(hops as usize * 2)
-                .await
-            {
-                Ok(fps) => fps,
-                Err(e) => {
-                    error!(error = %e, "traverse_memory_chain: Unbiased scan FAILED");
-                    return self.tool_error(id, &format!("Fingerprint scan failed: {}", e));
+            // No semantic filter - use anchor's own fingerprint as the query.
+            // This finds memories most similar to the anchor with real E1 similarity scores.
+            match self.teleological_store.retrieve(anchor_id).await {
+                Ok(Some(anchor_fp)) => anchor_fp.semantic,
+                Ok(None) => {
+                    return self.tool_error(
+                        id,
+                        &format!("Anchor memory {} not found for embedding retrieval", anchor_id),
+                    );
                 }
-            };
+                Err(e) => {
+                    error!(error = %e, "traverse_memory_chain: Anchor retrieval FAILED");
+                    return self.tool_error(id, &format!("Failed to retrieve anchor: {}", e));
+                }
+            }
+        };
 
-            unbiased
-                .into_iter()
-                .map(|fp| TeleologicalSearchResult {
-                    fingerprint: fp,
-                    similarity: 1.0, // No semantic bias
-                    embedder_scores: [0.0; 13],
-                    stage_scores: [0.0; 5],
-                    content: None,
-                    temporal_breakdown: None,
-                })
-                .collect()
+        let results: Vec<TeleologicalSearchResult> = match self
+            .teleological_store
+            .search_semantic(&query_embedding, options)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                error!(error = %e, "traverse_memory_chain: Search FAILED");
+                return self.tool_error(id, &format!("Search failed: {}", e));
+            }
         };
 
         // Limit to requested hops

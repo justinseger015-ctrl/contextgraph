@@ -321,9 +321,12 @@ mod tests {
                     vec!["accuracy".into()]
                 },
                 duration_ms: 100,
+                model_dependent: true,
             }],
             overall_pass_count: if pass { 1 } else { 0 },
             overall_total: 1,
+            model_pass_count: if pass { 1 } else { 0 },
+            model_total: 1,
         }
     }
 

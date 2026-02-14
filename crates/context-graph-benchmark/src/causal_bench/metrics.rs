@@ -20,6 +20,14 @@ pub struct PhaseBenchmarkResult {
     pub pass: bool,
     pub failing_criteria: Vec<String>,
     pub duration_ms: u64,
+    /// Whether this phase tests the trained model (true) or infrastructure/heuristics (false).
+    /// Phases marked false produce deterministic results regardless of model changes.
+    #[serde(default = "default_model_dependent")]
+    pub model_dependent: bool,
+}
+
+fn default_model_dependent() -> bool {
+    true
 }
 
 /// Full benchmark report across all phases.
@@ -30,6 +38,12 @@ pub struct FullBenchmarkReport {
     pub phases: Vec<PhaseBenchmarkResult>,
     pub overall_pass_count: usize,
     pub overall_total: usize,
+    /// Pass count among model-dependent phases only.
+    #[serde(default)]
+    pub model_pass_count: usize,
+    /// Total model-dependent phases.
+    #[serde(default)]
+    pub model_total: usize,
 }
 
 impl FullBenchmarkReport {
@@ -53,6 +67,32 @@ impl FullBenchmarkReport {
     /// Count failing phases (>50% criteria failing).
     pub fn count_fail(&self) -> usize {
         self.phases.len() - self.count_pass() - self.count_warn()
+    }
+
+    /// Count passing model-dependent phases.
+    pub fn count_model_pass(&self) -> usize {
+        self.phases
+            .iter()
+            .filter(|p| p.model_dependent && p.pass)
+            .count()
+    }
+
+    /// Count total model-dependent phases.
+    pub fn count_model_total(&self) -> usize {
+        self.phases.iter().filter(|p| p.model_dependent).count()
+    }
+
+    /// Count passing infrastructure (non-model-dependent) phases.
+    pub fn count_infra_pass(&self) -> usize {
+        self.phases
+            .iter()
+            .filter(|p| !p.model_dependent && p.pass)
+            .count()
+    }
+
+    /// Count total infrastructure phases.
+    pub fn count_infra_total(&self) -> usize {
+        self.phases.iter().filter(|p| !p.model_dependent).count()
     }
 }
 
@@ -519,6 +559,7 @@ pub fn make_phase_result(
         pass: failing_criteria.is_empty(),
         failing_criteria,
         duration_ms,
+        model_dependent: true,
     }
 }
 

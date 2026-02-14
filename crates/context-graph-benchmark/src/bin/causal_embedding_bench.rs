@@ -176,11 +176,15 @@ fn main() -> anyhow::Result<()> {
         phases: phase_results,
         overall_pass_count: 0, // Filled below
         overall_total: 0,
+        model_pass_count: 0,
+        model_total: 0,
     };
 
     let full_report = metrics::FullBenchmarkReport {
         overall_pass_count: full_report.count_pass(),
         overall_total: full_report.phases.len(),
+        model_pass_count: full_report.count_model_pass(),
+        model_total: full_report.count_model_total(),
         ..full_report
     };
 

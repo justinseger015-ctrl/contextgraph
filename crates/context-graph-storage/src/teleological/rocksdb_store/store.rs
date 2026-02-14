@@ -197,12 +197,48 @@ impl RocksDbTeleologicalStore {
             index_registry.len()
         );
 
+        let db_arc = Arc::new(db);
+
+        // SEC-06-FIX: Load persisted soft-delete markers from CF_SYSTEM BEFORE index rebuild.
+        // Without this, soft-deleted memories get added back to HNSW indexes on restart.
+        let soft_deleted = {
+            use super::crud::SOFT_DELETE_PREFIX;
+
+            let mut map = HashMap::new();
+            if let Some(cf_system) = db_arc.cf_handle(crate::column_families::cf_names::SYSTEM) {
+                let iter = db_arc.prefix_iterator_cf(cf_system, SOFT_DELETE_PREFIX.as_bytes());
+                for item in iter {
+                    match item {
+                        Ok((key, _value)) => {
+                            let key_str = String::from_utf8_lossy(&key);
+                            if let Some(uuid_str) = key_str.strip_prefix(SOFT_DELETE_PREFIX) {
+                                if let Ok(id) = uuid::Uuid::parse_str(uuid_str) {
+                                    map.insert(id, true);
+                                }
+                            } else {
+                                // Prefix iterator went past our prefix -- stop
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error reading soft-delete markers: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+            if !map.is_empty() {
+                info!("Loaded {} persisted soft-delete markers from CF_SYSTEM", map.len());
+            }
+            Arc::new(RwLock::new(map))
+        };
+
         let store = Self {
-            db: Arc::new(db),
+            db: db_arc,
             cache,
             path: path_buf,
             fingerprint_count: RwLock::new(None),
-            soft_deleted: Arc::new(RwLock::new(HashMap::new())),
+            soft_deleted,
             index_registry,
             causal_e11_index,
             secondary_index_lock: parking_lot::Mutex::new(()),
@@ -210,6 +246,7 @@ impl RocksDbTeleologicalStore {
 
         // CRITICAL: Rebuild HNSW indexes from existing RocksDB fingerprints
         // Without this, indexes are empty on every restart and multi-space search fails!
+        // NOTE: Soft-deleted IDs are already loaded above, so rebuild will skip them.
         store.rebuild_indexes_from_store()?;
 
         // Rebuild E11 HNSW index from existing causal relationships

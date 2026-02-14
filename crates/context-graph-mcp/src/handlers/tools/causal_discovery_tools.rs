@@ -381,12 +381,26 @@ impl Handlers {
             context_graph_graph_agent::ServiceStatus::Stopping => "stopping",
         };
 
+        // Count total stored causal relationships (covers both pairs and extract modes)
+        let total_relationships_stored = match self
+            .teleological_store
+            .count_causal_relationships()
+            .await
+        {
+            Ok(count) => count,
+            Err(e) => {
+                warn!(error = %e, "Failed to count causal relationships");
+                0
+            }
+        };
+
         let mut response = json!({
             "agentStatus": if is_running { "running" } else { status_str },
             "llmAvailable": llm_available,
             "modelName": "Hermes-2-Pro-Mistral-7B",
             "estimatedVramMb": 6000,
-            "pairsAnalyzedTotal": service.scanner_analyzed_count()
+            "pairsAnalyzedTotal": service.scanner_analyzed_count(),
+            "totalRelationshipsStored": total_relationships_stored
         });
 
         // Include last cycle result if requested
@@ -498,20 +512,8 @@ impl Handlers {
             "trigger_causal_discovery_extract: Starting extraction"
         );
 
-        // If dry run, return what would be analyzed
-        if dry_run {
-            return self.tool_result(
-                id,
-                json!({
-                    "status": "dry_run",
-                    "mode": "extract",
-                    "memoriesAvailable": memory_ids.len(),
-                    "minConfidence": min_confidence,
-                    "dryRun": true,
-                    "message": "Dry run completed - no relationships extracted"
-                }),
-            );
-        }
+        // dry_run=true: perform full analysis but skip persistence (store operations)
+        // This lets users validate LLM extraction logic without committing to storage.
 
         let mut memories_analyzed = 0;
         let mut total_relationships = 0;
@@ -702,159 +704,142 @@ impl Handlers {
                 .with_graph_embeddings(e8_graph_source, e8_graph_target)
                 .with_entity_embedding(e11_entity);
 
-                match self
-                    .teleological_store
-                    .store_causal_relationship(&causal_rel)
-                    .await
-                {
-                    Ok(causal_id) => {
-                        debug!(
-                            causal_id = %causal_id,
-                            source_id = %memory_id,
-                            cause = %causal_rel.cause_statement,
-                            "trigger_causal_discovery_extract: Stored CausalRelationship"
-                        );
+                // dry_run: analyze but don't persist. Live: store everything.
+                if dry_run {
+                    total_relationships += 1;
+                    relationship_details.push(json!({
+                        "id": format!("dry-run-{}", uuid::Uuid::new_v4()),
+                        "sourceMemoryId": memory_id.to_string(),
+                        "cause": relationship.cause,
+                        "effect": relationship.effect,
+                        "mechanismType": relationship.mechanism_type.as_str(),
+                        "confidence": relationship.confidence,
+                        "llmGuided": true,
+                        "dryRun": true,
+                    }));
+                } else {
+                    match self
+                        .teleological_store
+                        .store_causal_relationship(&causal_rel)
+                        .await
+                    {
+                        Ok(causal_id) => {
+                            debug!(
+                                causal_id = %causal_id,
+                                source_id = %memory_id,
+                                cause = %causal_rel.cause_statement,
+                                "trigger_causal_discovery_extract: Stored CausalRelationship"
+                            );
 
-                        // Emit RelationshipDiscovered audit (non-fatal)
-                        {
-                            let audit_record = AuditRecord::new(
-                                AuditOperation::RelationshipDiscovered {
-                                    relationship_type: relationship.mechanism_type.as_str().to_string(),
-                                    confidence: relationship.confidence,
-                                },
-                                causal_id,
-                            )
-                            .with_operator("trigger_causal_discovery")
-                            .with_parameters(serde_json::json!({
-                                "mode": "extract",
-                                "source_memory_id": memory_id.to_string(),
-                                "cause_statement": relationship.cause.chars().take(100).collect::<String>(),
-                                "effect_statement": relationship.effect.chars().take(100).collect::<String>(),
-                            }));
-
-                            if let Err(e) = self.teleological_store.append_audit_record(&audit_record).await {
-                                error!(error = %e, "trigger_causal_discovery: Failed to write audit record (non-fatal)");
-                            }
-                        }
-
-                        // NEW: Generate full 13-embedder fingerprint for the explanation
-                        // E5+LLM is the ONLY embedder pair that GENERATES new knowledge.
-                        // This knowledge deserves full 13-embedder treatment.
-                        let metadata = EmbeddingMetadata::default().with_causal_hint(CausalHint {
-                            is_causal: true,
-                            direction_hint: CausalDirectionHint::Neutral, // Explanation contains both cause and effect
-                            confidence: relationship.confidence,
-                            key_phrases: vec![
-                                relationship.cause.clone(),
-                                relationship.effect.clone(),
-                            ],
-                            description: Some(relationship.explanation.clone()),
-                            cause_spans: Vec::new(),
-                            effect_spans: Vec::new(),
-                            asymmetry_strength: 0.0,
-                        });
-
-                        match self
-                            .multi_array_provider
-                            .embed_all_with_metadata(&relationship.explanation, metadata)
-                            .await
-                        {
-                            Ok(embedding_output) => {
-                                // Compute SHA-256 hash of the explanation content
-                                use sha2::{Sha256, Digest};
-                                let mut hasher = Sha256::new();
-                                hasher.update(relationship.explanation.as_bytes());
-                                let content_hash: [u8; 32] = hasher.finalize().into();
-
-                                // Create TeleologicalFingerprint with CausalExplanation source
-                                let fingerprint = TeleologicalFingerprint::new(
-                                    embedding_output.fingerprint,
-                                    content_hash,
-                                );
-
-                                // Create source metadata linking to both original memory and causal relationship
-                                let source_metadata = SourceMetadata::causal_explanation(
-                                    *memory_id,
+                            // Emit RelationshipDiscovered audit (non-fatal)
+                            {
+                                let audit_record = AuditRecord::new(
+                                    AuditOperation::RelationshipDiscovered {
+                                        relationship_type: relationship.mechanism_type.as_str().to_string(),
+                                        confidence: relationship.confidence,
+                                    },
                                     causal_id,
-                                    relationship.mechanism_type.as_str().to_string(),
-                                    relationship.confidence,
-                                );
+                                )
+                                .with_operator("trigger_causal_discovery")
+                                .with_parameters(serde_json::json!({
+                                    "mode": "extract",
+                                    "source_memory_id": memory_id.to_string(),
+                                    "cause_statement": relationship.cause.chars().take(100).collect::<String>(),
+                                    "effect_statement": relationship.effect.chars().take(100).collect::<String>(),
+                                }));
 
-                                // Store the full 13-embedder fingerprint
-                                match self.teleological_store.store(fingerprint.clone()).await {
-                                    Ok(fp_id) => {
-                                        // Store the content
-                                        if let Err(e) = self
-                                            .teleological_store
-                                            .store_content(fp_id, &relationship.explanation)
-                                            .await
-                                        {
-                                            warn!(
-                                                fp_id = %fp_id,
-                                                error = %e,
-                                                "Failed to store explanation content"
-                                            );
-                                        }
-
-                                        // Store source metadata
-                                        if let Err(e) = self
-                                            .teleological_store
-                                            .store_source_metadata(fp_id, &source_metadata)
-                                            .await
-                                        {
-                                            warn!(
-                                                fp_id = %fp_id,
-                                                error = %e,
-                                                "Failed to store source metadata"
-                                            );
-                                        }
-
-                                        debug!(
-                                            fp_id = %fp_id,
-                                            causal_id = %causal_id,
-                                            "trigger_causal_discovery_extract: Stored 13-embedder fingerprint"
-                                        );
-                                    }
-                                    Err(e) => {
-                                        warn!(
-                                            causal_id = %causal_id,
-                                            error = %e,
-                                            "Failed to store 13-embedder fingerprint"
-                                        );
-                                        fingerprint_errors += 1;
-                                    }
+                                if let Err(e) = self.teleological_store.append_audit_record(&audit_record).await {
+                                    error!(error = %e, "trigger_causal_discovery: Failed to write audit record (non-fatal)");
                                 }
                             }
-                            Err(e) => {
-                                warn!(
-                                    causal_id = %causal_id,
-                                    error = %e,
-                                    "Failed to generate 13-embedder fingerprint for explanation"
-                                );
-                                // Don't count as error - CausalRelationship was stored
+
+                            // Generate full 13-embedder fingerprint for the explanation
+                            let metadata = EmbeddingMetadata::default().with_causal_hint(CausalHint {
+                                is_causal: true,
+                                direction_hint: CausalDirectionHint::Neutral,
+                                confidence: relationship.confidence,
+                                key_phrases: vec![
+                                    relationship.cause.clone(),
+                                    relationship.effect.clone(),
+                                ],
+                                description: Some(relationship.explanation.clone()),
+                                cause_spans: Vec::new(),
+                                effect_spans: Vec::new(),
+                                asymmetry_strength: 0.0,
+                            });
+
+                            match self
+                                .multi_array_provider
+                                .embed_all_with_metadata(&relationship.explanation, metadata)
+                                .await
+                            {
+                                Ok(embedding_output) => {
+                                    use sha2::{Sha256, Digest};
+                                    let mut hasher = Sha256::new();
+                                    hasher.update(relationship.explanation.as_bytes());
+                                    let content_hash: [u8; 32] = hasher.finalize().into();
+
+                                    let fingerprint = TeleologicalFingerprint::new(
+                                        embedding_output.fingerprint,
+                                        content_hash,
+                                    );
+
+                                    let source_metadata = SourceMetadata::causal_explanation(
+                                        *memory_id,
+                                        causal_id,
+                                        relationship.mechanism_type.as_str().to_string(),
+                                        relationship.confidence,
+                                    );
+
+                                    match self.teleological_store.store(fingerprint.clone()).await {
+                                        Ok(fp_id) => {
+                                            if let Err(e) = self
+                                                .teleological_store
+                                                .store_content(fp_id, &relationship.explanation)
+                                                .await
+                                            {
+                                                warn!(fp_id = %fp_id, error = %e, "Failed to store explanation content");
+                                            }
+                                            if let Err(e) = self
+                                                .teleological_store
+                                                .store_source_metadata(fp_id, &source_metadata)
+                                                .await
+                                            {
+                                                warn!(fp_id = %fp_id, error = %e, "Failed to store source metadata");
+                                            }
+                                            debug!(fp_id = %fp_id, causal_id = %causal_id, "Stored 13-embedder fingerprint");
+                                        }
+                                        Err(e) => {
+                                            warn!(causal_id = %causal_id, error = %e, "Failed to store 13-embedder fingerprint");
+                                            fingerprint_errors += 1;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!(causal_id = %causal_id, error = %e, "Failed to generate 13-embedder fingerprint");
+                                }
                             }
+
+                            total_relationships += 1;
+
+                            relationship_details.push(json!({
+                                "id": causal_id.to_string(),
+                                "sourceMemoryId": memory_id.to_string(),
+                                "cause": relationship.cause,
+                                "effect": relationship.effect,
+                                "mechanismType": relationship.mechanism_type.as_str(),
+                                "confidence": relationship.confidence,
+                                "llmGuided": true,
+                            }));
                         }
-
-                        total_relationships += 1;
-
-                        // Accumulate per-relationship detail for response
-                        relationship_details.push(json!({
-                            "id": causal_id.to_string(),
-                            "sourceMemoryId": memory_id.to_string(),
-                            "cause": relationship.cause,
-                            "effect": relationship.effect,
-                            "mechanismType": relationship.mechanism_type.as_str(),
-                            "confidence": relationship.confidence,
-                            "llmGuided": true,
-                        }));
-                    }
-                    Err(e) => {
-                        warn!(
-                            memory_id = %memory_id,
-                            error = %e,
-                            "trigger_causal_discovery_extract: Failed to store relationship"
-                        );
-                        storage_errors += 1;
+                        Err(e) => {
+                            warn!(
+                                memory_id = %memory_id,
+                                error = %e,
+                                "trigger_causal_discovery_extract: Failed to store relationship"
+                            );
+                            storage_errors += 1;
+                        }
                     }
                 }
             }
@@ -920,7 +905,7 @@ impl Handlers {
                 "e5PrefilterSkipped": e5_prefilter_skipped,
                 "llmStatus": llm_status,
                 "durationMs": duration.as_millis(),
-                "dryRun": false
+                "dryRun": dry_run
             }),
         )
     }

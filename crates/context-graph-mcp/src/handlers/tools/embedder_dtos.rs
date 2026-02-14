@@ -128,6 +128,21 @@ impl EmbedderId {
         matches!(self, EmbedderId::E6 | EmbedderId::E13)
     }
 
+    /// Check if this embedder uses HNSW indexing (required for direct search).
+    /// E6/E13 use inverted indexes, E12 uses MaxSim — none support HNSW search.
+    pub fn uses_hnsw(&self) -> bool {
+        !matches!(self, EmbedderId::E6 | EmbedderId::E12 | EmbedderId::E13)
+    }
+
+    /// Error message for embedders that don't support HNSW search.
+    /// Used by validate() on SearchByEmbedderRequest and CompareEmbedderViewsRequest.
+    pub fn hnsw_unsupported_error(embedder_name: &str) -> String {
+        format!(
+            "Embedder '{}' does not support HNSW search. E6/E13 use inverted indexes, E12 uses MaxSim. Use E1-E5, E7-E11 instead.",
+            embedder_name
+        )
+    }
+
     /// Check if this is a temporal embedder (E2-E4).
     pub fn is_temporal(&self) -> bool {
         matches!(self, EmbedderId::E2 | EmbedderId::E3 | EmbedderId::E4)
@@ -184,11 +199,18 @@ impl SearchByEmbedderRequest {
         if self.query.is_empty() {
             return Err("Query cannot be empty".to_string());
         }
-        if EmbedderId::from_str(&self.embedder).is_none() {
-            return Err(format!(
-                "Invalid embedder '{}'. Must be E1-E13.",
-                self.embedder
-            ));
+        match EmbedderId::from_str(&self.embedder) {
+            None => {
+                return Err(format!(
+                    "Invalid embedder '{}'. Must be E1-E13.",
+                    self.embedder
+                ));
+            }
+            Some(eid) => {
+                if !eid.uses_hnsw() {
+                    return Err(EmbedderId::hnsw_unsupported_error(&self.embedder));
+                }
+            }
         }
         if self.top_k == 0 || self.top_k > 100 {
             return Err("topK must be between 1 and 100".to_string());
@@ -396,8 +418,15 @@ impl CompareEmbedderViewsRequest {
             return Err("Cannot compare more than 5 embedders".to_string());
         }
         for e in &self.embedders {
-            if EmbedderId::from_str(e).is_none() {
-                return Err(format!("Invalid embedder '{}'. Must be E1-E13.", e));
+            match EmbedderId::from_str(e) {
+                None => {
+                    return Err(format!("Invalid embedder '{}'. Must be E1-E13.", e));
+                }
+                Some(eid) => {
+                    if !eid.uses_hnsw() {
+                        return Err(EmbedderId::hnsw_unsupported_error(e));
+                    }
+                }
             }
         }
         if self.top_k == 0 || self.top_k > 20 {

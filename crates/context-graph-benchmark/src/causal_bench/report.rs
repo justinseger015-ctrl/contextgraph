@@ -34,10 +34,21 @@ pub fn generate_markdown(report: &FullBenchmarkReport) -> String {
     out.push_str(&format!("**Model**: {}\n", report.model_name));
     out.push_str(&format!("**Date**: {}\n", report.timestamp));
     out.push_str(&format!(
-        "**Overall**: {}/{} PASS\n\n",
+        "**Overall**: {}/{} PASS\n",
         report.count_pass(),
         report.overall_total
     ));
+    let model_total = report.count_model_total();
+    if model_total > 0 {
+        out.push_str(&format!(
+            "**Model quality**: {}/{} PASS  |  **Infrastructure**: {}/{} PASS\n",
+            report.count_model_pass(),
+            model_total,
+            report.count_infra_pass(),
+            report.count_infra_total(),
+        ));
+    }
+    out.push('\n');
 
     out.push_str("## Phase Results\n\n");
     out.push_str("| Phase | Name | Status | Key Metrics |\n");
@@ -136,6 +147,17 @@ pub fn print_summary(report: &FullBenchmarkReport) {
         report.count_fail(),
         report.overall_total,
     );
+    let model_total = report.count_model_total();
+    let infra_total = report.count_infra_total();
+    if model_total > 0 || infra_total > 0 {
+        println!(
+            "Model quality: {}/{} PASS  |  Infrastructure: {}/{} PASS",
+            report.count_model_pass(),
+            model_total,
+            report.count_infra_pass(),
+            infra_total,
+        );
+    }
     println!();
 }
 
@@ -212,6 +234,7 @@ mod tests {
                     pass: true,
                     failing_criteria: vec![],
                     duration_ms: 50,
+                    model_dependent: false,
                 },
                 PhaseBenchmarkResult {
                     phase: 2,
@@ -229,10 +252,13 @@ mod tests {
                     pass: false,
                     failing_criteria: vec!["spread: 0.026 (target: >=0.10)".into()],
                     duration_ms: 200,
+                    model_dependent: true,
                 },
             ],
             overall_pass_count: 1,
             overall_total: 2,
+            model_pass_count: 0,
+            model_total: 1,
         }
     }
 
