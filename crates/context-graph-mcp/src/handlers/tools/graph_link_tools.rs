@@ -233,12 +233,13 @@ impl Handlers {
             }
         }
 
+        let count = neighbors.len();
         let response = GetMemoryNeighborsResponse {
             memory_id: memory_uuid,
             embedder_id,
             embedder_name: emb_name.to_string(),
-            neighbors: neighbors.clone(),
-            count: neighbors.len(),
+            count,
+            neighbors,
             metadata: NeighborSearchMetadata {
                 candidates_evaluated,
                 filtered_by_similarity: filtered_count,
@@ -504,12 +505,13 @@ impl Handlers {
             }
         }
 
+        let count = edges.len();
         let response = GetTypedEdgesResponse {
             memory_id: memory_uuid,
             direction: direction.clone(),
             edge_type_filter,
-            edges: edges.clone(),
-            count: edges.len(),
+            count,
+            edges,
             metadata: TypedEdgeMetadata {
                 total_edges,
                 filtered_by_type: 0, // Already filtered by query if specified
@@ -771,15 +773,16 @@ impl Handlers {
         }
 
         let truncated = paths.len() >= max_results;
+        let path_count = paths.len();
 
         let response = TraverseGraphResponse {
             start_memory_id: start_uuid,
             max_hops,
             edge_type_filter,
-            nodes: nodes.clone(),
-            paths: paths.clone(),
+            nodes,
+            paths,
             unique_nodes_visited: visited.len(),
-            path_count: paths.len(),
+            path_count,
             metadata: TraversalMetadata {
                 min_weight,
                 max_results,

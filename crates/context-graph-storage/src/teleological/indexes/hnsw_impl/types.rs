@@ -115,43 +115,7 @@ impl HnswEmbedderIndex {
             )
         });
 
-        let usearch_metric = metric_to_usearch(config.metric);
-
-        let options = IndexOptions {
-            dimensions: config.dimension,
-            metric: usearch_metric,
-            quantization: ScalarKind::F32,
-            connectivity: config.m,
-            expansion_add: config.ef_construction,
-            expansion_search: config.ef_search,
-            ..Default::default()
-        };
-
-        let index = Index::new(&options).unwrap_or_else(|e| {
-            panic!(
-                "FAIL FAST: Failed to create usearch index for {:?}: {}",
-                embedder, e
-            )
-        });
-
-        // Reserve initial capacity - usearch requires this before adding vectors
-        // Start with reasonable initial capacity, will grow as needed
-        const INITIAL_CAPACITY: usize = 1024;
-        index.reserve(INITIAL_CAPACITY).unwrap_or_else(|e| {
-            panic!(
-                "FAIL FAST: Failed to reserve capacity for {:?}: {}",
-                embedder, e
-            )
-        });
-
-        Self {
-            embedder,
-            config,
-            index: RwLock::new(index),
-            id_to_key: RwLock::new(HashMap::new()),
-            key_to_id: RwLock::new(HashMap::new()),
-            next_key: RwLock::new(0),
-        }
+        Self::build(embedder, config)
     }
 
     /// Create index with custom config (for testing).
@@ -166,6 +130,18 @@ impl HnswEmbedderIndex {
     /// Use `new()` for production - this bypasses config validation.
     #[allow(dead_code)]
     pub fn with_config(embedder: EmbedderIndex, config: HnswConfig) -> Self {
+        Self::build(embedder, config)
+    }
+
+    /// Internal constructor shared by `new()` and `with_config()`.
+    ///
+    /// Creates the usearch index, reserves initial capacity, and returns
+    /// the fully initialized `HnswEmbedderIndex`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if usearch Index creation or capacity reservation fails.
+    fn build(embedder: EmbedderIndex, config: HnswConfig) -> Self {
         let usearch_metric = metric_to_usearch(config.metric);
 
         let options = IndexOptions {

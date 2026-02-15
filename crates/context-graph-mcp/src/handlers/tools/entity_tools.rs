@@ -782,16 +782,17 @@ impl Handlers {
             .collect();
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
+        let results_found = results.len();
 
         let response = SearchByEntitiesResponse {
-            results: results.clone(),
+            results,
             detected_query_entities: query_entity_dtos,
             total_candidates,
             search_time_ms: elapsed_ms,
         };
 
         info!(
-            results_found = results.len(),
+            results_found = results_found,
             total_candidates = total_candidates,
             elapsed_ms = elapsed_ms,
             "search_by_entities: Completed entity-aware search"
@@ -967,16 +968,19 @@ impl Handlers {
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
+        let relations_found = inferred_relations.len();
+        let top_relation_name = inferred_relations.first().map(|r| r.relation.clone());
+
         let response = InferRelationshipResponse {
             head: head_dto,
             tail: tail_dto,
-            inferred_relations: inferred_relations.clone(),
+            inferred_relations,
             predicted_vector: None, // Not exposing raw vector
         };
 
         info!(
-            relations_found = inferred_relations.len(),
-            top_relation = inferred_relations.first().map(|r| r.relation.as_str()).unwrap_or("none"),
+            relations_found = relations_found,
+            top_relation = top_relation_name.as_deref().unwrap_or("none"),
             elapsed_ms = elapsed_ms,
             "infer_relationship: Completed TransE inference"
         );
@@ -1181,16 +1185,18 @@ impl Handlers {
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
+        let entities_found = related_entities.len();
+
         let response = FindRelatedEntitiesResponse {
             source_entity: source_dto,
             relation: relation.clone(),
             direction: direction.clone(),
-            related_entities: related_entities.clone(),
+            related_entities,
             search_time_ms: elapsed_ms,
         };
 
         info!(
-            entities_found = related_entities.len(),
+            entities_found = entities_found,
             elapsed_ms = elapsed_ms,
             "find_related_entities: Completed TransE entity prediction"
         );
@@ -1689,16 +1695,19 @@ impl Handlers {
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
+        let node_count = nodes.len();
+        let edge_count = edges.len();
+
         let response = GetEntityGraphResponse {
-            nodes: nodes.clone(),
-            edges: edges.clone(),
+            nodes,
+            edges,
             center_entity: center_entity_dto,
             total_memories_scanned,
         };
 
         info!(
-            nodes = nodes.len(),
-            edges = edges.len(),
+            nodes = node_count,
+            edges = edge_count,
             memories_scanned = total_memories_scanned,
             elapsed_ms = elapsed_ms,
             "get_entity_graph: Completed entity graph construction"

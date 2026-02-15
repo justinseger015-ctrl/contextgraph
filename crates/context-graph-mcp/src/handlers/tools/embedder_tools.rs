@@ -25,6 +25,7 @@ use std::time::Instant;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use context_graph_core::causal::asymmetric::CausalDirection;
 use context_graph_core::traits::{SearchStrategy, TeleologicalSearchOptions};
 use context_graph_core::types::audit::{AuditOperation, AuditRecord};
 
@@ -104,10 +105,15 @@ impl Handlers {
         };
 
         // Step 2: Search in the selected embedder's space
-        let options = TeleologicalSearchOptions::quick(request.top_k)
+        // AP-77: E5 requires explicit causal direction for scoring (not symmetric).
+        // Default to Cause (cause→effect) when user explicitly selects E5.
+        let mut options = TeleologicalSearchOptions::quick(request.top_k)
             .with_strategy(SearchStrategy::E1Only) // Strategy doesn't matter with explicit embedders
             .with_embedders(vec![embedder_index])
             .with_min_similarity(request.min_similarity);
+        if matches!(embedder_id, EmbedderId::E5) {
+            options = options.with_causal_direction(CausalDirection::Cause);
+        }
 
         let candidates = match self
             .teleological_store
@@ -459,10 +465,14 @@ impl Handlers {
         for embedder_id in &embedder_ids {
             let embedder_index = embedder_id.to_index();
 
-            let options = TeleologicalSearchOptions::quick(request.top_k)
+            let mut options = TeleologicalSearchOptions::quick(request.top_k)
                 .with_strategy(SearchStrategy::E1Only)
                 .with_embedders(vec![embedder_index])
                 .with_min_similarity(0.0);
+            // AP-77: E5 requires causal direction for scoring
+            if matches!(embedder_id, EmbedderId::E5) {
+                options = options.with_causal_direction(CausalDirection::Cause);
+            }
 
             // FAIL FAST: If search fails for any embedder, the entire comparison fails
             let candidates = match self
@@ -492,9 +502,6 @@ impl Handlers {
             let mut memory_set: HashSet<Uuid> = HashSet::new();
             let mut results_list: Vec<(Uuid, f32)> = Vec::new();
             let mut ranked_memories: Vec<RankedMemory> = Vec::new();
-
-            // Get the embedder index for extracting the correct score
-            let embedder_index = embedder_id.to_index();
 
             // HIGH-10 FIX: Batch fetch content if include_content=true
             let memory_ids: Vec<Uuid> = candidates.iter().map(|c| c.fingerprint.id).collect();
@@ -594,19 +601,24 @@ impl Handlers {
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 
+        // Capture counts and audit ID before moving vectors into response
+        let agreement_count = agreement.len();
+        let unique_finds_count = unique_finds.len();
+        let audit_target_id = agreement.first().copied().unwrap_or(Uuid::nil());
+
         let response = CompareEmbedderViewsResponse {
             query: request.query.clone(),
             rankings,
-            agreement: agreement.clone(),
-            unique_finds: unique_finds.clone(),
+            agreement,
+            unique_finds,
             agreement_score,
             time_ms: elapsed_ms,
         };
 
         info!(
             embedders = request.embedders.len(),
-            agreement_count = agreement.len(),
-            unique_finds = unique_finds.len(),
+            agreement_count = agreement_count,
+            unique_finds = unique_finds_count,
             agreement_score = agreement_score,
             elapsed_ms = elapsed_ms,
             "compare_embedder_views: Completed embedder comparison"
@@ -622,7 +634,7 @@ impl Handlers {
                     weight_profile: None,
                     strategy: Some(format!("compare:{}", request.embedders.join(","))),
                 },
-                agreement.first().copied().unwrap_or(Uuid::nil()),
+                audit_target_id,
             )
             .with_operator("compare_embedder_views")
             .with_parameters(json!({
@@ -1157,10 +1169,14 @@ impl Handlers {
 
         // Step 2: Search in the HIGH embedder's space (get more candidates than topK for filtering)
         let search_k = (request.top_k * 5).min(100);
-        let options = TeleologicalSearchOptions::quick(search_k)
+        let mut options = TeleologicalSearchOptions::quick(search_k)
             .with_strategy(SearchStrategy::E1Only)
             .with_embedders(vec![high_idx])
             .with_min_similarity(0.0); // no threshold - we filter ourselves
+        // AP-77: E5 requires causal direction for scoring
+        if matches!(high_eid, EmbedderId::E5) || matches!(low_eid, EmbedderId::E5) {
+            options = options.with_causal_direction(CausalDirection::Cause);
+        }
 
         let candidates = match self
             .teleological_store
