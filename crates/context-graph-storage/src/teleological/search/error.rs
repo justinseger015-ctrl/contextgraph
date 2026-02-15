@@ -249,32 +249,4 @@ mod tests {
 
         println!("RESULT: PASS");
     }
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== ERROR.RS VERIFICATION LOG ===");
-        println!();
-
-        println!("Type Verification:");
-        println!("  - SearchError: 7 variants");
-        println!("    - DimensionMismatch: embedder, expected, actual");
-        println!("    - UnsupportedEmbedder: embedder");
-        println!("    - EmptyQuery: embedder");
-        println!("    - InvalidVector: embedder, message");
-        println!("    - Index: IndexError");
-        println!("    - NotFound: id");
-        println!("    - Store: String");
-        println!("  - SearchResult<T>: Result<T, SearchError>");
-
-        println!();
-        println!("Conversion Verification:");
-        println!("  - From<IndexError> for SearchError: PASS");
-
-        println!();
-        println!("Display Verification:");
-        println!("  - All variants produce informative messages: PASS");
-
-        println!();
-        println!("VERIFICATION COMPLETE");
-    }
 }

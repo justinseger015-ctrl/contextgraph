@@ -624,8 +624,16 @@ impl Handlers {
             "discover_graph_relationships: Request validated"
         );
 
-        // Get graph discovery service - GUARANTEED to be available (NO FALLBACKS)
-        let service = self.graph_discovery_service();
+        let service = match self.graph_discovery_service() {
+            Some(s) => s,
+            None => {
+                return self.tool_error(
+                    id,
+                    "LLM not loaded — discover_graph_relationships unavailable. \
+                     Server started in degraded mode (check VRAM/model).",
+                );
+            }
+        };
 
         // Fetch memory content and metadata for analysis - FAIL FAST on any error
         let mut memories_for_analysis: Vec<MemoryForGraphAnalysis> = Vec::with_capacity(memory_uuids.len());
@@ -859,8 +867,16 @@ impl Handlers {
             "validate_graph_link: Request validated"
         );
 
-        // Get graph discovery service - GUARANTEED to be available (NO FALLBACKS)
-        let service = self.graph_discovery_service();
+        let service = match self.graph_discovery_service() {
+            Some(s) => s,
+            None => {
+                return self.tool_error(
+                    id,
+                    "LLM not loaded — validate_graph_link unavailable. \
+                     Server started in degraded mode (check VRAM/model).",
+                );
+            }
+        };
 
         // Fetch content for source memory
         let source_content = match self.teleological_store.get_content(source_uuid).await {

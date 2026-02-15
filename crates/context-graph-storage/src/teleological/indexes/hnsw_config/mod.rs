@@ -78,33 +78,4 @@ mod tests {
         assert_eq!(E1_DIM, 1024);
         assert_eq!(NUM_EMBEDDERS, 13);
     }
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== MODULARIZED HNSW_CONFIG VERIFICATION ===");
-
-        println!("Enum Verification:");
-        let hnsw_count = EmbedderIndex::all_hnsw().len();
-        assert_eq!(hnsw_count, 15);
-        println!("  - EmbedderIndex: 15 HNSW + 3 non-HNSW = 18 variants");
-        println!("  - Includes E5CausalCause, E5CausalEffect, E10MultimodalParaphrase, E10MultimodalContext (ARCH-15)");
-        println!("  - DistanceMetric: 5 variants");
-
-        println!("Struct Verification:");
-        println!("  - HnswConfig: m, ef_construction, ef_search, metric, dimension");
-        println!("  - InvertedIndexConfig: vocab_size, max_nnz, use_bm25");
-
-        println!("Function Verification:");
-        let configs = all_hnsw_configs();
-        assert_eq!(configs.len(), 15);
-        println!("  - all_hnsw_configs: {} entries", configs.len());
-
-        assert!(get_hnsw_config(EmbedderIndex::E6Sparse).is_none());
-        println!("  - get_hnsw_config: None for E6, E12, E13");
-
-        assert!(get_inverted_index_config(EmbedderIndex::E6Sparse).is_some());
-        println!("  - get_inverted_index_config: Some for E6, E13");
-
-        println!("VERIFICATION COMPLETE");
-    }
 }

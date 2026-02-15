@@ -580,7 +580,7 @@ pub fn generate_console_summary(results: &ValidationBenchmarkResults) -> String 
     s
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

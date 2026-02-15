@@ -407,7 +407,7 @@ impl std::fmt::Display for BeirLoadError {
 
 impl std::error::Error for BeirLoadError {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

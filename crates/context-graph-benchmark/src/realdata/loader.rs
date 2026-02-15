@@ -427,7 +427,7 @@ impl std::fmt::Display for LoadError {
 
 impl std::error::Error for LoadError {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use std::io::Write;

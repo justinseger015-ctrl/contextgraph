@@ -76,10 +76,12 @@ impl EmbedderIndexOps for HnswEmbedderIndex {
         let mut key_to_id = self.key_to_id.write();
 
         if let Some(key) = id_to_key.remove(&id) {
-            // Remove from key_to_id so search won't return this ID
-            // Note: Vector remains in usearch index (doesn't support deletion)
-            // but won't be mapped back to UUID
+            // Remove from key_to_id so search won't return this ID.
+            // H1 FIX: Vector remains orphaned in usearch (no deletion support).
+            // Track removal count for compaction threshold monitoring.
             key_to_id.remove(&key);
+            self.removed_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(true)
         } else {
             Ok(false)

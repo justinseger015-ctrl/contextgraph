@@ -170,12 +170,13 @@ pub static EMBEDDER_CONFIGS: [EmbedderConfig; 13] = [
     },
     // E8: Emotional/Graph (1024D, Cosine, Float8) - Category: Relational
     // Upgraded from MiniLM 384D to e5-large-v2 1024D for VRAM efficiency (shares with E1)
+    // M7 FIX: is_asymmetric=true — stores dual vectors (source/target) per constitution
     EmbedderConfig {
         embedder: Embedder::Emotional,
         dimension: E8_DIM, // 1024 (upgraded from 384)
         distance_metric: DistanceMetric::Cosine,
         quantization: QuantizationConfig::Float8,
-        is_asymmetric: false,
+        is_asymmetric: true,
         is_sparse: false,
         is_token_level: false,
     },
@@ -194,6 +195,7 @@ pub static EMBEDDER_CONFIGS: [EmbedderConfig; 13] = [
         is_token_level: false,
     },
     // E10: Multimodal (768D, Cosine, PQ8) - Category: Semantic
+    // M7 FIX: is_asymmetric=true — stores dual vectors (doc/query) per constitution
     EmbedderConfig {
         embedder: Embedder::Multimodal,
         dimension: E10_DIM, // 768
@@ -202,7 +204,7 @@ pub static EMBEDDER_CONFIGS: [EmbedderConfig; 13] = [
             num_subvectors: 24,
             bits_per_code: 8,
         },
-        is_asymmetric: false,
+        is_asymmetric: true,
         is_sparse: false,
         is_token_level: false,
     },

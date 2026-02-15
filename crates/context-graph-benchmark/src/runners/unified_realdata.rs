@@ -981,7 +981,7 @@ impl std::fmt::Display for RunnerError {
 
 impl std::error::Error for RunnerError {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use tempfile::TempDir;

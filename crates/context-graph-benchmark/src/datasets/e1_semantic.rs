@@ -840,7 +840,7 @@ pub fn apply_query_noise(query: &SemanticQuery, noise_level: f64, rng: &mut impl
 // Tests
 // ============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

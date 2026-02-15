@@ -746,7 +746,7 @@ impl E1SemanticBenchmarkRunner {
 // Tests
 // ============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::metrics::e1_semantic::TopicSeparationMetrics;

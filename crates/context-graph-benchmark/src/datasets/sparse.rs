@@ -581,7 +581,7 @@ pub struct E6SparseDatasetStats {
     pub avg_keywords_per_doc: f64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

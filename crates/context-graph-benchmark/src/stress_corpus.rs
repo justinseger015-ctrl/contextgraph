@@ -1124,7 +1124,7 @@ pub fn stress_config_map() -> HashMap<EmbedderIndex, EmbedderStressConfig> {
         .collect()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

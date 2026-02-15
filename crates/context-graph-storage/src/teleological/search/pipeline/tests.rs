@@ -663,45 +663,4 @@ mod tests {
     // ========================================================================
     // VERIFICATION LOG
     // ========================================================================
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== PIPELINE.RS VERIFICATION LOG ===\n");
-
-        println!("Type Verification:");
-        println!("  - PipelineError: 5 variants (Stage, Timeout, MissingQuery, EmptyCandidates, Search)");
-        println!("  - PipelineStage: 4 variants (SpladeFilter, MatryoshkaAnn, RrfRerank, MaxSimRerank)");
-        println!("  - StageConfig: 4 fields (enabled, candidate_multiplier, min_score_threshold, max_latency_ms)");
-        println!("  - PipelineConfig: 4 fields (stages, k, rrf_k, rrf_embedders)");
-        println!("  - PipelineCandidate: 3 fields (id, score, stage_scores)");
-        println!("  - StageResult: 5 fields (candidates, latency_us, candidates_in, candidates_out, stage)");
-        println!("  - PipelineResult: 4 fields (results, stage_results, total_latency_us, stages_executed)");
-        println!("  - RetrievalPipeline: 4 fields (single_search, multi_search, splade_index, token_storage, config)");
-
-        println!("\nStage Implementation:");
-        println!("  - Stage 1 (SpladeFilter): Inverted index with BM25, NOT HNSW");
-        println!("  - Stage 2 (MatryoshkaAnn): HNSW with E1Matryoshka128 (128D)");
-        println!("  - Stage 3 (RrfRerank): MultiEmbedderSearch with RRF scoring");
-        println!("  - Stage 4 (MaxSimRerank): ColBERT MaxSim token-level, NOT HNSW");
-
-        println!("\nFAIL FAST Compliance:");
-        println!("  - NaN detection: YES");
-        println!("  - Inf detection: YES");
-        println!("  - Dimension mismatch: YES");
-        println!("  - Timeout enforcement: YES");
-
-        println!("\nTest Coverage:");
-        println!("  - Structural tests: 4");
-        println!("  - Stage 1 tests: 4");
-        println!("  - Stage 2 tests: 1");
-        println!("  - Stage 4 tests: 3");
-        println!("  - FAIL FAST tests: 2");
-        println!("  - Pipeline stage tests: 2");
-        println!("  - Candidate tests: 1");
-        println!("  - Result tests: 1");
-        println!("  - Integration tests: 1");
-        println!("  - Total: 19 tests");
-
-        println!("\nVERIFICATION COMPLETE");
-    }
 }

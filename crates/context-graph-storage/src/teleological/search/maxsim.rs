@@ -759,39 +759,4 @@ mod tests {
         println!("[VERIFIED] MaxSim performance acceptable");
     }
 
-    // ========================================================================
-    // VERIFICATION LOG
-    // ========================================================================
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== MAXSIM.RS VERIFICATION LOG ===\n");
-
-        println!("Configuration:");
-        println!("  - E12_TOKEN_DIM: {}", E12_TOKEN_DIM);
-        println!("  - SIMD: AVX2 with FMA (when available)");
-
-        println!("\nAlgorithm:");
-        println!("  - MaxSim(Q, D) = (1/|Q|) × Σᵢ max_j cos(qᵢ, dⱼ)");
-        println!("  - For each query token, find max cosine sim to any doc token");
-        println!("  - Average all max similarities");
-
-        println!("\nSIMD Optimization:");
-        println!("  - Processes 8 f32 values per AVX2 instruction");
-        println!("  - Uses FMA (Fused Multiply-Add) for dot product");
-        println!("  - Falls back to scalar on non-AVX2 machines");
-
-        println!("\nPerformance Targets:");
-        println!("  - Score 50 candidates: <15ms");
-        println!("  - SIMD vs scalar: >4x speedup (on AVX2)");
-
-        println!("\nTest Coverage:");
-        println!("  - Cosine similarity: 5 tests");
-        println!("  - MaxSim computation: 4 tests");
-        println!("  - Scorer: 5 tests");
-        println!("  - Performance: 2 tests");
-        println!("  - Total: 16 tests");
-
-        println!("\nVERIFICATION COMPLETE");
-    }
 }

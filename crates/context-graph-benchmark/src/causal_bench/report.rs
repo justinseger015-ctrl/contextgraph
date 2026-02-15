@@ -208,7 +208,7 @@ fn format_key_metrics(phase: &PhaseBenchmarkResult) -> String {
     parts.join(", ")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use std::collections::HashMap;

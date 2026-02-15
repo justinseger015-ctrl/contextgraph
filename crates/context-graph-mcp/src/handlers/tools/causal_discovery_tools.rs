@@ -135,8 +135,16 @@ impl Handlers {
                 .await;
         }
 
-        // Get graph discovery service - GUARANTEED available (NO FALLBACKS)
-        let service = self.graph_discovery_service();
+        let service = match self.graph_discovery_service() {
+            Some(s) => s,
+            None => {
+                return self.tool_error(
+                    id,
+                    "LLM not loaded — trigger_causal_discovery unavailable. \
+                     Server started in degraded mode (check VRAM/model).",
+                );
+            }
+        };
 
         // For now, we'll get recent fingerprints from the store and run discovery
         // In the future, this could be optimized with a dedicated candidate finder
@@ -399,10 +407,12 @@ impl Handlers {
             "get_causal_discovery_status: Querying"
         );
 
-        // Get service status
+        // Get service (None = LLM not loaded, degraded mode)
         let service = self.graph_discovery_service();
-        let service_status = service.status();
-        let is_running = service.is_running();
+        let (service_status, is_running) = match service {
+            Some(s) => (s.status(), s.is_running()),
+            None => (context_graph_graph_agent::ServiceStatus::Stopped, false),
+        };
 
         // Get LLM availability from causal hint provider
         let llm_available = self
@@ -437,13 +447,13 @@ impl Handlers {
             "llmAvailable": llm_available,
             "modelName": "Hermes-2-Pro-Mistral-7B",
             "estimatedVramMb": 6000,
-            "pairsAnalyzedTotal": service.scanner_analyzed_count(),
+            "pairsAnalyzedTotal": service.map(|s| s.scanner_analyzed_count()).unwrap_or(0),
             "totalRelationshipsStored": total_relationships_stored
         });
 
         // Include last cycle result if requested
         if include_last_result {
-            if let Some(last_result) = service.last_result() {
+            if let Some(last_result) = service.and_then(|s| s.last_result()) {
                 response["lastCycle"] = json!({
                     "startedAt": last_result.started_at.to_rfc3339(),
                     "completedAt": last_result.completed_at.to_rfc3339(),
@@ -462,20 +472,24 @@ impl Handlers {
 
         // Include graph stats if requested
         if include_graph_stats {
-            let activator_stats = service.activator_stats();
-            let graph = service.graph();
-            let graph_read = graph.read();
-            let edge_count = graph_read.edge_count();
+            if let Some(s) = service {
+                let activator_stats = s.activator_stats();
+                let graph = s.graph();
+                let graph_read = graph.read();
+                let edge_count = graph_read.edge_count();
 
-            response["graphStats"] = json!({
-                "totalEdges": edge_count,
-                "totalEmbeddingsGenerated": activator_stats.embeddings_generated,
-                "totalEdgesCreated": activator_stats.edges_created,
-                "totalProcessed": activator_stats.processed,
-                "skippedLowConfidence": activator_stats.skipped_low_confidence,
-                "skippedExisting": activator_stats.skipped_existing,
-                "errors": activator_stats.errors
-            });
+                response["graphStats"] = json!({
+                    "totalEdges": edge_count,
+                    "totalEmbeddingsGenerated": activator_stats.embeddings_generated,
+                    "totalEdgesCreated": activator_stats.edges_created,
+                    "totalProcessed": activator_stats.processed,
+                    "skippedLowConfidence": activator_stats.skipped_low_confidence,
+                    "skippedExisting": activator_stats.skipped_existing,
+                    "errors": activator_stats.errors
+                });
+            } else {
+                response["graphStats"] = json!(null);
+            }
         }
 
         info!(

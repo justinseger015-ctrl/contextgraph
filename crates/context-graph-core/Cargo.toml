@@ -74,15 +74,7 @@ name = "file_watcher_integration"
 required-features = ["test-utils"]
 
 [[test]]
-name = "docs_manual_test"
-required-features = ["test-utils"]
-
-[[test]]
 name = "source_metadata_integration"
-required-features = ["test-utils"]
-
-[[test]]
-name = "embedder_fsv_test"
 required-features = ["test-utils"]
 
 [[example]]

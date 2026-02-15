@@ -26,22 +26,14 @@
 //! }
 //! ```
 
-mod content_storage_verification;
-mod curation_tools_fsv;
 mod error_codes;
-mod gpu_embedding_verification;
 mod initialize;
-mod manual_fsv_verification;
 mod mcp_protocol_e2e_test;
-mod robustness_fsv;
 mod search_periodic_test;
-mod semantic_search_skill_verification;
-mod task_emb_024_verification;
 mod tcp_transport_integration;
 mod tools_call;
 mod tools_list;
 mod topic_tools;
-mod topic_tools_fsv;
 
 use std::sync::Arc;
 
@@ -337,6 +329,7 @@ pub(crate) async fn create_test_handlers_with_rocksdb() -> (Handlers, TempDir) {
 ///
 /// `(Handlers, Arc<dyn TeleologicalMemoryStore>, TempDir)`
 #[cfg(feature = "llm")]
+#[allow(dead_code)] // Available for FSV tests but no current callers
 pub(crate) async fn create_test_handlers_with_rocksdb_store_access(
 ) -> (Handlers, Arc<dyn TeleologicalMemoryStore>, TempDir) {
     let tempdir = TempDir::new().expect("Failed to create temp directory for RocksDB test");

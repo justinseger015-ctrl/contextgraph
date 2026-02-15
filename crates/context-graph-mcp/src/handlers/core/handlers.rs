@@ -91,7 +91,7 @@ pub struct Handlers {
     /// Only available when `llm` feature is enabled.
     /// Uses shared CausalDiscoveryLLM (~6GB VRAM for Qwen2.5-3B).
     #[cfg(feature = "llm")]
-    pub(in crate::handlers) graph_discovery_service: Arc<GraphDiscoveryService>,
+    pub(in crate::handlers) graph_discovery_service: Option<Arc<GraphDiscoveryService>>,
 
     // =========================================================================
     // Causal Hint Provider (CAUSAL-HINT Phase 5)
@@ -171,26 +171,15 @@ impl Handlers {
             edge_repository: Some(edge_repository),
             // Graph builder will be set separately via set_graph_builder
             graph_builder: None,
-            // GRAPH-AGENT: REQUIRED - NO FALLBACKS
-            graph_discovery_service,
-            // CAUSAL-HINT: Disabled by default
+            graph_discovery_service: Some(graph_discovery_service),
             causal_hint_provider: None,
-            // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
-            // INLINE-CAUSAL: Disabled by default
             causal_discovery_llm: None,
             causal_model: None,
         }
     }
 
-    // NOTE: with_full_graph_linking was removed as dead code.
-    // Use with_graph_discovery instead - it has identical functionality.
-
     /// Create handlers with default clustering components.
-    ///
-    /// This is a convenience constructor that creates default cluster manager.
-    /// Use `with_all` for full control over dependencies.
-    /// NO FALLBACKS - Requires graph_discovery_service. LLM must be loaded.
     #[cfg(feature = "llm")]
     #[allow(dead_code)]
     pub fn with_defaults(
@@ -199,7 +188,7 @@ impl Handlers {
         layer_status_provider: Arc<dyn LayerStatusProvider>,
         graph_discovery_service: Arc<GraphDiscoveryService>,
     ) -> Self {
-        info!("Creating Handlers with_defaults - NO FALLBACKS, LLM required");
+        info!("Creating Handlers with_defaults");
 
         let cluster_manager = MultiSpaceClusterManager::with_defaults()
             .expect("Default cluster manager should always succeed");
@@ -215,13 +204,9 @@ impl Handlers {
             code_embedding_provider: None,
             edge_repository: None,
             graph_builder: None,
-            // GRAPH-AGENT: REQUIRED - NO FALLBACKS
-            graph_discovery_service,
-            // CAUSAL-HINT: Disabled by default
+            graph_discovery_service: Some(graph_discovery_service),
             causal_hint_provider: None,
-            // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
-            // INLINE-CAUSAL: Disabled by default
             causal_discovery_llm: None,
             causal_model: None,
         }
@@ -231,7 +216,6 @@ impl Handlers {
     ///
     /// GRAPH-AGENT: Constructor for graph linking with LLM-based relationship discovery.
     /// INLINE-CAUSAL: Also enables inline causal relationship extraction during store_memory.
-    /// Uses shared CausalDiscoveryLLM. NO FALLBACKS.
     ///
     /// # Arguments
     /// * `teleological_store` - Store for TeleologicalFingerprint
@@ -271,13 +255,9 @@ impl Handlers {
             code_embedding_provider: None,
             edge_repository: Some(edge_repository),
             graph_builder: Some(graph_builder),
-            // GRAPH-AGENT: REQUIRED - NO FALLBACKS
-            graph_discovery_service,
-            // CAUSAL-HINT: REQUIRED - shares LLM with graph discovery
+            graph_discovery_service: Some(graph_discovery_service),
             causal_hint_provider: Some(causal_hint_provider),
-            // NAV-GAP: Empty custom profiles
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
-            // INLINE-CAUSAL: Enabled - extracts relationships during store_memory
             causal_discovery_llm: Some(causal_discovery_llm),
             causal_model: Some(causal_model),
         }
@@ -285,10 +265,10 @@ impl Handlers {
 
     /// Create handlers without LLM features.
     ///
-    /// When `llm` feature is disabled, graph discovery and causal discovery are unavailable.
+    /// Used when LLM loading fails at runtime or when `llm` feature is disabled.
     /// LLM-dependent tools (trigger_causal_discovery, discover_graph_relationships,
-    /// validate_graph_link) will return errors.
-    #[cfg(not(feature = "llm"))]
+    /// validate_graph_link) will return errors at call time.
+    /// All other 52 tools remain fully operational.
     pub fn without_llm(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
@@ -297,7 +277,7 @@ impl Handlers {
         graph_builder: Arc<BackgroundGraphBuilder>,
         causal_hint_provider: Arc<dyn context_graph_embeddings::provider::CausalHintProvider>,
     ) -> Self {
-        info!("Creating Handlers without LLM features (llm feature disabled)");
+        info!("Creating Handlers without LLM (graph/causal discovery tools unavailable)");
 
         let cluster_manager = MultiSpaceClusterManager::with_defaults()
             .expect("Default cluster manager should always succeed");
@@ -313,8 +293,14 @@ impl Handlers {
             code_embedding_provider: None,
             edge_repository: Some(edge_repository),
             graph_builder: Some(graph_builder),
+            #[cfg(feature = "llm")]
+            graph_discovery_service: None,
             causal_hint_provider: Some(causal_hint_provider),
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),
+            #[cfg(feature = "llm")]
+            causal_discovery_llm: None,
+            #[cfg(feature = "llm")]
+            causal_model: None,
         }
     }
 
@@ -377,16 +363,13 @@ impl Handlers {
     // Graph Discovery Agent Accessors (GRAPH-AGENT)
     // =========================================================================
 
-    /// Get the graph discovery service.
+    /// Get the graph discovery service if LLM is loaded.
     ///
-    /// REQUIRED - NO FALLBACKS. The service uses CausalDiscoveryLLM (Qwen2.5-3B)
-    /// for LLM-based relationship detection between memories.
-    ///
-    /// This service is guaranteed to be available since LLM loading is required
-    /// at server startup. If LLM fails to load, server startup fails.
+    /// Returns None when LLM failed to load at startup (graceful degradation).
+    /// LLM-dependent tools should return an error to the caller when this is None.
     #[cfg(feature = "llm")]
-    pub fn graph_discovery_service(&self) -> &Arc<GraphDiscoveryService> {
-        &self.graph_discovery_service
+    pub fn graph_discovery_service(&self) -> Option<&Arc<GraphDiscoveryService>> {
+        self.graph_discovery_service.as_ref()
     }
 
     // =========================================================================

@@ -904,4 +904,12 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     /// }
     /// ```
     fn as_any(&self) -> &dyn Any;
+
+    /// Persist HNSW indexes to durable storage if the backend supports it.
+    ///
+    /// M2 FIX: Called on graceful shutdown to avoid O(n) rebuild from CF_FINGERPRINTS
+    /// on restart. Default implementation is a no-op for backends that don't use HNSW.
+    fn persist_hnsw_indexes_if_available(&self) -> CoreResult<()> {
+        Ok(())
+    }
 }

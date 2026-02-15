@@ -672,7 +672,7 @@ impl SemanticFingerprint {
     /// Array of 13 dense vectors with expected dimensions:
     /// - E1: 1024D, E2-E4: 512D each, E5: 768D
     /// - E6: 30522D (sparse converted), E7: 1536D
-    /// - E8, E11: 384D each, E9: 1024D, E10: 768D
+    /// - E8: 1024D, E9: 1024D, E10: 768D, E11: 768D
     /// - E12: 128D (mean-pooled), E13: 30522D (sparse converted)
     pub fn to_cluster_array(&self) -> [Vec<f32>; 13] {
         // E12: Mean-pool tokens to single 128D vector

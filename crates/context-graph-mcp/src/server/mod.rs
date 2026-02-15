@@ -12,7 +12,7 @@
 //!
 //! NO BACKWARDS COMPATIBILITY with stubs. FAIL FAST with clear errors.
 
-mod transport;
+pub mod transport;
 mod watchers;
 
 // NOTE: std::io removed - using tokio::io for async I/O (AP-08 compliance)
@@ -92,7 +92,6 @@ use crate::protocol::{JsonRpcRequest, JsonRpcResponse};
 /// TASK-S001: Uses TeleologicalMemoryStore for 13-embedding fingerprint storage.
 /// TASK-INTEG-018: Arc-wrapped handlers for TCP transport sharing across concurrent clients.
 /// LAZY-STARTUP: Models load in background to allow immediate MCP protocol response.
-#[allow(dead_code)]
 pub struct McpServer {
     pub(in crate::server) config: Config,
     /// Teleological memory store - stores TeleologicalFingerprint with 13 embeddings.
@@ -106,6 +105,7 @@ pub struct McpServer {
     pub(in crate::server) models_failed: Arc<RwLock<Option<String>>>,
     /// Arc-wrapped handlers for safe sharing across TCP client tasks.
     pub(in crate::server) handlers: Arc<Handlers>,
+    #[allow(dead_code)] // Used in TCP transport initialization checks
     pub(in crate::server) initialized: Arc<RwLock<bool>>,
     /// Connection semaphore for limiting concurrent TCP connections.
     pub(in crate::server) connection_semaphore: Arc<Semaphore>,
@@ -122,6 +122,16 @@ pub struct McpServer {
     pub(in crate::server) graph_builder: Option<Arc<BackgroundGraphBuilder>>,
     /// TASK-GRAPHLINK-PHASE1: Background graph builder worker task handle.
     pub(in crate::server) graph_builder_task: Arc<RwLock<Option<JoinHandle<()>>>>,
+    /// M1 FIX: Soft-delete GC background task handle (constitution: JoinHandle must be awaited).
+    /// Stored to prevent abort-on-drop; checked in shutdown path.
+    #[allow(dead_code)]
+    gc_task: Option<JoinHandle<()>>,
+    /// M1 FIX: HNSW persistence background task handle.
+    /// Stored to prevent abort-on-drop; checked in shutdown path.
+    #[allow(dead_code)]
+    hnsw_persist_task: Option<JoinHandle<()>>,
+    /// M1 FIX: Shutdown flag for background tasks.
+    background_shutdown: Arc<AtomicBool>,
 }
 
 impl McpServer {
@@ -165,7 +175,7 @@ impl McpServer {
             )
         })?;
         info!(
-            "Created RocksDbTeleologicalStore at {:?} (17 column families, persistent storage)",
+            "Created RocksDbTeleologicalStore at {:?} (51 column families, persistent storage)",
             db_path
         );
 
@@ -183,13 +193,23 @@ impl McpServer {
         let gc_store = Arc::clone(&rocksdb_store_arc);
         let persist_store = Arc::clone(&rocksdb_store_arc);
 
+        // M1 FIX: Shared shutdown flag for background tasks (constitution: JoinHandle must be awaited)
+        let background_shutdown = Arc::new(AtomicBool::new(false));
+        let gc_shutdown = Arc::clone(&background_shutdown);
+        let persist_shutdown = Arc::clone(&background_shutdown);
+
         // Spawn soft-delete GC background task (runs every 5 minutes)
-        tokio::spawn(async move {
+        // M1 FIX: Store JoinHandle — panics in this task are now observable
+        let gc_task = tokio::spawn(async move {
             let gc_interval = std::time::Duration::from_secs(5 * 60);
             let gc_retention = 7 * 24 * 3600u64; // 7 days
             info!("Soft-delete GC background task started (interval=5min, retention=7d)");
             loop {
                 tokio::time::sleep(gc_interval).await;
+                if gc_shutdown.load(Ordering::SeqCst) {
+                    info!("GC background task received shutdown signal");
+                    break;
+                }
                 match gc_store.gc_soft_deleted(gc_retention).await {
                     Ok(deleted) => {
                         if deleted > 0 {
@@ -197,20 +217,30 @@ impl McpServer {
                         }
                     }
                     Err(e) => {
-                        tracing::error!("GC cycle failed: {e}");
+                        error!("GC cycle failed: {e}");
                     }
                 }
             }
         });
 
-        // Spawn HNSW index persistence background task (runs every 10 minutes)
-        tokio::spawn(async move {
+        // Spawn HNSW index persistence + compaction background task (runs every 10 minutes)
+        // M1 FIX: Store JoinHandle — panics in this task are now observable
+        // H1/M9 FIX: Also checks for HNSW compaction (orphaned vector cleanup)
+        let hnsw_persist_task = tokio::spawn(async move {
             let persist_interval = std::time::Duration::from_secs(10 * 60);
-            info!("HNSW persistence background task started (interval=10min)");
+            info!("HNSW persistence+compaction background task started (interval=10min)");
             loop {
                 tokio::time::sleep(persist_interval).await;
+                if persist_shutdown.load(Ordering::SeqCst) {
+                    info!("HNSW persistence background task received shutdown signal");
+                    break;
+                }
+                // H1/M9 FIX: Check for compaction before persistence
+                if let Err(e) = persist_store.compact_hnsw_if_needed() {
+                    error!("HNSW compaction check failed: {e}");
+                }
                 if let Err(e) = persist_store.persist_hnsw_indexes() {
-                    tracing::error!("HNSW persistence failed: {e}");
+                    error!("HNSW persistence failed: {e}");
                 }
             }
         });
@@ -488,146 +518,120 @@ impl McpServer {
 
         #[cfg(feature = "llm")]
         let handlers = {
-            // GRAPH-AGENT: Initialize shared LLM for graph relationship discovery
-            // This LLM (Qwen2.5-3B) can also be shared with causal-agent
-            // NO FALLBACKS - LLM MUST load successfully or server startup fails
-            info!("GRAPH-AGENT: Initializing CausalDiscoveryLLM (Qwen2.5-3B) - NO FALLBACKS");
-            let llm = CausalDiscoveryLLM::new().map_err(|e| {
-                error!(
-                    "FATAL: Failed to create CausalDiscoveryLLM: {}. \
-                     Graph discovery requires Qwen2.5-3B model (~6GB VRAM). \
-                     Check model files exist and CUDA GPU is available.",
-                    e
-                );
-                anyhow::anyhow!(
-                    "Failed to create CausalDiscoveryLLM: {}. \
-                     Ensure Qwen2.5-3B model is downloaded and CUDA GPU with 6GB+ VRAM is available.",
-                    e
-                )
-            })?;
+            // GRAPH-AGENT: Try to initialize LLM for graph/causal discovery.
+            // If LLM fails to load (VRAM exhausted, model corrupted, driver issue),
+            // fall back gracefully to without_llm mode — 52 non-LLM tools still work.
+            let llm_result: Result<_> = async {
+                info!("GRAPH-AGENT: Initializing CausalDiscoveryLLM (Hermes-2-Pro-Mistral-7B)");
+                let llm = CausalDiscoveryLLM::new().map_err(|e| {
+                    anyhow::anyhow!("Failed to create CausalDiscoveryLLM: {}", e)
+                })?;
 
-            info!("Loading CausalDiscoveryLLM (Qwen2.5-3B) into VRAM (~6GB)...");
-            llm.load().await.map_err(|e| {
-                error!(
-                    "FATAL: Failed to load CausalDiscoveryLLM: {}. \
-                     Check CUDA GPU has at least 6GB free VRAM.",
-                    e
-                );
-                anyhow::anyhow!(
-                    "Failed to load CausalDiscoveryLLM: {}. \
-                     Requires ~6GB VRAM. Check GPU memory availability.",
-                    e
-                )
-            })?;
-            info!("CausalDiscoveryLLM loaded successfully (~6GB VRAM)");
+                info!("Loading CausalDiscoveryLLM into VRAM (~6GB)...");
+                llm.load().await.map_err(|e| {
+                    anyhow::anyhow!("Failed to load CausalDiscoveryLLM: {}", e)
+                })?;
+                info!("CausalDiscoveryLLM loaded successfully (~6GB VRAM)");
 
-            // CAUSAL-HINT: Wrap LLM in Arc first to enable sharing between services
-            let shared_llm = Arc::new(llm);
+                let shared_llm = Arc::new(llm);
 
-            // MODEL-INJECTION: Get GraphModel from warm provider for E8 embeddings
-            // This shares the already-loaded model (~1.3GB VRAM) with the embedding system
-            //
-            // In --no-warm mode, the background task may still hold the write lock on
-            // GLOBAL_WARM_PROVIDER. We must wait for it to finish before calling
-            // get_warm_graph_model() which uses try_read().
-            let graph_model = {
-                let max_wait = std::time::Duration::from_secs(180);
-                let poll_interval = std::time::Duration::from_millis(500);
-                let start = std::time::Instant::now();
+                // MODEL-INJECTION: Get GraphModel from warm provider for E8 embeddings
+                let graph_model = {
+                    let max_wait = std::time::Duration::from_secs(180);
+                    let poll_interval = std::time::Duration::from_millis(500);
+                    let start = std::time::Instant::now();
 
-                loop {
-                    match get_warm_graph_model() {
-                        Ok(model) => break model,
-                        Err(e) => {
-                            let elapsed = start.elapsed();
-                            if elapsed >= max_wait {
-                                error!(
-                                    "FATAL: Timed out waiting for GraphModel after {:.1}s: {}. \
-                                     Ensure embedding models are initialized before graph discovery.",
-                                    elapsed.as_secs_f64(), e
-                                );
-                                return Err(anyhow::anyhow!(
-                                    "Failed to get GraphModel after {:.1}s: {}. \
-                                     GraphDiscoveryService requires E8 model for relationship embeddings.",
-                                    elapsed.as_secs_f64(), e
-                                ));
+                    loop {
+                        match get_warm_graph_model() {
+                            Ok(model) => break model,
+                            Err(e) => {
+                                let elapsed = start.elapsed();
+                                if elapsed >= max_wait {
+                                    return Err(anyhow::anyhow!(
+                                        "Timed out waiting for GraphModel after {:.1}s: {}",
+                                        elapsed.as_secs_f64(), e
+                                    ));
+                                }
+                                if elapsed.as_millis() < 600 || elapsed.as_secs() % 10 == 0 {
+                                    info!(
+                                        "Waiting for warm provider to be ready ({:.1}s elapsed): {}",
+                                        elapsed.as_secs_f64(), e
+                                    );
+                                }
+                                tokio::time::sleep(poll_interval).await;
                             }
-                            // Log first attempt and then every 10s
-                            if elapsed.as_millis() < 600 || elapsed.as_secs() % 10 == 0 {
-                                info!(
-                                    "Waiting for warm provider to be ready ({:.1}s elapsed): {}",
-                                    elapsed.as_secs_f64(), e
-                                );
-                            }
-                            tokio::time::sleep(poll_interval).await;
                         }
                     }
-                }
-            };
-            info!("GraphModel obtained from warm provider - E8 embeddings ready");
+                };
+                info!("GraphModel obtained from warm provider - E8 embeddings ready");
 
-            let graph_discovery_config = GraphDiscoveryConfig::default();
-            let graph_discovery_service = Arc::new(GraphDiscoveryService::with_models(
-                Arc::clone(&shared_llm), // Shared LLM for relationship classification
-                graph_model,             // GraphModel for E8 asymmetric embeddings
-                graph_discovery_config,
-            ));
-
-            // INLINE-CAUSAL: Get CausalModel for E5 asymmetric embeddings (shares warm provider)
-            // Used by inline causal extraction during store_memory (no background loop).
-            let causal_model = get_warm_causal_model().map_err(|e| {
-                error!(
-                    "FATAL: Failed to get CausalModel from warm provider: {}. \
-                     Inline causal extraction requires E5 model for relationship embeddings.",
-                    e
-                );
-                anyhow::anyhow!("Failed to get CausalModel: {}", e)
-            })?;
-            info!("CausalModel obtained from warm provider - E5 embeddings ready for inline causal extraction");
-
-            // INLINE-CAUSAL: Clone shared_llm BEFORE it's moved into LlmCausalHintProvider
-            // This clone is passed to Handlers for inline extract_causal_relationships()
-            let causal_llm_for_inline = Arc::clone(&shared_llm);
-
-            // CAUSAL-HINT: Create LlmCausalHintProvider using shared LLM (GPU inference via CUDA)
-            info!("CAUSAL-HINT: Creating LlmCausalHintProvider (2s timeout for GPU inference)");
-            let causal_hint_provider: Arc<dyn CausalHintProvider> =
-                Arc::new(LlmCausalHintProvider::new(
-                    shared_llm, // Move remaining Arc
-                    LlmCausalHintProvider::DEFAULT_TIMEOUT_MS,
+                let graph_discovery_config = GraphDiscoveryConfig::default();
+                let graph_discovery_service = Arc::new(GraphDiscoveryService::with_models(
+                    Arc::clone(&shared_llm),
+                    graph_model,
+                    graph_discovery_config,
                 ));
 
-            // TASK-GRAPHLINK + INLINE-CAUSAL: Use with_graph_discovery to enable K-NN graph operations
-            // with background builder support, LLM-based relationship detection, and inline causal extraction.
-            // NO FALLBACKS - All components MUST work or server startup fails.
-            info!("Creating Handlers with graph discovery, causal hints, and inline causal extraction - NO FALLBACKS");
-            let h = Handlers::with_graph_discovery(
-                Arc::clone(&teleological_store),
-                lazy_provider,
-                layer_status_provider,
-                edge_repository,
-                Arc::clone(&graph_builder),
-                graph_discovery_service,
-                causal_hint_provider,
-                causal_llm_for_inline, // INLINE-CAUSAL: Shared LLM for extract_causal_relationships()
-                causal_model,          // INLINE-CAUSAL: E5 CausalModel for asymmetric embeddings
-            );
-            info!("Created Handlers with inline causal extraction enabled (K-NN edges + background builder, NO FALLBACKS)");
-            h
+                let causal_model = get_warm_causal_model().map_err(|e| {
+                    anyhow::anyhow!("Failed to get CausalModel: {}", e)
+                })?;
+                info!("CausalModel obtained from warm provider - E5 embeddings ready");
+
+                let causal_llm_for_inline = Arc::clone(&shared_llm);
+
+                info!("CAUSAL-HINT: Creating LlmCausalHintProvider (2s timeout for GPU inference)");
+                let causal_hint_provider: Arc<dyn CausalHintProvider> =
+                    Arc::new(LlmCausalHintProvider::new(
+                        shared_llm,
+                        LlmCausalHintProvider::DEFAULT_TIMEOUT_MS,
+                    ));
+
+                Ok((graph_discovery_service, causal_hint_provider, causal_llm_for_inline, causal_model))
+            }.await;
+
+            match llm_result {
+                Ok((graph_discovery_service, causal_hint_provider, causal_llm_for_inline, causal_model)) => {
+                    info!("Creating Handlers with graph discovery, causal hints, and inline causal extraction");
+                    Handlers::with_graph_discovery(
+                        Arc::clone(&teleological_store),
+                        lazy_provider,
+                        layer_status_provider,
+                        edge_repository,
+                        Arc::clone(&graph_builder),
+                        graph_discovery_service,
+                        causal_hint_provider,
+                        causal_llm_for_inline,
+                        causal_model,
+                    )
+                }
+                Err(e) => {
+                    warn!(
+                        "LLM loading failed, falling back to non-LLM mode. \
+                         3 LLM tools (causal_discovery, graph_discovery, validate_graph_link) unavailable. \
+                         52 other tools still operational. Error: {}",
+                        e
+                    );
+                    Handlers::without_llm(
+                        Arc::clone(&teleological_store),
+                        lazy_provider,
+                        layer_status_provider,
+                        edge_repository,
+                        Arc::clone(&graph_builder),
+                        Arc::new(context_graph_embeddings::provider::NoOpCausalHintProvider),
+                    )
+                }
+            }
         };
 
         #[cfg(not(feature = "llm"))]
         let handlers = {
             info!("LLM feature disabled - creating Handlers without LLM (graph/causal discovery tools unavailable)");
-            // Without LLM: no CausalDiscoveryLLM, no GraphDiscoveryService, no CausalHintProvider
-            // LLM-dependent tools will return errors at call time.
             Handlers::without_llm(
                 Arc::clone(&teleological_store),
                 lazy_provider,
                 layer_status_provider,
                 edge_repository,
                 Arc::clone(&graph_builder),
-                // No causal hint provider without LLM - pass a no-op provider
                 Arc::new(context_graph_embeddings::provider::NoOpCausalHintProvider),
             )
         };
@@ -664,6 +668,10 @@ impl McpServer {
             // TASK-GRAPHLINK-PHASE1: Graph builder for background K-NN edge computation
             graph_builder: Some(graph_builder),
             graph_builder_task: Arc::new(RwLock::new(None)),
+            // M1 FIX: Store background task handles (constitution: JoinHandle must be awaited)
+            gc_task: Some(gc_task),
+            hnsw_persist_task: Some(hnsw_persist_task),
+            background_shutdown,
         })
     }
 
@@ -758,7 +766,31 @@ impl McpServer {
 
             debug!("Received: {}", trimmed);
 
-            let response = self.handle_request(trimmed).await;
+            // Apply request timeout to prevent a hung handler from blocking the entire
+            // stdio session indefinitely. Matches the TCP transport behavior (HIGH-15).
+            let request_timeout = self.config.mcp.request_timeout;
+            let response = match tokio::time::timeout(
+                std::time::Duration::from_secs(request_timeout),
+                self.handle_request(trimmed),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(_) => {
+                    error!(
+                        "Stdio request timed out after {}s — handler may be deadlocked",
+                        request_timeout
+                    );
+                    JsonRpcResponse::error(
+                        None,
+                        crate::protocol::error_codes::LAYER_TIMEOUT,
+                        format!(
+                            "Request timed out after {}s. Handler may be deadlocked.",
+                            request_timeout
+                        ),
+                    )
+                }
+            };
 
             // Handle notifications (no response needed)
             if response.id.is_none() && response.result.is_none() && response.error.is_none() {
@@ -798,6 +830,18 @@ impl McpServer {
     /// - Safe to call multiple times (idempotent)
     pub async fn shutdown(&self) {
         info!("Initiating graceful shutdown...");
+
+        // M1 FIX: Signal background tasks to stop
+        self.background_shutdown.store(true, Ordering::SeqCst);
+        info!("Background shutdown flag set — GC and HNSW persist tasks will stop");
+
+        // M2 FIX: Persist HNSW indexes on shutdown to avoid O(n) rebuild on restart
+        info!("Persisting HNSW indexes on shutdown...");
+        if let Err(e) = self.teleological_store.persist_hnsw_indexes_if_available() {
+            error!("Failed to persist HNSW indexes on shutdown: {e}");
+        } else {
+            info!("HNSW indexes persisted successfully on shutdown");
+        }
 
         // TASK-GRAPHLINK-PHASE1: Stop graph builder worker
         self.stop_graph_builder().await;

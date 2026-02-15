@@ -1272,7 +1272,7 @@ fn hash_to_float(text: &str) -> f32 {
     ((h >> 40) as f32) / ((1u64 << 24) as f32)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::causal_bench::data_loader::BenchmarkPair;

@@ -463,6 +463,15 @@ impl McpServer {
     /// `Ok(true)` if the worker started successfully, `Ok(false)` if no graph builder
     /// is configured, `Err` on failure.
     pub async fn start_graph_builder(&self) -> Result<bool> {
+        // L9 FIX: Idempotency guard — skip if already running
+        {
+            let task_guard = self.graph_builder_task.read().await;
+            if task_guard.is_some() {
+                debug!("Graph builder already running — skipping duplicate start");
+                return Ok(true);
+            }
+        }
+
         let graph_builder = match &self.graph_builder {
             Some(builder) => Arc::clone(builder),
             None => {

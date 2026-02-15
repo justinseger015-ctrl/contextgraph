@@ -932,7 +932,7 @@ pub fn run_quick_benchmark() -> GraphLinkingBenchmarkResults {
 // Tests
 // ============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

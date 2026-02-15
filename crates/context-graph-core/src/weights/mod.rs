@@ -293,7 +293,8 @@ pub const WEIGHT_PROFILES: &[(&str, [f32; NUM_EMBEDDERS])] = &[
     ),
 
     // Category-Weighted: Constitution-compliant weights per CLAUDE.md and ARCH-13
-    // max_weighted_agreement = 6.5 (5*1.0 + 3*0.5 = 6.5)
+    // L8 FIX: Profile normalizer = 6.5 (5 SEMANTIC×1.0 + 2 RELATIONAL×0.5 + 1 STRUCTURAL×0.5)
+    // Note: Topic max_weighted_agreement = 8.5 per constitution (includes E12, E13)
     (
         "category_weighted",
         [

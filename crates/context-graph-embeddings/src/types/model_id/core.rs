@@ -57,8 +57,8 @@ pub enum ModelId {
     Hdc = 8,
     /// E10: Multimodal using openai/clip-vit-large-patch14 (768D)
     Multimodal = 9,
-    /// E11: Entity using KEPLER (768D, upgraded from MiniLM 384D)
-    /// DEPRECATED: Use Kepler ModelId instead for meaningful TransE operations.
+    /// E11: Entity using KEPLER (768D, upgraded from MiniLM 384D).
+    /// Prefer `ModelId::Kepler` for new code — `Entity` exists for backward-compatible matching.
     Entity = 10,
     /// E12: Late interaction using colbert-ir/colbertv2.0 (128D per token)
     LateInteraction = 11,
@@ -87,7 +87,7 @@ impl ModelId {
             Self::Graph => 1024,   // e5-large-v2 (upgraded from MiniLM 384D)
             Self::Hdc => 10000,    // 10K-bit vector
             Self::Multimodal => 768,
-            Self::Entity => 384,   // Legacy MiniLM-L6-v2 (production E11 uses Kepler 768D)
+            Self::Entity => 384,   // Legacy MiniLM-L6-v2 (use ModelId::Kepler for 768D production E11)
             Self::LateInteraction => 128, // Per-token dimension
             Self::Splade => 30522,        // SPLADE v3 vocab size
             Self::Kepler => 768,          // KEPLER (RoBERTa-base)

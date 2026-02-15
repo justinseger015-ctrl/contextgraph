@@ -422,33 +422,28 @@ impl Handlers {
                 }
 
                 // Phase 5: Store embedding version record for provenance tracking
+                // M5 FIX: Use actual model_ids from embedding output, not static strings
                 {
                     use context_graph_core::types::audit::EmbeddingVersionRecord;
                     use std::collections::HashMap;
 
-                    // NOTE: These are static descriptors, not dynamic model versions.
-                    // The embedding provider does not currently expose runtime model metadata.
-                    // Stale embedding detection requires the provider to report version changes.
+                    let embedder_labels = [
+                        "E1", "E2", "E3", "E4", "E5", "E6", "E7",
+                        "E8", "E9", "E10", "E11", "E12", "E13",
+                    ];
                     let mut embedder_versions = HashMap::new();
-                    embedder_versions.insert("E1".to_string(), "pretrained-semantic-1024d".to_string());
-                    embedder_versions.insert("E2".to_string(), "temporal-recent-decay".to_string());
-                    embedder_versions.insert("E3".to_string(), "temporal-periodic-fourier".to_string());
-                    embedder_versions.insert("E4".to_string(), "temporal-positional-sequence".to_string());
-                    embedder_versions.insert("E5".to_string(), "causal-asymmetric-768d".to_string());
-                    embedder_versions.insert("E6".to_string(), "sparse-tfidf-inverted".to_string());
-                    embedder_versions.insert("E7".to_string(), "qodo-embed-1-1.5b".to_string());
-                    embedder_versions.insert("E8".to_string(), "graph-knn-1024d".to_string());
-                    embedder_versions.insert("E9".to_string(), "structural-positional".to_string());
-                    embedder_versions.insert("E10".to_string(), "multimodal-modifier-768d".to_string());
-                    embedder_versions.insert("E11".to_string(), "entity-kepler-768d".to_string());
-                    embedder_versions.insert("E12".to_string(), "late-interaction-colbert".to_string());
-                    embedder_versions.insert("E13".to_string(), "keyword-splade-sparse".to_string());
+                    for (i, label) in embedder_labels.iter().enumerate() {
+                        embedder_versions.insert(
+                            label.to_string(),
+                            embedding_output.model_ids[i].clone(),
+                        );
+                    }
 
                     let record = EmbeddingVersionRecord {
                         fingerprint_id,
                         computed_at: chrono::Utc::now(),
                         embedder_versions,
-                        e7_model_version: Some("qodo-embed-1-1.5b".to_string()),
+                        e7_model_version: Some(embedding_output.model_ids[6].clone()),
                         computation_time_ms: Some(embedding_output.total_latency.as_millis() as u64),
                     };
 
@@ -2399,7 +2394,8 @@ mod tests {
 
     #[test]
     fn test_colbert_maxsim_orthogonal_tokens() {
-        // Orthogonal query and doc tokens should give score of 0.0
+        // Orthogonal query and doc tokens: raw cosine = 0.0
+        // SRC-3 normalization: (0.0 + 1.0) / 2.0 = 0.5
         let query_tokens = vec![
             vec![1.0, 0.0, 0.0],
         ];
@@ -2408,13 +2404,20 @@ mod tests {
         ];
 
         let score = compute_maxsim_direct(&query_tokens, &doc_tokens);
-        assert!(score.abs() < 0.01, "Orthogonal tokens should give ~0.0, got {}", score);
+        assert!((score - 0.5).abs() < 0.01, "Orthogonal tokens should give 0.5 (SRC-3 normalized), got {}", score);
         println!("[VERIFIED] ColBERT MaxSim with orthogonal tokens = {}", score);
     }
 
     #[test]
     fn test_colbert_maxsim_partial_match() {
         // Mix of matching and non-matching tokens
+        // Q1=[1,0,0] vs D1=[1,0,0]: cosine=1.0, normalized=1.0
+        // Q1=[1,0,0] vs D2=[0,1,0]: cosine=0.0, normalized=0.5
+        // Q1 max_sim = 1.0
+        // Q2=[0,0,1] vs D1=[1,0,0]: cosine=0.0, normalized=0.5
+        // Q2=[0,0,1] vs D2=[0,1,0]: cosine=0.0, normalized=0.5
+        // Q2 max_sim = 0.5
+        // Average = (1.0 + 0.5) / 2 = 0.75
         let query_tokens = vec![
             vec![1.0, 0.0, 0.0],  // Matches first doc token
             vec![0.0, 0.0, 1.0],  // Doesn't match any doc token
@@ -2425,8 +2428,8 @@ mod tests {
         ];
 
         let score = compute_maxsim_direct(&query_tokens, &doc_tokens);
-        // Expected: (1.0 + 0.0) / 2 = 0.5
-        assert!((score - 0.5).abs() < 0.01, "Partial match should give ~0.5, got {}", score);
+        // Expected: (1.0 + 0.5) / 2 = 0.75 (SRC-3 normalized cosine)
+        assert!((score - 0.75).abs() < 0.01, "Partial match should give 0.75 (SRC-3 normalized), got {}", score);
         println!("[VERIFIED] ColBERT MaxSim with partial match = {}", score);
     }
 

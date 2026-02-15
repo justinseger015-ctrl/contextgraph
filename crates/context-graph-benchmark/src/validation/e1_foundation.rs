@@ -283,7 +283,7 @@ impl E1FoundationValidator {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

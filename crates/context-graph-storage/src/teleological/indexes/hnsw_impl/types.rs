@@ -73,6 +73,9 @@ pub struct HnswEmbedderIndex {
     pub(crate) key_to_id: RwLock<HashMap<u64, Uuid>>,
     /// Next available key for usearch (monotonically increasing)
     pub(crate) next_key: RwLock<u64>,
+    /// H1 FIX: Count of removed vectors still orphaned in usearch index.
+    /// When removed_count / total_count > COMPACTION_RATIO, compaction is needed.
+    pub(crate) removed_count: std::sync::atomic::AtomicUsize,
 }
 
 impl HnswEmbedderIndex {
@@ -177,7 +180,37 @@ impl HnswEmbedderIndex {
             id_to_key: RwLock::new(HashMap::new()),
             key_to_id: RwLock::new(HashMap::new()),
             next_key: RwLock::new(0),
+            removed_count: std::sync::atomic::AtomicUsize::new(0),
         }
+    }
+
+    /// H1 FIX: Number of orphaned vectors in usearch index (removed from maps but still in graph).
+    pub fn removed_count(&self) -> usize {
+        self.removed_count
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// H1 FIX: Total vectors in usearch index (including orphaned).
+    pub fn usearch_size(&self) -> usize {
+        self.index.read().size()
+    }
+
+    /// H1 FIX: Check if compaction is needed (removed/total > 25%).
+    /// Compaction rebuilds the index from store, eliminating orphaned vectors.
+    pub fn needs_compaction(&self) -> bool {
+        let total = self.usearch_size();
+        if total == 0 {
+            return false;
+        }
+        let removed = self.removed_count();
+        // Compact when >25% of vectors are orphaned
+        removed * 4 > total
+    }
+
+    /// H1 FIX: Reset removed count after compaction.
+    pub fn reset_removed_count(&self) {
+        self.removed_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Check if a vector ID exists in the index.

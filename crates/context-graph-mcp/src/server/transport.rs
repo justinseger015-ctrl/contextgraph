@@ -26,7 +26,7 @@ use super::McpServer;
 
 /// Maximum line size in bytes (10 MB). Lines exceeding this are rejected.
 /// Prevents OOM from clients sending multi-gigabyte data without newlines.
-pub(in crate::server) const MAX_LINE_BYTES: usize = 10 * 1024 * 1024;
+pub const MAX_LINE_BYTES: usize = 10 * 1024 * 1024;
 
 /// Read a line from an async buffered reader with a byte size limit.
 ///
@@ -35,7 +35,7 @@ pub(in crate::server) const MAX_LINE_BYTES: usize = 10 * 1024 * 1024;
 /// OOM. This function reads in chunks via `fill_buf()` and enforces a limit.
 ///
 /// Returns the number of bytes read, or an IO error if the limit is exceeded.
-pub(in crate::server) async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
+pub async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
     reader: &mut R,
     buf: &mut String,
     max_bytes: usize,
@@ -57,8 +57,22 @@ pub(in crate::server) async fn read_line_bounded<R: tokio::io::AsyncBufRead + Un
         };
 
         if total + end > max_bytes {
-            // Consume what we've seen so far to avoid leaving stale data in the buffer
+            // Consume current chunk, then drain the rest of this line so the
+            // next call doesn't pick up the tail as a phantom message.
             reader.consume(end);
+            if !found_newline {
+                loop {
+                    let rest = reader.fill_buf().await?;
+                    if rest.is_empty() {
+                        break; // EOF
+                    }
+                    let drain_end = match rest.iter().position(|&b| b == b'\n') {
+                        Some(pos) => { reader.consume(pos + 1); break; }
+                        None => rest.len(),
+                    };
+                    reader.consume(drain_end);
+                }
+            }
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!(

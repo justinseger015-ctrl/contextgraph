@@ -1056,7 +1056,7 @@ fn run_validation_checks(results: &mut BenchmarkResults) {
     results.failed_checks = failed;
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

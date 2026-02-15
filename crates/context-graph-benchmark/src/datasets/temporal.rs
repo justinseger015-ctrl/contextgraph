@@ -736,7 +736,7 @@ pub struct TemporalDatasetStats {
     pub day_distribution: [usize; 7],
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

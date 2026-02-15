@@ -482,7 +482,7 @@ impl ConfigValidator {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

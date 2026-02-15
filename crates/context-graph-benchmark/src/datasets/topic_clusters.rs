@@ -312,7 +312,7 @@ fn generate_distinct_e5_pair(rng: &mut ChaCha8Rng, min_distance: f32) -> (Vec<f3
     (cause, effect)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

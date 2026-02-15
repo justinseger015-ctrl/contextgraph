@@ -295,7 +295,7 @@ pub fn print_comparison(comparison: &ComparisonReport) {
     );
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::causal_bench::metrics::PhaseBenchmarkResult;

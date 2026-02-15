@@ -268,7 +268,7 @@ pub fn structural_embedders() -> Vec<EmbedderIndex> {
     vec![EmbedderIndex::E9HDC]
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

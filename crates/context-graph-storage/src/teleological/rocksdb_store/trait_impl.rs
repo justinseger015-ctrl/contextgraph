@@ -440,4 +440,10 @@ impl TeleologicalMemoryStore for RocksDbTeleologicalStore {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn persist_hnsw_indexes_if_available(&self) -> CoreResult<()> {
+        self.persist_hnsw_indexes().map_err(|e| {
+            CoreError::StorageError(format!("HNSW persistence on shutdown failed: {e}"))
+        })
+    }
 }

@@ -465,32 +465,4 @@ mod tests {
         println!("[VERIFIED] MaxSim of identical tokens is ~1.0");
     }
 
-    // ========================================================================
-    // VERIFICATION LOG
-    // ========================================================================
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== STAGE5.RS VERIFICATION LOG ===\n");
-
-        println!("Configuration:");
-        println!("  - E12_TOKEN_DIM: {}", E12_TOKEN_DIM);
-        println!("  - DEFAULT_STAGE5_LIMIT: {}", DEFAULT_STAGE5_LIMIT);
-
-        println!("\nAlgorithm:");
-        println!("  - MaxSim(Q, D) = (1/|Q|) × Σᵢ max_j cos(qᵢ, dⱼ)");
-        println!("  - Combined score: 0.7×MaxSim + 0.3×Stage4");
-
-        println!("\nBehavior:");
-        println!("  - Candidates with tokens: reranked by MaxSim");
-        println!("  - Candidates without tokens: keep Stage 4 score");
-        println!("  - Fallback: sort by Stage 4 score if no query tokens");
-
-        println!("\nTest Coverage:");
-        println!("  - Basic: 5 tests (with tokens, without, fallback, limit, empty)");
-        println!("  - MaxSim: 1 test");
-        println!("  - Total: 6 tests");
-
-        println!("\nVERIFICATION COMPLETE");
-    }
 }

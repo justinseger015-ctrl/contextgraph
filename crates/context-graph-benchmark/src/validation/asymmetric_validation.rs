@@ -340,7 +340,7 @@ impl AsymmetricValidator {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

@@ -474,47 +474,4 @@ mod tests {
 
         println!("RESULT: PASS");
     }
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== RESULT.RS VERIFICATION LOG ===");
-        println!();
-
-        println!("Type Verification:");
-        println!("  - EmbedderSearchHit:");
-        println!("    - id: Uuid");
-        println!("    - distance: f32");
-        println!("    - similarity: f32");
-        println!("    - embedder: EmbedderIndex");
-        println!("  - SingleEmbedderSearchResults:");
-        println!("    - hits: Vec<EmbedderSearchHit>");
-        println!("    - embedder: EmbedderIndex");
-        println!("    - k: usize");
-        println!("    - threshold: Option<f32>");
-        println!("    - latency_us: u64");
-
-        println!();
-        println!("Method Verification:");
-        println!("  - EmbedderSearchHit::from_hnsw: PASS");
-        println!("  - EmbedderSearchHit::is_high_similarity: PASS");
-        println!("  - EmbedderSearchHit::meets_threshold: PASS");
-        println!("  - SingleEmbedderSearchResults::is_empty: PASS");
-        println!("  - SingleEmbedderSearchResults::len: PASS");
-        println!("  - SingleEmbedderSearchResults::top: PASS");
-        println!("  - SingleEmbedderSearchResults::ids: PASS");
-        println!("  - SingleEmbedderSearchResults::top_n: PASS");
-        println!("  - SingleEmbedderSearchResults::above_threshold: PASS");
-        println!("  - SingleEmbedderSearchResults::average_similarity: PASS");
-        println!("  - SingleEmbedderSearchResults::iter: PASS");
-
-        println!();
-        println!("Distance-to-Similarity Conversion:");
-        println!("  - distance 0.0 → similarity 1.0: PASS");
-        println!("  - distance 1.0 → similarity 0.0: PASS");
-        println!("  - distance 2.0 → similarity 0.0 (clamped): PASS");
-        println!("  - distance 0.3 → similarity 0.7: PASS");
-
-        println!();
-        println!("VERIFICATION COMPLETE");
-    }
 }

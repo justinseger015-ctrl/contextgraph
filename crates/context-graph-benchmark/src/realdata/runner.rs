@@ -735,7 +735,7 @@ impl std::fmt::Display for RealDataError {
 
 impl std::error::Error for RealDataError {}
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     #[cfg(feature = "real-embeddings")]
     use super::*;

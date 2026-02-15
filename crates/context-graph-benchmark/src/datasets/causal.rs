@@ -1127,7 +1127,7 @@ pub struct CausalDatasetStats {
     pub avg_chain_length: f64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

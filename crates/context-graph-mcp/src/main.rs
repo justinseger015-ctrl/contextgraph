@@ -550,7 +550,8 @@ async fn is_daemon_running(port: u16) -> bool {
 /// Reads JSON-RPC messages from stdin, forwards to daemon via TCP,
 /// and writes responses to stdout.
 async fn run_stdio_to_tcp_proxy(daemon_port: u16) -> Result<()> {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use context_graph_mcp::server::transport::{read_line_bounded, MAX_LINE_BYTES};
+    use tokio::io::{AsyncWriteExt, BufReader};
     use tokio::net::TcpStream;
 
     let addr = format!("127.0.0.1:{}", daemon_port);
@@ -567,14 +568,14 @@ async fn run_stdio_to_tcp_proxy(daemon_port: u16) -> Result<()> {
     let mut reader = BufReader::new(reader);
 
     // Spawn task to read from daemon and write to stdout
+    // AGT-04 FIX: Use bounded read_line to prevent OOM from unbounded daemon data
     let stdout_task = tokio::spawn(async move {
         let mut stdout = tokio::io::stdout();
         let mut line = String::new();
         loop {
             line.clear();
-            match reader.read_line(&mut line).await {
+            match read_line_bounded(&mut reader, &mut line, MAX_LINE_BYTES).await {
                 Ok(0) => {
-                    // EOF from daemon
                     info!("Daemon closed connection");
                     break;
                 }
@@ -589,7 +590,7 @@ async fn run_stdio_to_tcp_proxy(daemon_port: u16) -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to read from daemon: {}", e);
+                    error!("Failed to read from daemon (bounded read): {}", e);
                     break;
                 }
             }
@@ -597,15 +598,15 @@ async fn run_stdio_to_tcp_proxy(daemon_port: u16) -> Result<()> {
     });
 
     // Read from stdin and write to daemon
+    // AGT-04 FIX: Use bounded read_line to prevent OOM from unbounded stdin data
     let stdin = tokio::io::stdin();
     let mut stdin = BufReader::new(stdin);
     let mut line = String::new();
 
     loop {
         line.clear();
-        match stdin.read_line(&mut line).await {
+        match read_line_bounded(&mut stdin, &mut line, MAX_LINE_BYTES).await {
             Ok(0) => {
-                // EOF from stdin
                 info!("Stdin closed");
                 break;
             }
@@ -620,7 +621,7 @@ async fn run_stdio_to_tcp_proxy(daemon_port: u16) -> Result<()> {
                 }
             }
             Err(e) => {
-                error!("Failed to read from stdin: {}", e);
+                error!("Failed to read from stdin (bounded read): {}", e);
                 break;
             }
         }
@@ -672,9 +673,11 @@ async fn start_daemon_server(config: Config, warm_first: bool, daemon_port: u16)
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // CRITICAL: MCP servers must be silent - set this BEFORE any config loading
-    // This ensures no banners/warnings corrupt the JSON-RPC stdio protocol
-    // Especially important for WSL environments where env vars may not pass correctly
+    // CRITICAL: MCP servers must be silent - set this BEFORE any config loading.
+    // L2 NOTE: env::set_var is technically UB in multi-threaded context per POSIX.
+    // This is the first statement before any async tasks spawn. When upgrading to
+    // Rust 2024 edition, this must move to a pre-runtime init or use unsafe{}.
+    // For now on edition 2021, this is safe in practice (no concurrent readers yet).
     env::set_var("CONTEXT_GRAPH_MCP_QUIET", "1");
 
     // Parse CLI arguments first (before logging init so --help works cleanly)

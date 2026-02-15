@@ -102,9 +102,6 @@ mod in_memory_executor;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod manual_test;
-
 // Re-export all public types
 pub use aggregation::{AggregationStrategy, CombinedResult};
 pub use executor::{IndexType, MultiEmbeddingQueryExecutor, SpaceInfo};

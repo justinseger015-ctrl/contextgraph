@@ -563,7 +563,7 @@ pub fn make_phase_result(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

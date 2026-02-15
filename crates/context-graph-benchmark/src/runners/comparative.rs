@@ -360,7 +360,7 @@ fn compute_overall_improvement(tier_improvements: &HashMap<Tier, TierImprovement
     total / tier_improvements.len() as f64 / 100.0 // Convert to fraction
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

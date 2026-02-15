@@ -24,7 +24,7 @@ pub struct IndexEntry {
     /// Dequantized embedding vector (full precision f32).
     /// Length depends on embedder:
     /// - E1: 1024, E2-E4: 512 each, E5: 768, E6: sparse, E7: 1536
-    /// - E8: 384, E9: 1024 (from 10K binary), E10: 768, E11: 384
+    /// - E8: 1024, E9: 1024 (from 10K binary), E10: 768, E11: 768
     /// - E12: 128 per token, E13: sparse
     pub vector: Vec<f32>,
 

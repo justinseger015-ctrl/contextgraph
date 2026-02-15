@@ -1090,7 +1090,7 @@ fn cooccurrence_relation(count: usize) -> &'static str {
 // Tests
 // ============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

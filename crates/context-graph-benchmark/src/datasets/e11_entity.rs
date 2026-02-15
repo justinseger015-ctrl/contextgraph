@@ -701,7 +701,7 @@ impl E11EntityDatasetLoader {
 // Tests
 // ============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

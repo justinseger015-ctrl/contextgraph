@@ -351,32 +351,4 @@ mod tests {
 
         println!("RESULT: PASS");
     }
-
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== EMBEDDER_INDEX.RS VERIFICATION LOG ===");
-        println!();
-
-        println!("Type Verification:");
-        println!("  - IndexError: 5 variants (DimensionMismatch, IndexNotFound, OperationFailed, ReadOnly, InvalidVector)");
-        println!("  - IndexResult<T>: Result<T, IndexError>");
-        println!("  - EmbedderIndexOps: 8 trait methods");
-
-        println!();
-        println!("Function Verification:");
-        println!("  - validate_vector: dimension check + finite check");
-
-        println!();
-        println!("Test Coverage:");
-        println!("  - Correct dimension: PASS");
-        println!("  - Dimension mismatch: PASS");
-        println!("  - Empty vector: PASS");
-        println!("  - NaN vector: PASS");
-        println!("  - Infinity vector: PASS");
-        println!("  - Negative infinity: PASS");
-        println!("  - Error Display: PASS");
-
-        println!();
-        println!("VERIFICATION COMPLETE");
-    }
 }

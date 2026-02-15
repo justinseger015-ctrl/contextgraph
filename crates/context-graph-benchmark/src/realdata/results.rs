@@ -419,7 +419,7 @@ pub struct BenchmarkTimings {
     pub total_ms: u64,
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

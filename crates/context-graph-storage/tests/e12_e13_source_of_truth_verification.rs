@@ -491,36 +491,4 @@ async fn test_edge_case_empty_e13_splade() {
     println!("\n=== EDGE CASE: Empty E13 SPLADE PASSED ===\n");
 }
 
-// ============================================================================
-// VERIFICATION LOG
-// ============================================================================
-
-#[test]
-fn test_verification_log() {
-    println!("\n");
-    println!("╔══════════════════════════════════════════════════════════════════╗");
-    println!("║     E12/E13 SOURCE OF TRUTH VERIFICATION TEST SUITE              ║");
-    println!("╠══════════════════════════════════════════════════════════════════╣");
-    println!("║                                                                  ║");
-    println!("║ Source of Truth Locations:                                       ║");
-    println!("║   - E12 Tokens: CF_E12_LATE_INTERACTION (RocksDB)                ║");
-    println!("║   - E13 SPLADE: SemanticFingerprint.e13_splade (in fingerprints) ║");
-    println!("║   - E13 Inverted: CF_E13_SPLADE_INVERTED (RocksDB)               ║");
-    println!("║                                                                  ║");
-    println!("║ Tests:                                                           ║");
-    println!("║   1. test_e12_tokens_stored_in_column_family                     ║");
-    println!("║   2. test_e13_splade_stored_in_fingerprint                       ║");
-    println!("║   3. test_e13_inverted_index_populated                           ║");
-    println!("║   4. test_edge_case_empty_e12_tokens                             ║");
-    println!("║   5. test_edge_case_max_e12_tokens                               ║");
-    println!("║   6. test_edge_case_empty_e13_splade                             ║");
-    println!("║                                                                  ║");
-    println!("║ Verification Criteria:                                           ║");
-    println!("║   - Raw bytes exist in column family                             ║");
-    println!("║   - Deserialized data matches expected structure                 ║");
-    println!("║   - E12 tokens: 128D, L2 normalized                              ║");
-    println!("║   - E13 SPLADE: term_id < 30522, weight > 0                      ║");
-    println!("║                                                                  ║");
-    println!("╚══════════════════════════════════════════════════════════════════╝");
-    println!("\n");
-}
+// L6 FIX: Removed test_verification_log() — zero assertions, phantom test.

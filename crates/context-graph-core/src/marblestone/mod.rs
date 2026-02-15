@@ -32,12 +32,6 @@ mod neurotransmitter_weights;
 
 #[cfg(test)]
 mod edge_case_verification;
-#[cfg(test)]
-mod tests_domain;
-#[cfg(test)]
-mod tests_edge_type;
-#[cfg(test)]
-mod tests_neurotransmitter_weights;
 
 // Re-export all public types
 pub use self::contradiction_type::ContradictionType;

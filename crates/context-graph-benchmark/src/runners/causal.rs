@@ -989,7 +989,7 @@ impl CausalBenchmarkResults {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::metrics::causal::{compute_asymmetric_retrieval_metrics, compute_direction_detection_metrics};

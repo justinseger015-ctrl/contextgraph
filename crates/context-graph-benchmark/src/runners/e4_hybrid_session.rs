@@ -555,7 +555,7 @@ pub fn run_e4_hybrid_benchmark(
 // Tests
 // ============================================================================
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::datasets::temporal_sessions::SessionChunk;

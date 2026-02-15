@@ -370,11 +370,22 @@ impl RocksDbTeleologicalStore {
 
         #[cfg(windows)]
         {
+            // L11 FIX: On Windows, we cannot safely probe for live lock holders (no flock).
+            // Log a warning instead of blindly removing — could kill a live process's lock.
+            warn!(
+                "LOCK file at '{}' found on Windows — cannot verify if held by live process. \
+                 Attempting removal (may fail if locked by another process).",
+                lock_path_str
+            );
             Self::try_remove_lock_file(&lock_path, &lock_path_str)
         }
 
         #[cfg(not(any(unix, windows)))]
         {
+            warn!(
+                "LOCK file at '{}' found on unknown OS — attempting removal",
+                lock_path_str
+            );
             Self::try_remove_lock_file(&lock_path, &lock_path_str)
         }
     }
@@ -795,6 +806,39 @@ impl RocksDbTeleologicalStore {
                 "Persisted {} HNSW indexes to CF_HNSW_GRAPHS ({} empty/skipped) in {:?}",
                 persisted, skipped, elapsed
             );
+        }
+
+        Ok(())
+    }
+
+    /// H1/M9 FIX: Check if any HNSW index needs compaction and rebuild if so.
+    ///
+    /// Compaction is triggered when > 25% of vectors in any index are orphaned
+    /// (removed from UUID maps but still consuming memory in usearch graph).
+    /// This rebuilds ALL indexes from CF_FINGERPRINTS, eliminating all orphans.
+    pub fn compact_hnsw_if_needed(&self) -> TeleologicalStoreResult<()> {
+        let mut any_needs_compaction = false;
+        for (embedder, index) in self.index_registry.iter() {
+            if index.needs_compaction() {
+                let removed = index.removed_count();
+                let total = index.usearch_size();
+                info!(
+                    "HNSW compaction needed for {:?}: {removed} orphaned / {total} total ({:.0}%)",
+                    embedder,
+                    (removed as f64 / total as f64) * 100.0
+                );
+                any_needs_compaction = true;
+            }
+        }
+
+        if any_needs_compaction {
+            info!("H1 FIX: Rebuilding all HNSW indexes from CF_FINGERPRINTS to eliminate orphaned vectors");
+            self.rebuild_indexes_from_store()?;
+            // Reset all removed counts after successful rebuild
+            for (_embedder, index) in self.index_registry.iter() {
+                index.reset_removed_count();
+            }
+            info!("HNSW compaction complete — all orphaned vectors eliminated");
         }
 
         Ok(())

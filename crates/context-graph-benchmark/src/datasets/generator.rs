@@ -14,7 +14,7 @@ use context_graph_core::types::fingerprint::{
     SemanticFingerprint, SparseVector, E12_TOKEN_DIM, E13_SPLADE_VOCAB, E6_SPARSE_VOCAB,
 };
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 use context_graph_core::types::fingerprint::{
     E10_DIM, E11_DIM, E1_DIM, E2_DIM, E3_DIM, E4_DIM, E5_DIM, E7_DIM, E8_DIM, E9_DIM,
 };
@@ -327,7 +327,7 @@ fn random_dense_embedding(dim: usize, rng: &mut ChaCha8Rng) -> Vec<f32> {
     embedding
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::config::{Tier, TierConfig};

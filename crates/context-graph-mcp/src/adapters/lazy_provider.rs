@@ -153,28 +153,28 @@ impl MultiArrayEmbeddingProvider for LazyMultiArrayProvider {
     }
 
     fn is_ready(&self) -> bool {
-        // Only ready if loading is complete and succeeded
+        // L1 FIX: Check both loading AND failed flags for honest health reporting.
         if self.loading.load(Ordering::SeqCst) {
             return false;
         }
-        // Can't check failed synchronously, so assume ready if not loading
-        // The actual check happens in embed_all()
+        // Non-blocking check of failure state (returns not-ready if lock contended)
+        if self.failed.try_read().map_or(true, |f| f.is_some()) {
+            return false;
+        }
         true
     }
 
     fn health_status(&self) -> [bool; NUM_EMBEDDERS] {
-        // If loading, all are "not ready"
-        if self.loading.load(Ordering::SeqCst) {
+        // L1 FIX: Report unhealthy when loading OR failed
+        if !self.is_ready() {
             return [false; NUM_EMBEDDERS];
         }
-        // Otherwise, assume healthy (actual check in embed_all)
         [true; NUM_EMBEDDERS]
     }
 }
 
-// Safety: LazyMultiArrayProvider is Send + Sync because all fields are Arc<...>
-unsafe impl Send for LazyMultiArrayProvider {}
-unsafe impl Sync for LazyMultiArrayProvider {}
+// All fields (Arc<RwLock<...>>, Arc<AtomicBool>) are already Send + Sync.
+// Removed manual unsafe impls — compiler auto-trait checking is more reliable.
 
 #[cfg(test)]
 mod tests {

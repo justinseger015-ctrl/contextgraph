@@ -945,40 +945,4 @@ mod tests {
         println!("[VERIFIED] Synthetic scores are correct");
     }
 
-    #[test]
-    fn test_verification_log() {
-        println!("\n=== SPARSE_INDEX.RS VERIFICATION LOG ===\n");
-
-        println!("Configuration:");
-        println!("  - DEFAULT_RECALL_LIMIT: {}", DEFAULT_RECALL_LIMIT);
-        println!("  - MAX_DF_RATIO: {}", MAX_DF_RATIO);
-        println!("  - SPARSE_VOCAB_SIZE: {}", SPARSE_VOCAB_SIZE);
-
-        println!("\nAlgorithm:");
-        println!("  - Stage 1 sparse recall using inverted index");
-        println!("  - Score = Σ(query_weight × doc_weight × IDF_weight)");
-        println!("  - IDF = ln(N / df) for term discrimination");
-        println!("  - Top-K candidates returned sorted by score");
-
-        println!("\nError Types (FAIL FAST):");
-        println!("  - EmptyVector: Cannot index empty sparse vector");
-        println!("  - AlreadyExists: Memory already indexed");
-        println!("  - NotFound: Memory not in index");
-        println!("  - TermOutOfBounds: Invalid term ID");
-        println!("  - LockFailed: Concurrent modification");
-
-        println!("\nPerformance Targets:");
-        println!("  - Recall latency: <5ms");
-        println!("  - Candidate count: up to 10K");
-
-        println!("\nTest Coverage:");
-        println!("  - Basic: 7 tests (index, recall, remove, update, etc.)");
-        println!("  - Scoring: 4 tests (order, limit, empty, no match)");
-        println!("  - Statistics: 2 tests");
-        println!("  - Performance: 1 test");
-        println!("  - Synthetic: 1 test");
-        println!("  - Total: 15 tests");
-
-        println!("\nVERIFICATION COMPLETE");
-    }
 }

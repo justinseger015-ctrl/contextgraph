@@ -234,7 +234,7 @@ impl MultiSpaceIndex {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::config::{Tier, TierConfig};

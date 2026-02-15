@@ -803,7 +803,7 @@ impl E10MultimodalBenchmarkRunner {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

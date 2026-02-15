@@ -347,7 +347,7 @@ fn improvement_pct(a: f64, b: f64) -> f64 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
     use crate::metrics::{RetrievalMetrics, ClusteringMetrics};

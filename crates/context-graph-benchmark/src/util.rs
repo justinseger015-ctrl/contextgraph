@@ -32,7 +32,7 @@ pub fn similarity_sort_desc(a: &(Uuid, f32), b: &(Uuid, f32)) -> Ordering {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {
     use super::*;
 

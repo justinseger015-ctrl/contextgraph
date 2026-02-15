@@ -122,7 +122,7 @@ pub enum EmbedderIndex {
     E6Sparse,
     /// E7: 1536D code (Qodo-Embed)
     E7Code,
-    /// E8: 384D graph
+    /// E8: 1024D graph (e5-large-v2)
     E8Graph,
     /// E9: 1024D HDC (projected)
     E9HDC,
