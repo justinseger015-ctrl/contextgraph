@@ -198,7 +198,7 @@ impl EmbedderEdge {
     /// Per AP-60, temporal embedders should NOT be used for edge type detection.
     #[inline]
     pub fn is_temporal(&self) -> bool {
-        matches!(self.embedder_id, 1 | 2 | 3)
+        matches!(self.embedder_id, 1..=3)
     }
 
     /// Get the adjusted similarity with direction modifier applied.

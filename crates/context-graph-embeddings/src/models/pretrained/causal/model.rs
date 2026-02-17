@@ -34,6 +34,7 @@ pub(crate) struct TrainedState {
 }
 
 /// Internal state for CausalModel weight management.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum ModelState {
     /// Unloaded - no weights in memory.
     Unloaded,

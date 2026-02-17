@@ -232,6 +232,8 @@ mod fail_fast {
 
     // All FAISS functions fail fast with clear errors
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_index_factory(
         _p_index: *mut *mut c_void,
         _d: i32,
@@ -241,6 +243,8 @@ mod fail_fast {
         fail_fast_faiss_call("faiss_index_factory")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_index_cpu_to_gpu(
         _provider: *mut c_void,
         _device: i32,
@@ -250,6 +254,8 @@ mod fail_fast {
         fail_fast_faiss_call("faiss_index_cpu_to_gpu")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, no-op.
     pub unsafe fn faiss_Index_free(_index: *mut c_void) {
         tracing::error!(
             target: "context_graph::faiss",
@@ -257,6 +263,8 @@ mod fail_fast {
         );
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_Index_add_with_ids(
         _index: *mut c_void,
         _n: i64,
@@ -266,6 +274,8 @@ mod fail_fast {
         fail_fast_faiss_call("faiss_Index_add_with_ids")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_Index_search(
         _index: *const c_void,
         _n: i64,
@@ -277,14 +287,20 @@ mod fail_fast {
         fail_fast_faiss_call("faiss_Index_search")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_Index_train(_index: *mut c_void, _n: i64, _x: *const f32) -> i32 {
         fail_fast_faiss_call("faiss_Index_train")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_Index_is_trained(_index: *const c_void) -> i32 {
         fail_fast_faiss_call("faiss_Index_is_trained")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, returns -1 to signal error.
     pub unsafe fn faiss_Index_ntotal(_index: *const c_void) -> i64 {
         tracing::error!(
             target: "context_graph::faiss",
@@ -293,14 +309,20 @@ mod fail_fast {
         -1 // Return -1 to signal error (0 would be confused with empty index)
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_IndexIVF_set_nprobe(_index: *mut c_void, _nprobe: usize) -> i32 {
         fail_fast_faiss_call("faiss_IndexIVF_set_nprobe")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_StandardGpuResources_new(_p_res: *mut *mut c_void) -> i32 {
         fail_fast_faiss_call("faiss_StandardGpuResources_new")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, no-op.
     pub unsafe fn faiss_StandardGpuResources_free(_res: *mut c_void) {
         tracing::error!(
             target: "context_graph::faiss",
@@ -308,6 +330,8 @@ mod fail_fast {
         );
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, returns 0.
     pub unsafe fn faiss_get_num_gpus() -> i32 {
         tracing::warn!(
             target: "context_graph::faiss",
@@ -316,6 +340,8 @@ mod fail_fast {
         0
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_read_index(
         _fname: *const c_char,
         _io_flags: i32,
@@ -324,6 +350,8 @@ mod fail_fast {
         fail_fast_faiss_call("faiss_read_index")
     }
 
+    /// # Safety
+    /// FFI stub - FAISS GPU not available, always returns error.
     pub unsafe fn faiss_write_index(_index: *const c_void, _fname: *const c_char) -> i32 {
         fail_fast_faiss_call("faiss_write_index")
     }

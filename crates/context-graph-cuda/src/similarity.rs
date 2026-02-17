@@ -109,7 +109,7 @@ pub const fn embedder_to_group(embedder_idx: usize) -> Option<DimensionGroup> {
     match embedder_idx {
         0 | 7 | 8 => Some(DimensionGroup::Dim1024),  // E1, E8 (upgraded to 1024D), E9
         4 | 9 | 10 => Some(DimensionGroup::Dim768),  // E5, E10, E11
-        1 | 2 | 3 => Some(DimensionGroup::Dim512),   // E2, E3, E4
+        1..=3 => Some(DimensionGroup::Dim512),   // E2, E3, E4
         6 => Some(DimensionGroup::Dim1536),          // E7
         5 | 11 | 12 => None, // E6 (sparse), E12 (token), E13 (sparse)
         _ => None,

@@ -187,9 +187,8 @@ impl Evaluator {
 
         let mut mrr_sum = 0.0f32;
 
-        for i in 0..n {
+        for (i, &correct_idx) in correct_indices.iter().enumerate().take(n) {
             let row: Vec<f32> = sim_matrix.get(i).map_err(map_candle)?.to_vec1().map_err(map_candle)?;
-            let correct_idx = correct_indices[i];
 
             // Rank: count how many candidates have higher similarity
             let correct_sim = row[correct_idx];
@@ -316,7 +315,7 @@ impl Evaluator {
         let mut pair_idx = 0usize;
         'outer: for i in 0..n {
             for j in (i + 1)..n {
-                if pair_idx % step == 0 {
+                if pair_idx.is_multiple_of(step) {
                     let dot: f32 = vectors[i]
                         .iter()
                         .zip(vectors[j].iter())
@@ -364,7 +363,7 @@ impl Evaluator {
 
         let mut correct = 0usize;
 
-        for i in 0..n {
+        for (i, &expected_idx) in expected_indices.iter().enumerate().take(n) {
             let row: Vec<f32> = sim_matrix
                 .get(i)
                 .map_err(map_candle)?
@@ -377,7 +376,7 @@ impl Evaluator {
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .unwrap_or((0, &0.0));
 
-            if max_idx == expected_indices[i] {
+            if max_idx == expected_idx {
                 correct += 1;
             }
         }

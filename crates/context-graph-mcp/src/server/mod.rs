@@ -147,7 +147,7 @@ impl McpServer {
     ///
     /// * `config` - Server configuration
     /// * `warm_first` - If true, block startup until models are loaded into VRAM (default: true)
-    ///                  If false, models load in background while server starts immediately
+    ///   If false, models load in background while server starts immediately
     ///
     /// # Errors
     ///
@@ -476,7 +476,7 @@ impl McpServer {
         // 2. Ensure CODE_STORE_PATH is set (defaults to db_path/code_store)
         //
         let _code_pipeline_enabled =
-            std::env::var("CODE_PIPELINE_ENABLED").map_or(false, |v| v == "true");
+            std::env::var("CODE_PIPELINE_ENABLED").is_ok_and(|v| v == "true");
 
         // E7-WIRING: Code pipeline components are created but not wired by default.
         // When enabled:
@@ -552,7 +552,7 @@ impl McpServer {
                                         elapsed.as_secs_f64(), e
                                     ));
                                 }
-                                if elapsed.as_millis() < 600 || elapsed.as_secs() % 10 == 0 {
+                                if elapsed.as_millis() < 600 || elapsed.as_secs().is_multiple_of(10) {
                                     info!(
                                         "Waiting for warm provider to be ready ({:.1}s elapsed): {}",
                                         elapsed.as_secs_f64(), e

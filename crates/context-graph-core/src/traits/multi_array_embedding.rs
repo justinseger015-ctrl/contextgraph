@@ -242,6 +242,7 @@ pub enum CausalDirectionHint {
 
 impl CausalDirectionHint {
     /// Parse direction from string.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "cause" | "causes" | "causal" => Self::Cause,
@@ -467,6 +468,7 @@ pub enum MechanismType {
 
 impl MechanismType {
     /// Parse from string (for LLM output parsing).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "direct" => Some(Self::Direct),

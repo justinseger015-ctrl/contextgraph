@@ -488,7 +488,7 @@ use crate::types::fingerprint::SemanticFingerprint;
 /// * `query` - Query fingerprint
 /// * `doc` - Document fingerprint to compare against
 /// * `query_is_cause` - If true, treat query as potential cause (for "why" queries);
-///                      if false, treat query as potential effect (for "what happens" queries)
+///   if false, treat query as potential effect (for "what happens" queries)
 ///
 /// # Returns
 ///
@@ -938,6 +938,7 @@ pub fn detect_causal_query_intent(query: &str) -> CausalDirection {
 ///
 /// Includes match_pos+1 in the window to handle indicators with leading spaces
 /// (e.g., " cause ") where the negation token's trailing space falls at match_pos.
+#[allow(clippy::incompatible_msrv)]
 fn is_negated_at(text: &str, match_pos: usize, negation_tokens: &[&str]) -> bool {
     let window_start = match_pos.saturating_sub(15);
     let window_end = (match_pos + 1).min(text.len());

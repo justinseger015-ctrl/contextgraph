@@ -228,6 +228,7 @@ impl Handlers {
     /// * `causal_discovery_llm` - Shared LLM for inline multi-relationship extraction
     /// * `causal_model` - E5 CausalModel for asymmetric cause/effect embeddings
     #[cfg(feature = "llm")]
+    #[allow(clippy::too_many_arguments)]
     pub fn with_graph_discovery(
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,

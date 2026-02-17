@@ -159,8 +159,10 @@ impl GroundTruthValidator {
     }
 
     fn compute_stats(embedder_gt: &EmbedderGroundTruth) -> GroundTruthStats {
-        let mut stats = GroundTruthStats::default();
-        stats.num_queries = embedder_gt.queries.len();
+        let mut stats = GroundTruthStats {
+            num_queries: embedder_gt.queries.len(),
+            ..Default::default()
+        };
 
         if stats.num_queries == 0 {
             return stats;

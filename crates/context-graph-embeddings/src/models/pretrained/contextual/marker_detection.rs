@@ -403,8 +403,8 @@ pub fn intent_pooling_weights(markers: &ContextMarkerResult, seq_len: usize) -> 
     }
 
     // Boost first few content tokens (subject/action)
-    for i in 1..4.min(seq_len) {
-        weights[i] = 1.5;
+    for weight in weights.iter_mut().take(4.min(seq_len)).skip(1) {
+        *weight = 1.5;
     }
 
     // Boost shift markers (intent transitions are important)
@@ -463,9 +463,9 @@ pub fn context_pooling_weights(markers: &ContextMarkerResult, seq_len: usize) ->
 
     // Boost later tokens (conclusions/outcomes)
     let late_start = seq_len.saturating_sub(5);
-    for i in late_start..seq_len {
-        if weights[i] < 1.5 {
-            weights[i] = 1.5;
+    for weight in weights.iter_mut().take(seq_len).skip(late_start) {
+        if *weight < 1.5 {
+            *weight = 1.5;
         }
     }
 

@@ -93,6 +93,7 @@ impl FailFastSummary {
 }
 
 /// Build standard FAIL FAST test scenarios for sequence tools
+#[allow(clippy::vec_init_then_push)]
 pub fn build_sequence_tool_scenarios() -> Vec<FailFastScenario> {
     let mut scenarios = Vec::new();
 

@@ -133,8 +133,8 @@ impl DatasetGenerator {
         let mut topic_counts = vec![0usize; topics.len()];
 
         // First ensure minimum per topic
-        for i in 0..topics.len() {
-            topic_counts[i] = min_per_topic.min(remaining);
+        for topic_count in topic_counts.iter_mut().take(topics.len()) {
+            *topic_count = min_per_topic.min(remaining);
             remaining = remaining.saturating_sub(min_per_topic);
         }
 

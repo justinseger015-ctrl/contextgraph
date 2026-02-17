@@ -17,7 +17,7 @@ use clap::Parser;
 use context_graph_benchmark::causal_bench::{
     comparison, data_loader, metrics, phases, report,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(name = "causal-embedding-bench")]
@@ -209,7 +209,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_comparison(baseline_path: &PathBuf, tuned_path: &PathBuf) -> anyhow::Result<()> {
+fn run_comparison(baseline_path: &Path, tuned_path: &Path) -> anyhow::Result<()> {
     tracing::info!("Loading baseline: {}", baseline_path.display());
     let baseline = comparison::load_results(baseline_path)?;
 

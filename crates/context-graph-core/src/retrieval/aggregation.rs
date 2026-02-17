@@ -215,8 +215,8 @@ impl AggregationStrategy {
 
         // Convert to results and apply unique boost
         let mut results: Vec<CombinedResult> = contributions
-            .into_iter()
-            .map(|(_, builder)| {
+            .into_values()
+            .map(|builder| {
                 let mut result = builder.build();
 
                 // Apply unique boost if found by only one embedder

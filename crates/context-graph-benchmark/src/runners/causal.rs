@@ -380,7 +380,7 @@ impl CausalBenchmarkRunner {
             // Target gets higher base but NOT guaranteed highest
             // Other same-domain pairs can sometimes beat target
             // Use sin for proper noise distribution instead of modulo
-            let noise = (idx as f32 * 2.718 + pair.strength * 3.14159).sin() * 0.15;
+            let noise = (idx as f32 * std::f32::consts::E + pair.strength * std::f32::consts::PI).sin() * 0.15;
             let base_sim = if pair.domain == target_pair.domain {
                 if pair.id == target_pair.id {
                     // Target: 0.70-0.85 (competitive with same-domain)
@@ -574,7 +574,7 @@ impl CausalBenchmarkRunner {
                 // Simulate retrieval: for each hop, we need to find the next effect
                 // Score correct next pair vs random distractors
                 // Use sin for proper noise distribution
-                let noise = (hop_idx as f32 * 2.718 + chain.id as f32 * 1.414).sin() * 0.25;
+                let noise = (hop_idx as f32 * std::f32::consts::E + chain.id as f32 * 1.414).sin() * 0.25;
 
                 // Correct next hop gets higher similarity (but not guaranteed)
                 let sim_correct = 0.65 + (current_pair.strength + next_pair.strength) * 0.1 + noise;
@@ -635,7 +635,7 @@ impl CausalBenchmarkRunner {
                     // Earlier causes should have higher "causal potential"
                     // based on their content and context
                     // Use sin/cos for proper noise distribution
-                    let seed = (idx as f32 * 2.718 + chain.id as f32 * 3.14159).sin();
+                    let seed = (idx as f32 * std::f32::consts::E + chain.id as f32 * std::f32::consts::PI).sin();
                     let noise = seed * 0.25; // Noise range: -0.25 to +0.25
 
                     // Score based on position in chain (earlier = more causal)

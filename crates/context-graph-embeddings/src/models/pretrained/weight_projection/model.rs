@@ -346,7 +346,7 @@ impl LearnedWeightProjection {
             message: format!("Tensor '{}' not found in weights file: {}", name, e),
         })?;
 
-        let shape: Vec<usize> = view.shape().iter().map(|&d| d).collect();
+        let shape: Vec<usize> = view.shape().to_vec();
         let data: Vec<f32> = view
             .data()
             .chunks(4)

@@ -336,7 +336,7 @@ impl TemporalRealdataBenchmarkRunner {
 
             results.push(DirectionQueryResult {
                 query_id: query.id,
-                direction: query.direction.clone(),
+                direction: query.direction,
                 retrieved_ids,
                 expected_ids: query.expected_ids.iter().cloned().collect(),
                 expected_order: query.expected_order.clone(),
@@ -413,7 +413,7 @@ impl TemporalRealdataBenchmarkRunner {
 
             results.push(OrderingResult {
                 query_id: query.id,
-                direction: query.direction.clone(),
+                direction: query.direction,
                 retrieved_order,
                 expected_order: query.expected_order.clone(),
             });

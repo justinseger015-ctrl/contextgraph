@@ -287,7 +287,7 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
 
     async fn index_file_fingerprint(&self, file_path: &str, fingerprint_id: Uuid) -> CoreResult<()> {
         // Proper implementation: maintain file_index DashMap
-        let mut entry = self.file_index.entry(file_path.to_string()).or_insert_with(Vec::new);
+        let mut entry = self.file_index.entry(file_path.to_string()).or_default();
         if !entry.contains(&fingerprint_id) {
             entry.push(fingerprint_id);
         }
@@ -484,7 +484,7 @@ impl TeleologicalMemoryStore for InMemoryTeleologicalStore {
         // Update secondary index
         self.causal_by_source
             .entry(relationship.source_fingerprint_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id);
 
         Ok(id)

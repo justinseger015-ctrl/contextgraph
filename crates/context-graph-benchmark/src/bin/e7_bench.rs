@@ -97,7 +97,7 @@ fn run_iou_benchmark() {
     println!("\n  IoU@K Performance (simulated retrieval):");
 
     let ground_truth_code = "pub async fn embed_text(&self, text: &str) -> Result<Vec<f32>> { self.model.forward(text) }";
-    let retrieved_chunks = vec![
+    let retrieved_chunks = [
         ("pub async fn embed(&self, input: &str) -> Result<Vec<f32>> { self.encoder.forward(input) }", "High similarity"),
         ("fn embed_text(text: String) -> Vec<f32> { text.chars().map(|c| c as f32).collect() }", "Same name, diff impl"),
         ("pub fn process_text(s: &str) -> String { s.to_uppercase() }", "Low overlap"),

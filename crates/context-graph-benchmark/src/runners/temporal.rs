@@ -355,8 +355,8 @@ impl TemporalBenchmarkRunner {
                 .memories
                 .iter()
                 .map(|m| {
-                    let hour_diff = ((m.hour as i16 - query.target_hour as i16).abs() as u8).min(
-                        24 - ((m.hour as i16 - query.target_hour as i16).abs() as u8),
+                    let hour_diff = (m.hour as i16 - query.target_hour as i16).unsigned_abs().min(
+                        24 - (m.hour as i16 - query.target_hour as i16).unsigned_abs(),
                     );
                     let hour_score = 1.0 - (hour_diff as f64 / 12.0);
                     (m, hour_score)
@@ -1275,8 +1275,8 @@ fn compute_periodic_data(dataset: &TemporalBenchmarkDataset) -> PeriodicBenchmar
             .memories
             .iter()
             .map(|m| {
-                let hour_diff = ((m.hour as i16 - query.target_hour as i16).abs() as u8)
-                    .min(24 - ((m.hour as i16 - query.target_hour as i16).abs() as u8));
+                let hour_diff = (m.hour as i16 - query.target_hour as i16).unsigned_abs()
+                    .min(24 - (m.hour as i16 - query.target_hour as i16).unsigned_abs());
                 let score = 1.0 - (hour_diff as f64 / 12.0);
                 (m, score)
             })

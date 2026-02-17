@@ -545,7 +545,7 @@ pub fn update_matrix_incremental(
             break; // Safety check
         }
 
-        let result = comparator.compare(*existing_fp, new_fp).map_err(|e| {
+        let result = comparator.compare(existing_fp, new_fp).map_err(|e| {
             ClusterError::invalid_parameter(format!(
                 "Failed to compare fingerprint with new memory {}: {}",
                 new_id, e

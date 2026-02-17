@@ -436,7 +436,7 @@ pub fn _string_to_entity_type(s: &str) -> EntityType {
 }
 
 /// Entities grouped by type.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct EntityByType {
     #[serde(rename = "ProgrammingLanguage", skip_serializing_if = "Vec::is_empty")]
     pub programming_language: Vec<EntityLinkDto>,
@@ -460,19 +460,6 @@ pub struct EntityByType {
     pub unknown: Vec<EntityLinkDto>,
 }
 
-impl Default for EntityByType {
-    fn default() -> Self {
-        Self {
-            programming_language: Vec::new(),
-            framework: Vec::new(),
-            database: Vec::new(),
-            cloud: Vec::new(),
-            company: Vec::new(),
-            technical_term: Vec::new(),
-            unknown: Vec::new(),
-        }
-    }
-}
 
 // ============================================================================
 // SEARCH_BY_ENTITIES DTOs

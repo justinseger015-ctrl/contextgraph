@@ -25,7 +25,7 @@
 //! ```
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
 
@@ -144,7 +144,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn load_intent_context_pairs(data_dir: &PathBuf) -> anyhow::Result<Vec<IntentContextPair>> {
+fn load_intent_context_pairs(data_dir: &Path) -> anyhow::Result<Vec<IntentContextPair>> {
     let file_path = data_dir.join("intent_context_pairs.jsonl");
 
     if !file_path.exists() {
@@ -276,7 +276,7 @@ fn run_tuning(pairs: &[IntentContextPair], args: &Args) -> anyhow::Result<()> {
         num_pairs: pairs.len(),
         bootstrap_samples: args.bootstrap_samples,
         seed: args.seed,
-        simulated: args.simulated || true, // Always simulated for now
+        simulated: true, // Always simulated for now
         results: results.clone(),
         best_config: best.clone(),
         default_config: default.clone(),
@@ -353,7 +353,7 @@ fn evaluate_modifiers(
     let mut ranks: Vec<f64> = Vec::new();
     let mut hits_at_1 = 0;
 
-    for (_i, (query, relevant, irrelevant)) in embeddings.iter().enumerate() {
+    for (query, relevant, irrelevant) in embeddings.iter() {
         // Query intent vs document context (intent→context direction)
         let sim_relevant = compute_modified_similarity(
             &query.as_intent,

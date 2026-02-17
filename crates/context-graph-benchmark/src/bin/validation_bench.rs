@@ -92,7 +92,7 @@ pub struct LatencyOverhead {
 ///
 /// # Arguments
 /// * `valid_anchor_id` - A valid anchor ID that exists in storage (for hops tests).
-///                       If None, hops tests will use a random UUID that doesn't exist.
+///   If None, hops tests will use a random UUID that doesn't exist.
 fn build_test_cases(valid_anchor_id: Option<&str>) -> Vec<TestCase> {
     let mut cases = Vec::new();
 

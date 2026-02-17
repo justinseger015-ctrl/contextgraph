@@ -198,7 +198,7 @@ impl ConfigValidator {
         ).with_priority(CheckPriority::Critical);
 
         // Verify correct embedders
-        let expected = vec![
+        let expected = [
             EmbedderName::E1Semantic,
             EmbedderName::E5Causal,
             EmbedderName::E6Sparse,
@@ -226,7 +226,7 @@ impl ConfigValidator {
             "Temporal embedders = 3 (E2, E3, E4)",
         ).with_priority(CheckPriority::Critical);
 
-        let expected = vec![
+        let expected = [
             EmbedderName::E2Recency,
             EmbedderName::E3Periodic,
             EmbedderName::E4Sequence,
@@ -250,7 +250,7 @@ impl ConfigValidator {
             "Relational embedders = 2 (E8, E11)",
         ).with_priority(CheckPriority::High);
 
-        let expected = vec![EmbedderName::E8Graph, EmbedderName::E11Entity];
+        let expected = [EmbedderName::E8Graph, EmbedderName::E11Entity];
         let all_correct = expected.iter().all(|e| relational.contains(e));
 
         if count == 2 && all_correct {
@@ -269,7 +269,7 @@ impl ConfigValidator {
             "Structural embedders = 1 (E9)",
         ).with_priority(CheckPriority::High);
 
-        let expected = vec![EmbedderName::E9HDC];
+        let expected = [EmbedderName::E9HDC];
         let all_correct = expected.iter().all(|e| structural.contains(e));
 
         if count == 1 && all_correct {
@@ -288,7 +288,7 @@ impl ConfigValidator {
             "Asymmetric embedders = 3 (E5, E8, E10)",
         ).with_priority(CheckPriority::High);
 
-        let expected = vec![
+        let expected = [
             EmbedderName::E5Causal,
             EmbedderName::E8Graph,
             EmbedderName::E10Multimodal,

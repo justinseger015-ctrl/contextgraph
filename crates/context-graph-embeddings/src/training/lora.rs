@@ -106,7 +106,7 @@ impl LoraAdapter {
         let a_data: Vec<f32> = (0..hidden_size * rank)
             .map(|i| {
                 // Deterministic pseudo-random based on position
-                let x = ((i as f32 * 0.618033988 + 0.31415926) % 1.0) * 2.0 - 1.0;
+                let x = ((i as f32 * 0.618_034 + 0.31415926) % 1.0) * 2.0 - 1.0;
                 x * std_dev
             })
             .collect();

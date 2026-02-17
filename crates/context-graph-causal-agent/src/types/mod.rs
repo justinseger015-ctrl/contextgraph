@@ -171,6 +171,7 @@ pub enum MechanismType {
 
 impl MechanismType {
     /// Convert from string (for parsing LLM output).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "direct" => Some(Self::Direct),
@@ -272,6 +273,7 @@ pub enum SpanType {
 
 impl SpanType {
     /// Parse from string representation.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "cause" => Self::Cause,
@@ -440,6 +442,7 @@ pub enum CausalLinkDirection {
 
 impl CausalLinkDirection {
     /// Parse from LLM response string.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let lower = s.to_lowercase();
         if lower.contains("a_causes_b") || lower.contains("a causes b") || lower == "forward" {

@@ -481,15 +481,15 @@ impl E1SemanticBenchmarkRunner {
 
             let query_results: Vec<(Vec<Uuid>, HashSet<Uuid>)> = type_queries
                 .iter()
-                .filter_map(|query| {
+                .map(|query| {
                     let relevant = query.relevant_docs.clone();
                     // Skip OffTopic if no relevant docs expected
                     if relevant.is_empty() && query_type == SemanticQueryType::OffTopic {
                         // For off-topic, we expect no matches, so treat as success if we don't retrieve many
-                        return Some((vec![], HashSet::new()));
+                        return (vec![], HashSet::new());
                     }
                     let retrieved = self.simulate_retrieval(documents, &relevant, embeddings);
-                    Some((retrieved, relevant))
+                    (retrieved, relevant)
                 })
                 .collect();
 
@@ -547,12 +547,12 @@ impl E1SemanticBenchmarkRunner {
         // In production, this would use all 13 embedders via RRF fusion
         // Here we estimate based on best enhancement effect
         let best_enhancement = e1_e5_mrr.unwrap_or(e1_only_mrr).max(e1_e7_mrr.unwrap_or(e1_only_mrr));
-        let full_multispace_mrr = Some((e1_only_mrr + best_enhancement) / 2.0 * 1.05); // ~5% boost from fusion
+        let full_multispace_mrr = (e1_only_mrr + best_enhancement) / 2.0 * 1.05; // ~5% boost from fusion
 
         // Step 5: Determine if E1 is truly the best foundation
         // E1 is best foundation if E1-only is at least 50% of best enhanced score
         // (per Constitution ARCH-12: E1 is semantic foundation, others enhance)
-        let best_mrr = full_multispace_mrr.unwrap_or(e1_only_mrr);
+        let best_mrr = full_multispace_mrr;
         let e1_is_best_foundation = e1_only_mrr >= best_mrr * 0.5;
 
         // Step 6: Compute enhancement percentages
@@ -569,11 +569,9 @@ impl E1SemanticBenchmarkRunner {
                 enhancements.insert("E7_code".to_string(), improvement);
             }
         }
-        if let Some(full_mrr) = full_multispace_mrr {
-            if e1_only_mrr > 0.0 {
-                let improvement = (full_mrr - e1_only_mrr) / e1_only_mrr * 100.0;
-                enhancements.insert("full_multispace".to_string(), improvement);
-            }
+        if e1_only_mrr > 0.0 {
+            let improvement = (full_multispace_mrr - e1_only_mrr) / e1_only_mrr * 100.0;
+            enhancements.insert("full_multispace".to_string(), improvement);
         }
 
         E1AblationMetrics {
@@ -581,7 +579,7 @@ impl E1SemanticBenchmarkRunner {
             e1_e5_mrr,
             e1_e7_mrr,
             e1_all_semantic_mrr: None, // Would require E10, E12, E13 embeddings
-            full_multispace_mrr,
+            full_multispace_mrr: Some(full_multispace_mrr),
             e1_is_best_foundation,
             enhancements,
         }

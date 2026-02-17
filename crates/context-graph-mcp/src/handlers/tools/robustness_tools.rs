@@ -200,21 +200,19 @@ impl Handlers {
         // For memories found by E9 but not E1, we need to compute their E1 score too
         for cand in &e9_candidates {
             let mem_id = cand.fingerprint.id;
-            if !e1_scores.contains_key(&mem_id) {
+            e1_scores.entry(mem_id).or_insert_with(|| {
                 let cand_e1 = &cand.fingerprint.semantic.e1_semantic;
-                let e1_sim = cosine_similarity(query_e1, cand_e1);
-                e1_scores.insert(mem_id, e1_sim);
-            }
+                cosine_similarity(query_e1, cand_e1)
+            });
         }
 
         // Similarly, compute E9 scores for E1-found memories not in E9 results
         for cand in &e1_candidates {
             let mem_id = cand.fingerprint.id;
-            if !e9_scores.contains_key(&mem_id) {
+            e9_scores.entry(mem_id).or_insert_with(|| {
                 let cand_e9 = &cand.fingerprint.semantic.e9_hdc;
-                let e9_sim = cosine_similarity(query_e9, cand_e9);
-                e9_scores.insert(mem_id, e9_sim);
-            }
+                cosine_similarity(query_e9, cand_e9)
+            });
         }
 
         // Identify blind spots: high E9 + low E1

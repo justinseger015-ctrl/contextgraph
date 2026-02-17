@@ -134,7 +134,7 @@ impl TemporalPositionalModel {
     ///
     /// # Arguments
     /// * `hybrid` - If true, uses session_signature || position_encoding.
-    ///              If false, uses legacy full positional encoding.
+    ///   If false, uses legacy full positional encoding.
     #[must_use]
     pub fn with_hybrid_mode(hybrid: bool) -> Self {
         Self {

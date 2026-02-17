@@ -127,9 +127,9 @@ impl RealDataBenchRunner {
     pub fn embed_dataset(&mut self) -> Result<&EmbeddedDataset, RealDataError> {
         #[cfg(not(feature = "real-embeddings"))]
         {
-            return Err(RealDataError::EmbedError(
+            Err(RealDataError::EmbedError(
                 "Real embeddings require 'real-embeddings' feature flag to be enabled".to_string(),
-            ));
+            ))
         }
 
         #[cfg(feature = "real-embeddings")]
@@ -156,7 +156,7 @@ impl RealDataBenchRunner {
         let embedded = self
             .embedded
             .as_ref()
-            .ok_or_else(|| RealDataError::NotEmbedded)?;
+            .ok_or(RealDataError::NotEmbedded)?;
 
         // Build indexes
         let fingerprints: Vec<(Uuid, &SemanticFingerprint)> = embedded

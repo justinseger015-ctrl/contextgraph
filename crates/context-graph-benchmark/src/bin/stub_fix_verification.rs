@@ -167,15 +167,15 @@ async fn main() -> anyhow::Result<()> {
     println!("=== Stub Fix Verification Benchmark ===\n");
     println!("Verifying 7 stub fixes are working correctly...\n");
 
-    let mut results = Vec::new();
-
     // Run all verification tests
-    results.push(test_faiss_ntotal_error_signal());
-    results.push(test_index_stats_accuracy());
-    results.push(test_include_all_scores());
-    results.push(test_ablation_real_measurements());
-    results.push(test_test_mode_feature_pattern());
-    results.push(test_causal_discovery_skips_failures());
+    let results = vec![
+        test_faiss_ntotal_error_signal(),
+        test_index_stats_accuracy(),
+        test_include_all_scores(),
+        test_ablation_real_measurements(),
+        test_test_mode_feature_pattern(),
+        test_causal_discovery_skips_failures(),
+    ];
 
     // Print results
     let mut all_passed = true;

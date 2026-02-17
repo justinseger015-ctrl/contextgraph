@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Used to adjust E7 Code embedder similarity computation
 /// based on whether the query is actual code or natural language.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum CodeQueryType {
     /// Query is actual code syntax (e.g., "fn process_batch<T>", "impl Iterator")
     ///
@@ -44,6 +44,7 @@ pub enum CodeQueryType {
     ///
     /// For non-code queries, E7 similarity should have reduced weight
     /// since the Code embedder is not optimized for general text.
+    #[default]
     NonCode,
 }
 
@@ -61,12 +62,6 @@ impl CodeQueryType {
             Self::Text2Code => "text2code",
             Self::NonCode => "non-code",
         }
-    }
-}
-
-impl Default for CodeQueryType {
-    fn default() -> Self {
-        Self::NonCode
     }
 }
 

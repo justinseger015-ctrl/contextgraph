@@ -118,7 +118,7 @@ fn is_soft_deleted_sync(soft_deleted: &Arc<DashMap<Uuid, i64>>, id: &Uuid) -> bo
 /// the embedder's HNSW index. Returns None for non-HNSW embedders (E6=5, E12=11, E13=12).
 ///
 /// CRIT-06: This mapping is the single source of truth for embedder -> query vector routing.
-fn get_query_vector_for_embedder<'a>(query: &'a SemanticFingerprint, embedder_idx: usize) -> Option<&'a [f32]> {
+fn get_query_vector_for_embedder(query: &SemanticFingerprint, embedder_idx: usize) -> Option<&[f32]> {
     match embedder_idx {
         0 => Some(&query.e1_semantic),              // E1 Semantic
         1 => Some(&query.e2_temporal_recent),       // E2 Temporal Recent
@@ -831,7 +831,7 @@ fn search_pipeline_sync(
 
     // E13 SPLADE sparse recall
     if !query.e13_splade.is_empty() {
-        match search_sparse_sync(&**db, &query.e13_splade, recall_k, soft_deleted, total_doc_count) {
+        match search_sparse_sync(db, &query.e13_splade, recall_k, soft_deleted, total_doc_count) {
             Ok(sparse_results) => {
                 let sparse_count = sparse_results.len();
                 candidate_ids.extend(sparse_results.into_iter().map(|(id, _)| id));
@@ -1493,7 +1493,7 @@ impl RocksDbTeleologicalStore {
                         indices[0]
                     );
                     return search_single_embedder_sync(
-                        &db, &index_registry, &soft_deleted, &query_clone, &options_clone,
+                        &db, &index_registry, &soft_deleted, query_clone, &options_clone,
                         indices[0],
                     );
                 } else {
@@ -1503,7 +1503,7 @@ impl RocksDbTeleologicalStore {
                         indices
                     );
                     return search_filtered_multi_space_sync(
-                        &db, &index_registry, &soft_deleted, &query_clone, &options_clone,
+                        &db, &index_registry, &soft_deleted, query_clone, &options_clone,
                         indices,
                     );
                 }
@@ -1512,10 +1512,10 @@ impl RocksDbTeleologicalStore {
             // Standard strategy-based dispatch when no specific embedders requested
             match options_clone.strategy {
                 SearchStrategy::E1Only => {
-                    search_e1_only_sync(&db, &index_registry, &soft_deleted, &query_clone, &options_clone)
+                    search_e1_only_sync(&db, &index_registry, &soft_deleted, query_clone, &options_clone)
                 }
                 SearchStrategy::MultiSpace => {
-                    search_multi_space_sync(&db, &index_registry, &soft_deleted, &query_clone, &options_clone)
+                    search_multi_space_sync(&db, &index_registry, &soft_deleted, query_clone, &options_clone)
                 }
                 SearchStrategy::Pipeline => {
                     warn!(
@@ -1566,7 +1566,7 @@ impl RocksDbTeleologicalStore {
     /// session_sequence from SourceMetadata for accurate before/after filtering.
     async fn apply_full_temporal_boosts(
         &self,
-        results: &mut Vec<TeleologicalSearchResult>,
+        results: &mut [TeleologicalSearchResult],
         query: &SemanticFingerprint,
         options: &TeleologicalSearchOptions,
     ) -> CoreResult<()> {
@@ -1743,7 +1743,7 @@ impl RocksDbTeleologicalStore {
 
         // Move synchronous RocksDB I/O to blocking thread pool
         tokio::task::spawn_blocking(move || {
-            search_sparse_sync(&*db, &sparse_query, top_k, &soft_deleted, total_doc_count)
+            search_sparse_sync(&db, &sparse_query, top_k, &soft_deleted, total_doc_count)
         })
         .await
         .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))?

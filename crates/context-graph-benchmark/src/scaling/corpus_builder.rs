@@ -103,6 +103,7 @@ pub struct IncrementalCorpusBuilder {
 impl IncrementalCorpusBuilder {
     /// Create a new incremental builder.
     pub fn new(seed: u64, total_items: usize, chunk_size: usize) -> Self {
+        #[allow(clippy::manual_div_ceil)]
         let total_chunks = (total_items + chunk_size - 1) / chunk_size;
 
         Self {

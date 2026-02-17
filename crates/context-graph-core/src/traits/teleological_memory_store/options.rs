@@ -827,13 +827,13 @@ impl TemporalSearchOptions {
         self.decay_function.is_active()
             || self.periodic_options.is_some()
             || self.sequence_options.is_some()
-            || self.time_window.as_ref().map_or(false, |w| w.is_defined())
+            || self.time_window.as_ref().is_some_and(|w| w.is_defined())
             || self.session_id.is_some()
     }
 
     /// Check if time window filtering is active.
     pub fn has_time_filter(&self) -> bool {
-        self.time_window.as_ref().map_or(false, |w| w.is_defined())
+        self.time_window.as_ref().is_some_and(|w| w.is_defined())
             || self.session_id.is_some()
     }
 

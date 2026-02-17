@@ -342,7 +342,7 @@ pub fn compute_iou_at_k(retrieved_chunks: &[&str], ground_truth: &str, k: usize)
     let combined: String = retrieved_chunks
         .iter()
         .take(k)
-        .map(|s| *s)
+        .copied()
         .collect::<Vec<_>>()
         .join("\n");
 

@@ -68,11 +68,13 @@ impl Handlers {
         };
 
         // Build search options - use E1Only strategy for base search
-        let mut options = TeleologicalSearchOptions::default();
-        options.top_k = params.top_k * 2; // Over-fetch for temporal reranking
-        options.min_similarity = params.min_similarity;
-        options.strategy = SearchStrategy::E1Only;
-        options.include_content = params.include_content;
+        let options = TeleologicalSearchOptions {
+            top_k: params.top_k * 2, // Over-fetch for temporal reranking
+            min_similarity: params.min_similarity,
+            strategy: SearchStrategy::E1Only,
+            include_content: params.include_content,
+            ..Default::default()
+        };
 
         // Run base semantic search
         let results = match self
@@ -264,11 +266,13 @@ impl Handlers {
         };
 
         // Build search options - use E1Only strategy for base search
-        let mut options = TeleologicalSearchOptions::default();
-        options.top_k = params.top_k * 2; // Over-fetch for periodic reranking
-        options.min_similarity = params.min_similarity;
-        options.strategy = SearchStrategy::E1Only;
-        options.include_content = params.include_content;
+        let options = TeleologicalSearchOptions {
+            top_k: params.top_k * 2, // Over-fetch for periodic reranking
+            min_similarity: params.min_similarity,
+            strategy: SearchStrategy::E1Only,
+            include_content: params.include_content,
+            ..Default::default()
+        };
 
         // Run base semantic search
         let results = match self

@@ -92,6 +92,7 @@ impl GraphDirection {
     }
 
     /// Convert from string representation.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "source" => Self::Source,
@@ -401,7 +402,7 @@ use crate::types::fingerprint::SemanticFingerprint;
 /// * `query` - Query fingerprint
 /// * `doc` - Document fingerprint to compare against
 /// * `query_is_source` - If true, treat query as potential source (for "what imports X" queries);
-///                       if false, treat query as potential target (for "what does X import" queries)
+///   if false, treat query as potential target (for "what does X import" queries)
 ///
 /// # Returns
 ///

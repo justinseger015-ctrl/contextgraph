@@ -440,9 +440,9 @@ impl E6SparseDatasetGenerator {
                 let query_text = query_template.replace("{keyword}", keyword);
 
                 let query_id = self.next_uuid();
-                let expected = keyword_docs.get(&keyword.to_string()).cloned().unwrap_or_default();
+                let expected = keyword_docs.get(keyword).cloned().unwrap_or_default();
                 let anti = keyword_anti_docs
-                    .get(&keyword.to_string())
+                    .get(keyword)
                     .cloned()
                     .unwrap_or_default();
 

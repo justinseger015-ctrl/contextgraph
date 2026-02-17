@@ -222,7 +222,7 @@ impl RocksDbTeleologicalStore {
                 .map_err(|e| CoreError::StorageError(format!("CF_SYSTEM not found: {e}")))?;
             let sd_key = soft_delete_key(&id);
             self.db
-                .put_cf(cf_system, sd_key.as_bytes(), &now_millis.to_be_bytes())
+                .put_cf(cf_system, sd_key.as_bytes(), now_millis.to_be_bytes())
                 .map_err(|e| {
                     CoreError::StorageError(format!(
                         "Failed to persist soft-delete marker for {}: {}",

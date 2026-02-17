@@ -152,7 +152,7 @@ impl Handlers {
         }
 
         let importance = match args.get("importance").and_then(|v| v.as_f64()) {
-            Some(v) if v < 0.0 || v > 1.0 => {
+            Some(v) if !(0.0..=1.0).contains(&v) => {
                 return self.tool_error(
                     id,
                     &format!("importance must be between 0.0 and 1.0, got {}", v),
@@ -550,7 +550,7 @@ impl Handlers {
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0) as f32;
 
-        if min_similarity < 0.0 || min_similarity > 1.0 {
+        if !(0.0..=1.0).contains(&min_similarity) {
             return self.tool_error(
                 id,
                 &format!(
@@ -839,7 +839,7 @@ impl Handlers {
             "cause" => CausalDirection::Cause,
             "effect" => CausalDirection::Effect,
             "none" => CausalDirection::Unknown,
-            "auto" | _ => detect_causal_query_intent(query),
+            _ => detect_causal_query_intent(query),
         };
 
         // Log causal detection for debugging/monitoring
@@ -977,8 +977,7 @@ impl Handlers {
 
         // Apply periodic boost if configured
         if let Some(weight) = periodic_boost {
-            let mut periodic = context_graph_core::traits::PeriodicOptions::default();
-            periodic.weight = weight;
+            let mut periodic = context_graph_core::traits::PeriodicOptions { weight, ..Default::default() };
             if let Some(hour) = target_hour {
                 periodic.target_hour = Some(hour);
             }

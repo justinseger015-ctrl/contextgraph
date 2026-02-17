@@ -335,6 +335,7 @@ pub fn self_attention_forward(
 ///   V_final = V_base + reshape(LoRA_V(hidden_flat))
 ///
 /// Used during training only — inference uses the base `self_attention_forward()`.
+#[allow(clippy::too_many_arguments)]
 pub fn self_attention_forward_with_lora(
     hidden_states: &Tensor,
     attention: &NomicAttentionWeights,

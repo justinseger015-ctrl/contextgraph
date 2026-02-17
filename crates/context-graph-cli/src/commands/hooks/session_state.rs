@@ -122,9 +122,9 @@ pub enum CoherenceState {
     /// Good coherence (>= 0.5)
     Aware,
     /// Low coherence (>= 0.2)
-    DIM,
+    Dim,
     /// Very low coherence (< 0.2)
-    DOR,
+    Dor,
 }
 
 impl CoherenceState {
@@ -133,8 +133,8 @@ impl CoherenceState {
         match level {
             l if l >= 0.8 => Self::Active,
             l if l >= 0.5 => Self::Aware,
-            l if l >= 0.2 => Self::DIM,
-            _ => Self::DOR,
+            l if l >= 0.2 => Self::Dim,
+            _ => Self::Dor,
         }
     }
 
@@ -143,8 +143,8 @@ impl CoherenceState {
         match self {
             Self::Active => "Active",
             Self::Aware => "Aware",
-            Self::DIM => "DIM",
-            Self::DOR => "DOR",
+            Self::Dim => "DIM",
+            Self::Dor => "DOR",
         }
     }
 }

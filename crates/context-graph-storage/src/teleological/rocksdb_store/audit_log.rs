@@ -72,7 +72,7 @@ impl RocksDbTeleologicalStore {
         // Atomic batch write: primary record + secondary index
         let mut batch = rocksdb::WriteBatch::default();
         batch.put_cf(cf_log, primary_key, &bytes);
-        batch.put_cf(cf_target, target_key, &primary_key);
+        batch.put_cf(cf_target, target_key, primary_key);
 
         self.db.write(batch).map_err(|e| {
             error!(
@@ -161,7 +161,7 @@ impl RocksDbTeleologicalStore {
                                 CF_AUDIT_LOG, e
                             );
                             TeleologicalStoreError::Deserialization {
-                                key: format!("audit_log:{}", hex_encode(&*primary_key_bytes)),
+                                key: format!("audit_log:{}", hex_encode(&primary_key_bytes)),
                                 message: format!("Audit record deserialization failed: {}", e),
                             }
                         })?;
@@ -266,7 +266,7 @@ impl RocksDbTeleologicalStore {
                     CF_AUDIT_LOG, e
                 );
                 TeleologicalStoreError::Deserialization {
-                    key: format!("audit_log:{}", hex_encode(&*key)),
+                    key: format!("audit_log:{}", hex_encode(&key)),
                     message: format!("Audit record deserialization failed: {}", e),
                 }
             })?;

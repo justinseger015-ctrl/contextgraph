@@ -158,9 +158,7 @@ fn format_json(results: &EmbedderImpactResults) -> anyhow::Result<String> {
 fn format_table(results: &EmbedderImpactResults) -> String {
     let mut out = String::new();
 
-    out.push_str(&format!(
-        "\n=== Embedder Impact Benchmark Results ===\n"
-    ));
+    out.push_str("\n=== Embedder Impact Benchmark Results ===\n");
     out.push_str(&format!(
         "Duration: {}ms | Tiers: {:?}\n\n",
         results.metadata.duration_ms,
@@ -247,7 +245,7 @@ fn format_table(results: &EmbedderImpactResults) -> String {
                     ));
                 }
             }
-            out.push_str("\n");
+            out.push('\n');
         }
 
         // E5 Causal Embedder Analysis
@@ -350,7 +348,7 @@ fn format_markdown(results: &EmbedderImpactResults) -> String {
                 critical
             ));
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Enhancement table
         out.push_str("### Enhancement Impact (E1 + each embedder)\n\n");
@@ -369,7 +367,7 @@ fn format_markdown(results: &EmbedderImpactResults) -> String {
                 delta.improvement_pct
             ));
         }
-        out.push_str("\n");
+        out.push('\n');
 
         // Blind spots
         if let Some(ref blind) = tier_results.blind_spots {
@@ -391,7 +389,7 @@ fn format_markdown(results: &EmbedderImpactResults) -> String {
                     ));
                 }
             }
-            out.push_str("\n");
+            out.push('\n');
         }
 
         // E5 Causal Embedder Analysis

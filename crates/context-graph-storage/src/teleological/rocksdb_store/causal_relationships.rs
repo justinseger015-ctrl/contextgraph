@@ -114,7 +114,7 @@ impl RocksDbTeleologicalStore {
         let idx_key = causal_by_source_key(&relationship.source_fingerprint_id);
 
         // Read current index list
-        let mut causal_ids: Vec<Uuid> = match self.db.get_cf(cf_idx, &idx_key) {
+        let mut causal_ids: Vec<Uuid> = match self.db.get_cf(cf_idx, idx_key) {
             Ok(Some(bytes)) => serde_json::from_slice(&bytes).map_err(|e| {
                 error!(
                     "CAUSAL ERROR: Failed to deserialize causal_by_source for {}: {}",
@@ -149,8 +149,8 @@ impl RocksDbTeleologicalStore {
 
         // Write both atomically
         let mut batch = rocksdb::WriteBatch::default();
-        batch.put_cf(cf_rel, &rel_key, &serialized);
-        batch.put_cf(cf_idx, &idx_key, &idx_serialized);
+        batch.put_cf(cf_rel, rel_key, &serialized);
+        batch.put_cf(cf_idx, idx_key, &idx_serialized);
 
         self.db.write(batch).map_err(|e| {
             error!(
@@ -649,7 +649,7 @@ impl RocksDbTeleologicalStore {
     /// # Arguments
     /// * `query_embedding` - E8 1024D query embedding
     /// * `search_sources` - If true, query as target, search source vectors
-    ///                     If false, query as source, search target vectors
+    ///   If false, query as source, search target vectors
     /// * `top_k` - Number of results
     ///
     /// # Returns
@@ -799,6 +799,7 @@ impl RocksDbTeleologicalStore {
     ///
     /// # Returns
     /// Vector of CausalSearchResult with per-embedder scores and consensus metrics.
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_causal_multi_embedder(
         &self,
         e1_embedding: &[f32],
@@ -1014,10 +1015,10 @@ impl RocksDbTeleologicalStore {
         let mut batch = rocksdb::WriteBatch::default();
 
         // 1. Delete from primary CF
-        batch.delete_cf(cf_rel, &rel_key);
+        batch.delete_cf(cf_rel, rel_key);
 
         // 2. Read-modify-write secondary index into the same batch
-        match self.db.get_cf(cf_idx, &idx_key) {
+        match self.db.get_cf(cf_idx, idx_key) {
             Ok(Some(bytes)) => {
                 let mut causal_ids: Vec<Uuid> = serde_json::from_slice(&bytes).map_err(|e| {
                     error!(
@@ -1034,12 +1035,12 @@ impl RocksDbTeleologicalStore {
                 causal_ids.retain(|cid| *cid != id);
 
                 if causal_ids.is_empty() {
-                    batch.delete_cf(cf_idx, &idx_key);
+                    batch.delete_cf(cf_idx, idx_key);
                 } else {
                     let serialized = serde_json::to_vec(&causal_ids).map_err(|e| {
                         CoreError::Internal(format!("Failed to serialize causal_by_source list: {}", e))
                     })?;
-                    batch.put_cf(cf_idx, &idx_key, &serialized);
+                    batch.put_cf(cf_idx, idx_key, &serialized);
                 }
             }
             Ok(None) => {

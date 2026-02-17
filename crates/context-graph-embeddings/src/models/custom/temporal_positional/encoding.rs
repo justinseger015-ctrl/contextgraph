@@ -22,8 +22,8 @@ use super::constants::{POSITION_ENCODING_DIMENSION, TEMPORAL_POSITIONAL_DIMENSIO
 /// * `base` - Base frequency for positional encoding
 /// * `d_model` - Model dimension (always 512)
 /// * `is_sequence` - If true, position is a session sequence number (smaller values),
-///                   if false, position is a Unix timestamp (larger values).
-///                   This affects the scaling to ensure good gradient distribution.
+///   if false, position is a Unix timestamp (larger values).
+///   This affects the scaling to ensure good gradient distribution.
 ///
 /// # Returns
 /// A 512-dimensional L2-normalized vector

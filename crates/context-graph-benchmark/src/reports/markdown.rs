@@ -73,7 +73,7 @@ fn write_key_findings(md: &mut String, results: &BenchmarkResults) {
     let mut avg_mrr = 0.0;
     let mut count = 0;
 
-    for (_, summary) in &tier_map {
+    for summary in tier_map.values() {
         avg_p10 += summary.improvement.precision_10;
         avg_r10 += summary.improvement.recall_10;
         avg_mrr += summary.improvement.mrr;
@@ -108,7 +108,7 @@ fn write_key_findings(md: &mut String, results: &BenchmarkResults) {
         }
     }
 
-    md.push_str("\n");
+    md.push('\n');
 }
 
 fn write_tier_table(md: &mut String, results: &BenchmarkResults) {
@@ -142,7 +142,7 @@ fn write_tier_table(md: &mut String, results: &BenchmarkResults) {
         ));
     }
 
-    md.push_str("\n");
+    md.push('\n');
 }
 
 fn write_retrieval_table(md: &mut String, results: &BenchmarkResults) {
@@ -180,7 +180,7 @@ fn write_retrieval_table(md: &mut String, results: &BenchmarkResults) {
         ));
     }
 
-    md.push_str("\n");
+    md.push('\n');
 }
 
 fn write_clustering_table(md: &mut String, results: &BenchmarkResults) {
@@ -202,7 +202,7 @@ fn write_clustering_table(md: &mut String, results: &BenchmarkResults) {
         ));
     }
 
-    md.push_str("\n");
+    md.push('\n');
 }
 
 fn write_scaling_analysis(md: &mut String, results: &BenchmarkResults) {
@@ -284,7 +284,7 @@ fn write_breaking_points(md: &mut String, results: &BenchmarkResults) {
         format_bp(multi_bp.and_then(|b| b.overall_limit)),
     ));
 
-    md.push_str("\n");
+    md.push('\n');
 }
 
 fn write_recommendations(md: &mut String, results: &BenchmarkResults) {
@@ -304,7 +304,7 @@ fn write_recommendations(md: &mut String, results: &BenchmarkResults) {
         md.push_str("- Multi-space for additional robustness at scale\n");
     }
 
-    md.push_str("\n");
+    md.push('\n');
 }
 
 /// Format a number with thousands separators.

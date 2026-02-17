@@ -45,12 +45,13 @@ pub enum ContentDomain {
 
 impl ContentDomain {
     /// Parse domain from string (case-insensitive).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().trim() {
             "code" => Self::Code,
             "legal" => Self::Legal,
             "academic" => Self::Academic,
-            "general" | _ => Self::General,
+            _ => Self::General,
         }
     }
 
@@ -109,6 +110,7 @@ pub enum RelationshipCategory {
 
 impl RelationshipCategory {
     /// Parse category from string (case-insensitive).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().trim() {
             "containment" => Self::Containment,
@@ -116,7 +118,7 @@ impl RelationshipCategory {
             "reference" => Self::Reference,
             "implementation" => Self::Implementation,
             "extension" => Self::Extension,
-            "invocation" | "none" | _ => Self::Invocation,
+            _ => Self::Invocation,
         }
     }
 
@@ -227,6 +229,7 @@ pub enum GraphLinkDirection {
 
 impl GraphLinkDirection {
     /// Parse direction from string (case-insensitive).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let lower = s.to_lowercase();
         let trimmed = lower.trim();
@@ -362,6 +365,7 @@ pub enum RelationshipType {
 
 impl RelationshipType {
     /// Parse relationship type from string (case-insensitive).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let lower = s.to_lowercase();
         let trimmed = lower.trim();

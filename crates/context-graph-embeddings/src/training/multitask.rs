@@ -52,6 +52,7 @@ impl MechanismLabel {
     }
 
     /// Parse from string.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "biological" | "bio" | "medical" | "health" => Self::Biological,
@@ -116,7 +117,7 @@ impl ClassificationHead {
         let std2 = (2.0 / (hidden_dim + num_classes) as f64).sqrt() as f32;
 
         let w1_data: Vec<f32> = (0..input_dim * hidden_dim)
-            .map(|i| ((i as f32 * 0.618033988 + 0.5) % 1.0 * 2.0 - 1.0) * std1)
+            .map(|i| ((i as f32 * 0.618_034 + 0.5) % 1.0 * 2.0 - 1.0) * std1)
             .collect();
         let w1 = Var::from_tensor(
             &Tensor::from_slice(&w1_data, (input_dim, hidden_dim), device)
@@ -130,7 +131,7 @@ impl ClassificationHead {
         .map_err(map_candle)?;
 
         let w2_data: Vec<f32> = (0..hidden_dim * num_classes)
-            .map(|i| ((i as f32 * 0.414213562 + 0.7) % 1.0 * 2.0 - 1.0) * std2)
+            .map(|i| ((i as f32 * 0.414_213_57 + 0.7) % 1.0 * 2.0 - 1.0) * std2)
             .collect();
         let w2 = Var::from_tensor(
             &Tensor::from_slice(&w2_data, (hidden_dim, num_classes), device)
@@ -284,9 +285,9 @@ fn classification_cross_entropy(
         .map_err(map_candle)?;
 
     let mut nll_sum = 0.0f64;
-    for i in 0..n {
+    for (i, &label) in label_vec.iter().enumerate().take(n) {
         let row = log_softmax.get(i).map_err(map_candle)?;
-        let idx = label_vec[i] as usize;
+        let idx = label as usize;
         let log_prob: f32 = row
             .get(idx)
             .map_err(map_candle)?

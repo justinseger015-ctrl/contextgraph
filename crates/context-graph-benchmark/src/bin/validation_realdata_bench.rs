@@ -127,7 +127,7 @@ fn parse_args() -> Args {
                 let phase_str = argv.next().expect("--phases requires a value");
                 args.phases = phase_str
                     .split(',')
-                    .filter_map(|s| ValidationPhase::from_str(s.trim()))
+                    .filter_map(|s| ValidationPhase::parse_from(s.trim()))
                     .collect();
             }
             "--output" | "-o" => {
@@ -405,8 +405,10 @@ fn main() {
 
         // Get E1 MRR from aggregator if available
         let e1_mrr = aggregator.get_e1_baseline_mrr();
-        if args.verbose && e1_mrr.is_some() {
-            eprintln!("  Using measured E1 MRR: {:.3}", e1_mrr.unwrap());
+        if let Some(mrr) = e1_mrr {
+            if args.verbose {
+                eprintln!("  Using measured E1 MRR: {:.3}", mrr);
+            }
         }
 
         let result = E1FoundationValidator::validate(e1_mrr, None, None, None, None);
@@ -674,7 +676,7 @@ fn generate_recommendations_markdown(recommendations: &[Recommendation]) -> Stri
         for (i, rec) in critical.iter().enumerate() {
             md.push_str(&format!("{}. [{}] {}\n", i + 1, rec.component, rec.description));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     // Performance
@@ -686,7 +688,7 @@ fn generate_recommendations_markdown(recommendations: &[Recommendation]) -> Stri
         for (i, rec) in perf.iter().enumerate() {
             md.push_str(&format!("{}. {}\n", i + 1, rec.description));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     // Parameter Tuning
@@ -704,7 +706,7 @@ fn generate_recommendations_markdown(recommendations: &[Recommendation]) -> Stri
                 rec.recommended.as_deref().unwrap_or("-"),
                 rec.reason));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     // Best Practices
@@ -716,7 +718,7 @@ fn generate_recommendations_markdown(recommendations: &[Recommendation]) -> Stri
         for (i, rec) in best.iter().enumerate() {
             md.push_str(&format!("{}. {}\n", i + 1, rec.description));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     md

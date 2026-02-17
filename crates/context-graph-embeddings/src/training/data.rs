@@ -21,6 +21,7 @@ pub enum TrainingDirection {
 
 impl TrainingDirection {
     /// Parse from LLM output string.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "forward" | "a_causes_b" | "cause" => Self::Forward,
@@ -207,7 +208,7 @@ impl CausalDataLoader {
 
     /// Number of batches per epoch.
     pub fn num_batches(&self) -> usize {
-        (self.pairs.len() + self.batch_size - 1) / self.batch_size
+        self.pairs.len().div_ceil(self.batch_size)
     }
 
     /// Shuffle indices for a new epoch.

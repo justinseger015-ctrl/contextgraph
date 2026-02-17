@@ -169,6 +169,7 @@ impl CausalEdge {
     /// * `b_effect` - B embedded as effect (768D)
     /// * `b_cause` - B embedded as cause (768D)
     /// * `a_effect` - A embedded as effect (768D)
+    #[allow(clippy::too_many_arguments)]
     pub fn bidirectional(
         source: Uuid,
         target: Uuid,

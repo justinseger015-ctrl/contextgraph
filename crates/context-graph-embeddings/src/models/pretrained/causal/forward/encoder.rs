@@ -206,6 +206,7 @@ pub fn run_encoder_with_lora(
 }
 
 /// Run single encoder layer with LoRA: attention + SwiGLU FFN with post-norm.
+#[allow(clippy::too_many_arguments)]
 fn encoder_layer_forward_with_lora(
     hidden_states: &Tensor,
     layer: &NomicEncoderLayerWeights,

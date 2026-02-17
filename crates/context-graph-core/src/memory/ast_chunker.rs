@@ -276,6 +276,7 @@ impl AstCodeChunker {
     }
 
     /// Process a node and its children, creating chunks as appropriate.
+    #[allow(clippy::too_many_arguments)]
     fn process_node(
         &self,
         node: &Node,
@@ -294,12 +295,12 @@ impl AstCodeChunker {
         }
 
         // Case 1: Node fits in a single chunk
-        if size <= self.config.max_size {
-            if self.is_chunkable_node(node) {
-                if let Some(chunk) = self.node_to_chunk(node, source, file_path, imports, scope_chain, parent_def) {
-                    chunks.push(chunk);
-                    return;
-                }
+        if size <= self.config.max_size
+            && self.is_chunkable_node(node)
+        {
+            if let Some(chunk) = self.node_to_chunk(node, source, file_path, imports, scope_chain, parent_def) {
+                chunks.push(chunk);
+                return;
             }
         }
 

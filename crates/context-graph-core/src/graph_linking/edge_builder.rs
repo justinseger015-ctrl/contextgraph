@@ -96,7 +96,7 @@ impl Clone for EdgeBuilderConfig {
         Self {
             min_weighted_agreement: self.min_weighted_agreement,
             embedder_thresholds: self.embedder_thresholds,
-            edge_thresholds: self.edge_thresholds.clone(),
+            edge_thresholds: self.edge_thresholds,
             include_temporal: self.include_temporal,
             learned_projection: self.learned_projection.clone(),
         }

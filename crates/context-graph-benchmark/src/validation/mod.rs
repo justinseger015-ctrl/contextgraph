@@ -129,7 +129,7 @@ impl ValidationPhase {
         ]
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_from(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "config" => Some(Self::Config),
             "temporal" => Some(Self::Temporal),
@@ -448,7 +448,7 @@ impl ValidationReportGenerator {
         // Summary
         report.push_str("## Summary\n\n");
         let summary = &self.results.summary;
-        report.push_str(&format!("| Metric | Value |\n"));
+        report.push_str("| Metric | Value |\n");
         report.push_str("|--------|-------|\n");
         report.push_str(&format!("| Total Checks | {} |\n", summary.total_checks));
         report.push_str(&format!("| Passed | {} |\n", summary.passed_checks));
@@ -481,7 +481,7 @@ impl ValidationReportGenerator {
                     report.push_str(&format!("| {} | {} | {} | {} |\n",
                         check.name, status, check.expected, check.actual));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
         }
 
@@ -498,7 +498,7 @@ impl ValidationReportGenerator {
                 for (i, rec) in critical.iter().enumerate() {
                     report.push_str(&format!("{}. [{}] {}\n", i + 1, rec.component, rec.description));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
 
             // Performance
@@ -510,7 +510,7 @@ impl ValidationReportGenerator {
                 for (i, rec) in perf.iter().enumerate() {
                     report.push_str(&format!("{}. {}\n", i + 1, rec.description));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
 
             // Parameter Tuning
@@ -528,7 +528,7 @@ impl ValidationReportGenerator {
                         rec.recommended.as_deref().unwrap_or("-"),
                         rec.reason));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
         }
 
@@ -586,9 +586,9 @@ mod tests {
 
     #[test]
     fn test_validation_phase_parse() {
-        assert_eq!(ValidationPhase::from_str("config"), Some(ValidationPhase::Config));
-        assert_eq!(ValidationPhase::from_str("ARCH"), Some(ValidationPhase::Arch));
-        assert_eq!(ValidationPhase::from_str("invalid"), None);
+        assert_eq!(ValidationPhase::parse_from("config"), Some(ValidationPhase::Config));
+        assert_eq!(ValidationPhase::parse_from("ARCH"), Some(ValidationPhase::Arch));
+        assert_eq!(ValidationPhase::parse_from("invalid"), None);
     }
 
     #[test]

@@ -628,6 +628,7 @@ impl Handlers {
         let mut edges_filtered_by_weight = 0;
 
         // Queue: (memory_id, hop_level, cumulative_weight, path_so_far, edge_types_so_far, edge_weights_so_far)
+        #[allow(clippy::type_complexity)]
         let mut queue: VecDeque<(Uuid, usize, f32, Vec<Uuid>, Vec<String>, Vec<f32>)> =
             VecDeque::new();
         queue.push_back((start_uuid, 0, 1.0, vec![start_uuid], vec![], vec![]));

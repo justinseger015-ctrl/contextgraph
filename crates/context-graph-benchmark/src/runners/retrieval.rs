@@ -207,6 +207,7 @@ impl MultiSpaceIndex {
         let mut scores: HashMap<Uuid, f32> = HashMap::new();
 
         // Accumulate weighted similarities from each space
+        #[allow(clippy::type_complexity)]
         let spaces: [(&[(Uuid, Vec<f32>)], &[f32]); 4] = [
             (&self.e1_index, &query_fp.e1_semantic),
             (&self.e5_index, &query_fp.e5_causal),

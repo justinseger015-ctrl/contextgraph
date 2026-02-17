@@ -139,7 +139,7 @@ fn parse_args() -> Args {
                 let embedder_str = argv.next().expect("--embedders requires a value");
                 let embedders: Vec<EmbedderName> = embedder_str
                     .split(',')
-                    .filter_map(|s| EmbedderName::from_str(s.trim()))
+                    .filter_map(|s| EmbedderName::parse_from(s.trim()))
                     .collect();
                 if embedders.is_empty() {
                     eprintln!("Warning: No valid embedders parsed from '{}'", embedder_str);

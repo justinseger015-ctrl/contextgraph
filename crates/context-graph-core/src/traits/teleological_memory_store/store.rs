@@ -723,6 +723,7 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     ///
     /// # Returns
     /// Vector of CausalSearchResult with per-embedder scores and consensus metrics.
+    #[allow(clippy::too_many_arguments)]
     async fn search_causal_multi_embedder(
         &self,
         e1_embedding: &[f32],

@@ -355,11 +355,11 @@ impl E8Activator {
             }
             None => {
                 // Production mode: fail fast - GraphModel is required
-                return Err(GraphAgentError::ConfigError {
+                Err(GraphAgentError::ConfigError {
                     message: "GraphModel required in production but not available. \
                               Use E8Activator::with_model()."
                         .to_string(),
-                });
+                })
             }
         }
     }

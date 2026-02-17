@@ -246,7 +246,7 @@ fn run_simulated_evaluation(
 fn format_table(results: &RealDataBenchmarkResults) -> String {
     let mut out = String::new();
 
-    out.push_str(&format!("\n=== BEIR Real Data Benchmark Results ===\n"));
+    out.push_str("\n=== BEIR Real Data Benchmark Results ===\n");
     out.push_str(&format!("Dataset: {} ({} chunks, {} queries, {} qrels)\n",
         if results.dataset_name.is_empty() { "Unknown" } else { &results.dataset_name },
         results.chunk_count, results.query_count, results.qrel_count));

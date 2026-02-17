@@ -705,7 +705,7 @@ impl CausalDatasetGenerator {
 
         // Unknown/neutral patterns
         // Include some ambiguous patterns that might trigger false positives
-        let unknown_patterns = vec![
+        let unknown_patterns = [
             // Clear neutral patterns
             ("Tell me about {topic}", CausalDirection::Unknown),
             ("Describe {topic}", CausalDirection::Unknown),

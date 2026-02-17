@@ -236,7 +236,7 @@ impl EdgeRepository {
         // Batch write both the primary edge and secondary index
         let mut batch = WriteBatch::default();
         batch.put_cf(&typed_cf, primary_key.to_bytes(), &value);
-        batch.put_cf(&by_type_cf, &secondary_key, edge.target().as_bytes());
+        batch.put_cf(&by_type_cf, secondary_key, edge.target().as_bytes());
 
         self.db
             .write(batch)
@@ -297,7 +297,7 @@ impl EdgeRepository {
             let mut secondary_key = [0u8; 17];
             secondary_key[0] = e.edge_type() as u8;
             secondary_key[1..17].copy_from_slice(source.as_bytes());
-            batch.delete_cf(&by_type_cf, &secondary_key);
+            batch.delete_cf(&by_type_cf, secondary_key);
         }
 
         self.db
@@ -358,7 +358,7 @@ impl EdgeRepository {
         prefix[0] = edge_type as u8;
         prefix[1..17].copy_from_slice(source.as_bytes());
 
-        let iter = self.db.prefix_iterator_cf(&by_type_cf, &prefix);
+        let iter = self.db.prefix_iterator_cf(&by_type_cf, prefix);
 
         let mut edges = Vec::new();
         for item in iter {
@@ -371,7 +371,7 @@ impl EdgeRepository {
             })?;
 
             // Stop if we've gone past this (type, source) prefix
-            if key.len() < 17 || &key[0..17] != prefix {
+            if key.len() < 17 || key[0..17] != prefix {
                 break;
             }
 
@@ -468,7 +468,7 @@ impl EdgeRepository {
             secondary_key[1..17].copy_from_slice(edge.source().as_bytes());
 
             batch.put_cf(&typed_cf, primary_key.to_bytes(), &value);
-            batch.put_cf(&by_type_cf, &secondary_key, edge.target().as_bytes());
+            batch.put_cf(&by_type_cf, secondary_key, edge.target().as_bytes());
         }
 
         self.db

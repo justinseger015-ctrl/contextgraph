@@ -186,7 +186,7 @@ impl GroundTruthGenerator {
         // Filter topics with enough chunks
         let valid_topics: Vec<_> = topic_chunks
             .iter()
-            .filter(|(_, chunks)| chunks.len() >= self.min_relevant + 1)
+            .filter(|(_, chunks)| chunks.len() > self.min_relevant)
             .map(|(topic, _)| *topic)
             .collect();
 

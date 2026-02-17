@@ -432,13 +432,15 @@ impl GraphDiscoveryService {
 
         *self.status.write() = ServiceStatus::Stopping;
 
-        if let Some(tx) = self.shutdown_tx.write().take() {
+        let tx = self.shutdown_tx.write().take();
+        if let Some(tx) = tx {
             let _ = tx.send(()).await;
         }
 
         // CRIT-05 + HIGH-12 FIX: Replace infinite spin-loop with awaiting the
         // JoinHandle with a timeout. This detects panics and avoids busy-waiting.
-        if let Some(handle) = self.join_handle.write().take() {
+        let handle = self.join_handle.write().take();
+        if let Some(handle) = handle {
             match tokio::time::timeout(Duration::from_secs(10), handle).await {
                 Ok(Ok(())) => info!("Graph discovery background task completed normally"),
                 Ok(Err(e)) => tracing::error!("Graph discovery background task panicked: {:?}", e),

@@ -219,16 +219,16 @@ pub(crate) fn extract_entity_mentions(text: &str) -> EntityMetadata {
         let (entity_type, confidence) = classify_entity(&canonical);
         let is_known_entity = entity_type != EntityType::Unknown;
 
-        if is_capitalized || is_all_caps || has_special || is_known_entity {
-            if !seen.contains(&canonical) {
-                seen.insert(canonical.clone());
-                entities.push(EntityLink {
-                    surface_form: clean.to_string(),
-                    canonical_id: canonical,
-                    entity_type,
-                    confidence,
-                });
-            }
+        if (is_capitalized || is_all_caps || has_special || is_known_entity)
+            && !seen.contains(&canonical)
+        {
+            seen.insert(canonical.clone());
+            entities.push(EntityLink {
+                surface_form: clean.to_string(),
+                canonical_id: canonical,
+                entity_type,
+                confidence,
+            });
         }
     }
 
@@ -704,6 +704,7 @@ impl Handlers {
 
         // Step 7: Score each candidate using combined insights
         // Each embedder contributes what it knows
+        #[allow(clippy::type_complexity)]
         let mut scored_results: Vec<(Uuid, f32, f32, f32, f32, Vec<EntityLink>, Option<String>)> =
             Vec::with_capacity(candidate_map.len());
 

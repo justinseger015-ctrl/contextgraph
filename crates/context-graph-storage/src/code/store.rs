@@ -522,7 +522,7 @@ impl CodeStore {
     pub fn search_by_signature(&self, signature: &str) -> CodeStorageResult<Vec<CodeEntity>> {
         let hash = Self::hash_signature(signature);
 
-        match self.db.get_cf(&self.cf_signature_index()?, &hash)? {
+        match self.db.get_cf(&self.cf_signature_index()?, hash)? {
             Some(bytes) => {
                 let ids: Vec<Uuid> = serde_json::from_slice(&bytes)
                     .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
@@ -842,7 +842,7 @@ impl CodeStore {
         let cf = self.cf_signature_index()?;
         let key = Self::hash_signature(signature);
 
-        let mut ids: Vec<Uuid> = match self.db.get_cf(&cf, &key)? {
+        let mut ids: Vec<Uuid> = match self.db.get_cf(&cf, key)? {
             Some(bytes) => serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?,
             None => Vec::new(),
@@ -852,7 +852,7 @@ impl CodeStore {
             ids.push(entity_id);
             let bytes = serde_json::to_vec(&ids)
                 .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
-            self.db.put_cf(&cf, &key, bytes)?;
+            self.db.put_cf(&cf, key, bytes)?;
         }
 
         Ok(())
@@ -866,7 +866,7 @@ impl CodeStore {
         let cf = self.cf_signature_index()?;
         let key = Self::hash_signature(signature);
 
-        if let Some(bytes) = self.db.get_cf(&cf, &key)? {
+        if let Some(bytes) = self.db.get_cf(&cf, key)? {
             let mut ids: Vec<Uuid> = serde_json::from_slice(&bytes)
                 .map_err(|e| CodeStorageError::deserialization(e.to_string()))?;
 
@@ -874,11 +874,11 @@ impl CodeStore {
                 ids.remove(pos);
 
                 if ids.is_empty() {
-                    self.db.delete_cf(&cf, &key)?;
+                    self.db.delete_cf(&cf, key)?;
                 } else {
                     let bytes = serde_json::to_vec(&ids)
                         .map_err(|e| CodeStorageError::serialization(e.to_string()))?;
-                    self.db.put_cf(&cf, &key, bytes)?;
+                    self.db.put_cf(&cf, key, bytes)?;
                 }
             }
         }

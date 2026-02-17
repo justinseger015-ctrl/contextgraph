@@ -274,7 +274,7 @@ impl McpServer {
     #[allow(dead_code)]
     pub async fn start_code_watcher(&self) -> Result<bool> {
         // Check if code pipeline is enabled
-        let enabled = std::env::var("CODE_PIPELINE_ENABLED").map_or(false, |v| v == "true");
+        let enabled = std::env::var("CODE_PIPELINE_ENABLED").is_ok_and(|v| v == "true");
         if !enabled {
             debug!("Code pipeline disabled (set CODE_PIPELINE_ENABLED=true to enable)");
             return Ok(false);

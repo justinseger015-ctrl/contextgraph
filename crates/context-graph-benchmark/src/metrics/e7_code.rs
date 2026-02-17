@@ -49,7 +49,7 @@ pub enum E7QueryType {
 
 impl E7QueryType {
     /// Parse from string representation.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_from(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "function_search" | "func" => Some(Self::FunctionSearch),
             "pattern_search" | "pattern" => Some(Self::PatternSearch),
@@ -487,9 +487,9 @@ mod tests {
 
     #[test]
     fn test_query_type_parsing() {
-        assert_eq!(E7QueryType::from_str("function_search"), Some(E7QueryType::FunctionSearch));
-        assert_eq!(E7QueryType::from_str("pattern"), Some(E7QueryType::PatternSearch));
-        assert_eq!(E7QueryType::from_str("unknown"), None);
+        assert_eq!(E7QueryType::parse_from("function_search"), Some(E7QueryType::FunctionSearch));
+        assert_eq!(E7QueryType::parse_from("pattern"), Some(E7QueryType::PatternSearch));
+        assert_eq!(E7QueryType::parse_from("unknown"), None);
     }
 
     #[test]

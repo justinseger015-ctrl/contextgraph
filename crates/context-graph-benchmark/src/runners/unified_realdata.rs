@@ -315,7 +315,7 @@ impl UnifiedRealdataBenchmarkRunner {
 
         for embedder in &self.config.embedders {
             let gt = ground_truth.get(*embedder)
-                .ok_or_else(|| RunnerError::NoGroundTruthFor(*embedder))?;
+                .ok_or(RunnerError::NoGroundTruthFor(*embedder))?;
 
             let eval = self.evaluate_embedder(*embedder, gt)?;
             results.insert(*embedder, eval);
@@ -604,7 +604,7 @@ impl UnifiedRealdataBenchmarkRunner {
                     let mrr_i = per_embedder.get(&embedder_order[i]).map(|r| r.mrr_at_10).unwrap_or(0.0);
                     let mrr_j = per_embedder.get(&embedder_order[j]).map(|r| r.mrr_at_10).unwrap_or(0.0);
                     let corr = 1.0 - (mrr_i - mrr_j).abs() / (mrr_i.max(mrr_j) + 0.01);
-                    correlation_matrix[i][j] = corr.max(0.0).min(1.0);
+                    correlation_matrix[i][j] = corr.clamp(0.0, 1.0);
                 }
             }
         }
@@ -813,8 +813,8 @@ impl UnifiedRealdataBenchmarkRunner {
     /// Build dataset info for results.
     fn build_dataset_info(&self, dataset: &RealDataset, ground_truth: &UnifiedGroundTruth) -> DatasetInfo {
         let top_topics: Vec<_> = dataset.topic_to_idx
-            .iter()
-            .map(|(name, _)| {
+            .keys()
+            .map(|name| {
                 let count = dataset.chunks.iter().filter(|c| &c.topic_hint == name).count();
                 TopicInfo {
                     name: name.clone(),

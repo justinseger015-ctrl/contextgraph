@@ -131,6 +131,7 @@ impl Handlers {
     ///
     /// Returns `Ok(request)` on success, or an MCP error `JsonRpcResponse`
     /// on parse/validation failure.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn parse_request<T: DeserializeOwned + Validate>(
         &self,
         id: Option<JsonRpcId>,
@@ -179,6 +180,7 @@ impl Handlers {
     ///
     /// Returns `Ok((request, validated_output))` on success, or an MCP error
     /// `JsonRpcResponse` on parse/validation failure.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn parse_request_validated<T: DeserializeOwned + ValidateInto>(
         &self,
         id: Option<JsonRpcId>,

@@ -208,10 +208,8 @@ impl MemoryScanner {
                 }
 
                 // Check session constraint
-                if self.config.same_session_only {
-                    if mem_a.session_id != mem_b.session_id {
-                        continue;
-                    }
+                if self.config.same_session_only && mem_a.session_id != mem_b.session_id {
+                    continue;
                 }
 
                 // Determine temporal order (earlier = potential cause)
@@ -285,7 +283,7 @@ impl MemoryScanner {
 
         // 5. Semantic similarity bonus (not too similar, not too different)
         let sim = cosine_similarity(&earlier.e1_embedding, &later.e1_embedding);
-        if sim >= 0.5 && sim <= 0.8 {
+        if (0.5..=0.8).contains(&sim) {
             score += 0.1;
         }
 

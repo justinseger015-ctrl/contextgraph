@@ -101,10 +101,11 @@ impl ResourceImpact {
 }
 
 /// Index type enumeration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IndexType {
     /// HNSW (Hierarchical Navigable Small World) for dense vectors.
+    #[default]
     HNSW,
     /// Inverted index for sparse vectors.
     Inverted,
@@ -118,11 +119,6 @@ pub enum IndexType {
     Unknown,
 }
 
-impl Default for IndexType {
-    fn default() -> Self {
-        Self::HNSW
-    }
-}
 
 /// Statistics for a single embedder's index.
 #[derive(Debug, Clone, Serialize, Deserialize)]

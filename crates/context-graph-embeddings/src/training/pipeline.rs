@@ -488,6 +488,7 @@ impl CausalTrainingPipeline {
     }
 
     /// Run a single training stage.
+    #[allow(clippy::too_many_arguments)]
     fn run_stage(
         &self,
         stage: u32,
@@ -615,6 +616,7 @@ impl CausalTrainingPipeline {
     /// Quick benchmark callback: sample pairs, compute 3 fast metrics, log to trajectory file.
     ///
     /// Called after each training stage to track improvement over time.
+    #[allow(clippy::too_many_arguments)]
     fn log_benchmark_snapshot(
         &self,
         stage: u32,

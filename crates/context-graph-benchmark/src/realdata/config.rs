@@ -161,7 +161,7 @@ impl EmbedderName {
     }
 
     /// Parse from string.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_from(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
             "E1" | "E1_SEMANTIC" | "SEMANTIC" => Some(Self::E1Semantic),
             "E2" | "E2_RECENCY" | "RECENCY" => Some(Self::E2Recency),
@@ -230,9 +230,10 @@ impl Default for TemporalInjectionConfig {
 }
 
 /// Fusion strategy for multi-space retrieval.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FusionStrategy {
     /// E1 only (baseline).
+    #[default]
     E1Only,
     /// E1 + enhancement embedders via weighted RRF.
     MultiSpace,
@@ -242,11 +243,6 @@ pub enum FusionStrategy {
     Custom,
 }
 
-impl Default for FusionStrategy {
-    fn default() -> Self {
-        Self::E1Only
-    }
-}
 
 /// Unified benchmark configuration for real data benchmarks.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -477,10 +473,10 @@ mod tests {
 
     #[test]
     fn test_embedder_parsing() {
-        assert_eq!(EmbedderName::from_str("E1"), Some(EmbedderName::E1Semantic));
-        assert_eq!(EmbedderName::from_str("e5"), Some(EmbedderName::E5Causal));
-        assert_eq!(EmbedderName::from_str("CAUSAL"), Some(EmbedderName::E5Causal));
-        assert_eq!(EmbedderName::from_str("invalid"), None);
+        assert_eq!(EmbedderName::parse_from("E1"), Some(EmbedderName::E1Semantic));
+        assert_eq!(EmbedderName::parse_from("e5"), Some(EmbedderName::E5Causal));
+        assert_eq!(EmbedderName::parse_from("CAUSAL"), Some(EmbedderName::E5Causal));
+        assert_eq!(EmbedderName::parse_from("invalid"), None);
     }
 
     #[test]

@@ -268,7 +268,7 @@ impl SparseInvertedIndex {
 
             posting_guard
                 .entry(term_id)
-                .or_insert_with(PostingList::new)
+                .or_default()
                 .add(posting);
 
             indexed_terms.push(term_id);
@@ -355,7 +355,7 @@ impl SparseInvertedIndex {
 
             posting_guard
                 .entry(term_id)
-                .or_insert_with(PostingList::new)
+                .or_default()
                 .add(posting);
 
             indexed_terms.push(term_id);

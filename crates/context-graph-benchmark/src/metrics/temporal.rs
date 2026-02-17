@@ -428,7 +428,7 @@ pub fn episode_boundary_f1(
     for &pred in predicted_boundaries {
         for (i, &actual) in actual_boundaries.iter().enumerate() {
             if !matched_actual.contains(&i) {
-                let distance = if pred > actual { pred - actual } else { actual - pred };
+                let distance = pred.abs_diff(actual);
                 if distance <= tolerance {
                     true_positives += 1;
                     matched_actual.insert(i);

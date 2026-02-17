@@ -573,7 +573,7 @@ fn generate_markdown_report(results: &E6RealBenchmarkResults) -> String {
         for (topic, mrr) in topics.iter().take(15) {
             report.push_str(&format!("| {} | {:.4} |\n", topic, mrr));
         }
-        report.push_str("\n");
+        report.push('\n');
     }
 
     report

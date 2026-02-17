@@ -9,7 +9,7 @@ use uuid::Uuid;
 use serde::{Deserialize, Serialize};
 
 /// Ground truth data for benchmark evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GroundTruth {
     /// Document to topic mapping.
     pub document_topics: HashMap<Uuid, usize>,
@@ -202,16 +202,6 @@ impl GroundTruth {
     }
 }
 
-impl Default for GroundTruth {
-    fn default() -> Self {
-        Self {
-            document_topics: HashMap::new(),
-            query_relevance: HashMap::new(),
-            divergence_labels: HashMap::new(),
-            topic_names: Vec::new(),
-        }
-    }
-}
 
 #[cfg(all(test, feature = "benchmark-tests"))]
 mod tests {

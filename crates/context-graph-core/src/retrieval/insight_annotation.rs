@@ -48,7 +48,7 @@ impl EmbedderCategory {
             // STRUCTURAL: E9
             8 => Self::Structural,
             // TEMPORAL: E2, E3, E4
-            1 | 2 | 3 => Self::Temporal,
+            1..=3 => Self::Temporal,
             _ => Self::Semantic, // Default to semantic for unknown
         }
     }

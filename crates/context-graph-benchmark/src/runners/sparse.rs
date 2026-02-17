@@ -591,7 +591,7 @@ impl E6SparseBenchmarkResults {
                     ));
                 }
             }
-            s.push_str("\n");
+            s.push('\n');
         }
 
         s.push_str("\n## Dataset Stats\n");

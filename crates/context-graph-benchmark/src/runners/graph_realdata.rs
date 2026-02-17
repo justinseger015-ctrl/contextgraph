@@ -107,7 +107,7 @@ impl DocumentGraph {
 
         // Build edges within documents (sequential adjacency)
         for chunks in doc_chunks.values() {
-            let mut sorted: Vec<_> = chunks.iter().cloned().collect();
+            let mut sorted: Vec<_> = chunks.to_vec();
             sorted.sort_by_key(|c| c.chunk_idx);
 
             for window in sorted.windows(2) {

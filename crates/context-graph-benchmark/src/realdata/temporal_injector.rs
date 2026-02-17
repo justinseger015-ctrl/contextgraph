@@ -333,7 +333,7 @@ impl TemporalMetadataInjector {
                 continue; // Need at least 2 chunks for sequence
             }
 
-            let mut sorted_chunks: Vec<_> = chunks.iter().cloned().collect();
+            let mut sorted_chunks: Vec<_> = chunks.to_vec();
             sorted_chunks.sort_by_key(|c| c.chunk_idx);
 
             let session_id = format!("doc_{}", doc_id);

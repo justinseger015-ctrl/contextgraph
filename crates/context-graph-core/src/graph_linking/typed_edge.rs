@@ -156,7 +156,7 @@ impl TypedEdge {
 
         for (i, (&score, &threshold)) in embedder_scores.iter().zip(thresholds.iter()).enumerate() {
             // Skip temporal embedders per AP-60
-            if matches!(i, 1 | 2 | 3) {
+            if matches!(i, 1..=3) {
                 continue;
             }
 
@@ -266,7 +266,7 @@ impl TypedEdge {
             _ => {
                 // Use primary embedder score
                 if let Some(idx) = edge_type.primary_embedder_index() {
-                    scores[idx].max(0.0).min(1.0)
+                    scores[idx].clamp(0.0, 1.0)
                 } else {
                     0.0
                 }

@@ -527,10 +527,10 @@ pub fn build_causal_chain(
             }
 
             let sim = cosine_similarity(&current_effect, &pair.cause_embedding);
-            if sim >= similarity_threshold {
-                if best_match.is_none() || sim > best_match.unwrap().1 {
-                    best_match = Some((*id, sim));
-                }
+            if sim >= similarity_threshold
+                && (best_match.is_none() || sim > best_match.unwrap().1)
+            {
+                best_match = Some((*id, sim));
             }
         }
 

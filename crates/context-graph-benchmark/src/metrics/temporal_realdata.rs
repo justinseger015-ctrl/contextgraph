@@ -405,7 +405,7 @@ pub fn compute_ordering_metrics(results: &[OrderingResult]) -> SequenceOrderingM
     };
 
     // Average tau across all results
-    let avg_tau = results.iter().map(|r| compute_kendalls_tau(r)).sum::<f64>()
+    let avg_tau = results.iter().map(compute_kendalls_tau).sum::<f64>()
         / results.len() as f64;
 
     // Compute ordering MRR
@@ -754,7 +754,7 @@ pub fn ground_truth_to_direction_data(
         .iter()
         .map(|q| DirectionQueryResult {
             query_id: q.id,
-            direction: q.direction.clone(),
+            direction: q.direction,
             retrieved_ids: Vec::new(), // To be filled by runner
             expected_ids: q.expected_ids.iter().cloned().collect(),
             expected_order: q.expected_order.clone(),

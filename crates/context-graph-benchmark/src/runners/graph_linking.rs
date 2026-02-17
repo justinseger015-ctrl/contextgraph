@@ -783,7 +783,7 @@ impl GraphLinkingBenchmarkRunner {
 
         // Simulate inference on sample subgraphs
         let num_subgraphs = self.config.sample_size.min(50);
-        let avg_nodes = (dataset.memories.len() / 10).max(10).min(500);
+        let avg_nodes = (dataset.memories.len() / 10).clamp(10, 500);
         let avg_edges = avg_nodes * 3;
 
         for _ in 0..num_subgraphs {

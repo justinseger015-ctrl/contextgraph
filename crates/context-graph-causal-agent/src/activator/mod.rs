@@ -186,18 +186,18 @@ impl E5EmbedderActivator {
         // Check if relationship already exists in graph
         {
             let graph = self.causal_graph.read();
-            if graph.has_direct_cause(cause_id, effect_id) {
-                if !self.config.update_existing {
-                    debug!(
-                        cause = %cause_id,
-                        effect = %effect_id,
-                        "Skipping existing relationship"
-                    );
-                    self.stats.write().skipped_existing += 1;
-                    return Err(CausalAgentError::ConfigError {
-                        message: "Relationship already exists".to_string(),
-                    });
-                }
+            if graph.has_direct_cause(cause_id, effect_id)
+                && !self.config.update_existing
+            {
+                debug!(
+                    cause = %cause_id,
+                    effect = %effect_id,
+                    "Skipping existing relationship"
+                );
+                self.stats.write().skipped_existing += 1;
+                return Err(CausalAgentError::ConfigError {
+                    message: "Relationship already exists".to_string(),
+                });
             }
         }
 
@@ -262,11 +262,11 @@ impl E5EmbedderActivator {
             }
             None => {
                 // Production mode: fail fast - CausalModel is required
-                return Err(CausalAgentError::ConfigError {
+                Err(CausalAgentError::ConfigError {
                     message: "CausalModel required in production but not available. \
                               Use E5EmbedderActivator::with_model()."
                         .to_string(),
-                });
+                })
             }
         }
     }
@@ -444,13 +444,13 @@ impl E5EmbedderActivator {
                     cause_id,
                     effect_id,
                     analysis.confidence * 0.8, // Slightly lower for bidirectional
-                    &format!("{} (forward)", analysis.mechanism),
+                    format!("{} (forward)", analysis.mechanism),
                 ));
                 graph.add_edge(CausalEdge::new(
                     effect_id,
                     cause_id,
                     analysis.confidence * 0.8,
-                    &format!("{} (backward)", analysis.mechanism),
+                    format!("{} (backward)", analysis.mechanism),
                 ));
             }
             CausalLinkDirection::NoCausalLink => {

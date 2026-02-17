@@ -85,7 +85,7 @@ impl BeirQrels {
 
     /// Check if a document is relevant to a query.
     pub fn is_relevant(&self, query_id: &str, doc_id: &str) -> bool {
-        self.get_relevance(query_id, doc_id).map_or(false, |r| r > 0)
+        self.get_relevance(query_id, doc_id).is_some_and(|r| r > 0)
     }
 
     /// Total number of relevance judgments.
@@ -224,16 +224,16 @@ impl BeirLoader {
         let dir = dir.as_ref();
 
         // Load metadata
-        let metadata = self.load_metadata(&dir.join("metadata.json"))?;
+        let metadata = self.load_metadata(dir.join("metadata.json"))?;
 
         // Load chunks
-        let chunks = self.load_chunks(&dir.join("chunks.jsonl"))?;
+        let chunks = self.load_chunks(dir.join("chunks.jsonl"))?;
 
         // Load queries
-        let queries = self.load_queries(&dir.join("queries.jsonl"))?;
+        let queries = self.load_queries(dir.join("queries.jsonl"))?;
 
         // Load qrels
-        let qrels = self.load_qrels(&dir.join("qrels.json"))?;
+        let qrels = self.load_qrels(dir.join("qrels.json"))?;
 
         // Build doc ID mappings
         let mut doc_id_to_chunks: HashMap<String, Vec<Uuid>> = HashMap::new();

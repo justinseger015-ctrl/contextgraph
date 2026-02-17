@@ -48,7 +48,7 @@ impl EmbedderId {
     }
 
     /// Get the index in the TeleologicalArray (0-12).
-    pub fn to_index(&self) -> usize {
+    pub fn to_index(self) -> usize {
         match self {
             EmbedderId::E1 => 0,
             EmbedderId::E2 => 1,

@@ -4,8 +4,8 @@
 //! 1. SPLADE Filter (inverted index, NOT HNSW)
 //! 2. Matryoshka ANN (128D HNSW)
 //! 3. RRF Rerank (multi-space)
-//! 3.5. Graph Expansion (K-NN edges)
-//! 3.75. GNN Enhancement (R-GCN message passing)
+//!    3.5. Graph Expansion (K-NN edges)
+//!    3.75. GNN Enhancement (R-GCN message passing)
 //! 4. MaxSim Rerank (ColBERT, NOT HNSW)
 
 use std::collections::{HashMap, HashSet};

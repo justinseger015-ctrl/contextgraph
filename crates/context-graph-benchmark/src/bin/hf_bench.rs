@@ -907,6 +907,7 @@ fn run_ablation_studies(
 
     // ALL 13 embedders - dense vectors (E1-E5, E7-E11), sparse (E6, E13), token-level (E12)
     // Dense embedder extraction functions
+    #[allow(clippy::type_complexity)]
     let dense_embedder_configs: Vec<(&str, fn(&SemanticFingerprint) -> &Vec<f32>)> = vec![
         ("E1_semantic", |fp: &SemanticFingerprint| &fp.e1_semantic),
         ("E2_temporal", |fp: &SemanticFingerprint| &fp.e2_temporal_recent),

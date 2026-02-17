@@ -657,20 +657,19 @@ impl BenchmarkResultsAggregator {
         let reader = BufReader::new(file);
         let json: serde_json::Value = serde_json::from_reader(reader)?;
 
-        let mut metrics = SummaryMetrics::default();
-
-        metrics.overall_status = json.get("overall_status")
-            .and_then(|v| v.as_str())
-            .unwrap_or("UNKNOWN")
-            .to_string();
-
-        metrics.overall_score = json.get("overall_score")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-
-        metrics.constitutional_compliance = json.get("constitutional_compliance")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let mut metrics = SummaryMetrics {
+            overall_status: json.get("overall_status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("UNKNOWN")
+                .to_string(),
+            overall_score: json.get("overall_score")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
+            constitutional_compliance: json.get("constitutional_compliance")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
+            ..Default::default()
+        };
 
         // Extract embedder status
         if let Some(embedders) = json.get("embedders").and_then(|v| v.as_object()) {

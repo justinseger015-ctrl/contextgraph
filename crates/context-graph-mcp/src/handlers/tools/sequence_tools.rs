@@ -425,7 +425,7 @@ impl Handlers {
             .filter(|(_fp, meta): &(&TeleologicalFingerprint, &Option<SourceMetadata>)| {
                 meta.as_ref()
                     .and_then(|m| m.session_id.as_deref())
-                    .map_or(false, |sid| sid == session_id)
+                    .is_some_and(|sid| sid == session_id)
             })
             .map(|(fp, _): (&TeleologicalFingerprint, &Option<SourceMetadata>)| fp)
             .collect();
@@ -514,7 +514,7 @@ impl Handlers {
                 entry
                     .get("sourceType")
                     .and_then(|v| v.as_str())
-                    .map_or(false, |st| types.iter().any(|t| t == st))
+                    .is_some_and(|st| types.iter().any(|t| t == st))
             });
         }
 
@@ -846,7 +846,7 @@ impl Handlers {
             .filter(|(_fp, meta): &(&TeleologicalFingerprint, &Option<SourceMetadata>)| {
                 meta.as_ref()
                     .and_then(|m| m.session_id.as_deref())
-                    .map_or(false, |sid| sid == session_id)
+                    .is_some_and(|sid| sid == session_id)
             })
             .take(COMPARISON_BATCH_SIZE)
             .map(|(fp, _): (&TeleologicalFingerprint, &Option<SourceMetadata>)| TeleologicalSearchResult {

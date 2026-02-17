@@ -105,7 +105,7 @@ pub fn compute_e2_recency_score(
             // Exponential decay: score = exp(-age * ln(2) / half_life)
             // This gives score = 0.5 at half_life
             let half_life_secs = options.effective_half_life() as f64;
-            let lambda = 0.693147 / half_life_secs; // ln(2) / half_life
+            let lambda = std::f64::consts::LN_2 / half_life_secs; // ln(2) / half_life
             let score = (-age_secs * lambda).exp();
             score as f32
         }
@@ -160,7 +160,7 @@ pub fn compute_e2_recency_score_adaptive(
         DecayFunction::Exponential => {
             // Use adaptive half-life based on corpus size
             let half_life_secs = options.adaptive_half_life(corpus_size) as f64;
-            let lambda = 0.693147 / half_life_secs; // ln(2) / half_life
+            let lambda = std::f64::consts::LN_2 / half_life_secs; // ln(2) / half_life
             let score = (-age_secs * lambda).exp();
             score as f32
         }
@@ -616,7 +616,7 @@ pub fn filter_by_session<F>(
 {
     let original_len = results.len();
     results.retain(|r| {
-        get_session(r).map_or(false, |sid| sid == session_id)
+        get_session(r) == Some(session_id)
     });
 
     debug!(
@@ -678,7 +678,7 @@ impl Default for TemporalBoostData {
 ///
 /// Map of memory IDs to their temporal boost data (for debugging/logging)
 pub fn apply_temporal_boosts(
-    results: &mut Vec<TeleologicalSearchResult>,
+    results: &mut [TeleologicalSearchResult],
     query_fp: &SemanticFingerprint,
     options: &TemporalSearchOptions,
     fingerprints: &HashMap<Uuid, SemanticFingerprint>,
@@ -872,8 +872,9 @@ pub fn apply_temporal_boosts(
 /// # Returns
 ///
 /// Map of memory IDs to their temporal boost data (for debugging/logging)
+#[allow(clippy::too_many_arguments)]
 pub fn apply_temporal_boosts_v2(
-    results: &mut Vec<TeleologicalSearchResult>,
+    results: &mut [TeleologicalSearchResult],
     query_fp: &SemanticFingerprint,
     options: &TemporalSearchOptions,
     fingerprints: &HashMap<Uuid, SemanticFingerprint>,

@@ -369,12 +369,13 @@ impl TemporalValidator {
             "E4 creates expected number of sessions",
         ).with_priority(CheckPriority::High);
 
-        let mut metrics = E4Metrics::default();
-
-        metrics.num_sessions = metadata.sessions.len();
-        metrics.chunks_with_sessions = metadata.sessions.iter()
-            .flat_map(|s| s.chunks.iter())
-            .count();
+        let mut metrics = E4Metrics {
+            num_sessions: metadata.sessions.len(),
+            chunks_with_sessions: metadata.sessions.iter()
+                .flat_map(|s| s.chunks.iter())
+                .count(),
+            ..Default::default()
+        };
 
         if !metadata.sessions.is_empty() {
             let lengths: Vec<_> = metadata.sessions.iter()

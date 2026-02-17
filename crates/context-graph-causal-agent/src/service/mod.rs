@@ -788,7 +788,8 @@ impl CausalDiscoveryService {
         self.llm.unload().await?;
 
         // CRIT-05 FIX: Await JoinHandle with timeout
-        if let Some(handle) = self.join_handle.write().take() {
+        let handle = self.join_handle.write().take();
+        if let Some(handle) = handle {
             match tokio::time::timeout(Duration::from_secs(10), handle).await {
                 Ok(Ok(())) => info!("Causal discovery background task completed normally"),
                 Ok(Err(e)) => error!("Causal discovery background task panicked: {:?}", e),

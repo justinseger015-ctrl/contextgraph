@@ -428,7 +428,7 @@ impl BlindSpotAnalysis {
         }
 
         // Find enhancer unique finds (found by enhancer but not by E1)
-        for (embedder, _found) in &per_embedder_found {
+        for embedder in per_embedder_found.keys() {
             if *embedder == EmbedderIndex::E1Semantic {
                 continue;
             }

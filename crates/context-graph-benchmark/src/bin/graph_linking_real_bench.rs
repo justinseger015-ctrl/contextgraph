@@ -796,7 +796,7 @@ fn phase2_edge_repository(
             edges_by_source
                 .entry(edge.source())
                 .or_default()
-                .push(edge.clone());
+                .push(*edge);
         }
 
         // Store each source's edges

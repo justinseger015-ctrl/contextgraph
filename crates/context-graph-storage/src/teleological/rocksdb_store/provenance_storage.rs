@@ -126,7 +126,7 @@ impl RocksDbTeleologicalStore {
                     CF_MERGE_HISTORY, e
                 );
                 TeleologicalStoreError::Deserialization {
-                    key: format!("merge_history:{}", hex_encode(&*key)),
+                    key: format!("merge_history:{}", hex_encode(&key)),
                     message: format!("MergeRecord deserialization failed: {}", e),
                 }
             })?;
@@ -240,7 +240,7 @@ impl RocksDbTeleologicalStore {
                         CF_IMPORTANCE_HISTORY, e
                     );
                     TeleologicalStoreError::Deserialization {
-                        key: format!("importance_history:{}", hex_encode(&*key)),
+                        key: format!("importance_history:{}", hex_encode(&key)),
                         message: format!(
                             "ImportanceChangeRecord deserialization failed: {}",
                             e

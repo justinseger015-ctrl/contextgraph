@@ -531,7 +531,7 @@ impl BackgroundGraphBuilder {
                 let neighbors = graph.get_neighbors(source_id);
                 if !neighbors.is_empty() {
                     self.edge_repository
-                        .store_embedder_edges(*embedder_id, source_id, &neighbors)?;
+                        .store_embedder_edges(*embedder_id, source_id, neighbors)?;
                     knn_edges_created += neighbors.len();
                     sources_stored += 1;
                 }

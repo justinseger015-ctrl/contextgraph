@@ -109,7 +109,7 @@ impl Handlers {
             .unwrap_or(false);
 
         // Validate parameters
-        if max_memories < 1 || max_memories > 200 {
+        if !(1..=200).contains(&max_memories) {
             return self.tool_error(id, "maxMemories must be between 1 and 200");
         }
         if !(0.5..=1.0).contains(&min_confidence) {

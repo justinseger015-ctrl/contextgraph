@@ -370,7 +370,7 @@ pub fn compute_core_distances_gpu(
     let kernel = module.get_function("compute_core_distances_kernel")?;
 
     // Allocate GPU memory
-    let vectors_size = vectors.len() * std::mem::size_of::<f32>();
+    let vectors_size = std::mem::size_of_val(vectors);
     let output_size = n_points * std::mem::size_of::<f32>();
 
     let d_vectors = GpuBuffer::new(vectors_size)?;
@@ -426,7 +426,7 @@ pub fn compute_core_distances_gpu(
     ];
 
     // Launch kernel
-    let num_blocks = ((n_points as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    let num_blocks = (n_points as u32).div_ceil(BLOCK_SIZE);
     let ret = unsafe {
         cuLaunchKernel(
             kernel,
@@ -523,7 +523,7 @@ pub fn compute_pairwise_distances_gpu(
     let kernel = module.get_function("compute_pairwise_distances_kernel")?;
 
     // Allocate GPU memory
-    let vectors_size = vectors.len() * std::mem::size_of::<f32>();
+    let vectors_size = std::mem::size_of_val(vectors);
     let output_size = num_pairs * std::mem::size_of::<f32>();
 
     let d_vectors = GpuBuffer::new(vectors_size)?;
@@ -584,7 +584,7 @@ pub fn compute_pairwise_distances_gpu(
             code: -1,
         });
     }
-    let num_blocks = ((total_pairs as u32) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    let num_blocks = (total_pairs as u32).div_ceil(BLOCK_SIZE);
     let ret = unsafe {
         cuLaunchKernel(
             kernel,

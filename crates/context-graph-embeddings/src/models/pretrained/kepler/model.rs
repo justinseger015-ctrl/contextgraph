@@ -181,7 +181,7 @@ impl KeplerModel {
         // Extract text content from all inputs
         let texts: Vec<String> = inputs
             .iter()
-            .map(|input| Self::extract_content(input))
+            .map(Self::extract_content)
             .collect::<Result<Vec<_>, _>>()?;
 
         // Get text references for batch forward

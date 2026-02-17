@@ -777,7 +777,6 @@ pub struct RecentConversationTurn {
 /// # Returns
 /// Vector of retrieved memories, empty if search fails or no matches found.
 /// Failure is non-fatal - we log and return empty rather than failing the hook.
-
 /// Search the knowledge graph using a pre-created MCP client.
 /// This avoids redundant server connectivity checks when called alongside
 /// other MCP operations.
@@ -861,16 +860,16 @@ fn parse_search_results(result: &serde_json::Value) -> Vec<RetrievedMemory> {
         }
 
         // Parse source metadata if available
-        let source = item.get("source").and_then(|s| {
+        let source = item.get("source").map(|s| {
             let source_type = s.get("type").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string();
-            Some(SourceInfo {
+            SourceInfo {
                 source_type,
                 file_path: s.get("file_path").and_then(|v| v.as_str()).map(String::from),
                 chunk_index: s.get("chunk_index").and_then(|v| v.as_u64()).map(|n| n as u32),
                 total_chunks: s.get("total_chunks").and_then(|v| v.as_u64()).map(|n| n as u32),
                 hook_type: s.get("hook_type").and_then(|v| v.as_str()).map(String::from),
                 tool_name: s.get("tool_name").and_then(|v| v.as_str()).map(String::from),
-            })
+            }
         });
 
         memories.push(RetrievedMemory {
@@ -1139,7 +1138,6 @@ const DIVERGENCE_THRESHOLD: f32 = 0.3;
 ///
 /// # Returns
 /// Vector of divergence alerts, empty if none detected or fetch fails.
-
 /// Fetch divergence alerts using a pre-created MCP client.
 /// This avoids redundant server connectivity checks when called alongside
 /// other MCP operations.

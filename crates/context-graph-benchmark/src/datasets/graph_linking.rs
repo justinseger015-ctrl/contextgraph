@@ -511,7 +511,7 @@ impl GraphLinkingDatasetGenerator {
         }
 
         // Generate edges within topics (high probability)
-        for (_topic_id, members) in &topic_members {
+        for members in topic_members.values() {
             for &i in members.iter().take(100) {
                 // Limit per topic for performance
                 for &j in members.iter().take(10) {

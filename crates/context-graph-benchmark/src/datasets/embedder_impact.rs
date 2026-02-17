@@ -552,7 +552,7 @@ impl EmbedderImpactDatasetGenerator {
                     .filter(|(other_id, _)| other_id != id)
                     .map(|(other_id, other_fp)| {
                         let other_embedding = self.get_embedding(other_fp, embedder);
-                        let sim = cosine_similarity(&query_embedding, &other_embedding);
+                        let sim = cosine_similarity(query_embedding, other_embedding);
                         (*other_id, sim)
                     })
                     .collect();

@@ -274,7 +274,7 @@ impl SemanticFingerprint {
     /// Accepts either:
     /// - New format: both e8_graph_as_source and e8_graph_as_target have 1024D
     /// - Legacy format: only e8_graph has 1024D (as_source/as_target are empty)
-    /// (Upgraded from MiniLM 384D to e5-large-v2 1024D)
+    ///   (Upgraded from MiniLM 384D to e5-large-v2 1024D)
     fn validate_e8(&self) -> Result<(), ValidationError> {
         // New format: dual vectors populated
         if !self.e8_graph_as_source.is_empty() || !self.e8_graph_as_target.is_empty() {

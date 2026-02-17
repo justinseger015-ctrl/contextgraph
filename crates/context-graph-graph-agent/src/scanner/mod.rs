@@ -264,7 +264,7 @@ impl MemoryScanner {
 
         // 6. E1 semantic similarity in sweet spot (0.1)
         let sim = self.cosine_similarity(&mem_a.e1_embedding, &mem_b.e1_embedding);
-        if sim >= 0.4 && sim <= 0.8 {
+        if (0.4..=0.8).contains(&sim) {
             score += 0.1;
         }
 

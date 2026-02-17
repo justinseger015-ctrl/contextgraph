@@ -296,9 +296,10 @@ impl QueryStats {
 }
 
 /// Graph operation mode for the QueryBuilder.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum QueryMode {
     /// Pure semantic search (vector similarity only).
+    #[default]
     Semantic,
 
     /// Semantic search with graph context enrichment.
@@ -311,11 +312,6 @@ pub enum QueryMode {
     Contradiction,
 }
 
-impl Default for QueryMode {
-    fn default() -> Self {
-        Self::Semantic
-    }
-}
 
 #[cfg(test)]
 mod tests {

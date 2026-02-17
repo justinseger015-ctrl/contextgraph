@@ -488,7 +488,7 @@ fn compute_cause_effect_distance(pairs: &[BenchmarkPair], config: &BenchConfig) 
 /// For each forward pair, computes:
 /// - forward: e5_score(cause_text, effect_text) — correctly aligned
 /// - reverse: e5_score(effect_text, cause_text) — reversed alignment
-/// Then applies direction modifiers (1.2x forward, 0.8x reverse).
+///   Then applies direction modifiers (1.2x forward, 0.8x reverse).
 ///
 /// Tests whether the model + direction modifiers produce correct asymmetry.
 /// Results vary with model quality (unlike the previous hardcoded implementation).
@@ -903,8 +903,8 @@ fn simulate_ranked_search(
             .collect();
 
         // Only rerank the top-k candidates, leave rest in place
-        for i in 0..top_k {
-            let pair_id = &scored[i].0;
+        for scored_item in scored.iter_mut().take(top_k) {
+            let pair_id = &scored_item.0;
             if let Some(pair) = pairs.iter().find(|p| p.id == *pair_id) {
                 let all_words: Vec<&str> = pair.cause_text.split_whitespace()
                     .chain(pair.effect_text.split_whitespace())
@@ -916,7 +916,7 @@ fn simulate_ranked_search(
                     .count();
 
                 let maxsim_proxy = (overlap as f32 / total_words as f32).min(1.0);
-                scored[i].1 = (1.0 - rerank_weight) * scored[i].1 + rerank_weight * maxsim_proxy;
+                scored_item.1 = (1.0 - rerank_weight) * scored_item.1 + rerank_weight * maxsim_proxy;
             }
         }
 
