@@ -1,3 +1,11 @@
+# Directories excluded from repo (kept locally)
+docs/
+docs2/
+benchmarks/
+benchmark_results/
+.github/
+scripts/
+
 # Rust build artifacts
 target/
 **/*.rs.bk
@@ -131,9 +139,7 @@ contextgraph_data_backup_*/
 contextgraph_data_corrupted_*/
 contextgraph_data.bak.*/
 
-# Large benchmark artifacts (regeneratable)
-benchmark_results/*.json
-benchmark_results/*.md
+# Large benchmark artifacts (regeneratable) — covered by benchmark_results/ above
 
 # Debug artifacts that shouldn't be tracked
 *.rmeta
