@@ -662,9 +662,23 @@ impl McpServer {
         // TASK-INTEG-018: Create connection semaphore from config
         let max_connections = config.mcp.max_connections;
         let connection_semaphore = Arc::new(Semaphore::new(max_connections));
+        let active_connections = Arc::new(AtomicUsize::new(0));
         info!(
             "TCP transport ready: max_connections={}, bind_address={}, tcp_port={}",
             max_connections, config.mcp.bind_address, config.mcp.tcp_port
+        );
+
+        // Inject daemon state into handlers for daemon_status tool
+        let mut handlers = handlers;
+        handlers.set_daemon_state(
+            crate::handlers::DaemonState {
+                active_connections: Arc::clone(&active_connections),
+                max_connections,
+                models_loading: Arc::clone(&models_loading),
+                models_failed: Arc::clone(&models_failed),
+                background_shutdown: Arc::clone(&background_shutdown),
+                start_time: std::time::Instant::now(),
+            },
         );
 
         Ok(Self {
@@ -677,7 +691,7 @@ impl McpServer {
             handlers: Arc::new(handlers),
             initialized: Arc::new(RwLock::new(false)),
             connection_semaphore,
-            active_connections: Arc::new(AtomicUsize::new(0)),
+            active_connections,
             // E7-WIRING: Code watcher fields initialized as None/false
             code_watcher_task: Arc::new(RwLock::new(None)),
             code_watcher_running: Arc::new(AtomicBool::new(false)),

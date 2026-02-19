@@ -13,3 +13,4 @@ mod tools;
 mod tests;
 
 pub use self::core::Handlers;
+pub(crate) use self::tools::daemon_tools::DaemonState;
