@@ -52,6 +52,7 @@ use std::sync::atomic::Ordering;
 // P5: DashMap for lock-free concurrent soft-delete checks
 use dashmap::DashMap;
 
+use chrono::{DateTime, Utc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -202,16 +203,9 @@ fn search_single_embedder_sync(
         if let Some(data) = get_fingerprint_raw_sync(db, id)? {
             let fp = deserialize_teleological_fingerprint(&data)?;
             let code_query_type = options.effective_code_query_type();
-            let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
-                compute_embedder_scores_with_direction_sync(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                    options.causal_direction,
-                )
-            } else {
-                compute_embedder_scores_sync(query, &fp.semantic, code_query_type)
-            };
+            let embedder_scores = compute_embedder_scores_sync(
+                query, &fp.semantic, code_query_type, options.causal_direction, fp.created_at,
+            );
             results.push(TeleologicalSearchResult::new(fp, similarity, embedder_scores));
         }
     }
@@ -330,16 +324,9 @@ fn search_filtered_multi_space_sync(
     for fused in fused_results {
         if let Some(data) = get_fingerprint_raw_sync(db, fused.doc_id)? {
             let fp = deserialize_teleological_fingerprint(&data)?;
-            let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
-                compute_embedder_scores_with_direction_sync(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                    options.causal_direction,
-                )
-            } else {
-                compute_embedder_scores_sync(query, &fp.semantic, code_query_type)
-            };
+            let embedder_scores = compute_embedder_scores_sync(
+                query, &fp.semantic, code_query_type, options.causal_direction, fp.created_at,
+            );
             candidates.push((fp, embedder_scores));
         }
     }
@@ -375,72 +362,47 @@ fn search_filtered_multi_space_sync(
     Ok(results)
 }
 
-/// Compute embedder scores with code query type (pure function).
+/// Compute E2 recency score from a stored memory's creation timestamp.
 ///
-/// MED-21: E12 MaxSim is O(N*M) per result (e.g. 20x200=4K cosine ops). When E12
-/// weight is 0.0 in the active profile, this computation is skipped entirely.
-/// The `weights` parameter enables this optimization.
+/// Replaces broken E2 cosine similarity (all E2 vectors are identical because
+/// TemporalRecentModel embeds delta=0 for every memory at embed time).
+///
+/// Uses multi-scale exponential decay blending three time horizons:
+///   - Short (1h half-life, weight 0.4): sensitive to minute-level freshness
+///   - Medium (1d half-life, weight 0.35): day-level discrimination
+///   - Long (7d half-life, weight 0.25): week-level discrimination
+///
+/// Score behavior:
+///   - Just created: ~1.0
+///   - 1 hour old:   ~0.79
+///   - 1 day old:    ~0.40
+///   - 1 week old:   ~0.13
+///   - 1 month old:  ~0.01
+fn compute_e2_recency_decay(stored_created_at: DateTime<Utc>) -> f32 {
+    let now = Utc::now();
+    let age_secs = (now - stored_created_at).num_seconds().max(0) as f64;
+
+    // Three-scale exponential decay for smooth discrimination at all time ranges
+    let short = (-age_secs * std::f64::consts::LN_2 / 3600.0).exp();   // 1h half-life
+    let medium = (-age_secs * std::f64::consts::LN_2 / 86400.0).exp(); // 1d half-life
+    let long = (-age_secs * std::f64::consts::LN_2 / 604800.0).exp();  // 7d half-life
+
+    let score = 0.4 * short + 0.35 * medium + 0.25 * long;
+    score as f32
+}
+
+/// Compute all 13 embedder similarity scores (pure function).
+///
+/// E5 causal score uses direction-aware asymmetric similarity when `causal_direction`
+/// is not `Unknown`. With `Unknown`, E5 returns 0.0 (AP-77: no signal without direction).
+///
+/// MED-21: E12 MaxSim is O(N*M) per result. Skipped when tokens are empty.
 fn compute_embedder_scores_sync(
     query: &SemanticFingerprint,
     stored: &SemanticFingerprint,
     code_query_type: Option<CodeQueryType>,
-) -> [f32; 13] {
-    use crate::teleological::search::compute_maxsim_direct;
-    use context_graph_core::code::compute_e7_similarity_with_query_type;
-
-    let e7_score = match code_query_type {
-        Some(query_type) => {
-            compute_e7_similarity_with_query_type(&query.e7_code, &stored.e7_code, query_type)
-        }
-        None => compute_cosine_similarity(&query.e7_code, &stored.e7_code),
-    };
-
-    // MED-21 FIX: E12 MaxSim is O(N*M) per result. Skip when both sides are empty
-    // (which is the common case for non-ColBERT queries). The weight-based skip is
-    // handled at call sites that have access to the weight profile.
-    let e12_score = if query.e12_late_interaction.is_empty() || stored.e12_late_interaction.is_empty() {
-        0.0
-    } else {
-        compute_maxsim_direct(&query.e12_late_interaction, &stored.e12_late_interaction)
-    };
-
-    [
-        compute_cosine_similarity(&query.e1_semantic, &stored.e1_semantic),
-        compute_cosine_similarity(&query.e2_temporal_recent, &stored.e2_temporal_recent),
-        compute_cosine_similarity(&query.e3_temporal_periodic, &stored.e3_temporal_periodic),
-        compute_cosine_similarity(&query.e4_temporal_positional, &stored.e4_temporal_positional),
-        // AP-77: E5 MUST NOT use symmetric cosine — causal is directional.
-        // Without an explicit direction, E5 cannot provide meaningful signal.
-        // Use compute_embedder_scores_with_direction_sync when direction is known.
-        0.0,
-        // SEARCH-1 FIX: Normalize sparse cosine from [-1,1] to [0,1] to match
-        // dense embedders which use (raw+1)/2. Without this, E6/E13 are
-        // systematically under-weighted in fusion (0.8 raw vs 0.9 normalized).
-        (query.e6_sparse.cosine_similarity(&stored.e6_sparse) + 1.0) / 2.0,
-        e7_score,
-        // HIGH-8 FIX: E8 uses asymmetric source/target vectors.
-        // Query uses source vector ("what is connected to X?"),
-        // stored uses target vector (the destination of relationships).
-        compute_cosine_similarity(query.get_e8_as_source(), stored.get_e8_as_target()),
-        compute_cosine_similarity(&query.e9_hdc, &stored.e9_hdc),
-        // HIGH-8 FIX: E10 uses asymmetric paraphrase/context vectors.
-        // Query uses paraphrase vector (expressed meaning),
-        // stored uses context vector (background context).
-        compute_cosine_similarity(query.get_e10_as_paraphrase(), stored.get_e10_as_context()),
-        compute_cosine_similarity(&query.e11_entity, &stored.e11_entity),
-        e12_score,
-        (query.e13_splade.cosine_similarity(&stored.e13_splade) + 1.0) / 2.0,
-    ]
-}
-
-/// Compute embedder scores with direction awareness (pure function).
-///
-/// MED-21: Same E12 MaxSim optimization as compute_embedder_scores_sync.
-fn compute_embedder_scores_with_direction_sync(
-    query: &SemanticFingerprint,
-    stored: &SemanticFingerprint,
-    code_query_type: Option<CodeQueryType>,
     causal_direction: CausalDirection,
+    stored_created_at: DateTime<Utc>,
 ) -> [f32; 13] {
     use crate::teleological::search::compute_maxsim_direct;
     use context_graph_core::code::compute_e7_similarity_with_query_type;
@@ -454,6 +416,7 @@ fn compute_embedder_scores_with_direction_sync(
         None => compute_cosine_similarity(&query.e7_code, &stored.e7_code),
     };
 
+    // AP-77: E5 returns 0.0 for Unknown direction (causal is inherently directional)
     let e5_score = compute_similarity_for_space_with_direction(
         Embedder::Causal,
         query,
@@ -470,25 +433,21 @@ fn compute_embedder_scores_with_direction_sync(
 
     [
         compute_cosine_similarity(&query.e1_semantic, &stored.e1_semantic),
-        compute_cosine_similarity(&query.e2_temporal_recent, &stored.e2_temporal_recent),
+        // E2: Timestamp-based recency decay (cosine is broken — all E2 vectors identical)
+        compute_e2_recency_decay(stored_created_at),
         compute_cosine_similarity(&query.e3_temporal_periodic, &stored.e3_temporal_periodic),
         compute_cosine_similarity(&query.e4_temporal_positional, &stored.e4_temporal_positional),
         e5_score,
-        // SEARCH-1 FIX: Normalize sparse cosine [-1,1] → [0,1]
+        // SEARCH-1 FIX: Normalize sparse cosine [-1,1] to [0,1]
         (query.e6_sparse.cosine_similarity(&stored.e6_sparse) + 1.0) / 2.0,
         e7_score,
-        // HIGH-8 FIX: E8 uses asymmetric source/target vectors.
-        // Query uses source vector ("what is connected to X?"),
-        // stored uses target vector (the destination of relationships).
+        // E8: asymmetric source/target vectors
         compute_cosine_similarity(query.get_e8_as_source(), stored.get_e8_as_target()),
         compute_cosine_similarity(&query.e9_hdc, &stored.e9_hdc),
-        // HIGH-8 FIX: E10 uses asymmetric paraphrase/context vectors.
-        // Query uses paraphrase vector (expressed meaning),
-        // stored uses context vector (background context).
+        // E10: asymmetric paraphrase/context vectors
         compute_cosine_similarity(query.get_e10_as_paraphrase(), stored.get_e10_as_context()),
         compute_cosine_similarity(&query.e11_entity, &stored.e11_entity),
         e12_score,
-        // SEARCH-1 FIX: Normalize sparse cosine [-1,1] → [0,1]
         (query.e13_splade.cosine_similarity(&stored.e13_splade) + 1.0) / 2.0,
     ]
 }
@@ -531,16 +490,9 @@ fn search_e1_only_sync(
         if let Some(data) = get_fingerprint_raw_sync(db, id)? {
             let fp = deserialize_teleological_fingerprint(&data)?;
             let code_query_type = options.effective_code_query_type();
-            let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
-                compute_embedder_scores_with_direction_sync(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                    options.causal_direction,
-                )
-            } else {
-                compute_embedder_scores_sync(query, &fp.semantic, code_query_type)
-            };
+            let embedder_scores = compute_embedder_scores_sync(
+                query, &fp.semantic, code_query_type, options.causal_direction, fp.created_at,
+            );
             results.push(TeleologicalSearchResult::new(fp, similarity, embedder_scores));
         }
     }
@@ -789,16 +741,9 @@ fn search_multi_space_sync(
     for fused in fused_results {
         if let Some(data) = get_fingerprint_raw_sync(db, fused.doc_id)? {
             let fp = deserialize_teleological_fingerprint(&data)?;
-            let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
-                compute_embedder_scores_with_direction_sync(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                    options.causal_direction,
-                )
-            } else {
-                compute_embedder_scores_sync(query, &fp.semantic, code_query_type)
-            };
+            let embedder_scores = compute_embedder_scores_sync(
+                query, &fp.semantic, code_query_type, options.causal_direction, fp.created_at,
+            );
             candidates.push((fp, embedder_scores));
         }
     }
@@ -1006,16 +951,9 @@ fn search_pipeline_sync(
     let candidate_data: Vec<(Uuid, [f32; 13], SemanticFingerprint)> = valid_candidates
         .into_iter()
         .map(|(id, fp)| {
-            let embedder_scores = if options.causal_direction != CausalDirection::Unknown {
-                compute_embedder_scores_with_direction_sync(
-                    query,
-                    &fp.semantic,
-                    code_query_type,
-                    options.causal_direction,
-                )
-            } else {
-                compute_embedder_scores_sync(query, &fp.semantic, code_query_type)
-            };
+            let embedder_scores = compute_embedder_scores_sync(
+                query, &fp.semantic, code_query_type, options.causal_direction, fp.created_at,
+            );
             (id, embedder_scores, fp.semantic)
         })
         .collect();
@@ -1804,5 +1742,94 @@ impl RocksDbTeleologicalStore {
         })
         .await
         .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))?
+    }
+}
+
+#[cfg(test)]
+mod e2_recency_tests {
+    use super::*;
+    use chrono::Duration;
+
+    #[test]
+    fn test_just_created_near_one() {
+        let now = Utc::now();
+        let score = compute_e2_recency_decay(now);
+        assert!(
+            (score - 1.0).abs() < 0.02,
+            "Just-created memory should score ~1.0, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_one_hour_old() {
+        let created = Utc::now() - Duration::hours(1);
+        let score = compute_e2_recency_decay(created);
+        assert!(
+            (score - 0.79).abs() < 0.05,
+            "1-hour-old memory should score ~0.79, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_one_day_old() {
+        let created = Utc::now() - Duration::days(1);
+        let score = compute_e2_recency_decay(created);
+        assert!(
+            (score - 0.40).abs() < 0.05,
+            "1-day-old memory should score ~0.40, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_one_week_old() {
+        let created = Utc::now() - Duration::weeks(1);
+        let score = compute_e2_recency_decay(created);
+        assert!(
+            (score - 0.13).abs() < 0.05,
+            "1-week-old memory should score ~0.13, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_one_month_old() {
+        let created = Utc::now() - Duration::days(30);
+        let score = compute_e2_recency_decay(created);
+        assert!(
+            score < 0.05,
+            "1-month-old memory should score ~0.01, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_future_timestamp_clamped() {
+        // Future timestamps should clamp age to 0, giving score ~1.0
+        let future = Utc::now() + Duration::hours(1);
+        let score = compute_e2_recency_decay(future);
+        assert!(
+            (score - 1.0).abs() < 0.02,
+            "Future memory should score ~1.0 (age clamped to 0), got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_monotonically_decreasing() {
+        let now = Utc::now();
+        let scores: Vec<f32> = [0, 60, 3600, 86400, 604800, 2592000]
+            .iter()
+            .map(|&secs| compute_e2_recency_decay(now - Duration::seconds(secs)))
+            .collect();
+        for i in 1..scores.len() {
+            assert!(
+                scores[i] <= scores[i - 1] + f32::EPSILON,
+                "Score should decrease over time: age[{}]={} > age[{}]={}",
+                i, scores[i], i - 1, scores[i - 1]
+            );
+        }
     }
 }

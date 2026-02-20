@@ -126,75 +126,6 @@ pub fn compute_e2_recency_score(
     }
 }
 
-/// Compute E2 recency score with adaptive half-life based on corpus size.
-///
-/// E2 decay accuracy degrades at larger corpus sizes with fixed half-life.
-/// This variant scales the half-life to maintain accuracy across scales.
-///
-/// # Arguments
-///
-/// * `memory_timestamp_ms` - Timestamp of the memory in milliseconds
-/// * `query_timestamp_ms` - Current time in milliseconds
-/// * `options` - Temporal search options with decay configuration
-/// * `corpus_size` - Number of memories in the corpus
-///
-/// # Returns
-///
-/// Recency score [0.0, 1.0] where 1.0 is most recent
-pub fn compute_e2_recency_score_adaptive(
-    memory_timestamp_ms: i64,
-    query_timestamp_ms: i64,
-    options: &TemporalSearchOptions,
-    corpus_size: usize,
-) -> f32 {
-    // Age in seconds
-    let age_secs = ((query_timestamp_ms - memory_timestamp_ms).max(0) / 1000) as f64;
-
-    match options.decay_function {
-        DecayFunction::Linear => {
-            // Linear decay uses temporal scale, not half-life
-            let max_age_secs = options.temporal_scale.horizon_seconds() as f64;
-            let score = 1.0 - (age_secs / max_age_secs).min(1.0);
-            score.max(0.0) as f32
-        }
-        DecayFunction::Exponential => {
-            // Use adaptive half-life based on corpus size
-            let half_life_secs = options.adaptive_half_life(corpus_size) as f64;
-            let lambda = std::f64::consts::LN_2 / half_life_secs; // ln(2) / half_life
-            let score = (-age_secs * lambda).exp();
-            score as f32
-        }
-        DecayFunction::Step => {
-            // Step function doesn't use half-life
-            let age_secs_u64 = age_secs as u64;
-            for &(threshold, score) in &options.step_buckets {
-                if age_secs_u64 <= threshold {
-                    return score;
-                }
-            }
-            0.1
-        }
-        DecayFunction::NoDecay => 1.0,
-    }
-}
-
-/// Compute E2 recency score using the E2 embedding similarity.
-///
-/// Uses cosine similarity between query E2 and memory E2 embeddings.
-/// This captures learned temporal patterns, not just raw timestamps.
-///
-/// # Arguments
-///
-/// * `query_e2` - Query E2 temporal embedding
-/// * `memory_e2` - Memory E2 temporal embedding
-///
-/// # Returns
-///
-/// Similarity score [0.0, 1.0]
-#[inline]
-pub fn compute_e2_embedding_similarity(query_e2: &[f32], memory_e2: &[f32]) -> f32 {
-    cosine_similarity(query_e2, memory_e2)
-}
 
 // =============================================================================
 // E3 PERIODIC FUNCTIONS
@@ -655,7 +586,7 @@ impl Default for TemporalBoostData {
     }
 }
 
-/// Apply all temporal boosts POST-retrieval per ARCH-14.
+/// Apply all temporal boosts POST-retrieval per ARCH-14 with sequence support (E4-FIX).
 ///
 /// This function:
 /// 1. Computes E2 recency scores (if decay function is active)
@@ -664,198 +595,8 @@ impl Default for TemporalBoostData {
 /// 4. Combines boosts with configurable weights
 /// 5. Re-sorts results by final score
 ///
-/// # Arguments
-///
-/// * `results` - Search results to boost (modified in place)
-/// * `query_fp` - Query semantic fingerprint (for embedding comparisons)
-/// * `options` - Temporal search options
-/// * `fingerprints` - Map of memory IDs to their fingerprints
-/// * `timestamps` - Map of memory IDs to their timestamps (ms)
-/// * `anchor_fp` - Optional anchor fingerprint for sequence queries
-/// * `anchor_ts` - Optional anchor timestamp for sequence queries
-///
-/// # Returns
-///
-/// Map of memory IDs to their temporal boost data (for debugging/logging)
-pub fn apply_temporal_boosts(
-    results: &mut [TeleologicalSearchResult],
-    query_fp: &SemanticFingerprint,
-    options: &TemporalSearchOptions,
-    fingerprints: &HashMap<Uuid, SemanticFingerprint>,
-    timestamps: &HashMap<Uuid, i64>,
-    anchor_fp: Option<&SemanticFingerprint>,
-    anchor_ts: Option<i64>,
-) -> HashMap<Uuid, TemporalBoostData> {
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    let temporal_weight = options.temporal_weight;
-
-    // If no temporal weight, skip all processing
-    if temporal_weight <= 0.0 {
-        return HashMap::new();
-    }
-
-    let mut boost_data: HashMap<Uuid, TemporalBoostData> = HashMap::new();
-
-    // Compute individual component weights from configured weights
-    // Only include weights for active components, then normalize
-    let has_recency = options.decay_function.is_active();
-    let has_periodic = options.periodic_options.is_some();
-    let has_sequence = options.sequence_options.is_some();
-
-    if !has_recency && !has_periodic && !has_sequence {
-        return HashMap::new();
-    }
-
-    // Use configured weights (default: 0.50/0.15/0.35 from benchmark optimization)
-    let (w_recency, w_periodic, w_sequence) = options.component_weights;
-
-    // Zero out weights for inactive components
-    let raw_recency = if has_recency { w_recency } else { 0.0 };
-    let raw_periodic = if has_periodic { w_periodic } else { 0.0 };
-    let raw_sequence = if has_sequence { w_sequence } else { 0.0 };
-
-    // Normalize active weights to sum to 1.0
-    let total_weight = raw_recency + raw_periodic + raw_sequence;
-    let (recency_weight, periodic_weight, sequence_weight) = if total_weight > f32::EPSILON {
-        (
-            raw_recency / total_weight,
-            raw_periodic / total_weight,
-            raw_sequence / total_weight,
-        )
-    } else {
-        // Fallback: equal among active
-        let active_count = has_recency as u8 + has_periodic as u8 + has_sequence as u8;
-        let w = 1.0 / active_count.max(1) as f32;
-        (
-            if has_recency { w } else { 0.0 },
-            if has_periodic { w } else { 0.0 },
-            if has_sequence { w } else { 0.0 },
-        )
-    };
-
-    debug!(
-        "Temporal boost weights: recency={:.2}, periodic={:.2}, sequence={:.2}, master={:.2}",
-        recency_weight, periodic_weight, sequence_weight, temporal_weight
-    );
-
-    for result in results.iter_mut() {
-        let id = result.fingerprint.id;
-        let memory_fp = fingerprints.get(&id);
-        let memory_ts = timestamps.get(&id).copied().unwrap_or(0);
-
-        let mut data = TemporalBoostData::default();
-
-        // E2 Recency
-        if has_recency {
-            if let Some(fp) = memory_fp {
-                // Prefer embedding-based similarity if query has E2
-                if !query_fp.e2_temporal_recent.is_empty() && !fp.e2_temporal_recent.is_empty() {
-                    data.recency_score = compute_e2_embedding_similarity(
-                        &query_fp.e2_temporal_recent,
-                        &fp.e2_temporal_recent,
-                    );
-                } else {
-                    // Fall back to timestamp-based decay
-                    data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
-                }
-            } else {
-                data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
-            }
-        }
-
-        // E3 Periodic
-        if let Some(ref periodic_opts) = options.periodic_options {
-            if let Some(fp) = memory_fp {
-                // Prefer embedding-based similarity
-                if !query_fp.e3_temporal_periodic.is_empty() && !fp.e3_temporal_periodic.is_empty() {
-                    data.periodic_score = compute_e3_periodic_score(
-                        &query_fp.e3_temporal_periodic,
-                        &fp.e3_temporal_periodic,
-                    );
-                } else {
-                    // Fall back to hour/day matching using chrono
-                    let (memory_hour, memory_dow) = extract_temporal_components(memory_ts);
-                    data.periodic_score = compute_periodic_match_fallback(
-                        periodic_opts.effective_hour(),
-                        memory_hour,
-                        periodic_opts.effective_day_of_week(),
-                        memory_dow,
-                    );
-                }
-            }
-        }
-
-        // E4 Sequence
-        if let Some(ref sequence_opts) = options.sequence_options {
-            if let (Some(anchor), Some(anchor_time)) = (anchor_fp, anchor_ts) {
-                if let Some(fp) = memory_fp {
-                    // Prefer embedding-based similarity
-                    if !anchor.e4_temporal_positional.is_empty() && !fp.e4_temporal_positional.is_empty() {
-                        data.sequence_score = compute_e4_sequence_score(
-                            &anchor.e4_temporal_positional,
-                            &fp.e4_temporal_positional,
-                            memory_ts,
-                            anchor_time,
-                            sequence_opts.direction,
-                        );
-                    } else {
-                        // Fall back to timestamp proximity
-                        let max_distance = sequence_opts.max_distance as u64 * 60; // Convert positions to seconds
-                        data.sequence_score = if sequence_opts.use_exponential_fallback {
-                            compute_sequence_proximity_exponential(
-                                memory_ts,
-                                anchor_time,
-                                sequence_opts.direction,
-                                max_distance,
-                            )
-                        } else {
-                            compute_sequence_proximity_fallback(
-                                memory_ts,
-                                anchor_time,
-                                sequence_opts.direction,
-                                max_distance,
-                            )
-                        };
-                    }
-                }
-            }
-        }
-
-        // Combine component scores
-        data.combined_score =
-            data.recency_score * recency_weight +
-            data.periodic_score * periodic_weight +
-            data.sequence_score * sequence_weight;
-
-        // Apply temporal boost to final similarity
-        // formula: final = semantic * (1 - weight) + temporal * weight
-        let original = result.similarity;
-        result.similarity = original * (1.0 - temporal_weight) + data.combined_score * temporal_weight;
-
-        debug!(
-            "Temporal boost for {}: {} -> {} (recency={:.3}, periodic={:.3}, sequence={:.3})",
-            id, original, result.similarity,
-            data.recency_score, data.periodic_score, data.sequence_score
-        );
-
-        boost_data.insert(id, data);
-    }
-
-    // Re-sort results by boosted similarity
-    results.sort_by(|a, b| {
-        b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    boost_data
-}
-
-/// Apply all temporal boosts POST-retrieval with sequence support (E4-FIX Phase 2).
-///
-/// This is the v2 version that properly uses session_sequence for E4 direction filtering.
-/// The key difference from `apply_temporal_boosts` is that this function:
-/// 1. Takes `sequences` map with session_sequence for each memory
-/// 2. Takes `anchor_seq` for the anchor memory's sequence
-/// 3. Uses `compute_e4_sequence_score_v2` which prefers sequence-based direction filtering
+/// E4 direction filtering prefers session_sequence over timestamps when both
+/// the memory and anchor have sequence numbers available.
 ///
 /// # Arguments
 ///
@@ -867,7 +608,7 @@ pub fn apply_temporal_boosts(
 /// * `sequences` - Map of memory IDs to their session_sequence (if available)
 /// * `anchor_fp` - Optional anchor fingerprint for sequence queries
 /// * `anchor_ts` - Optional anchor timestamp for sequence queries
-/// * `anchor_seq` - Optional anchor session_sequence for sequence queries (E4-FIX)
+/// * `anchor_seq` - Optional anchor session_sequence for sequence queries
 ///
 /// # Returns
 ///
@@ -944,22 +685,10 @@ pub fn apply_temporal_boosts_v2(
 
         let mut data = TemporalBoostData::default();
 
-        // E2 Recency
+        // E2 Recency — always use timestamp-based decay.
+        // E2 embedding cosine is broken (all vectors identical → always 1.0).
         if has_recency {
-            if let Some(fp) = memory_fp {
-                // Prefer embedding-based similarity if query has E2
-                if !query_fp.e2_temporal_recent.is_empty() && !fp.e2_temporal_recent.is_empty() {
-                    data.recency_score = compute_e2_embedding_similarity(
-                        &query_fp.e2_temporal_recent,
-                        &fp.e2_temporal_recent,
-                    );
-                } else {
-                    // Fall back to timestamp-based decay
-                    data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
-                }
-            } else {
-                data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
-            }
+            data.recency_score = compute_e2_recency_score(memory_ts, now_ms, options);
         }
 
         // E3 Periodic
@@ -1203,16 +932,6 @@ mod tests {
         // 12 hours apart (opposite)
         let score = compute_periodic_match_fallback(Some(14), 2, None, 0);
         assert!(score < 0.1);
-    }
-
-    #[test]
-    fn test_e2_embedding_similarity() {
-        let query = vec![1.0, 0.0, 0.0];
-        let same = vec![1.0, 0.0, 0.0];
-        let orthogonal = vec![0.0, 1.0, 0.0];
-
-        assert!((compute_e2_embedding_similarity(&query, &same) - 1.0).abs() < 0.01);
-        assert!(compute_e2_embedding_similarity(&query, &orthogonal) < 0.01);
     }
 
     // =============================================================================

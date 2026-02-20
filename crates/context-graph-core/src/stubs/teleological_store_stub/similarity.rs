@@ -39,8 +39,8 @@ pub(crate) fn compute_semantic_scores(
     // E1: Semantic
     scores[0] = cosine_similarity(&query.e1_semantic, &target.e1_semantic);
 
-    // E2: Temporal Recent
-    scores[1] = cosine_similarity(&query.e2_temporal_recent, &target.e2_temporal_recent);
+    // E2: Temporal Recent — neutral score (E2 cosine is broken: all vectors identical → 1.0)
+    scores[1] = 0.5;
 
     // E3: Temporal Periodic
     scores[2] = cosine_similarity(&query.e3_temporal_periodic, &target.e3_temporal_periodic);
