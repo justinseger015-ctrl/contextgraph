@@ -1003,33 +1003,47 @@ impl Handlers {
 
 /// Infer causal direction from a semantic fingerprint's E5 embeddings.
 ///
-/// Documents that describe causes tend to have stronger "as_cause" vectors,
-/// while documents describing effects have stronger "as_effect" vectors.
+/// MCP-L2 FIX: Uses component variance instead of L2 norms. L2 norms of E5 dual
+/// vectors are nearly identical regardless of direction (both are unit-normalized
+/// by the model). Component variance captures distributional differences: causal
+/// content activates different dimensions than effect content.
+///
+/// # Returns
+/// - `Cause` if cause vector has significantly higher variance (>10% difference)
+/// - `Effect` if effect vector has significantly higher variance
+/// - `Unknown` if variances are similar or both are near zero
 fn infer_causal_direction(fingerprint: &SemanticFingerprint) -> CausalDirection {
     let cause_vec = fingerprint.get_e5_as_cause();
     let effect_vec = fingerprint.get_e5_as_effect();
 
-    // Compare vector norms as a proxy for directional strength
-    let cause_norm: f32 = cause_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let effect_norm: f32 = effect_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let cause_variance = component_variance_f32(cause_vec);
+    let effect_variance = component_variance_f32(effect_vec);
+
+    let max_var = cause_variance.max(effect_variance);
+    if max_var < f32::EPSILON {
+        return CausalDirection::Unknown; // Both zero vectors
+    }
+
+    let diff_ratio = (cause_variance - effect_variance) / max_var;
 
     // Require >10% difference to be confident in direction
-    let threshold = 0.1;
-    let diff_ratio = if effect_norm > f32::EPSILON {
-        (cause_norm - effect_norm) / effect_norm
-    } else if cause_norm > f32::EPSILON {
-        1.0 // All cause, no effect
-    } else {
-        0.0 // Both zero
-    };
-
-    if diff_ratio > threshold {
+    if diff_ratio > 0.1 {
         CausalDirection::Cause
-    } else if diff_ratio < -threshold {
+    } else if diff_ratio < -0.1 {
         CausalDirection::Effect
     } else {
         CausalDirection::Unknown
     }
+}
+
+/// Compute variance of vector components (measures how spread out activations are).
+fn component_variance_f32(v: &[f32]) -> f32 {
+    if v.is_empty() {
+        return 0.0;
+    }
+    let n = v.len() as f32;
+    let mean = v.iter().sum::<f32>() / n;
+    v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n
 }
 
 #[cfg(test)]
@@ -1038,47 +1052,53 @@ mod tests {
 
     #[test]
     fn test_infer_causal_direction_cause() {
-        // Create a fingerprint where cause norm > effect norm
+        // MCP-L2 FIX: Uses component variance, not L2 norms.
+        // High-variance cause vector (spread activations) vs low-variance effect (uniform)
         let mut fp = SemanticFingerprint::zeroed();
-        // Set e5_as_cause to have higher norm than e5_as_effect
-        fp.e5_causal_as_cause = vec![1.0, 0.5, 0.3]; // norm ~= 1.14
-        fp.e5_causal_as_effect = vec![0.5, 0.2, 0.1]; // norm ~= 0.55
+        fp.e5_causal_as_cause = vec![2.0, -1.0, 0.5, -0.3]; // variance ~= 1.17
+        fp.e5_causal_as_effect = vec![0.5, 0.5, 0.5, 0.5];  // variance = 0.0
 
         let direction = infer_causal_direction(&fp);
         assert_eq!(direction, CausalDirection::Cause);
-        println!("[PASS] Correctly inferred Cause direction");
     }
 
     #[test]
     fn test_infer_causal_direction_effect() {
-        // Create a fingerprint where effect norm > cause norm
+        // High-variance effect vector vs low-variance cause vector
         let mut fp = SemanticFingerprint::zeroed();
-        fp.e5_causal_as_cause = vec![0.5, 0.2, 0.1]; // norm ~= 0.55
-        fp.e5_causal_as_effect = vec![1.0, 0.5, 0.3]; // norm ~= 1.14
+        fp.e5_causal_as_cause = vec![0.5, 0.5, 0.5, 0.5];  // variance = 0.0
+        fp.e5_causal_as_effect = vec![2.0, -1.0, 0.5, -0.3]; // variance ~= 1.17
 
         let direction = infer_causal_direction(&fp);
         assert_eq!(direction, CausalDirection::Effect);
-        println!("[PASS] Correctly inferred Effect direction");
     }
 
     #[test]
     fn test_infer_causal_direction_unknown() {
-        // Create a fingerprint where norms are similar
+        // Same variance in both vectors = unknown
         let mut fp = SemanticFingerprint::zeroed();
         fp.e5_causal_as_cause = vec![1.0, 0.5, 0.3];
         fp.e5_causal_as_effect = vec![1.0, 0.5, 0.3];
 
         let direction = infer_causal_direction(&fp);
         assert_eq!(direction, CausalDirection::Unknown);
-        println!("[PASS] Correctly inferred Unknown direction for equal norms");
     }
 
     #[test]
     fn test_infer_causal_direction_empty_vectors() {
-        // Create a fingerprint with empty vectors
+        // Zeroed fingerprint = empty vectors = unknown
         let fp = SemanticFingerprint::zeroed();
         let direction = infer_causal_direction(&fp);
         assert_eq!(direction, CausalDirection::Unknown);
-        println!("[PASS] Correctly handled empty vectors");
+    }
+
+    #[test]
+    fn test_component_variance_f32() {
+        // Known variance: [1, 3] has mean=2, variance=((1-2)^2+(3-2)^2)/2 = 1.0
+        assert!((component_variance_f32(&[1.0, 3.0]) - 1.0).abs() < 1e-6);
+        // Uniform vector has zero variance
+        assert!((component_variance_f32(&[5.0, 5.0, 5.0]) - 0.0).abs() < 1e-6);
+        // Empty vector returns 0
+        assert_eq!(component_variance_f32(&[]), 0.0);
     }
 }

@@ -802,6 +802,15 @@ impl McpServer {
             // Apply request timeout to prevent a hung handler from blocking the entire
             // stdio session indefinitely. Matches the TCP transport behavior (HIGH-15).
             let request_timeout = self.config.mcp.request_timeout;
+
+            // MCP-H2 FIX: Pre-parse request id before handle_request consumes the input.
+            // This ensures timeout errors include the correct id per JSON-RPC 2.0 spec.
+            let request_id: Option<crate::protocol::JsonRpcId> =
+                serde_json::from_str::<serde_json::Value>(trimmed)
+                    .ok()
+                    .and_then(|v| v.get("id").cloned())
+                    .and_then(|id_val| serde_json::from_value(id_val).ok());
+
             let response = match tokio::time::timeout(
                 std::time::Duration::from_secs(request_timeout),
                 self.handle_request(trimmed),
@@ -815,7 +824,7 @@ impl McpServer {
                         request_timeout
                     );
                     JsonRpcResponse::error(
-                        None,
+                        request_id,
                         crate::protocol::error_codes::LAYER_TIMEOUT,
                         format!(
                             "Request timed out after {}s. Handler may be deadlocked.",

@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use context_graph_core::error::{CoreError, CoreResult};
-use context_graph_core::traits::{MultiArrayEmbeddingOutput, MultiArrayEmbeddingProvider};
+use context_graph_core::traits::{EmbeddingMetadata, MultiArrayEmbeddingOutput, MultiArrayEmbeddingProvider};
 use context_graph_core::types::fingerprint::NUM_EMBEDDERS;
 
 /// Lazy wrapper for MultiArrayEmbeddingProvider that allows immediate MCP startup.
@@ -104,6 +104,36 @@ impl MultiArrayEmbeddingProvider for LazyMultiArrayProvider {
         }
     }
 
+    /// MCP-H1 FIX: Override embed_all_with_metadata to delegate to real provider.
+    /// Without this, the default trait impl discards E4 session_sequence and E5 causal_hint,
+    /// silently falling back to embed_all() which produces incorrect E4/E5 embeddings.
+    async fn embed_all_with_metadata(
+        &self,
+        content: &str,
+        metadata: EmbeddingMetadata,
+    ) -> CoreResult<MultiArrayEmbeddingOutput> {
+        if self.loading.load(Ordering::SeqCst) {
+            return Err(CoreError::Internal(
+                "Embedding models are still loading. Please wait and try again.".to_string(),
+            ));
+        }
+
+        if let Some(ref err) = *self.failed.read().await {
+            return Err(CoreError::Internal(format!(
+                "Embedding model loading failed: {}",
+                err
+            )));
+        }
+
+        let guard = self.inner.read().await;
+        match guard.as_ref() {
+            Some(provider) => provider.embed_all_with_metadata(content, metadata).await,
+            None => Err(CoreError::Internal(
+                "Embedding provider not available. This is a bug.".to_string(),
+            )),
+        }
+    }
+
     async fn embed_batch_all(
         &self,
         contents: &[String],
@@ -169,7 +199,15 @@ impl MultiArrayEmbeddingProvider for LazyMultiArrayProvider {
         if !self.is_ready() {
             return [false; NUM_EMBEDDERS];
         }
-        [true; NUM_EMBEDDERS]
+        // MCP-M2 FIX: Delegate to real provider for per-embedder health.
+        // Previously hardcoded [true; 13], hiding post-startup embedder failures.
+        match self.inner.try_read() {
+            Ok(guard) => match guard.as_ref() {
+                Some(provider) => provider.health_status(),
+                None => [false; NUM_EMBEDDERS],
+            },
+            Err(_) => [true; NUM_EMBEDDERS], // lock contended, assume healthy
+        }
     }
 }
 

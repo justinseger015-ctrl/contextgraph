@@ -286,9 +286,10 @@ impl McpServer {
             let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
                 Ok(r) => r,
                 Err(e) => {
-                    // FAIL FAST: Send parse error and disconnect
+                    // MCP-L4 FIX: Log message was misleading — code actually returns error
+                    // via Err() below (which does disconnect), but the message should match.
                     warn!(
-                        "[{}] {} sent invalid JSON, disconnecting: {}",
+                        "[{}] {} sent invalid JSON, sending error and closing: {}",
                         conn_tag, peer_addr, e
                     );
                     let error_response = JsonRpcResponse::error(
@@ -334,6 +335,9 @@ impl McpServer {
             }
 
             // HIGH-15 FIX: Apply request timeout to prevent unbounded request processing.
+            // MCP-H2 FIX: Clone request.id before dispatch consumes the request,
+            // so timeout errors can include the correct id per JSON-RPC 2.0 spec.
+            let request_id = request.id.clone();
             let response = match tokio::time::timeout(
                 Duration::from_secs(request_timeout),
                 handlers.dispatch(request),
@@ -347,7 +351,7 @@ impl McpServer {
                         conn_tag, request_timeout, peer_addr
                     );
                     JsonRpcResponse::error(
-                        None,
+                        request_id,
                         crate::protocol::error_codes::TCP_CLIENT_TIMEOUT,
                         format!(
                             "Request timed out after {}s. Consider increasing request_timeout.",

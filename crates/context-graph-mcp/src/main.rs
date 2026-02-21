@@ -98,6 +98,9 @@ struct CliArgs {
     daemon_port: u16,
     /// Whether --daemon-port was explicitly passed on CLI
     explicit_daemon_port: bool,
+    /// Internal flag: this process IS the headless daemon (--daemon-server-only).
+    /// Set automatically by spawn_daemon_process(). Not exposed in --help.
+    daemon_server_only: bool,
 }
 
 impl CliArgs {
@@ -118,6 +121,7 @@ impl CliArgs {
             daemon: false,
             daemon_port: 3100, // Default daemon port (aligned with .mcp.json)
             explicit_daemon_port: false,
+            daemon_server_only: false,
         };
 
         let mut i = 1;
@@ -191,6 +195,12 @@ impl CliArgs {
                             cli.help = true;
                         }
                     }
+                }
+                "--daemon-server-only" => {
+                    // Internal flag: this process IS the headless daemon.
+                    // Spawned by spawn_daemon_process() — not for direct user use.
+                    cli.daemon_server_only = true;
+                    cli.daemon = true;
                 }
                 arg => {
                     eprintln!("WARNING: Unknown argument '{}' — ignoring. Use --help for usage.", arg);
@@ -1283,6 +1293,10 @@ async fn run_stdio_to_tcp_proxy(daemon_port: u16) -> Result<()> {
 /// Spawns a task that runs the TCP server and waits until it's accepting connections.
 /// The PID guard is moved into the daemon task so it lives exactly as long as the daemon.
 /// Signal handlers are registered inside the daemon task for graceful shutdown.
+///
+/// NOTE: On Unix, this is replaced by spawn_daemon_process() which runs the daemon
+/// in a separate OS process (survives proxy death). Kept for non-Unix fallback.
+#[cfg(not(unix))]
 async fn start_daemon_server(
     config: Config,
     warm_first: bool,
@@ -1377,6 +1391,110 @@ async fn start_daemon_server(
     ))
 }
 
+/// Spawn the daemon as a separate OS process that survives the proxy's death.
+///
+/// Uses `setsid()` to make the child a session leader, so it doesn't receive
+/// SIGHUP/SIGTERM when the proxy's terminal or process group dies. The child
+/// process runs with `--daemon-server-only` which triggers the headless daemon
+/// handler in main().
+///
+/// Polls `is_daemon_healthy()` with 500ms intervals until the daemon is ready
+/// or 120s timeout (generous for model warmup: 13 embedders on RTX 5090).
+#[cfg(unix)]
+async fn spawn_daemon_process(
+    daemon_port: u16,
+    config_path: Option<&Path>,
+    warm_first: bool,
+) -> Result<()> {
+    use std::os::unix::process::CommandExt;
+    use tokio::time::{sleep, Duration};
+
+    let exe = std::env::current_exe()
+        .map_err(|e| anyhow::anyhow!("Cannot determine current executable path: {}", e))?;
+
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.arg("--daemon-server-only");
+    cmd.arg("--daemon-port");
+    cmd.arg(daemon_port.to_string());
+
+    if let Some(path) = config_path {
+        cmd.arg("--config");
+        cmd.arg(path);
+    }
+
+    if !warm_first {
+        cmd.arg("--no-warm");
+    }
+
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::inherit());
+
+    // setsid() makes the child a session leader — it won't receive
+    // SIGHUP/SIGTERM when the parent's terminal or process group dies.
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to spawn daemon process: {}", e))?;
+
+    let child_pid = child.id();
+    info!(
+        "Spawned daemon process PID {} (exe: {:?})",
+        child_pid, exe
+    );
+
+    // Wait for daemon to become healthy (up to 120s for model warmup)
+    let max_wait = Duration::from_secs(120);
+    let poll_interval = Duration::from_millis(500);
+    let start = std::time::Instant::now();
+
+    loop {
+        if start.elapsed() > max_wait {
+            error!(
+                "Daemon process PID {} did not become healthy within 120s",
+                child_pid
+            );
+            unsafe {
+                libc::kill(child_pid as i32, libc::SIGKILL);
+            }
+            return Err(anyhow::anyhow!(
+                "Daemon process failed to start within 120s (PID {}). \
+                 Check RUST_LOG=info for daemon stderr output.",
+                child_pid
+            ));
+        }
+
+        // Check if child is still alive
+        let alive = unsafe { libc::kill(child_pid as i32, 0) } == 0;
+        if !alive {
+            return Err(anyhow::anyhow!(
+                "Daemon process PID {} exited during startup. \
+                 Check RUST_LOG=info for daemon stderr output.",
+                child_pid
+            ));
+        }
+
+        // Check health
+        if is_daemon_healthy(daemon_port).await {
+            info!(
+                "Daemon process PID {} is healthy on port {} (started in {:.1}s)",
+                child_pid,
+                daemon_port,
+                start.elapsed().as_secs_f64()
+            );
+            return Ok(());
+        }
+
+        sleep(poll_interval).await;
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // CRITICAL: MCP servers must be silent - set this BEFORE any config loading.
@@ -1453,6 +1571,103 @@ async fn main() -> Result<()> {
     let db_path = PathBuf::from(&config.storage.path);
     let uses_rocksdb = config.storage.backend == "rocksdb";
 
+    // ==================================================================
+    // HEADLESS DAEMON MODE (--daemon-server-only)
+    // This process IS the daemon, spawned by spawn_daemon_process().
+    // Runs as a session leader (setsid) so it survives the proxy's death.
+    // ==================================================================
+    if cli.daemon_server_only {
+        config.mcp.tcp_port = daemon_port;
+        config.mcp.transport = "tcp".to_string();
+
+        // Kill stale holders (both daemon and standalone)
+        #[cfg(unix)]
+        if uses_rocksdb {
+            let _ = kill_stale_lock_holder(&db_path, daemon_port).await;
+            let _ = kill_stale_standalone_holder(&db_path).await;
+            // Brief pause for kernel to release flock after kill
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        }
+
+        // Acquire PID file guard
+        let _pid_guard = if uses_rocksdb {
+            Some(PidFileGuard::acquire(&db_path)?)
+        } else {
+            None
+        };
+
+        // Create server
+        let server = server::McpServer::new(config, warm_first).await?;
+
+        // Start file watcher
+        match server.start_file_watcher().await {
+            Ok(true) => info!("File watcher started successfully"),
+            Ok(false) => debug!("File watcher not started (disabled or models not ready)"),
+            Err(e) => warn!("File watcher failed to start: {}", e),
+        }
+
+        info!(
+            "Headless daemon server PID {} running on port {}",
+            std::process::id(),
+            daemon_port
+        );
+
+        // Run until signal
+        let shutdown_signal = async {
+            #[cfg(unix)]
+            {
+                let mut sigterm = tokio::signal::unix::signal(
+                    tokio::signal::unix::SignalKind::terminate(),
+                )
+                .expect("FATAL: failed to register SIGTERM handler in headless daemon");
+
+                tokio::select! {
+                    _ = sigterm.recv() => {
+                        info!("Headless daemon received SIGTERM");
+                    }
+                    _ = tokio::signal::ctrl_c() => {
+                        info!("Headless daemon received SIGINT");
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("FATAL: failed to register Ctrl+C handler");
+                info!("Headless daemon received Ctrl+C");
+            }
+        };
+
+        tokio::select! {
+            result = server.run_tcp() => {
+                if let Err(e) = result {
+                    error!("Headless daemon TCP server crashed: {}", e);
+                }
+            }
+            _ = shutdown_signal => {
+                info!("Headless daemon shutting down...");
+            }
+        }
+
+        // Shutdown with 10s force-exit deadline
+        tokio::select! {
+            _ = server.shutdown() => {
+                info!("Headless daemon shutdown complete");
+            }
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(10)) => {
+                error!(
+                    "Headless daemon shutdown stuck (10s) — force exiting to release flock"
+                );
+                drop(_pid_guard);
+                std::process::exit(1);
+            }
+        }
+
+        info!("Headless daemon exiting");
+        return Ok(());
+    }
+
     if daemon_mode {
         // ==================================================================
         // DAEMON MODE: Share one MCP server across multiple Claude terminals
@@ -1491,12 +1706,14 @@ async fn main() -> Result<()> {
             // Port is free but a stale process may hold flock on mcp.pid,
             // blocking Step 3's PidFileGuard::acquire(). Kill it first.
             #[cfg(unix)]
-            let killed_stale = if uses_rocksdb {
-                if kill_stale_lock_holder(&db_path, daemon_port).await {
+            let _killed_stale = if uses_rocksdb {
+                let killed_daemon = kill_stale_lock_holder(&db_path, daemon_port).await;
+                let killed_standalone = kill_stale_standalone_holder(&db_path).await;
+                if killed_daemon || killed_standalone {
                     // After SIGKILL, the kernel must reap the process and release
                     // the flock. On WSL2 this can take 500ms+. Wait with retries
                     // instead of racing PidFileGuard::acquire().
-                    info!("Stale lock holder killed, waiting for flock release...");
+                    info!("Stale holder(s) killed, waiting for flock release...");
                     true
                 } else {
                     false
@@ -1507,56 +1724,102 @@ async fn main() -> Result<()> {
             #[cfg(not(unix))]
             let killed_stale = false;
 
-            // ---- Step 3: Port is free — try to acquire PID lock and start daemon ----
-            let pid_guard = if uses_rocksdb {
-                let mut guard_result = PidFileGuard::acquire(&db_path);
-                // If we just killed a stale holder, the flock may not be released
-                // yet (kernel reap delay, especially on WSL2). Retry with backoff.
-                if guard_result.is_err() && killed_stale {
-                    for retry in 1..=5 {
-                        let delay_ms = 300 * retry;
-                        info!("Waiting for flock release (retry {}/5, {}ms)...", retry, delay_ms);
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
-                        guard_result = PidFileGuard::acquire(&db_path);
-                        if guard_result.is_ok() {
-                            break;
-                        }
-                    }
-                }
-                match guard_result {
-                    Ok(guard) => Some(guard),
-                    Err(e) => {
-                        warn!(
-                            "PID lock contention (attempt {}/{}): {}",
-                            attempt, max_attempts, e
-                        );
-                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                        continue;
-                    }
-                }
-            } else {
-                None
-            };
-
-            // ---- Step 4: Start daemon server (guard ownership transfers) ----
-            info!("No daemon found, starting new daemon server (attempt {})...", attempt);
+            // ---- Steps 3+4: Spawn daemon as separate OS process ----
+            info!(
+                "No daemon found, spawning daemon process (attempt {})...",
+                attempt
+            );
             if warm_first {
                 warn!("Daemon mode with warm_first=true: models will load before serving requests");
             }
 
-            match start_daemon_server(config.clone(), warm_first, daemon_port, pid_guard).await {
-                Ok(()) => {
-                    info!("Daemon started successfully on port {}", daemon_port);
-                    run_stdio_to_tcp_proxy(daemon_port).await?;
-                    connected = true;
-                    break;
+            #[cfg(unix)]
+            {
+                match spawn_daemon_process(
+                    daemon_port,
+                    cli.config_path.as_deref(),
+                    warm_first,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        info!(
+                            "Daemon process started successfully on port {}",
+                            daemon_port
+                        );
+                        run_stdio_to_tcp_proxy(daemon_port).await?;
+                        connected = true;
+                        break;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to spawn daemon (attempt {}/{}): {}",
+                            attempt, max_attempts, e
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    }
                 }
-                Err(e) => {
-                    error!(
-                        "Failed to start daemon (attempt {}/{}): {}",
-                        attempt, max_attempts, e
-                    );
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            }
+
+            #[cfg(not(unix))]
+            {
+                // Non-Unix fallback: in-process daemon (original behavior)
+                let pid_guard = if uses_rocksdb {
+                    let mut guard_result = PidFileGuard::acquire(&db_path);
+                    if guard_result.is_err() && killed_stale {
+                        for retry in 1..=5 {
+                            let delay_ms = 300 * retry;
+                            info!(
+                                "Waiting for flock release (retry {}/5, {}ms)...",
+                                retry, delay_ms
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_millis(
+                                delay_ms,
+                            ))
+                            .await;
+                            guard_result = PidFileGuard::acquire(&db_path);
+                            if guard_result.is_ok() {
+                                break;
+                            }
+                        }
+                    }
+                    match guard_result {
+                        Ok(guard) => Some(guard),
+                        Err(e) => {
+                            warn!(
+                                "PID lock contention (attempt {}/{}): {}",
+                                attempt, max_attempts, e
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500))
+                                .await;
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                match start_daemon_server(
+                    config.clone(),
+                    warm_first,
+                    daemon_port,
+                    pid_guard,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        info!("Daemon started on port {}", daemon_port);
+                        run_stdio_to_tcp_proxy(daemon_port).await?;
+                        connected = true;
+                        break;
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to start daemon (attempt {}/{}): {}",
+                            attempt, max_attempts, e
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    }
                 }
             }
         }
@@ -1706,8 +1969,21 @@ async fn main() -> Result<()> {
             }
         }
 
-        // Graceful shutdown: await background tasks, persist HNSW, flush RocksDB
-        server.shutdown().await;
+        // Graceful shutdown with 10s force-exit deadline.
+        // Catches stuck RocksDB compaction or HNSW flush that would hold
+        // the flock forever, preventing new MCP servers from starting.
+        tokio::select! {
+            _ = server.shutdown() => {
+                info!("Graceful shutdown complete");
+            }
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(10)) => {
+                error!(
+                    "Shutdown stuck (10s deadline) — force exiting to release flock"
+                );
+                drop(_pid_guard);
+                std::process::exit(1);
+            }
+        }
 
         // _pid_guard dropped here — releases flock + removes mcp.pid
     }

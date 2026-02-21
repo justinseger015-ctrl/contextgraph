@@ -515,11 +515,18 @@ impl Handlers {
 
     /// Handle MCP initialized notification.
     ///
-    /// This is a notification (no response expected), but we return
-    /// an empty success for consistency in dispatch.
+    /// Per JSON-RPC 2.0 / MCP spec: notifications MUST NOT receive a response.
+    /// MCP-M1 FIX: Return all-None sentinel so the transport suppression check
+    /// (`id.is_none() && result.is_none() && error.is_none()`) correctly
+    /// prevents sending any response to the client.
     pub fn handle_initialized_notification(&self) -> JsonRpcResponse {
         info!("MCP initialized notification received");
-        JsonRpcResponse::success(None, json!({}))
+        JsonRpcResponse {
+            jsonrpc: "2.0".to_string(),
+            id: None,
+            result: None,
+            error: None,
+        }
     }
 
     /// Handle MCP shutdown request.

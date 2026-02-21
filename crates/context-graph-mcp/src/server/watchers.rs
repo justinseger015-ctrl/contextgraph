@@ -233,12 +233,23 @@ impl McpServer {
             }
             Ok(mut guard) => {
                 if let Some(handle) = guard.take() {
-                    // The thread checks the flag every 500ms, so it should exit within ~1s.
-                    // Use join() which blocks the current thread until the spawned thread finishes.
-                    // This is acceptable in shutdown since we are tearing down.
-                    match handle.join() {
-                        Ok(()) => info!("File watcher thread stopped"),
-                        Err(_) => error!("File watcher thread panicked"),
+                    // MCP-L3 FIX: The thread checks the flag every 500ms, so it should exit
+                    // within ~1s. Use a bounded spin-wait to avoid blocking the async runtime
+                    // indefinitely if process_events() hangs.
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+                    loop {
+                        if handle.is_finished() {
+                            match handle.join() {
+                                Ok(()) => info!("File watcher thread stopped"),
+                                Err(_) => error!("File watcher thread panicked"),
+                            }
+                            break;
+                        }
+                        if std::time::Instant::now() >= deadline {
+                            warn!("File watcher thread did not stop within 2s — abandoning join");
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(50));
                     }
                 }
             }

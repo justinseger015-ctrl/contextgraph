@@ -62,35 +62,25 @@ const CAUSAL_DIRECTION_THRESHOLD: f32 = 0.1;
 
 /// Infer causal direction from E5 asymmetric embeddings.
 ///
-/// Compares the norms of the e5_causal_as_cause and e5_causal_as_effect vectors
-/// to determine if the content primarily describes causes or effects.
+/// MCP-L2 FIX: Uses component variance instead of L2 norms. L2 norms of E5 dual
+/// vectors are nearly identical regardless of direction (both are unit-normalized
+/// by the model). Component variance captures distributional differences: causal
+/// content activates different dimensions than effect content.
 ///
 /// # Returns
-/// - "cause" if cause norm is significantly higher (>10% difference)
-/// - "effect" if effect norm is significantly higher
-/// - "unknown" if norms are similar or both are near zero
+/// - "cause" if cause vector has significantly higher variance (>10% difference)
+/// - "effect" if effect vector has significantly higher variance
+/// - "unknown" if variances are similar or both are near zero
 fn infer_causal_direction_from_fingerprint(fingerprint: &SemanticFingerprint) -> String {
-    let cause_norm: f32 = fingerprint
-        .e5_causal_as_cause
-        .iter()
-        .map(|x| x * x)
-        .sum::<f32>()
-        .sqrt();
-    let effect_norm: f32 = fingerprint
-        .e5_causal_as_effect
-        .iter()
-        .map(|x| x * x)
-        .sum::<f32>()
-        .sqrt();
+    let cause_variance = component_variance(&fingerprint.e5_causal_as_cause);
+    let effect_variance = component_variance(&fingerprint.e5_causal_as_effect);
 
-    // Require >10% difference to be confident in direction
-    let diff_ratio = if effect_norm > f32::EPSILON {
-        (cause_norm - effect_norm) / effect_norm
-    } else if cause_norm > f32::EPSILON {
-        1.0 // All cause, no effect
-    } else {
-        0.0 // Both zero
-    };
+    let max_var = cause_variance.max(effect_variance);
+    if max_var < f32::EPSILON {
+        return "unknown".to_string(); // Both zero vectors
+    }
+
+    let diff_ratio = (cause_variance - effect_variance) / max_var;
 
     if diff_ratio > CAUSAL_DIRECTION_THRESHOLD {
         "cause".to_string()
@@ -99,6 +89,16 @@ fn infer_causal_direction_from_fingerprint(fingerprint: &SemanticFingerprint) ->
     } else {
         "unknown".to_string()
     }
+}
+
+/// Compute variance of vector components (measures how spread out activations are).
+fn component_variance(v: &[f32]) -> f32 {
+    if v.is_empty() {
+        return 0.0;
+    }
+    let n = v.len() as f32;
+    let mean = v.iter().sum::<f32>() / n;
+    v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n
 }
 
 /// CHAIN-1: Infer causal direction from content text using keyword heuristics.
