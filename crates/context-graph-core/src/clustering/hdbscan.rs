@@ -1379,7 +1379,7 @@ mod tests {
             DistanceMetric::Cosine
         );
         assert_eq!(
-            HDBSCANParams::default_for_space(Embedder::Multimodal).metric,
+            HDBSCANParams::default_for_space(Embedder::Contextual).metric,
             DistanceMetric::Cosine
         );
         assert_eq!(

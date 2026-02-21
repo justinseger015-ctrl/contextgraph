@@ -33,7 +33,7 @@ fn main() {
         (Embedder::Semantic, "E1"),
         (Embedder::Sparse, "E6"),
         (Embedder::Code, "E7"),
-        (Embedder::Multimodal, "E10"),
+        (Embedder::Contextual, "E10"),
         (Embedder::LateInteraction, "E12"),
         (Embedder::KeywordSplade, "E13"),
     ];
@@ -239,7 +239,7 @@ fn main() {
     report2.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.08, "h2"));
     report2.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Causal, 0.15, "m1"));
     report2.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Sparse, 0.22, "l1"));
-    report2.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Multimodal, 0.28, "l2"));
+    report2.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Contextual, 0.28, "l2"));
     
     let (high, medium, low) = report2.count_by_severity();
     assert_eq!(high, 2);

@@ -152,7 +152,7 @@ mod edge_case_tests {
             (ModelId::Code, QuantizationMethod::PQ8, "E7"),
             (ModelId::Graph, QuantizationMethod::Float8E4M3, "E8"),
             (ModelId::Hdc, QuantizationMethod::Binary, "E9"),
-            (ModelId::Multimodal, QuantizationMethod::PQ8, "E10"),
+            (ModelId::Contextual, QuantizationMethod::PQ8, "E10"),
             (ModelId::Entity, QuantizationMethod::Float8E4M3, "E11"),
             (
                 ModelId::LateInteraction,

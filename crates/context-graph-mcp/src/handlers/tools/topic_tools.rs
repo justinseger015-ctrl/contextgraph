@@ -52,7 +52,7 @@ fn embedder_to_dto_space(embedder: Embedder) -> &'static str {
         Embedder::Causal => "E5_Causal",
         Embedder::Sparse => "E6_Sparse",
         Embedder::Code => "E7_Code",
-        Embedder::Multimodal => "E10_Multimodal",
+        Embedder::Contextual => "E10_Multimodal",
         Embedder::LateInteraction => "E12_LateInteraction",
         Embedder::KeywordSplade => "E13_SPLADE",
         // Temporal, Relational, Structural embedders should never reach here per AP-62
@@ -878,7 +878,7 @@ mod tests {
         assert_eq!(embedder_to_dto_space(Embedder::Sparse), "E6_Sparse");
         assert_eq!(embedder_to_dto_space(Embedder::Code), "E7_Code");
         assert_eq!(
-            embedder_to_dto_space(Embedder::Multimodal),
+            embedder_to_dto_space(Embedder::Contextual),
             "E10_Multimodal"
         );
         assert_eq!(
@@ -960,7 +960,7 @@ mod tests {
             "Must include E7"
         );
         assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::Multimodal),
+            DIVERGENCE_SPACES.contains(&Embedder::Contextual),
             "Must include E10"
         );
         assert!(

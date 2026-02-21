@@ -644,6 +644,11 @@ fn search_multi_space_sync(
     // seek "what is connected to X?" (find targets of source). The stored vectors
     // contain the "target" representation, so query=source, stored=target is the
     // natural retrieval direction for structural relationship discovery.
+    //
+    // M3 NOTE: E8 HNSW uses e8_active_vector() (source-only) for both indexing
+    // and retrieval, but compute_embedder_scores_sync uses directional source/target
+    // comparison. This may miss candidates with very different source vs target vectors.
+    // Accepted trade-off: E8 has 5% default weight, impact is minimal.
     if let Some(e8_index) = index_registry.get(EmbedderIndex::E8Graph) {
         match e8_index.search(query.e8_active_vector(), k, None) {
             Ok(e8_candidates) => {

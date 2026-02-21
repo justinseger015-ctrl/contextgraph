@@ -599,7 +599,7 @@ pub fn quantize_fingerprint(
     let e5_causal = quantize_pq8(fp.e5_active_vector(), E5_DIM / 32, Embedder::Causal)?; // 24 subvectors
     let e7_code = quantize_pq8(&fp.e7_code, E7_DIM / 32, Embedder::Code)?; // 48 subvectors
     // For E10, we quantize the active vector (paraphrase vector takes precedence over legacy)
-    let e10_multimodal = quantize_pq8(fp.e10_active_vector(), E10_DIM / 32, Embedder::Multimodal)?; // 24 subvectors
+    let e10_multimodal = quantize_pq8(fp.e10_active_vector(), E10_DIM / 32, Embedder::Contextual)?; // 24 subvectors
 
     // Float8 quantization for temporal and relational embeddings
     let e2_temporal_recent =
@@ -727,7 +727,7 @@ fn validate_fingerprint_dimensions(
     check_dim(fp.e7_code.len(), E7_DIM, Embedder::Code)?;
     check_dim(fp.e8_active_vector().len(), E8_DIM, Embedder::Graph)?;
     check_dim(fp.e9_hdc.len(), E9_DIM, Embedder::Hdc)?;
-    check_dim(fp.e10_active_vector().len(), E10_DIM, Embedder::Multimodal)?;
+    check_dim(fp.e10_active_vector().len(), E10_DIM, Embedder::Contextual)?;
     check_dim(fp.e11_entity.len(), E11_DIM, Embedder::Entity)?;
 
     // Validate E12 token dimensions (NaN/Infinity checked during quantization)

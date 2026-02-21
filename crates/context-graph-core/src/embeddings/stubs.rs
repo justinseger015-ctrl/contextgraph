@@ -148,7 +148,7 @@ impl StubSingleEmbedder {
 
     /// Create stub embedder for E10 (Multimodal, 768D).
     pub fn for_e10() -> Self {
-        Self::new(Embedder::Multimodal)
+        Self::new(Embedder::Contextual)
     }
 
     /// Create stub embedder for E11 (Entity/KEPLER, 768D).

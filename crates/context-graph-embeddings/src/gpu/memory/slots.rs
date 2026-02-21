@@ -578,7 +578,7 @@ mod tests {
             (Embedder::Code, 300_000_000),               // E7: 300MB
             (Embedder::Graph, 75_000_000),           // E8: 75MB (was Graph, renamed)
             (Embedder::Hdc, 50_000_000),                 // E9: 50MB
-            (Embedder::Multimodal, 150_000_000),         // E10: 150MB
+            (Embedder::Contextual, 150_000_000),         // E10: 150MB
             (Embedder::Entity, 75_000_000),              // E11: 75MB
             (Embedder::LateInteraction, 200_000_000),    // E12: 200MB
             (Embedder::KeywordSplade, 50_000_000),       // E13: 50MB

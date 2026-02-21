@@ -182,7 +182,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "description": "Session ID to compare within (default: current session)"
                     }
                 },
-                "required": []
+                "required": ["beforeSequence", "afterSequence"]
             }),
         ),
     ]

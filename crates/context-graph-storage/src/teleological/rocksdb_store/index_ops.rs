@@ -90,6 +90,10 @@ impl RocksDbTeleologicalStore {
                 panic!("FAIL FAST: E6 is sparse - use inverted index, not HNSW")
             }
             EmbedderIndex::E7Code => &semantic.e7_code,
+            // M3 NOTE: E8 HNSW uses e8_active_vector() (source-only) for both indexing
+            // and retrieval, but compute_embedder_scores_sync uses directional source/target
+            // comparison. This may miss candidates with very different source vs target vectors.
+            // Accepted trade-off: E8 has 5% default weight, impact is minimal.
             EmbedderIndex::E8Graph => semantic.e8_active_vector(),
             EmbedderIndex::E9HDC => &semantic.e9_hdc,
             // E10 legacy - uses active vector (whichever is populated)

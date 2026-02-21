@@ -324,14 +324,14 @@ impl SemanticFingerprint {
     fn validate_e10(&self) -> Result<(), ValidationError> {
         if self.e10_multimodal_paraphrase.len() != E10_DIM {
             return Err(ValidationError::DimensionMismatch {
-                embedder: Embedder::Multimodal,
+                embedder: Embedder::Contextual,
                 expected: E10_DIM,
                 actual: self.e10_multimodal_paraphrase.len(),
             });
         }
         if self.e10_multimodal_as_context.len() != E10_DIM {
             return Err(ValidationError::DimensionMismatch {
-                embedder: Embedder::Multimodal,
+                embedder: Embedder::Contextual,
                 expected: E10_DIM,
                 actual: self.e10_multimodal_as_context.len(),
             });

@@ -228,6 +228,8 @@ impl DefaultCrossSpaceEngine {
         }
 
         let mean: f32 = active_scores.iter().sum::<f32>() / active_scores.len() as f32;
+        // Population variance (not Bessel's): these are the exhaustive set of
+        // active embedder scores, not a sample from a larger population.
         let variance: f32 = active_scores
             .iter()
             .map(|&s| (s - mean).powi(2))

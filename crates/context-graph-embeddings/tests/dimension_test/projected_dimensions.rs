@@ -143,7 +143,7 @@ fn test_e9_hdc_projected_dimension() {
 #[test]
 fn test_e10_multimodal_projected_dimension() {
     assert_eq!(
-        ModelId::Multimodal.projected_dimension(),
+        ModelId::Contextual.projected_dimension(),
         768,
         "E10 Multimodal: expected projected dimension 768"
     );

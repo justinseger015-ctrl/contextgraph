@@ -68,7 +68,7 @@ impl ModelFactory for DefaultModelFactory {
             | ModelId::Sparse
             | ModelId::Code
             | ModelId::Graph
-            | ModelId::Multimodal
+            | ModelId::Contextual
             | ModelId::Entity
             | ModelId::Kepler
             | ModelId::LateInteraction

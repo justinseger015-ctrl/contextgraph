@@ -27,7 +27,7 @@ pub const DIVERGENCE_SPACES: [Embedder; 6] = [
     Embedder::Semantic,        // E1
     Embedder::Sparse,          // E6
     Embedder::Code,            // E7
-    Embedder::Multimodal,      // E10
+    Embedder::Contextual,      // E10
     Embedder::LateInteraction, // E12
     Embedder::KeywordSplade,   // E13
 ];
@@ -360,7 +360,7 @@ mod tests {
             Embedder::Semantic,
             Embedder::Sparse,
             Embedder::Code,
-            Embedder::Multimodal,
+            Embedder::Contextual,
             Embedder::LateInteraction,
             Embedder::KeywordSplade,
         ];
@@ -605,11 +605,11 @@ mod tests {
         report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.08, "h2"));
 
         // 1 medium (0.10 <= score < 0.20)
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Multimodal, 0.15, "m1"));
+        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Contextual, 0.15, "m1"));
 
         // 2 low (score >= 0.20)
         report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Sparse, 0.22, "l1"));
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Multimodal, 0.28, "l2"));
+        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Contextual, 0.28, "l2"));
 
         let (high, medium, low) = report.count_by_severity();
         assert_eq!(high, 2);

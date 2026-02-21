@@ -11,9 +11,7 @@
 //! - AP-60: Temporal embedders (E2-E4) NEVER count toward topic detection
 //! - AP-62: Divergence alerts use SEMANTIC embedders only (E1, E5, E6, E7, E10, E12, E13)
 
-// Allow unused items - constants and methods are defined for constitution compliance
-// and will be used when full clustering integration is complete
-#![allow(dead_code)]
+// L12 FIX: Removed blanket #![allow(dead_code)] — unused items marked individually below
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -346,6 +344,7 @@ impl TopicSummary {
     ///
     /// Per ARCH-09: weighted_agreement >= 2.5
     #[inline]
+    #[allow(dead_code)] // Constitution compliance: ARCH-09 threshold check
     pub fn is_valid_topic(&self) -> bool {
         self.weighted_agreement >= TOPIC_THRESHOLD
     }
@@ -432,6 +431,7 @@ pub struct PhaseBreakdown {
 
 impl PhaseBreakdown {
     /// Total count of all topics.
+    #[allow(dead_code)] // Used when full clustering integration is complete
     pub fn total(&self) -> u32 {
         self.emerging + self.stable + self.declining + self.merging
     }
@@ -456,6 +456,7 @@ pub struct DetectTopicsResponse {
 
 impl DetectTopicsResponse {
     /// Create an empty response when detection found nothing.
+    #[allow(dead_code)] // Constructor for clustering integration
     pub fn empty() -> Self {
         Self {
             new_topics: Vec::new(),
@@ -466,6 +467,7 @@ impl DetectTopicsResponse {
     }
 
     /// Create a response when insufficient memories exist.
+    #[allow(dead_code)] // Constructor for clustering integration
     pub fn insufficient_memories(current_count: usize) -> Self {
         Self {
             new_topics: Vec::new(),
@@ -569,6 +571,7 @@ pub struct DivergenceAlert {
 
 impl DivergenceAlert {
     /// Valid semantic spaces that can trigger divergence alerts per AP-62.
+    #[allow(dead_code)] // Constitution compliance: AP-62 semantic space validation
     pub const VALID_SEMANTIC_SPACES: [&'static str; 7] = [
         "E1_Semantic",
         "E5_Causal",
@@ -580,6 +583,7 @@ impl DivergenceAlert {
     ];
 
     /// Check if the semantic space is valid for divergence alerts.
+    #[allow(dead_code)] // Constitution compliance: AP-62 semantic space validation
     pub fn is_valid_semantic_space(space: &str) -> bool {
         Self::VALID_SEMANTIC_SPACES.contains(&space)
     }

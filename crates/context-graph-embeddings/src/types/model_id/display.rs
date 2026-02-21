@@ -14,7 +14,7 @@ impl std::fmt::Display for ModelId {
             Self::Code => "Code (E7)",
             Self::Graph => "Graph (E8)",
             Self::Hdc => "Hdc (E9)",
-            Self::Multimodal => "Multimodal (E10)",
+            Self::Contextual => "Contextual (E10)",
             Self::Entity => "Entity (E11-deprecated)",
             Self::Kepler => "Kepler (E11)",
             Self::LateInteraction => "LateInteraction (E12)",

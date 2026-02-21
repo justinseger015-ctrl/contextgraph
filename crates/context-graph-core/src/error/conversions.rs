@@ -99,7 +99,7 @@ pub(crate) fn embedder_index_to_embedder(idx: crate::index::config::EmbedderInde
         EmbedderIndex::E7Code => Embedder::Code,
         EmbedderIndex::E8Graph => Embedder::Graph,
         EmbedderIndex::E9HDC => Embedder::Hdc,
-        EmbedderIndex::E10Multimodal => Embedder::Multimodal,
+        EmbedderIndex::E10Multimodal => Embedder::Contextual,
         EmbedderIndex::E11Entity => Embedder::Entity,
         EmbedderIndex::E12LateInteraction => Embedder::LateInteraction,
         EmbedderIndex::E13Splade => Embedder::KeywordSplade,

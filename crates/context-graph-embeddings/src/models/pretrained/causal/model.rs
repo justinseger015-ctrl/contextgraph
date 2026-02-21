@@ -582,11 +582,14 @@ impl EmbeddingModel for CausalModel {
         match &*state {
             ModelState::Loaded { weights, tokenizer, trained } => {
                 let strategy = self.attention_strategy.as_ref();
+                // H2+H3 FIX: nomic-embed-text-v1.5 requires "search_document: " prefix.
+                // Without prefix, embeddings are out-of-distribution and scores degrade.
+                let prefixed = format!("search_document: {}", text_content);
                 let vector = if let Some(ts) = trained {
                     // Use trained LoRA + projection (cause direction by default for single embed)
-                    gpu_forward_single_trained(&text_content, weights, tokenizer, &ts.lora, &ts.projection, true, strategy)?
+                    gpu_forward_single_trained(&prefixed, weights, tokenizer, &ts.lora, &ts.projection, true, strategy)?
                 } else {
-                    gpu_forward(&text_content, weights, tokenizer, strategy)?
+                    gpu_forward(&prefixed, weights, tokenizer, strategy)?
                 };
                 let latency_us = start.elapsed().as_micros() as u64;
                 Ok(ModelEmbedding::new(ModelId::Causal, vector, latency_us))

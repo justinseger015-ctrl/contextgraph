@@ -944,7 +944,7 @@ mod tests {
             Embedder::Causal,
             Embedder::Sparse,
             Embedder::Code,
-            Embedder::Multimodal,
+            Embedder::Contextual,
             Embedder::LateInteraction,
             Embedder::KeywordSplade,
         ] {

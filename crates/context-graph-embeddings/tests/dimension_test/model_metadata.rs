@@ -29,7 +29,7 @@ fn test_model_id_repr_order() {
     assert_eq!(ModelId::Code as u8, 6, "Code should be 6");
     assert_eq!(ModelId::Graph as u8, 7, "Graph should be 7");
     assert_eq!(ModelId::Hdc as u8, 8, "Hdc should be 8");
-    assert_eq!(ModelId::Multimodal as u8, 9, "Multimodal should be 9");
+    assert_eq!(ModelId::Contextual as u8, 9, "Multimodal should be 9");
     assert_eq!(ModelId::Entity as u8, 10, "Entity should be 10");
     assert_eq!(
         ModelId::LateInteraction as u8,

@@ -396,7 +396,7 @@ impl Handlers {
         let config = ConsolidationConfig {
             enabled: true,
             similarity_threshold: params.min_similarity,
-            max_daily_merges: 50,
+            max_daily_merges: 50, // Per-call candidate limit (not daily — named for historical ConsolidationConfig API)
         };
         let consolidation_service = ConsolidationService::with_config(config);
 

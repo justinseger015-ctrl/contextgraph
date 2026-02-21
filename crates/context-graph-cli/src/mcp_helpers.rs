@@ -101,13 +101,20 @@ pub fn mcp_error_to_exit_code(e: &McpClientError) -> i32 {
     }
 }
 
-/// Check if an error message indicates corruption.
+/// Check if an error message indicates storage corruption.
 ///
 /// Used to determine if an MCP error should be treated as blocking (exit 2).
+/// Only matches RocksDB-specific corruption patterns — NOT common error words
+/// like "not found" (normal for missing memories) or "invalid" (normal for bad input).
 fn is_corruption_message(message: &str) -> bool {
-    message.contains("corruption")
-        || message.contains("stale index")
-        || message.contains("not found")
+    let lower = message.to_lowercase();
+    lower.contains("corruption")
+        || lower.contains("corrupted")
+        || lower.contains("stale index")
+        || lower.contains("checksum mismatch")
+        || lower.contains("bad magic")
+        || lower.contains("crc error")
+        || lower.contains("truncated block")
 }
 
 // =============================================================================
@@ -250,13 +257,26 @@ mod tests {
 
     #[test]
     fn test_is_corruption_message() {
+        // Real corruption patterns
         assert!(is_corruption_message("data corruption detected"));
         assert!(is_corruption_message("stale index found"));
-        assert!(is_corruption_message("memory not found"));
+        assert!(is_corruption_message("checksum mismatch in block 42"));
+        assert!(is_corruption_message("bad magic number"));
+        assert!(is_corruption_message("CRC Error in SST file"));
+        assert!(is_corruption_message("truncated block at offset 1024"));
 
+        // H4 FIX: "not found" is NOT corruption — it's normal for missing memories
+        assert!(!is_corruption_message("memory not found"));
+        assert!(!is_corruption_message("session not found"));
+
+        // M9 FIX: "invalid" and "malformed" are NOT corruption — they're normal errors
+        assert!(!is_corruption_message("invalid request"));
+        assert!(!is_corruption_message("invalid JSON"));
+        assert!(!is_corruption_message("malformed input"));
+
+        // Other non-corruption
         assert!(!is_corruption_message("connection refused"));
         assert!(!is_corruption_message("timeout error"));
-        assert!(!is_corruption_message("invalid request"));
     }
 
     // =========================================================================

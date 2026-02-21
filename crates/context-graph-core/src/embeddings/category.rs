@@ -184,7 +184,7 @@ pub fn category_for(embedder: Embedder) -> EmbedderCategory {
         Embedder::Causal => EmbedderCategory::Semantic,
         Embedder::Sparse => EmbedderCategory::Semantic,
         Embedder::Code => EmbedderCategory::Semantic,
-        Embedder::Multimodal => EmbedderCategory::Semantic,
+        Embedder::Contextual => EmbedderCategory::Semantic,
         Embedder::LateInteraction => EmbedderCategory::Semantic,
         Embedder::KeywordSplade => EmbedderCategory::Semantic,
 
@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(category_for(Embedder::Causal), EmbedderCategory::Semantic);
         assert_eq!(category_for(Embedder::Sparse), EmbedderCategory::Semantic);
         assert_eq!(category_for(Embedder::Code), EmbedderCategory::Semantic);
-        assert_eq!(category_for(Embedder::Multimodal), EmbedderCategory::Semantic);
+        assert_eq!(category_for(Embedder::Contextual), EmbedderCategory::Semantic);
         assert_eq!(category_for(Embedder::LateInteraction), EmbedderCategory::Semantic);
         assert_eq!(category_for(Embedder::KeywordSplade), EmbedderCategory::Semantic);
         println!("[PASS] All 7 semantic embedders correctly categorized");

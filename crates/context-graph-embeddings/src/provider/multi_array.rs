@@ -518,7 +518,7 @@ impl GraphDualEmbedderAdapter {
 
     /// Embed content as both source and target roles.
     ///
-    /// Returns (source_vector, target_vector) where each is 384D.
+    /// Returns (source_vector, target_vector) where each is 1024D.
     /// The vectors are genuinely different due to learned projections.
     ///
     /// # Errors
@@ -841,7 +841,7 @@ impl ProductionMultiArrayProvider {
             ModelId::Graph.as_str().to_string(),
             ModelId::Hdc.as_str().to_string(),
             // MED-18 FIX: E10 production model is ContextualModel (intfloat/e5-base-v2),
-            // not CLIP as ModelId::Multimodal suggests. Report the actual model identity.
+            // not CLIP as ModelId::Contextual suggests. Report the actual model identity.
             "contextual".to_string(),
             ModelId::Kepler.as_str().to_string(), // E11: KEPLER (was Entity/MiniLM)
             ModelId::LateInteraction.as_str().to_string(),

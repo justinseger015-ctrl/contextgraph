@@ -201,6 +201,54 @@ impl RocksDbTeleologicalStore {
                 error = %e,
                 "HNSW index add failed during update — rolling back to old fingerprint"
             );
+
+            // M2 FIX: Remove the NEW fingerprint's inverted index terms BEFORE
+            // restoring the old fingerprint. store_fingerprint_internal(&fingerprint, false)
+            // above already wrote the new E6/E13 terms into the inverted indexes.
+            // Without this cleanup, rollback via store_fingerprint_internal(&old_fp)
+            // re-adds old terms but leaves new terms orphaned in the index, causing
+            // false-positive search hits for queries matching the new (rolled-back) terms.
+            {
+                let _index_guard = self.secondary_index_lock.lock();
+                let mut cleanup_batch = WriteBatch::default();
+
+                // Remove new E13 SPLADE terms
+                if let Err(ce) = self.remove_from_splade_inverted_index(
+                    &mut cleanup_batch,
+                    &id,
+                    &fingerprint.semantic.e13_splade,
+                ) {
+                    warn!(
+                        id = %id,
+                        error = %ce,
+                        "Rollback: failed to remove new E13 terms (orphaned entries will be filtered at read time)"
+                    );
+                }
+
+                // Remove new E6 sparse terms (if present)
+                if let Some(ref new_e6_sparse) = fingerprint.e6_sparse {
+                    if let Err(ce) = self.remove_from_e6_sparse_inverted_index(
+                        &mut cleanup_batch,
+                        &id,
+                        new_e6_sparse,
+                    ) {
+                        warn!(
+                            id = %id,
+                            error = %ce,
+                            "Rollback: failed to remove new E6 terms (orphaned entries will be filtered at read time)"
+                        );
+                    }
+                }
+
+                if let Err(ce) = self.db.write(cleanup_batch) {
+                    warn!(
+                        id = %id,
+                        error = %ce,
+                        "Rollback: failed to commit inverted index cleanup batch"
+                    );
+                }
+            }
+
             // Restore old fingerprint from captured bytes (NOT from RocksDB) — rollback, not new
             if let Err(re) = self.store_fingerprint_internal(&old_fp, false) {
                 error!(
@@ -267,6 +315,11 @@ impl RocksDbTeleologicalStore {
             *self.fingerprint_count.write() = None;
         } else {
             // Hard delete: remove from all column families
+            // M1 FIX: Check if this ID was already soft-deleted BEFORE the hard-delete
+            // proceeds. If it was, total_doc_count was already decremented during
+            // soft-delete, so we must NOT decrement again at the end of this block.
+            let was_soft_deleted = self.is_soft_deleted(&id);
+
             // STG-04 FIX: Hold lock during inverted index read-modify-write
             let _index_guard = self.secondary_index_lock.lock();
             let key = fingerprint_key(&id);
@@ -363,9 +416,17 @@ impl RocksDbTeleologicalStore {
                 warn!(id = %id, error = %e, "Hard-delete: HNSW index removal failed (orphan will be filtered at search time)");
             }
 
-            // Invalidate count cache and decrement total doc count for IDF
+            // Invalidate count cache
             *self.fingerprint_count.write() = None;
-            self.total_doc_count.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+
+            // M1 FIX: Only decrement total_doc_count if this fingerprint was NOT
+            // already soft-deleted. Soft-delete already decremented the counter
+            // (see soft-delete branch above). GC calls delete_async(id, false)
+            // for expired soft-deletes, which would double-decrement without this guard.
+            if !was_soft_deleted {
+                self.total_doc_count
+                    .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            }
         }
 
         info!("Deleted fingerprint {} (soft={})", id, soft);

@@ -88,7 +88,7 @@ impl MultimodalModel {
         let tokenizer_path = self.model_path.join("tokenizer.json");
         let tokenizer =
             Tokenizer::from_file(&tokenizer_path).map_err(|e| EmbeddingError::ModelLoadError {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
                 source: Box::new(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!(
@@ -103,7 +103,7 @@ impl MultimodalModel {
         let safetensors_path = self.model_path.join("model.safetensors");
         if !safetensors_path.exists() {
             return Err(EmbeddingError::ModelLoadError {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
                 source: Box::new(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("Safetensors not found at {}", safetensors_path.display()),

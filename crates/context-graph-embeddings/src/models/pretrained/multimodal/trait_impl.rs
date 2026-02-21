@@ -16,7 +16,7 @@ use super::model::MultimodalModel;
 #[async_trait]
 impl EmbeddingModel for MultimodalModel {
     fn model_id(&self) -> ModelId {
-        ModelId::Multimodal
+        ModelId::Contextual
     }
 
     fn supported_input_types(&self) -> &[InputType] {
@@ -87,6 +87,6 @@ impl EmbeddingModel for MultimodalModel {
         };
 
         let latency_us = start.elapsed().as_micros() as u64;
-        Ok(ModelEmbedding::new(ModelId::Multimodal, vector, latency_us))
+        Ok(ModelEmbedding::new(ModelId::Contextual, vector, latency_us))
     }
 }

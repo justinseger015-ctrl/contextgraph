@@ -245,7 +245,7 @@ mod tests {
         assert!(is_divergence_space(Embedder::Causal));
         assert!(is_divergence_space(Embedder::Sparse));
         assert!(is_divergence_space(Embedder::Code));
-        assert!(is_divergence_space(Embedder::Multimodal));
+        assert!(is_divergence_space(Embedder::Contextual));
         assert!(is_divergence_space(Embedder::LateInteraction));
         assert!(is_divergence_space(Embedder::KeywordSplade));
         println!("[PASS] All 7 semantic embedders return true for is_divergence_space");

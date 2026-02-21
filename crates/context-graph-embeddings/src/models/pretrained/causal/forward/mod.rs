@@ -464,15 +464,10 @@ pub fn gpu_forward_dual_trainable_tensor(
     // Cause/effect asymmetry comes from the projection heads, not the prefix.
     let prefixed_text = format!("search_document: {}", text);
 
-    // LoRA-augmented forward pass (same input for both roles; projection heads differentiate)
-    let cause_emb = gpu_forward_with_lora_tensor(
-        &prefixed_text,
-        weights,
-        tokenizer,
-        lora_layers,
-        strategy,
-    )?;
-    let effect_emb = gpu_forward_with_lora_tensor(
+    // Single LoRA-augmented forward pass — projection heads differentiate cause/effect.
+    // Both projections share the same base embedding since the encoder is deterministic
+    // and the input text is identical for both roles.
+    let base_emb = gpu_forward_with_lora_tensor(
         &prefixed_text,
         weights,
         tokenizer,
@@ -481,8 +476,8 @@ pub fn gpu_forward_dual_trainable_tensor(
     )?;
 
     // Apply trainable projections (gradients flow through Var tensors)
-    let cause_proj = projection.project_cause_trainable(&cause_emb)?;
-    let effect_proj = projection.project_effect_trainable(&effect_emb)?;
+    let cause_proj = projection.project_cause_trainable(&base_emb)?;
+    let effect_proj = projection.project_effect_trainable(&base_emb)?;
 
     // L2 normalize projected outputs
     let cause_norm = l2_normalize(&cause_proj)?;

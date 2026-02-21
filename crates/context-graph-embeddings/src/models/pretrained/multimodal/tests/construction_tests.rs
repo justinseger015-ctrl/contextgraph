@@ -35,7 +35,7 @@ fn test_new_with_zero_batch_size_fails() {
 #[test]
 fn test_model_id() {
     let model = create_test_model();
-    assert_eq!(model.model_id(), ModelId::Multimodal);
+    assert_eq!(model.model_id(), ModelId::Contextual);
 }
 
 #[test]
@@ -137,9 +137,9 @@ fn test_clip_normalization_constants() {
 
 #[test]
 fn test_model_id_dimension_matches_constant() {
-    assert_eq!(ModelId::Multimodal.dimension(), MULTIMODAL_DIMENSION);
+    assert_eq!(ModelId::Contextual.dimension(), MULTIMODAL_DIMENSION);
     assert_eq!(
-        ModelId::Multimodal.projected_dimension(),
+        ModelId::Contextual.projected_dimension(),
         MULTIMODAL_DIMENSION
     );
 }

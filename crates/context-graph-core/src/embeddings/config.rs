@@ -197,7 +197,7 @@ pub static EMBEDDER_CONFIGS: [EmbedderConfig; 13] = [
     // E10: Multimodal (768D, Cosine, PQ8) - Category: Semantic
     // M7 FIX: is_asymmetric=true — stores dual vectors (doc/query) per constitution
     EmbedderConfig {
-        embedder: Embedder::Multimodal,
+        embedder: Embedder::Contextual,
         dimension: E10_DIM, // 768
         distance_metric: DistanceMetric::Cosine,
         quantization: QuantizationConfig::PQ8 {
@@ -460,7 +460,7 @@ mod tests {
         assert_eq!(get_category(Embedder::Sparse), EmbedderCategory::Semantic);
         assert_eq!(get_category(Embedder::Code), EmbedderCategory::Semantic);
         assert_eq!(
-            get_category(Embedder::Multimodal),
+            get_category(Embedder::Contextual),
             EmbedderCategory::Semantic
         );
         assert_eq!(
@@ -530,7 +530,7 @@ mod tests {
         assert!(is_semantic(Embedder::Causal));
         assert!(is_semantic(Embedder::Sparse));
         assert!(is_semantic(Embedder::Code));
-        assert!(is_semantic(Embedder::Multimodal));
+        assert!(is_semantic(Embedder::Contextual));
         assert!(is_semantic(Embedder::LateInteraction));
         assert!(is_semantic(Embedder::KeywordSplade));
 
@@ -570,7 +570,7 @@ mod tests {
         assert_eq!(get_dimension(Embedder::Code), E7_DIM);
         assert_eq!(get_dimension(Embedder::Graph), E8_DIM);
         assert_eq!(get_dimension(Embedder::Hdc), E9_DIM);
-        assert_eq!(get_dimension(Embedder::Multimodal), E10_DIM);
+        assert_eq!(get_dimension(Embedder::Contextual), E10_DIM);
         assert_eq!(get_dimension(Embedder::Entity), E11_DIM);
         assert_eq!(get_dimension(Embedder::LateInteraction), E12_TOKEN_DIM);
         assert_eq!(get_dimension(Embedder::KeywordSplade), E13_SPLADE_VOCAB);

@@ -494,8 +494,8 @@ impl McpServer {
         // 1. Set CODE_PIPELINE_ENABLED=true environment variable
         // 2. Ensure CODE_STORE_PATH is set (defaults to db_path/code_store)
         //
-        let _code_pipeline_enabled =
-            std::env::var("CODE_PIPELINE_ENABLED").is_ok_and(|v| v == "true");
+        // L4 FIX: CODE_PIPELINE_ENABLED env var is read directly where needed.
+        // No variable binding required here.
 
         // E7-WIRING: Code pipeline components are created but not wired by default.
         // When enabled:

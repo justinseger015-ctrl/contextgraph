@@ -463,7 +463,7 @@ impl Topic {
                 Embedder::Code => "Code",
                 Embedder::Graph => "Graph",
                 Embedder::Hdc => "Robust",
-                Embedder::Multimodal => "Paraphrase",
+                Embedder::Contextual => "Paraphrase",
                 Embedder::Entity => "Entity",
                 Embedder::LateInteraction => "Precision",
                 Embedder::KeywordSplade => "SPLADE",

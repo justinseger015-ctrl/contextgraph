@@ -76,7 +76,7 @@ pub trait EmbeddingModel: Send + Sync {
     /// ```
     /// # use context_graph_embeddings::types::ModelId;
     /// // Query model properties via ModelId
-    /// let multimodal = ModelId::Multimodal;
+    /// let multimodal = ModelId::Contextual;
     /// assert_eq!(multimodal.dimension(), 768);
     /// assert!(multimodal.is_pretrained());
     /// ```
@@ -191,7 +191,7 @@ pub trait EmbeddingModel: Send + Sync {
     ///
     /// ```
     /// # use context_graph_embeddings::types::ModelId;
-    /// let model_id = ModelId::Multimodal;
+    /// let model_id = ModelId::Contextual;
     /// // Check model properties
     /// assert_eq!(model_id.dimension(), 768);
     /// assert!(model_id.is_pretrained());

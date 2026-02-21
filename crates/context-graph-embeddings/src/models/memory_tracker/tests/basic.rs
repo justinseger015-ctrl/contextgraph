@@ -104,7 +104,7 @@ fn test_allocate_multiple_models() {
 #[test]
 fn test_allocate_fails_when_budget_exceeded() {
     let mut tracker = MemoryTracker::new(1_000_000_000);
-    let result = tracker.allocate(ModelId::Multimodal, 1_600_000_000);
+    let result = tracker.allocate(ModelId::Contextual, 1_600_000_000);
 
     assert!(result.is_err());
     match result {
@@ -122,7 +122,7 @@ fn test_allocate_fails_when_budget_exceeded() {
 
     // Tracker should be unchanged
     assert_eq!(tracker.current_usage(), 0);
-    assert!(!tracker.is_allocated(ModelId::Multimodal));
+    assert!(!tracker.is_allocated(ModelId::Contextual));
 }
 
 #[test]

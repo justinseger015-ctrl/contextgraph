@@ -67,7 +67,7 @@ async fn test_stats_tracks_failures() {
 
     // Try to load models that exceed budget
     let _ = registry.load_model(ModelId::Semantic).await;
-    let _ = registry.load_model(ModelId::Multimodal).await;
+    let _ = registry.load_model(ModelId::Contextual).await;
 
     let stats = registry.stats().await;
     assert_eq!(stats.load_failures, 2);
@@ -124,7 +124,7 @@ async fn test_edge_2_memory_budget_exceeded() {
     assert_eq!(registry.memory_budget(), 1_000_000_000);
 
     // Action: Try to load Multimodal (1.6GB)
-    let result = registry.load_model(ModelId::Multimodal).await;
+    let result = registry.load_model(ModelId::Contextual).await;
 
     // Expected: EmbeddingError::MemoryBudgetExceeded
     assert!(result.is_err());
@@ -134,7 +134,7 @@ async fn test_edge_2_memory_budget_exceeded() {
             available_bytes,
             budget_bytes,
         }) => {
-            assert_eq!(requested_bytes, get_memory_estimate(ModelId::Multimodal));
+            assert_eq!(requested_bytes, get_memory_estimate(ModelId::Contextual));
             assert_eq!(available_bytes, 1_000_000_000);
             assert_eq!(budget_bytes, 1_000_000_000);
         }
@@ -143,7 +143,7 @@ async fn test_edge_2_memory_budget_exceeded() {
 
     // Postcondition: No memory allocated, no model in HashMap
     assert_eq!(registry.total_memory_usage().await, 0);
-    assert!(!registry.is_loaded(ModelId::Multimodal).await);
+    assert!(!registry.is_loaded(ModelId::Contextual).await);
 
     let stats = registry.stats().await;
     assert_eq!(stats.load_failures, 1);

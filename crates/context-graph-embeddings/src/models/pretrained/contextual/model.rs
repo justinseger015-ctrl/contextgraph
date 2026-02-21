@@ -116,7 +116,7 @@ impl ContextualModel {
         let tokenizer_path = self.model_path.join("tokenizer.json");
         let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path).map_err(|e| {
             EmbeddingError::ModelLoadError {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
                 source: Box::new(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!(
@@ -134,7 +134,7 @@ impl ContextualModel {
 
         let weights = loader.load_bert_weights(&self.model_path).map_err(|e| {
             EmbeddingError::ModelLoadError {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
                 source: Box::new(std::io::Error::other(format!(
                     "ContextualModel weight load failed: {}",
                     e
@@ -218,7 +218,7 @@ impl ContextualModel {
                 Ok(full)
             }
             _ => Err(EmbeddingError::UnsupportedModality {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
                 input_type: InputType::from(input),
             }),
         }
@@ -250,6 +250,8 @@ impl ContextualModel {
     /// # Returns
     /// 768D embedding vector with intent-role semantics
     pub async fn embed_as_intent(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
+        // Note: embed_dual uses single forward pass + two projections.
+        // The "unused" projection cost is ~0.1ms, not worth separate code path.
         let (intent_vec, _) = self.embed_dual(content).await?;
         Ok(intent_vec)
     }
@@ -307,7 +309,7 @@ impl ContextualModel {
     pub async fn embed_dual(&self, content: &str) -> EmbeddingResult<(Vec<f32>, Vec<f32>)> {
         if !self.is_initialized() {
             return Err(EmbeddingError::NotInitialized {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
             });
         }
 
@@ -343,7 +345,7 @@ impl ContextualModel {
                 Ok((intent_vec, context_vec))
             }
             ModelState::Unloaded => Err(EmbeddingError::NotInitialized {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
             }),
         }
     }
@@ -362,7 +364,7 @@ fn gpu_forward(
     let encoding = tokenizer
         .encode(text, true)
         .map_err(|e| EmbeddingError::TokenizationError {
-            model_id: ModelId::Multimodal,
+            model_id: ModelId::Contextual,
             message: format!("ContextualModel tokenization failed: {}", e),
         })?;
 
@@ -968,7 +970,7 @@ fn mean_pooling(
 #[async_trait]
 impl EmbeddingModel for ContextualModel {
     fn model_id(&self) -> ModelId {
-        ModelId::Multimodal
+        ModelId::Contextual
     }
 
     fn supported_input_types(&self) -> &[InputType] {
@@ -986,7 +988,7 @@ impl EmbeddingModel for ContextualModel {
     async fn embed(&self, input: &ModelInput) -> EmbeddingResult<ModelEmbedding> {
         if !self.is_initialized() {
             return Err(EmbeddingError::NotInitialized {
-                model_id: ModelId::Multimodal,
+                model_id: ModelId::Contextual,
             });
         }
         self.validate_input(input)?;
@@ -1004,7 +1006,7 @@ impl EmbeddingModel for ContextualModel {
             ModelState::Loaded { weights, tokenizer } => (weights, tokenizer),
             _ => {
                 return Err(EmbeddingError::NotInitialized {
-                    model_id: ModelId::Multimodal,
+                    model_id: ModelId::Contextual,
                 })
             }
         };
@@ -1013,7 +1015,7 @@ impl EmbeddingModel for ContextualModel {
         let prefixed_content = format!("{}{}", CONTEXT_PREFIX, content);
         let vector = gpu_forward(&prefixed_content, weights, tokenizer)?;
         let latency_us = start.elapsed().as_micros() as u64;
-        Ok(ModelEmbedding::new(ModelId::Multimodal, vector, latency_us))
+        Ok(ModelEmbedding::new(ModelId::Contextual, vector, latency_us))
     }
 }
 

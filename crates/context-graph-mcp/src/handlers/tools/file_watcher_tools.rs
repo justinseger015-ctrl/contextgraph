@@ -498,6 +498,7 @@ impl Handlers {
                                 file_path = %entry.file_path,
                                 "reconcile_files: Failed to get fingerprints for orphan"
                             );
+                            failed_deletions.push(format!("{}:fetch_error:{}", entry.file_path, e));
                             continue;
                         }
                     };

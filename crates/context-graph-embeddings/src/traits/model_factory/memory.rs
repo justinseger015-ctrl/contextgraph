@@ -16,7 +16,7 @@ pub const MEMORY_ESTIMATES: [(ModelId, usize); 13] = [
     (ModelId::Code, 550_000_000),              // 500 MB + buffer
     (ModelId::Graph, 120_000_000),             // 100 MB + buffer
     (ModelId::Hdc, 60_000_000),                // 50 MB + buffer
-    (ModelId::Multimodal, 1_600_000_000),      // 1.5 GB + buffer
+    (ModelId::Contextual, 1_600_000_000),      // 1.5 GB + buffer
     (ModelId::Entity, 120_000_000),            // 100 MB + buffer
     (ModelId::LateInteraction, 450_000_000),   // 400 MB + buffer
     (ModelId::Splade, 550_000_000),            // 500 MB + buffer (similar to E6 Sparse)
@@ -72,9 +72,9 @@ mod tests {
     #[test]
     fn test_memory_estimate_largest_model() {
         // Multimodal (CLIP) should be largest
-        let multimodal = get_memory_estimate(ModelId::Multimodal);
+        let multimodal = get_memory_estimate(ModelId::Contextual);
         for model_id in ModelId::all() {
-            if *model_id != ModelId::Multimodal {
+            if *model_id != ModelId::Contextual {
                 let other = get_memory_estimate(*model_id);
                 assert!(
                     multimodal >= other,

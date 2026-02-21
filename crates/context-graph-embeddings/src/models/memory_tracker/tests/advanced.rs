@@ -99,11 +99,11 @@ fn test_allocation_for_returns_correct_value() {
     let mut tracker = MemoryTracker::new(5_000_000_000);
     tracker.allocate(ModelId::Semantic, 1_400_000_000).unwrap();
     tracker
-        .allocate(ModelId::Multimodal, 1_600_000_000)
+        .allocate(ModelId::Contextual, 1_600_000_000)
         .unwrap();
 
     assert_eq!(tracker.allocation_for(ModelId::Semantic), 1_400_000_000);
-    assert_eq!(tracker.allocation_for(ModelId::Multimodal), 1_600_000_000);
+    assert_eq!(tracker.allocation_for(ModelId::Contextual), 1_600_000_000);
     assert_eq!(tracker.allocation_for(ModelId::Code), 0);
 }
 

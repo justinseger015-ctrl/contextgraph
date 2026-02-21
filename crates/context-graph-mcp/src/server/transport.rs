@@ -397,7 +397,17 @@ impl McpServer {
     /// - HTTP server fails to bind (address in use, permissions)
     /// - Server encounters fatal error during operation
     pub async fn run_sse(&self) -> Result<()> {
-        // Parse bind address
+        // H5 FIX: SSE transport is broadcast-only — it cannot process MCP tool calls.
+        // All 56 tools would be unreachable. Fail fast instead of silently starting
+        // a server that appears to work but can't handle any requests.
+        return Err(anyhow::anyhow!(
+            "SSE transport is not supported for MCP tool calls. \
+             SSE is a one-directional broadcast protocol — it cannot receive or process \
+             JSON-RPC requests. Use --transport stdio (default) or --transport tcp instead."
+        ));
+
+        // Parse bind address (dead code kept for future bidirectional SSE implementation)
+        #[allow(unreachable_code)]
         let bind_addr: SocketAddr = format!(
             "{}:{}",
             self.config.mcp.bind_address, self.config.mcp.sse_port

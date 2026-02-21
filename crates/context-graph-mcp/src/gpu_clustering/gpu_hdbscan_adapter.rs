@@ -328,7 +328,7 @@ impl EmbedderExt for Embedder {
             | Embedder::Causal
             | Embedder::Sparse
             | Embedder::Code
-            | Embedder::Multimodal
+            | Embedder::Contextual
             | Embedder::LateInteraction
             | Embedder::KeywordSplade => 1.0,
             // Relational - half weight
@@ -350,7 +350,7 @@ mod tests {
         assert_eq!(Embedder::Causal.topic_weight(), 1.0);
         assert_eq!(Embedder::Sparse.topic_weight(), 1.0);
         assert_eq!(Embedder::Code.topic_weight(), 1.0);
-        assert_eq!(Embedder::Multimodal.topic_weight(), 1.0);
+        assert_eq!(Embedder::Contextual.topic_weight(), 1.0);
         assert_eq!(Embedder::LateInteraction.topic_weight(), 1.0);
         assert_eq!(Embedder::KeywordSplade.topic_weight(), 1.0);
 

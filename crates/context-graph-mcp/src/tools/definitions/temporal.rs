@@ -45,9 +45,9 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     },
                     "decayFunction": {
                         "type": "string",
-                        "enum": ["linear", "exponential", "step"],
+                        "enum": ["linear", "exponential", "step", "none", "no_decay"],
                         "default": "exponential",
-                        "description": "Decay function for freshness. 'exponential' (default) = natural forgetting curve, 'linear' = simple decay, 'step' = time bucket based"
+                        "description": "Decay function for freshness. 'exponential' (default) = natural forgetting curve, 'linear' = simple decay, 'step' = time bucket based, 'none'/'no_decay' = no decay applied"
                     },
                     "temporalScale": {
                         "type": "string",

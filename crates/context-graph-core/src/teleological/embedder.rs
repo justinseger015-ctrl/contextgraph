@@ -64,8 +64,10 @@ pub enum Embedder {
     Graph = 7,
     /// E9: HDC projected from 10K-bit hyperdimensional (1024D dense)
     Hdc = 8,
-    /// E10: Paraphrase via e5-base-v2 (768D dense, text-only — historically labeled "Multimodal")
-    Multimodal = 9,
+    /// E10: Contextual paraphrase via e5-base-v2 (768D dense, text-only).
+    /// M5 FIX: Renamed from "Multimodal" to match actual model.
+    #[serde(alias = "Multimodal")]
+    Contextual = 9,
     /// E11: Entity via KEPLER (768D dense)
     Entity = 10,
     /// E12: Late interaction ColBERT MaxSim (128D per token)
@@ -99,7 +101,7 @@ impl Embedder {
             6 => Some(Self::Code),
             7 => Some(Self::Graph),
             8 => Some(Self::Hdc),
-            9 => Some(Self::Multimodal),
+            9 => Some(Self::Contextual),
             10 => Some(Self::Entity),
             11 => Some(Self::LateInteraction),
             12 => Some(Self::KeywordSplade),
@@ -123,7 +125,7 @@ impl Embedder {
             Self::Code => EmbedderDims::Dense(E7_DIM),     // 1536
             Self::Graph => EmbedderDims::Dense(E8_DIM), // 1024 (e5-large-v2)
             Self::Hdc => EmbedderDims::Dense(E9_DIM),      // 1024 (projected)
-            Self::Multimodal => EmbedderDims::Dense(E10_DIM), // 768
+            Self::Contextual => EmbedderDims::Dense(E10_DIM), // 768
             Self::Entity => EmbedderDims::Dense(E11_DIM),  // 768 (KEPLER)
             Self::LateInteraction => EmbedderDims::TokenLevel {
                 per_token: E12_TOKEN_DIM,
@@ -153,7 +155,7 @@ impl Embedder {
             Self::Code => "E7_Code",
             Self::Graph => "E8_Graph",
             Self::Hdc => "E9_HDC",
-            Self::Multimodal => "E10_Multimodal",
+            Self::Contextual => "E10_Multimodal",
             Self::Entity => "E11_Entity",
             Self::LateInteraction => "E12_Late_Interaction",
             Self::KeywordSplade => "E13_SPLADE",
@@ -174,7 +176,7 @@ impl Embedder {
             Self::Code => "E7",
             Self::Graph => "E8",
             Self::Hdc => "E9",
-            Self::Multimodal => "E10",
+            Self::Contextual => "E10",
             Self::Entity => "E11",
             Self::LateInteraction => "E12",
             Self::KeywordSplade => "E13",
@@ -223,7 +225,7 @@ impl Embedder {
             Self::Code => "V_code",
             Self::Graph => "V_connectivity", // Per constitution
             Self::Hdc => "V_hdc",
-            Self::Multimodal => "V_multimodal",
+            Self::Contextual => "V_multimodal",
             Self::Entity => "V_entity",
             Self::LateInteraction => "V_late_interaction",
             Self::KeywordSplade => "V_keyword",
@@ -268,7 +270,7 @@ impl Embedder {
             // E9
             "e9" | "e9_hdc" | "hdc" => Ok(Self::Hdc),
             // E10
-            "e10" | "e10_multimodal" | "multimodal" => Ok(Self::Multimodal),
+            "e10" | "e10_multimodal" | "multimodal" => Ok(Self::Contextual),
             // E11
             "e11" | "e11_entity" | "entity" => Ok(Self::Entity),
             // E12

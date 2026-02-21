@@ -85,9 +85,8 @@ struct CliArgs {
     bind_address: Option<String>,
     /// Show help
     help: bool,
-    /// Block startup until embedding models are loaded into VRAM (--warm-first)
-    /// Default: true per constitution ARCH-08 (CUDA GPU required for production)
-    warm_first: bool,
+    // L3 FIX: warm_first field removed — determine_warm_first() uses only no_warm + env var.
+    // Default is true (block until warm). --warm-first flag just clears no_warm.
     /// Skip model warmup entirely (--no-warm)
     /// WARNING: Embedding operations will fail until models load in background
     no_warm: bool,
@@ -115,7 +114,6 @@ impl CliArgs {
             sse_port: None,
             bind_address: None,
             help: false,
-            warm_first: true, // Default: block until models are warm
             no_warm: false,
             daemon: false,
             daemon_port: 3100, // Default daemon port (aligned with .mcp.json)
@@ -164,9 +162,8 @@ impl CliArgs {
                     }
                 }
                 "--warm-first" => {
-                    // TASK-EMB-WARMUP: Block startup until models are warm
-                    cli.warm_first = true;
-                    cli.no_warm = false; // Explicitly override --no-warm if both passed
+                    // Explicit opt-in to default behavior. Useful to override --no-warm when both are passed.
+                    cli.no_warm = false;
                 }
                 "--no-warm" => {
                     // TASK-EMB-WARMUP: Skip blocking warmup (use background loading)
@@ -994,11 +991,29 @@ async fn kill_stale_standalone_holder(db_path: &Path) -> bool {
             .replace('\0', " ");
         let is_standalone = !cmdline.contains("--daemon");
         if is_standalone {
-            info!(
-                "PID {} is a standalone MCP server (stdin={}) — treating as stale",
-                pid, fd0_str
-            );
-            true
+            // L6 FIX: Check if the process is still listening on a TCP port.
+            // A standalone server actively serving requests is not stale.
+            let is_listening = std::fs::read_to_string(format!("/proc/{}/net/tcp", pid))
+                .unwrap_or_default()
+                .lines()
+                .skip(1) // skip header
+                .any(|line| {
+                    // Column 4 (st) = 0A means LISTEN state
+                    line.split_whitespace().nth(3).map_or(false, |st| st == "0A")
+                });
+            if is_listening {
+                info!(
+                    "PID {} is standalone but still listening on a port — not stale",
+                    pid
+                );
+                false
+            } else {
+                info!(
+                    "PID {} is a standalone MCP server (stdin={}) — treating as stale",
+                    pid, fd0_str
+                );
+                true
+            }
         } else {
             false
         }

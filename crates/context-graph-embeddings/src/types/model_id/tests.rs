@@ -53,7 +53,7 @@ fn test_model_path() {
 fn test_max_tokens() {
     assert_eq!(ModelId::Causal.max_tokens(), 512);
     // EMB-1 FIX: Multimodal uses BERT tokenizer (512 tokens), not CLIP (77)
-    assert_eq!(ModelId::Multimodal.max_tokens(), 512);
+    assert_eq!(ModelId::Contextual.max_tokens(), 512);
     assert_eq!(ModelId::Semantic.max_tokens(), 512);
 }
 
@@ -119,7 +119,7 @@ fn test_projected_dimensions() {
 fn test_latency_budgets() {
     assert_eq!(ModelId::Semantic.latency_budget_ms(), 5);
     assert_eq!(ModelId::Hdc.latency_budget_ms(), 1);
-    assert_eq!(ModelId::Multimodal.latency_budget_ms(), 15);
+    assert_eq!(ModelId::Contextual.latency_budget_ms(), 15);
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn test_tokenizer_families() {
 
     // EMB-1 FIX: Multimodal uses BERT family, not CLIP (e5-base-v2 is BERT-based)
     assert_eq!(
-        ModelId::Multimodal.tokenizer_family(),
+        ModelId::Contextual.tokenizer_family(),
         TokenizerFamily::BertWordpiece
     );
 

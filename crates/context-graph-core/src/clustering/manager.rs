@@ -2545,8 +2545,8 @@ mod tests {
             e8_graph_as_target: generate_domain_embedding(get_dimension(Embedder::Graph), "all", 0.5, seed + 601),
             e8_graph: Vec::new(), // Legacy field, empty by default
             e9_hdc: generate_domain_embedding(get_dimension(Embedder::Hdc), "all", 0.5, seed + 700),
-            e10_multimodal_paraphrase: generate_domain_embedding(get_dimension(Embedder::Multimodal), domain, variation, seed + 800),
-            e10_multimodal_as_context: generate_domain_embedding(get_dimension(Embedder::Multimodal), domain, variation, seed + 801),
+            e10_multimodal_paraphrase: generate_domain_embedding(get_dimension(Embedder::Contextual), domain, variation, seed + 800),
+            e10_multimodal_as_context: generate_domain_embedding(get_dimension(Embedder::Contextual), domain, variation, seed + 801),
             e11_entity: generate_domain_embedding(get_dimension(Embedder::Entity), domain, variation, seed + 900),
             e12_late_interaction: vec![generate_domain_embedding(128, domain, variation, seed + 1000); 10],
             e13_splade: SparseVector::empty(),
@@ -3018,8 +3018,8 @@ mod tests {
             e8_graph_as_target: generate_15domain_embedding(get_dimension(Embedder::Graph), 7, 0.5, seed + 601),
             e8_graph: Vec::new(), // Legacy field, empty by default
             e9_hdc: generate_15domain_embedding(get_dimension(Embedder::Hdc), 7, 0.5, seed + 700),
-            e10_multimodal_paraphrase: generate_15domain_embedding(get_dimension(Embedder::Multimodal), domain_idx, variation, seed + 800),
-            e10_multimodal_as_context: generate_15domain_embedding(get_dimension(Embedder::Multimodal), domain_idx, variation, seed + 801),
+            e10_multimodal_paraphrase: generate_15domain_embedding(get_dimension(Embedder::Contextual), domain_idx, variation, seed + 800),
+            e10_multimodal_as_context: generate_15domain_embedding(get_dimension(Embedder::Contextual), domain_idx, variation, seed + 801),
             e11_entity: generate_15domain_embedding(get_dimension(Embedder::Entity), domain_idx, variation, seed + 900),
             e12_late_interaction: vec![generate_15domain_embedding(128, domain_idx, variation, seed + 1000); 10],
             e13_splade: SparseVector::empty(),

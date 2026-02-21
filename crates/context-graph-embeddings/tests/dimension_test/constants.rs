@@ -21,7 +21,7 @@ pub const EXPECTED_NATIVE_DIMS: [(ModelId, usize); 13] = [
     (ModelId::Code, 1536),              // E7
     (ModelId::Graph, 1024),             // E8 (e5-large-v2, upgraded from MiniLM 384D)
     (ModelId::Hdc, 10000),              // E9
-    (ModelId::Multimodal, 768),         // E10
+    (ModelId::Contextual, 768),         // E10
     (ModelId::Entity, 384),             // E11 (legacy MiniLM-L6-v2; production uses Kepler 768D)
     (ModelId::LateInteraction, 128),    // E12
     (ModelId::Splade, 30522),           // E13
@@ -39,7 +39,7 @@ pub const EXPECTED_PROJECTED_DIMS: [(ModelId, usize); 13] = [
     (ModelId::Code, 1536),              // E7 - native 1536D
     (ModelId::Graph, 1024),             // E8 - e5-large-v2 (upgraded from MiniLM 384D)
     (ModelId::Hdc, 1024),               // E9 - 10K -> 1024
-    (ModelId::Multimodal, 768),         // E10 - no projection
+    (ModelId::Contextual, 768),         // E10 - no projection
     (ModelId::Entity, 384),             // E11 - legacy MiniLM (production uses Kepler 768D)
     (ModelId::LateInteraction, 128),    // E12 - no projection
     (ModelId::Splade, 1536),            // E13 - 30K -> 1536
@@ -56,7 +56,7 @@ pub const EXPECTED_QUANTIZATION: [(ModelId, QuantizationMethod); 13] = [
     (ModelId::Code, QuantizationMethod::PQ8),     // E7
     (ModelId::Graph, QuantizationMethod::Float8E4M3), // E8
     (ModelId::Hdc, QuantizationMethod::Binary),   // E9
-    (ModelId::Multimodal, QuantizationMethod::PQ8), // E10
+    (ModelId::Contextual, QuantizationMethod::PQ8), // E10
     (ModelId::Entity, QuantizationMethod::Float8E4M3), // E11
     (ModelId::LateInteraction, QuantizationMethod::TokenPruning), // E12
     (ModelId::Splade, QuantizationMethod::SparseNative), // E13

@@ -216,7 +216,7 @@ pub fn compute_similarity_for_space(
             // Take max of both directions — the stronger signal wins
             source_vs_target.max(target_vs_source)
         }
-        Embedder::Multimodal => {
+        Embedder::Contextual => {
             // E10: Compare paraphrase-vs-context cross pairs and take max
             let para_vs_context = cosine_similarity(
                 query.get_e10_as_paraphrase(),

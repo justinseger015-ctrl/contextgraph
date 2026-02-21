@@ -74,7 +74,7 @@ fn test_batch_request_estimated_tokens_code() {
 #[test]
 fn test_batch_request_estimated_tokens_image() {
     let input = ModelInput::image(vec![1, 2, 3, 4], ImageFormat::Png).unwrap();
-    let (request, _rx) = BatchRequest::new(input, ModelId::Multimodal);
+    let (request, _rx) = BatchRequest::new(input, ModelId::Contextual);
 
     assert_eq!(request.estimated_tokens(), 100);
 }

@@ -68,7 +68,7 @@ fn test_pq8_all_model_ids() {
         (ModelId::Semantic, 1024),
         (ModelId::Causal, 768),
         (ModelId::Code, 1536),
-        (ModelId::Multimodal, 768),
+        (ModelId::Contextual, 768),
     ];
 
     for (model_id, dim) in pq8_models {

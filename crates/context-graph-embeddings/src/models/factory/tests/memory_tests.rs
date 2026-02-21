@@ -30,9 +30,9 @@ fn test_estimate_memory_all_nonzero() {
 fn test_estimate_memory_multimodal_largest() {
     let factory = DefaultModelFactory::new(PathBuf::from("./models"), GpuConfig::default());
 
-    let multimodal = factory.estimate_memory(ModelId::Multimodal);
+    let multimodal = factory.estimate_memory(ModelId::Contextual);
     for model_id in ModelId::all() {
-        if *model_id != ModelId::Multimodal {
+        if *model_id != ModelId::Contextual {
             assert!(
                 multimodal >= factory.estimate_memory(*model_id),
                 "Multimodal should be >= {:?}",

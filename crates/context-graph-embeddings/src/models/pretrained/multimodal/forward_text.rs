@@ -52,7 +52,7 @@ pub fn text_forward(
     let encoding = tokenizer
         .encode(text, true)
         .map_err(|e| EmbeddingError::TokenizationError {
-            model_id: ModelId::Multimodal,
+            model_id: ModelId::Contextual,
             message: format!("CLIP tokenization failed: {}", e),
         })?;
 

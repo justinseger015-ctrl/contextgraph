@@ -785,15 +785,18 @@ impl Handlers {
             .and_then(|s| uuid::Uuid::parse_str(s).ok());
 
         // Parse sequenceDirection (before, after, both)
-        let sequence_direction = args
-            .get("sequenceDirection")
-            .and_then(|v| v.as_str())
-            .map(|s| match s.to_lowercase().as_str() {
-                "before" => context_graph_core::traits::SequenceDirection::Before,
-                "after" => context_graph_core::traits::SequenceDirection::After,
-                _ => context_graph_core::traits::SequenceDirection::Both,
-            })
-            .unwrap_or(context_graph_core::traits::SequenceDirection::Both);
+        let sequence_direction = match args.get("sequenceDirection").and_then(|v| v.as_str()) {
+            Some("before") => context_graph_core::traits::SequenceDirection::Before,
+            Some("after") => context_graph_core::traits::SequenceDirection::After,
+            Some("both") | None => context_graph_core::traits::SequenceDirection::Both,
+            Some(unknown) => {
+                return self.tool_error_typed(
+                    id,
+                    ToolErrorKind::Validation,
+                    &format!("Unknown sequenceDirection '{}'. Valid: before, after, both", unknown),
+                );
+            }
+        };
 
         // Parse temporalScale (micro, meso, macro, long, archival)
         let temporal_scale = match args.get("temporalScale").and_then(|v| v.as_str()) {
@@ -1167,23 +1170,25 @@ impl Handlers {
                 // Truncate to requested top_k after reranking
                 results.truncate(top_k);
 
-                // CRIT-01 FIX: Wire record_access() into search results path.
-                // This increments access_count and updates accessed_at for each
-                // returned fingerprint, enabling memory decay (BM25 importance).
-                // Non-blocking: failures logged but don't fail the search.
+                // M6 FIX: Update in-memory fingerprints first, then persist to RocksDB in background.
+                // Each update writes ~50KB fingerprint — doing 50+ synchronously inflates latency.
                 for result in &mut results {
                     result.fingerprint.record_access();
-                    if let Err(e) = self
-                        .teleological_store
-                        .update(result.fingerprint.clone())
-                        .await
-                    {
-                        warn!(
-                            error = %e,
-                            memory_id = %result.fingerprint.id,
-                            "search_graph: Failed to persist access count update"
-                        );
-                    }
+                }
+                {
+                    let store = self.teleological_store.clone();
+                    let updates: Vec<_> = results.iter().map(|r| r.fingerprint.clone()).collect();
+                    tokio::spawn(async move {
+                        for fp in updates {
+                            if let Err(e) = store.update(fp.clone()).await {
+                                tracing::warn!(
+                                    error = %e,
+                                    memory_id = %fp.id,
+                                    "search_graph: Failed to persist access count update (background)"
+                                );
+                            }
+                        }
+                    });
                 }
 
                 // Collect IDs for batch operations

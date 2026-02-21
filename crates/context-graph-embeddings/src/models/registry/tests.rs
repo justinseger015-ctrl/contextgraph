@@ -285,7 +285,7 @@ async fn test_initialize_fails_if_memory_exceeded() {
     let config = ModelRegistryConfig {
         // Budget only allows one model
         memory_budget_bytes: 200_000_000,
-        preload_models: vec![ModelId::Semantic, ModelId::Multimodal], // Both > 200MB
+        preload_models: vec![ModelId::Semantic, ModelId::Contextual], // Both > 200MB
         ..Default::default()
     };
 

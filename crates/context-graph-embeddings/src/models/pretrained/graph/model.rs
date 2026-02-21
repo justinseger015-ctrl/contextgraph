@@ -252,6 +252,8 @@ impl GraphModel {
     /// # Returns
     /// 1024D embedding vector with source-role semantics
     pub async fn embed_as_source(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
+        // Note: embed_dual uses single forward pass + two projections.
+        // The "unused" projection cost is ~0.1ms, not worth separate code path.
         let (source_vec, _) = self.embed_dual(content).await?;
         Ok(source_vec)
     }
@@ -324,8 +326,11 @@ impl GraphModel {
                 tokenizer,
                 projection,
             } => {
+                // H1 FIX: e5-large-v2 requires "passage: " prefix for documents.
+                // Without prefix, embeddings are out-of-distribution.
+                let prefixed = format!("passage: {}", content);
                 // Step 1: Get base embedding via standard forward pass
-                let base_embedding = gpu_forward(content, weights, tokenizer)?;
+                let base_embedding = gpu_forward(&prefixed, weights, tokenizer)?;
 
                 // Step 2: Convert to tensor for projection
                 let device = init_gpu().map_err(|e| EmbeddingError::GpuError {
@@ -463,7 +468,9 @@ impl EmbeddingModel for GraphModel {
             }
         };
 
-        let vector = gpu_forward(&content, weights, tokenizer)?;
+        // H1 FIX: e5-large-v2 requires "passage: " prefix for documents.
+        let prefixed = format!("passage: {}", content);
+        let vector = gpu_forward(&prefixed, weights, tokenizer)?;
         let latency_us = start.elapsed().as_micros() as u64;
         Ok(ModelEmbedding::new(ModelId::Graph, vector, latency_us))
     }

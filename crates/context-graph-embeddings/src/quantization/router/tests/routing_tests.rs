@@ -44,7 +44,7 @@ fn test_all_model_ids_have_method() {
     assert_eq!(router.method_for(ModelId::Causal), QuantizationMethod::PQ8);
     assert_eq!(router.method_for(ModelId::Code), QuantizationMethod::PQ8);
     assert_eq!(
-        router.method_for(ModelId::Multimodal),
+        router.method_for(ModelId::Contextual),
         QuantizationMethod::PQ8
     );
 
@@ -101,7 +101,7 @@ fn test_can_quantize() {
     assert!(router.can_quantize(ModelId::Semantic));
     assert!(router.can_quantize(ModelId::Causal));
     assert!(router.can_quantize(ModelId::Code));
-    assert!(router.can_quantize(ModelId::Multimodal));
+    assert!(router.can_quantize(ModelId::Contextual));
 
     // Float8: IMPLEMENTED
     assert!(router.can_quantize(ModelId::TemporalRecent));

@@ -4,14 +4,14 @@
 //! including dimensions, token limits, image parameters, and normalization values.
 
 /// Native dimension for CLIP embeddings (shared text-image space).
-/// Note: Matches ModelId::Multimodal.dimension() for clip-vit-large-patch14.
+/// Note: Matches ModelId::Contextual.dimension() for clip-vit-large-patch14.
 pub const MULTIMODAL_DIMENSION: usize = 768;
 
 /// Maximum tokens for CLIP text encoder.
 pub const MULTIMODAL_MAX_TOKENS: usize = 77;
 
 /// Latency budget in milliseconds (P95 target).
-/// Note: Matches ModelId::Multimodal.latency_budget_ms() from constitution.yaml.
+/// Note: Matches ModelId::Contextual.latency_budget_ms() from constitution.yaml.
 pub const MULTIMODAL_LATENCY_BUDGET_MS: u64 = 15;
 
 /// HuggingFace model repository name.

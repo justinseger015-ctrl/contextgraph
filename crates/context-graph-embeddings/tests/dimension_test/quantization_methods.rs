@@ -14,7 +14,7 @@ fn test_pq8_models() {
         (ModelId::Semantic, "E1"),
         (ModelId::Causal, "E5"),
         (ModelId::Code, "E7"),
-        (ModelId::Multimodal, "E10"),
+        (ModelId::Contextual, "E10"),
     ];
 
     for (model_id, label) in pq8_models {

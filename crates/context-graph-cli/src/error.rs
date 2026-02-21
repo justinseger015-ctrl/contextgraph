@@ -83,16 +83,18 @@ pub fn is_corruption_indicator(msg: &str) -> bool {
 }
 
 /// Corruption indicator strings (lowercase).
+/// H4/M9 FIX: Only RocksDB-specific corruption terms.
+/// "invalid" and "malformed" removed — they match normal JSON-RPC errors.
+/// "not found" never belonged here — it's a normal condition.
 const CORRUPTION_INDICATORS: &[&str] = &[
     "corruption",
     "corrupted",
-    "checksum",
     "checksum mismatch",
-    "invalid",
-    "malformed",
-    "truncated",
     "bad magic",
     "crc error",
+    "truncated block",
+    "bad table magic number",
+    "block checksum",
 ];
 
 /// Determine exit code for any error by inspecting error message.
@@ -218,19 +220,25 @@ mod tests {
         let corruption_messages = [
             ("data corruption detected", true),
             ("checksum mismatch", true),
-            ("invalid record format", true),
-            ("malformed entry", true),
-            ("truncated file", true),
             ("bad magic number", true),
             ("CRC ERROR in block", true),
+            ("truncated block at offset 1024", true),
+            ("bad table magic number", true),
+            ("block checksum failed", true),
         ];
 
+        // H4/M9 FIX: "invalid", "malformed", "not found" are NOT corruption
         let non_corruption_messages = [
             ("connection refused", false),
             ("timeout error", false),
             ("file not found", false),
             ("permission denied", false),
             ("disk full", false),
+            ("invalid request", false),
+            ("invalid json format", false),
+            ("malformed entry", false),
+            ("truncated file", false),
+            ("memory not found", false),
         ];
 
         for (msg, expected) in corruption_messages {
@@ -407,14 +415,14 @@ mod tests {
         );
         assert_eq!(code, CliExitCode::Blocking);
 
-        // Serialization without corruption indicator
+        // H4/M9 FIX: "invalid" is NOT a corruption indicator — it's normal for parse errors
         let err = StorageError::Serialization("invalid json format".to_string());
         let code = CliExitCode::from(&err);
         println!(
             "  Serialization('invalid json format'): exit_code={:?}",
             code
         );
-        assert_eq!(code, CliExitCode::Blocking); // 'invalid' is a corruption indicator
+        assert_eq!(code, CliExitCode::Warning); // Parse errors are recoverable, not corruption
 
         // Serialization with no indicators
         let err = StorageError::Serialization("unexpected end of input".to_string());

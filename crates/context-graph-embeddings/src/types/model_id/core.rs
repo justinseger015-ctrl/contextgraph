@@ -56,9 +56,10 @@ pub enum ModelId {
     /// E9: Hyperdimensional computing (10K-bit -> 1024D projected, custom)
     Hdc = 8,
     /// E10: Contextual paraphrase using intfloat/e5-base-v2 (768D).
-    /// Historical name "Multimodal" retained for backward compatibility (originally CLIP).
-    /// Production model is ContextualModel with asymmetric paraphrase/context vectors.
-    Multimodal = 9,
+    /// M5 FIX: Renamed from "Multimodal" (historical CLIP name) to match actual model.
+    /// serde(alias) preserves deserialization of existing JSON data.
+    #[serde(alias = "Multimodal")]
+    Contextual = 9,
     /// E11: Entity using KEPLER (768D, upgraded from MiniLM 384D).
     /// Prefer `ModelId::Kepler` for new code — `Entity` exists for backward-compatible matching.
     Entity = 10,
@@ -88,7 +89,7 @@ impl ModelId {
             Self::Code => 1536,    // Qodo-Embed-1-1.5B native dimension
             Self::Graph => 1024,   // e5-large-v2 (upgraded from MiniLM 384D)
             Self::Hdc => 10000,    // 10K-bit vector
-            Self::Multimodal => 768,
+            Self::Contextual => 768,
             Self::Entity => 384,   // Legacy MiniLM-L6-v2 (use ModelId::Kepler for 768D production E11)
             Self::LateInteraction => 128, // Per-token dimension
             Self::Splade => 30522,        // SPLADE v3 vocab size
@@ -143,7 +144,7 @@ impl ModelId {
         match self {
             Self::Code => 32768,    // Qodo-Embed-1-1.5B (Qwen2) supports 32K context
             Self::Causal => 512,    // nomic-embed-text-v1.5 (capped from 8192)
-            Self::Multimodal => 512, // EMB-1 FIX: e5-base-v2 uses BERT tokenizer (512), not CLIP (77)
+            Self::Contextual => 512, // EMB-1 FIX: e5-base-v2 uses BERT tokenizer (512), not CLIP (77)
             Self::TemporalRecent
             | Self::TemporalPeriodic
             | Self::TemporalPositional
@@ -166,7 +167,7 @@ impl ModelId {
             Self::Sparse => TokenizerFamily::BertWordpiece,   // SPLADE uses BERT
             Self::Code => TokenizerFamily::BertWordpiece,     // Qodo-Embed uses BERT tokenizer
             Self::Graph => TokenizerFamily::BertWordpiece,    // MiniLM uses BERT
-            Self::Multimodal => TokenizerFamily::BertWordpiece, // EMB-1 FIX: e5-base-v2 uses BERT, not CLIP
+            Self::Contextual => TokenizerFamily::BertWordpiece, // EMB-1 FIX: e5-base-v2 uses BERT, not CLIP
             Self::Entity => TokenizerFamily::BertWordpiece,   // all-MiniLM uses BERT
             Self::Kepler => TokenizerFamily::RobertaBpe,      // KEPLER uses RoBERTa/GPT-2 BPE
             Self::LateInteraction => TokenizerFamily::BertWordpiece, // ColBERT uses BERT
@@ -193,7 +194,7 @@ impl ModelId {
             Self::Code,               // E7
             Self::Graph,              // E8
             Self::Hdc,                // E9
-            Self::Multimodal,         // E10
+            Self::Contextual,         // E10
             Self::Entity,             // E11
             Self::LateInteraction,    // E12
             Self::Splade,             // E13
@@ -223,7 +224,7 @@ impl ModelId {
             Self::Code => 10,
             Self::Graph => 5,
             Self::Hdc => 1,
-            Self::Multimodal => 15,
+            Self::Contextual => 15,
             Self::Entity => 2,
             Self::Kepler => 5,          // Slightly slower than Entity due to larger model
             Self::LateInteraction => 8,
@@ -246,7 +247,7 @@ impl ModelId {
             Self::Code => "code",
             Self::Graph => "graph",
             Self::Hdc => "hdc",
-            Self::Multimodal => "multimodal",
+            Self::Contextual => "multimodal",
             Self::Entity => "entity",
             Self::Kepler => "kepler",
             Self::LateInteraction => "late_interaction",

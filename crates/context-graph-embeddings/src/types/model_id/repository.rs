@@ -18,7 +18,7 @@ impl ModelId {
             Self::Sparse => Some("naver/splade-cocondenser-ensembledistil"),
             Self::Code => Some("Qodo/Qodo-Embed-1-1.5B"),
             Self::Graph => Some("sentence-transformers/paraphrase-MiniLM-L6-v2"),
-            Self::Multimodal => Some("openai/clip-vit-large-patch14"),
+            Self::Contextual => Some("openai/clip-vit-large-patch14"),
             Self::Entity => Some("sentence-transformers/all-MiniLM-L6-v2"),
             Self::Kepler => Some("THU-KEG/KEPLER-Wiki5M-KE"), // KEPLER knowledge embeddings
             Self::LateInteraction => Some("colbert-ir/colbertv2.0"),
@@ -43,7 +43,7 @@ impl ModelId {
             Self::Code => "code",
             Self::Graph => "graph",
             Self::Hdc => "hdc",
-            Self::Multimodal => "multimodal",
+            Self::Contextual => "multimodal",
             Self::Entity => "entity",
             Self::Kepler => "kepler",
             Self::LateInteraction => "late-interaction",

@@ -150,7 +150,7 @@ fn test_quantization_method_assignments() {
         (ModelId::Code, QuantizationMethod::PQ8),
         (ModelId::Graph, QuantizationMethod::Float8E4M3),
         (ModelId::Hdc, QuantizationMethod::Binary),
-        (ModelId::Multimodal, QuantizationMethod::PQ8),
+        (ModelId::Contextual, QuantizationMethod::PQ8),
         (ModelId::Entity, QuantizationMethod::Float8E4M3),
         (ModelId::LateInteraction, QuantizationMethod::TokenPruning),
         (ModelId::Splade, QuantizationMethod::SparseNative),

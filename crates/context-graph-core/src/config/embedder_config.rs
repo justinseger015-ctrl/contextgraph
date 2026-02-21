@@ -292,7 +292,7 @@ mod tests {
             ("E7_Code", Embedder::Code),
             ("E8_Graph", Embedder::Graph),
             ("E9_HDC", Embedder::Hdc),
-            ("E10_Multimodal", Embedder::Multimodal),
+            ("E10_Multimodal", Embedder::Contextual),
             ("E11_Entity", Embedder::Entity),
             ("E12_Late_Interaction", Embedder::LateInteraction),
             ("E13_SPLADE", Embedder::KeywordSplade),

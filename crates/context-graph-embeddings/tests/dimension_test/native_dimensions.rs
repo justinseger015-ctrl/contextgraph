@@ -126,7 +126,7 @@ fn test_e9_hdc_native_dimension() {
 #[test]
 fn test_e10_multimodal_native_dimension() {
     assert_eq!(
-        ModelId::Multimodal.dimension(),
+        ModelId::Contextual.dimension(),
         768,
         "E10 Multimodal: expected native dimension 768 (CLIP)"
     );

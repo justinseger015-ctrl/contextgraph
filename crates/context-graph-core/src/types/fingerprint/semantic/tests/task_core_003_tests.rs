@@ -32,7 +32,7 @@ fn test_embedding_ref_categorization() {
         Embedder::Code,
         Embedder::Graph,
         Embedder::Hdc,
-        Embedder::Multimodal,
+        Embedder::Contextual,
         Embedder::Entity,
     ] {
         match fp.get(e) {
@@ -75,7 +75,7 @@ fn test_get_returns_correct_dimensions() {
         (Embedder::Code, E7_DIM),
         (Embedder::Graph, E8_DIM),
         (Embedder::Hdc, E9_DIM),
-        (Embedder::Multimodal, E10_DIM),
+        (Embedder::Contextual, E10_DIM),
         (Embedder::Entity, E11_DIM),
     ];
 

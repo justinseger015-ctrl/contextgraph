@@ -82,7 +82,7 @@ async fn test_embed_jpeg_image() {
     let input = ModelInput::image(jpeg_bytes, ImageFormat::Jpeg).expect("JPEG input");
     let embedding = model.embed(&input).await.expect("Embed should succeed");
     assert_eq!(embedding.vector.len(), 768);
-    assert_eq!(embedding.model_id, ModelId::Multimodal);
+    assert_eq!(embedding.model_id, ModelId::Contextual);
 }
 
 // ==================== Cross-Modal Tests ====================

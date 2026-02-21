@@ -213,7 +213,7 @@ impl Handlers {
             Ok(meta) => meta,
             Err(e) => {
                 error!(error = %e, "get_merge_history: Source metadata query failed");
-                None
+                return self.tool_error(id, &format!("Source metadata query failed: {}", e));
             }
         };
 
@@ -448,7 +448,7 @@ impl Handlers {
                 }
                 Err(e) => {
                     error!(error = %e, "get_provenance_chain: Importance history query failed");
-                    None
+                    return self.tool_error(id, &format!("Importance history query failed: {}", e));
                 }
             }
         } else {
@@ -477,7 +477,7 @@ impl Handlers {
                 }
                 Err(e) => {
                     error!(error = %e, "get_provenance_chain: Merge history query failed");
-                    None
+                    return self.tool_error(id, &format!("Merge history query failed: {}", e));
                 }
             }
         } else {

@@ -276,21 +276,22 @@ impl Float8E4M3Encoder {
 
         // Convert to E4M3 encoding
         let bits = scaled.to_bits();
-        let sign = (bits >> 31) & 1;
         let exp = ((bits >> 23) & 0xFF) as i32;
         let mantissa = (bits >> 20) & 0x07; // Top 3 bits of 23-bit mantissa
 
         // Compute E4M3 exponent (bias conversion: f32 bias=127, e4m3 bias=7)
         let e4m3_exp = (exp - 127 + 7).clamp(0, 15) as u8;
 
-        // Combine into E4M3 byte
-
-        ((sign as u8) << 7) | (e4m3_exp << 3) | (mantissa as u8)
+        // Sign bit always 0: values <= 0.0 return early at line 260
+        (e4m3_exp << 3) | (mantissa as u8)
     }
 
     /// Convert E4M3 byte to f32 (in [0, 1] range).
     #[inline]
     fn e4m3_to_f32(&self, byte: u8) -> f32 {
+        // L2 FIX: f32_to_e4m3 never sets the sign bit (values <= 0.0 return early).
+        // Catch data corruption if sign bit is somehow set.
+        debug_assert!(byte & 0x80 == 0, "unexpected sign bit in E4M3 byte: {:#04x}", byte);
         let sign = (byte >> 7) & 1;
         let exp = (byte >> 3) & 0x0F;
         let mantissa = byte & 0x07;

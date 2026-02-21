@@ -54,7 +54,7 @@ fn test_get_model_path_pretrained() {
     assert!(factory.get_model_path(ModelId::Sparse).is_some());
     assert!(factory.get_model_path(ModelId::Code).is_some());
     assert!(factory.get_model_path(ModelId::Graph).is_some());
-    assert!(factory.get_model_path(ModelId::Multimodal).is_some());
+    assert!(factory.get_model_path(ModelId::Contextual).is_some());
     assert!(factory.get_model_path(ModelId::Entity).is_some());
     assert!(factory.get_model_path(ModelId::LateInteraction).is_some());
 }
@@ -89,7 +89,7 @@ fn test_get_model_path_colbert() {
 #[test]
 fn test_get_model_path_clip() {
     let factory = DefaultModelFactory::new(PathBuf::from("/data/models"), GpuConfig::default());
-    let path = factory.get_model_path(ModelId::Multimodal).unwrap();
+    let path = factory.get_model_path(ModelId::Contextual).unwrap();
     assert_eq!(path, PathBuf::from("/data/models/multimodal"));
 }
 

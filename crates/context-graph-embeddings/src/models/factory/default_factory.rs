@@ -116,7 +116,7 @@ impl DefaultModelFactory {
             ModelId::Sparse => "sparse",
             ModelId::Code => "code-1536",
             ModelId::Graph => "graph",
-            ModelId::Multimodal => "multimodal",
+            ModelId::Contextual => "multimodal",
             ModelId::Entity => "entity",
             ModelId::Kepler => "kepler",
             ModelId::LateInteraction => "late-interaction",
@@ -163,7 +163,7 @@ impl DefaultModelFactory {
                 let model = GraphModel::new(&model_path, config.clone())?;
                 Ok(Box::new(model))
             }
-            ModelId::Multimodal => {
+            ModelId::Contextual => {
                 let model = MultimodalModel::new(&model_path, config.clone())?;
                 Ok(Box::new(model))
             }

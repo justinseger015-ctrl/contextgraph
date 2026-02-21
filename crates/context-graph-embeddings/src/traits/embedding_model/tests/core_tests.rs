@@ -47,7 +47,7 @@ fn test_supported_input_types_returns_correct_list() {
 
 #[test]
 fn test_supports_input_type_true_for_supported() {
-    let model = TestModel::new(ModelId::Multimodal, vec![InputType::Text, InputType::Image]);
+    let model = TestModel::new(ModelId::Contextual, vec![InputType::Text, InputType::Image]);
     assert!(model.supports_input_type(InputType::Text));
     assert!(model.supports_input_type(InputType::Image));
 }
@@ -181,7 +181,7 @@ fn test_max_tokens_delegates_to_model_id() {
     let causal = TestModel::new(ModelId::Causal, vec![InputType::Text]);
     assert_eq!(causal.max_tokens(), 512);
 
-    let multimodal = TestModel::new(ModelId::Multimodal, vec![InputType::Text]);
+    let multimodal = TestModel::new(ModelId::Contextual, vec![InputType::Text]);
     // EMB-1 FIX: Multimodal uses BERT tokenizer (512 tokens), not CLIP (77)
     assert_eq!(multimodal.max_tokens(), 512);
 }
@@ -253,7 +253,7 @@ fn test_embedding_model_is_sync() {
 #[test]
 fn test_all_input_types_can_be_supported() {
     let model = TestModel::new(
-        ModelId::Multimodal,
+        ModelId::Contextual,
         vec![
             InputType::Text,
             InputType::Code,
@@ -277,7 +277,7 @@ fn test_all_input_types_can_be_supported() {
 
 #[test]
 fn test_supported_types_can_use_hashset() {
-    let model = TestModel::new(ModelId::Multimodal, vec![InputType::Text, InputType::Image]);
+    let model = TestModel::new(ModelId::Contextual, vec![InputType::Text, InputType::Image]);
 
     let supported_set: HashSet<InputType> = model.supported_input_types().iter().copied().collect();
 

@@ -60,7 +60,7 @@ impl QuantizationMethod {
             ModelId::Semantic => Self::PQ8,   // E1
             ModelId::Causal => Self::PQ8,     // E5
             ModelId::Code => Self::PQ8,       // E7
-            ModelId::Multimodal => Self::PQ8, // E10
+            ModelId::Contextual => Self::PQ8, // E10
 
             // Float8: Temporal and graph embeddings
             ModelId::TemporalRecent => Self::Float8E4M3, // E2
@@ -265,7 +265,7 @@ mod tests {
             QuantizationMethod::PQ8
         );
         assert_eq!(
-            QuantizationMethod::for_model_id(ModelId::Multimodal),
+            QuantizationMethod::for_model_id(ModelId::Contextual),
             QuantizationMethod::PQ8
         );
 

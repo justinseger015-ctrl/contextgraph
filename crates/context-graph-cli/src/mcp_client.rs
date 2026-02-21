@@ -24,6 +24,56 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tracing::{debug, error, info, warn};
 
+/// H6 FIX: Bounded read_line — prevents OOM from malformed server responses.
+/// Reads until newline or `max_bytes`, whichever comes first.
+/// Returns error if the line exceeds `max_bytes` before a newline.
+async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
+    reader: &mut R,
+    buf: &mut String,
+    max_bytes: usize,
+) -> std::io::Result<usize> {
+    let mut total = 0;
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            return Ok(total); // EOF
+        }
+        if let Some(newline_pos) = available.iter().position(|&b| b == b'\n') {
+            let to_consume = newline_pos + 1;
+            if total + to_consume > max_bytes {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "Response line exceeds {} byte limit (read {} so far)",
+                        max_bytes, total
+                    ),
+                ));
+            }
+            let chunk = std::str::from_utf8(&available[..to_consume])
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            buf.push_str(chunk);
+            total += to_consume;
+            reader.consume(to_consume);
+            return Ok(total);
+        }
+        let len = available.len();
+        if total + len > max_bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Response line exceeds {} byte limit (read {} so far)",
+                    max_bytes, total
+                ),
+            ));
+        }
+        let chunk = std::str::from_utf8(available)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        buf.push_str(chunk);
+        total += len;
+        reader.consume(len);
+    }
+}
+
 // =============================================================================
 // Constants (AP-12: No magic numbers)
 // =============================================================================
@@ -790,11 +840,13 @@ impl McpClient {
         writer.write_all(b"\n").await?;
         writer.flush().await?;
 
-        // Read response with timeout
+        // H6 FIX: Use bounded read to prevent OOM from malformed server responses.
+        // Server-side uses read_line_bounded (AGT-04), client must also be bounded.
+        const MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024; // 10MB limit
         let mut response_line = String::new();
         let bytes_read = tokio::time::timeout(
             std::time::Duration::from_millis(request_timeout_ms),
-            reader.read_line(&mut response_line),
+            read_line_bounded(&mut reader, &mut response_line, MAX_RESPONSE_BYTES),
         )
         .await
         .map_err(|_| McpClientError::RequestTimeout {

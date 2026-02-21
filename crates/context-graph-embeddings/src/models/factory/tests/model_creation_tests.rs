@@ -164,11 +164,11 @@ fn test_create_multimodal() {
     let factory = DefaultModelFactory::new(PathBuf::from("./models"), GpuConfig::default());
     let config = SingleModelConfig::default();
 
-    let result = factory.create_model(ModelId::Multimodal, &config);
+    let result = factory.create_model(ModelId::Contextual, &config);
     assert!(result.is_ok(), "Failed: {:?}", result.err());
 
     let model = result.unwrap();
-    assert_eq!(model.model_id(), ModelId::Multimodal);
+    assert_eq!(model.model_id(), ModelId::Contextual);
     assert!(!model.is_initialized());
 }
 
