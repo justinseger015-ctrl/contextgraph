@@ -478,6 +478,7 @@ mod tests {
     // Verify: New snapshot created, stored in cache, output valid
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_006_001_new_session_creation() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-006-001: New Session Creation ===");
@@ -520,6 +521,7 @@ mod tests {
     // Verify: identity state restored when previous session is in cache
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_006_002_session_linking() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-006-002: Session Linking ===");
@@ -591,6 +593,7 @@ mod tests {
     // Verify: Session ID generated when not provided
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_006_003_auto_generate_session_id() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-006-003: Auto-Generate Session ID ===");
@@ -621,6 +624,7 @@ mod tests {
     // Verify: When previous_session_id doesn't exist, continue without linking
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_006_004_missing_previous_session() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-006-004: Missing Previous Session ===");
@@ -652,6 +656,7 @@ mod tests {
     // Verify: Output matches HookOutput schema exactly
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_006_006_json_output_schema() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-006-006: JSON Output Schema ===");
@@ -695,6 +700,7 @@ mod tests {
     // Verify: execution_time_ms reflects actual elapsed time
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_006_007_execution_time_tracking() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-006-007: Execution Time Tracking ===");
@@ -743,6 +749,7 @@ mod tests {
     // UPDATED: stability_delta should be ~0.0 because identity state is RESTORED
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_013_01_drift_metrics_computed_when_linking() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-013-01: Drift Metrics Computed When Linking ===");
@@ -835,6 +842,7 @@ mod tests {
     // Verify: drift_metrics is None when no previous_session_id
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_013_02_no_drift_metrics_for_new_session() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-013-02: No Drift Metrics for New Session ===");
@@ -865,6 +873,7 @@ mod tests {
     // Verify: drift_metrics is None when previous doesn't exist
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_013_03_drift_metrics_when_previous_not_found() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-013-03: Drift Metrics When Previous Not Found ===");
@@ -1077,6 +1086,7 @@ mod tests {
     // Verify: All identity fields are copied from previous to new session
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_017_01_complete_identity_state_restoration() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-017-01: Complete Identity State Restoration ===");
@@ -1170,6 +1180,7 @@ mod tests {
     // Verify: Coherence computed from integration/reflection/differentiation is healthy
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_017_02_stability_healthy_after_restoration() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-017-02: Stability Healthy After Restoration ===");
@@ -1243,6 +1254,7 @@ mod tests {
     // Verify: drift_metrics.stability_delta is near zero (identical vectors)
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_017_03_stability_delta_near_zero() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-017-03: Stability Delta Near Zero ===");

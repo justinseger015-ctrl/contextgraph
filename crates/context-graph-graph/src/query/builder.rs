@@ -436,8 +436,10 @@ mod tests {
         assert!(builder.validate().is_ok());
 
         // Invalid - no embedding
-        let mut builder = QueryBuilder::default();
-        builder.mode = QueryMode::Semantic;
+        let builder = QueryBuilder {
+            mode: QueryMode::Semantic,
+            ..QueryBuilder::default()
+        };
         assert!(builder.validate().is_err());
     }
 
@@ -448,8 +450,10 @@ mod tests {
         assert!(builder.validate().is_ok());
 
         // Invalid - no node_id
-        let mut builder = QueryBuilder::default();
-        builder.mode = QueryMode::Entailment;
+        let builder = QueryBuilder {
+            mode: QueryMode::Entailment,
+            ..QueryBuilder::default()
+        };
         assert!(builder.validate().is_err());
     }
 

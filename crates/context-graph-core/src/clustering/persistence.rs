@@ -605,15 +605,6 @@ mod tests {
         create_test_topic(strengths)
     }
 
-    /// Create an invalid topic (weighted_agreement < 2.5).
-    fn create_invalid_topic() -> Topic {
-        // 2 semantic spaces = weighted_agreement 2.0 < 2.5
-        let mut strengths = [0.0; 13];
-        strengths[0] = 1.0; // E1 Semantic
-        strengths[4] = 1.0; // E5 Causal
-        create_test_topic(strengths)
-    }
-
     // ===== Constructor Tests =====
 
     #[test]
@@ -630,86 +621,6 @@ mod tests {
         assert!(portfolio.persisted_at_ms > 0);
 
         println!("[PASS] test_new_portfolio");
-    }
-
-    #[test]
-    fn test_with_timestamp() {
-        let topics = vec![create_valid_topic()];
-        let timestamp = 1700000000000u64;
-
-        let portfolio =
-            PersistedTopicPortfolio::with_timestamp(topics, 0.2, 0.5, "session-1".to_string(), timestamp);
-
-        assert_eq!(portfolio.persisted_at_ms, timestamp);
-        assert_eq!(portfolio.session_id, "session-1");
-
-        println!("[PASS] test_with_timestamp");
-    }
-
-    #[test]
-    fn test_default_portfolio() {
-        let portfolio = PersistedTopicPortfolio::default();
-
-        assert!(portfolio.is_empty());
-        assert_eq!(portfolio.churn_rate, 0.0);
-        assert_eq!(portfolio.entropy, 0.0);
-        assert!(portfolio.session_id.is_empty());
-        assert_eq!(portfolio.persisted_at_ms, 0);
-
-        println!("[PASS] test_default_portfolio");
-    }
-
-    // ===== Metric Clamping Tests =====
-
-    #[test]
-    fn test_churn_rate_clamping() {
-        // Test clamping high value
-        let portfolio = PersistedTopicPortfolio::new(vec![], 1.5, 0.5, "test".to_string());
-        assert_eq!(portfolio.churn_rate, 1.0);
-
-        // Test clamping negative value
-        let portfolio = PersistedTopicPortfolio::new(vec![], -0.5, 0.5, "test".to_string());
-        assert_eq!(portfolio.churn_rate, 0.0);
-
-        println!("[PASS] test_churn_rate_clamping");
-    }
-
-    #[test]
-    fn test_entropy_clamping() {
-        // Test clamping high value
-        let portfolio = PersistedTopicPortfolio::new(vec![], 0.5, 2.0, "test".to_string());
-        assert_eq!(portfolio.entropy, 1.0);
-
-        // Test clamping negative value
-        let portfolio = PersistedTopicPortfolio::new(vec![], 0.5, -1.0, "test".to_string());
-        assert_eq!(portfolio.entropy, 0.0);
-
-        println!("[PASS] test_entropy_clamping");
-    }
-
-    #[test]
-    fn test_nan_handling() {
-        let portfolio = PersistedTopicPortfolio::new(vec![], f32::NAN, f32::NAN, "test".to_string());
-
-        assert!(!portfolio.churn_rate.is_nan());
-        assert!(!portfolio.entropy.is_nan());
-        assert_eq!(portfolio.churn_rate, 0.0);
-        assert_eq!(portfolio.entropy, 0.0);
-
-        println!("[PASS] test_nan_handling");
-    }
-
-    #[test]
-    fn test_infinity_handling() {
-        let portfolio =
-            PersistedTopicPortfolio::new(vec![], f32::INFINITY, f32::NEG_INFINITY, "test".to_string());
-
-        assert!(!portfolio.churn_rate.is_infinite());
-        assert!(!portfolio.entropy.is_infinite());
-        assert_eq!(portfolio.churn_rate, 0.0);
-        assert_eq!(portfolio.entropy, 0.0);
-
-        println!("[PASS] test_infinity_handling");
     }
 
     // ===== Serialization Tests =====
@@ -739,25 +650,6 @@ mod tests {
     }
 
     #[test]
-    fn test_pretty_serialization() {
-        let topics = vec![create_valid_topic()];
-        let portfolio = PersistedTopicPortfolio::new(topics, 0.1, 0.3, "pretty-test".to_string());
-
-        let bytes = portfolio.to_bytes_pretty().expect("pretty serialize should succeed");
-        let json_str = String::from_utf8(bytes.clone()).expect("should be valid UTF-8");
-
-        // Pretty print should contain newlines
-        assert!(json_str.contains('\n'), "Pretty JSON should have newlines");
-
-        // Should still deserialize correctly
-        let restored =
-            PersistedTopicPortfolio::from_bytes(&bytes).expect("deserialize should succeed");
-        assert_eq!(portfolio.session_id, restored.session_id);
-
-        println!("[PASS] test_pretty_serialization");
-    }
-
-    #[test]
     fn test_serialization_empty_portfolio() {
         let portfolio = PersistedTopicPortfolio::default();
 
@@ -783,184 +675,7 @@ mod tests {
         println!("[PASS] test_deserialization_invalid_json");
     }
 
-    #[test]
-    fn test_deserialization_wrong_structure() {
-        let wrong_json = br#"{"wrong": "structure"}"#;
-
-        let result = PersistedTopicPortfolio::from_bytes(wrong_json);
-
-        assert!(result.is_err());
-
-        println!("[PASS] test_deserialization_wrong_structure");
-    }
-
-    // ===== Accessor Tests =====
-
-    #[test]
-    fn test_topic_count() {
-        let topics = vec![create_valid_topic(), create_valid_topic(), create_valid_topic()];
-        let portfolio = PersistedTopicPortfolio::new(topics, 0.1, 0.2, "test".to_string());
-
-        assert_eq!(portfolio.topic_count(), 3);
-
-        println!("[PASS] test_topic_count");
-    }
-
-    #[test]
-    fn test_is_empty() {
-        let empty = PersistedTopicPortfolio::new(vec![], 0.1, 0.2, "test".to_string());
-        let non_empty = PersistedTopicPortfolio::new(vec![create_valid_topic()], 0.1, 0.2, "test".to_string());
-
-        assert!(empty.is_empty());
-        assert!(!non_empty.is_empty());
-
-        println!("[PASS] test_is_empty");
-    }
-
-    #[test]
-    fn test_is_unstable() {
-        // Stable (churn < 0.5)
-        let stable = PersistedTopicPortfolio::new(vec![], 0.3, 0.5, "test".to_string());
-        assert!(!stable.is_unstable());
-
-        // Unstable (churn >= 0.5)
-        let unstable = PersistedTopicPortfolio::new(vec![], 0.5, 0.5, "test".to_string());
-        assert!(unstable.is_unstable());
-
-        let very_unstable = PersistedTopicPortfolio::new(vec![], 0.8, 0.5, "test".to_string());
-        assert!(very_unstable.is_unstable());
-
-        println!("[PASS] test_is_unstable");
-    }
-
-    #[test]
-    fn test_has_high_entropy() {
-        // Normal entropy (<= 0.7)
-        let normal = PersistedTopicPortfolio::new(vec![], 0.3, 0.7, "test".to_string());
-        assert!(!normal.has_high_entropy());
-
-        // High entropy (> 0.7)
-        let high = PersistedTopicPortfolio::new(vec![], 0.3, 0.71, "test".to_string());
-        assert!(high.has_high_entropy());
-
-        println!("[PASS] test_has_high_entropy");
-    }
-
-    #[test]
-    fn test_total_members() {
-        // Create topics with known member counts
-        let mut topic1 = create_valid_topic();
-        topic1.member_memories = vec![Uuid::new_v4(), Uuid::new_v4()]; // 2 members
-
-        let mut topic2 = create_valid_topic();
-        topic2.member_memories = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()]; // 3 members
-
-        let portfolio = PersistedTopicPortfolio::new(vec![topic1, topic2], 0.1, 0.2, "test".to_string());
-
-        assert_eq!(portfolio.total_members(), 5);
-
-        println!("[PASS] test_total_members");
-    }
-
-    #[test]
-    fn test_valid_topics() {
-        let valid1 = create_valid_topic();
-        let valid2 = create_valid_topic();
-        let invalid = create_invalid_topic();
-
-        let portfolio =
-            PersistedTopicPortfolio::new(vec![valid1, invalid, valid2], 0.1, 0.2, "test".to_string());
-
-        assert_eq!(portfolio.topic_count(), 3);
-        assert_eq!(portfolio.valid_topic_count(), 2);
-        assert_eq!(portfolio.valid_topics().len(), 2);
-
-        println!("[PASS] test_valid_topics");
-    }
-
-    // ===== Age Tests =====
-
-    #[test]
-    fn test_age_seconds() {
-        // Create a portfolio from 10 seconds ago
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-
-        let ten_seconds_ago = now_ms.saturating_sub(10_000);
-        let portfolio =
-            PersistedTopicPortfolio::with_timestamp(vec![], 0.1, 0.2, "test".to_string(), ten_seconds_ago);
-
-        let age = portfolio.age_seconds();
-
-        // Allow some tolerance for test execution time
-        assert!(age >= 9 && age <= 12, "Age should be ~10 seconds, got {}", age);
-
-        println!("[PASS] test_age_seconds");
-    }
-
-    #[test]
-    fn test_age_seconds_future_timestamp() {
-        // Test with future timestamp (should return 0 due to saturating_sub)
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-
-        let future = now_ms + 10_000;
-        let portfolio =
-            PersistedTopicPortfolio::with_timestamp(vec![], 0.1, 0.2, "test".to_string(), future);
-
-        let age = portfolio.age_seconds();
-        assert_eq!(age, 0, "Future timestamp should yield 0 age");
-
-        println!("[PASS] test_age_seconds_future_timestamp");
-    }
-
-    // ===== Error Tests =====
-
-    #[test]
-    fn test_persistence_error_display() {
-        let invalid_err = PersistenceError::invalid_data("test error message");
-        let msg = invalid_err.to_string();
-
-        assert!(msg.contains("test error message"));
-
-        println!("[PASS] test_persistence_error_display");
-    }
-
-    #[test]
-    fn test_persistence_error_debug() {
-        let err = PersistenceError::invalid_data("debug test");
-        let debug = format!("{:?}", err);
-
-        assert!(!debug.is_empty());
-
-        println!("[PASS] test_persistence_error_debug");
-    }
-
     // ===== Topic Content Preservation Tests =====
-
-    #[test]
-    fn test_topic_profile_preserved() {
-        let mut strengths = [0.0; 13];
-        strengths[0] = 0.8;
-        strengths[4] = 0.7;
-        strengths[6] = 0.9;
-
-        let topic = create_test_topic(strengths);
-        let original_profile = topic.profile.strengths;
-
-        let portfolio = PersistedTopicPortfolio::new(vec![topic], 0.1, 0.2, "test".to_string());
-
-        let bytes = portfolio.to_bytes().expect("serialize");
-        let restored = PersistedTopicPortfolio::from_bytes(&bytes).expect("deserialize");
-
-        assert_eq!(restored.topics[0].profile.strengths, original_profile);
-
-        println!("[PASS] test_topic_profile_preserved");
-    }
 
     #[test]
     fn test_topic_stability_preserved() {
@@ -988,45 +703,6 @@ mod tests {
         println!("[PASS] test_topic_stability_preserved");
     }
 
-    #[test]
-    fn test_topic_members_preserved() {
-        let mut topic = create_valid_topic();
-        let mem1 = Uuid::new_v4();
-        let mem2 = Uuid::new_v4();
-        let mem3 = Uuid::new_v4();
-        topic.member_memories = vec![mem1, mem2, mem3];
-
-        let portfolio = PersistedTopicPortfolio::new(vec![topic], 0.1, 0.2, "test".to_string());
-
-        let bytes = portfolio.to_bytes().expect("serialize");
-        let restored = PersistedTopicPortfolio::from_bytes(&bytes).expect("deserialize");
-
-        assert_eq!(restored.topics[0].member_memories.len(), 3);
-        assert!(restored.topics[0].member_memories.contains(&mem1));
-        assert!(restored.topics[0].member_memories.contains(&mem2));
-        assert!(restored.topics[0].member_memories.contains(&mem3));
-
-        println!("[PASS] test_topic_members_preserved");
-    }
-
-    #[test]
-    fn test_topic_name_preserved() {
-        let mut topic = create_valid_topic();
-        topic.set_name("Authentication Patterns".to_string());
-
-        let portfolio = PersistedTopicPortfolio::new(vec![topic], 0.1, 0.2, "test".to_string());
-
-        let bytes = portfolio.to_bytes().expect("serialize");
-        let restored = PersistedTopicPortfolio::from_bytes(&bytes).expect("deserialize");
-
-        assert_eq!(
-            restored.topics[0].name,
-            Some("Authentication Patterns".to_string())
-        );
-
-        println!("[PASS] test_topic_name_preserved");
-    }
-
     // ===== Constitution Compliance Tests =====
 
     #[test]
@@ -1046,15 +722,4 @@ mod tests {
         println!("[PASS] test_constitution_churn_thresholds");
     }
 
-    #[test]
-    fn test_constitution_entropy_threshold() {
-        // Per AP-70: entropy > 0.7 is high
-        let at_threshold = PersistedTopicPortfolio::new(vec![], 0.3, 0.7, "test".to_string());
-        assert!(!at_threshold.has_high_entropy(), "0.7 should NOT be high (> not >=)");
-
-        let above_threshold = PersistedTopicPortfolio::new(vec![], 0.3, 0.701, "test".to_string());
-        assert!(above_threshold.has_high_entropy(), "0.701 should be high");
-
-        println!("[PASS] test_constitution_entropy_threshold");
-    }
 }

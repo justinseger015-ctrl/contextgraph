@@ -668,7 +668,7 @@ mod tests {
         // Check values are in expected range [-0.5, 0.5]
         for &val in &embedding {
             assert!(
-                val >= -0.5 && val <= 0.5,
+                (-0.5..=0.5).contains(&val),
                 "Value {} out of expected range",
                 val
             );

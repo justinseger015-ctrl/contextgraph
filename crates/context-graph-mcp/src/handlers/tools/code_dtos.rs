@@ -428,43 +428,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_search_code_validation_success() {
+    fn test_happy_path_deserialization() {
         let req = SearchCodeRequest {
             query: "async function HTTP handler".to_string(),
             ..Default::default()
         };
         assert!(req.validate().is_ok());
+        assert!((req.blend_with_semantic - DEFAULT_CODE_BLEND).abs() < 0.001);
+        assert_eq!(req.search_mode, CodeSearchMode::Hybrid);
     }
 
     #[test]
-    fn test_search_code_empty_query() {
-        let req = SearchCodeRequest::default();
-        assert!(req.validate().is_err());
+    fn test_validation_rejects_invalid() {
+        assert!(SearchCodeRequest::default().validate().is_err());
+        let bad_blend = SearchCodeRequest { query: "test".to_string(), blend_with_semantic: 1.5, ..Default::default() };
+        assert!(bad_blend.validate().is_err());
+        let bad_k = SearchCodeRequest { query: "test".to_string(), top_k: 100, ..Default::default() };
+        assert!(bad_k.validate().is_err());
     }
 
     #[test]
-    fn test_search_code_invalid_blend() {
-        let req = SearchCodeRequest {
-            query: "test".to_string(),
-            blend_with_semantic: 1.5,
-            ..Default::default()
-        };
-        assert!(req.validate().is_err());
-    }
-
-    #[test]
-    fn test_search_code_invalid_top_k() {
-        let req = SearchCodeRequest {
-            query: "test".to_string(),
-            top_k: 100,
-            ..Default::default()
-        };
-        assert!(req.validate().is_err());
-    }
-
-    #[test]
-    fn test_default_blend_weight() {
-        // E7 needs significant weight (0.4) for code queries
-        assert!((DEFAULT_CODE_BLEND - 0.4).abs() < 0.001);
+    fn test_response_serialization() {
+        let mode_json = serde_json::to_string(&CodeSearchMode::Hybrid).unwrap();
+        assert_eq!(mode_json, "\"Hybrid\"");
+        let mode_json = serde_json::to_string(&CodeSearchMode::E7Only).unwrap();
+        assert_eq!(mode_json, "\"E7Only\"");
     }
 }

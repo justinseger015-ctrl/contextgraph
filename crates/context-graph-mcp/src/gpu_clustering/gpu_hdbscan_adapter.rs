@@ -383,7 +383,7 @@ mod tests {
 
         // Max possible = 7*1.0 + 2*0.5 + 1*0.5 = 8.5
         let max: f32 = (0..13)
-            .filter_map(|i| Embedder::from_index(i))
+            .filter_map(Embedder::from_index)
             .map(|e| e.topic_weight())
             .sum();
         assert!((max - 8.5).abs() < 0.001);

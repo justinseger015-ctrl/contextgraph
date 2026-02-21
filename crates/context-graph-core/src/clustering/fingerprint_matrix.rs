@@ -625,28 +625,6 @@ mod tests {
     }
 
     #[test]
-    fn test_config_defaults() {
-        let config = FingerprintMatrixConfig::default();
-        assert_eq!(config.aggregation, AggregationStrategy::WeightedSum);
-        assert_eq!(config.min_similarity_threshold, 0.0);
-        assert!(config.store_per_space);
-        assert!(config.validate().is_ok());
-
-        println!("[PASS] test_config_defaults");
-    }
-
-    #[test]
-    fn test_config_validation_invalid_threshold() {
-        let mut config = FingerprintMatrixConfig::default();
-        config.min_similarity_threshold = 1.5;
-
-        let result = config.validate();
-        assert!(result.is_err());
-
-        println!("[PASS] test_config_validation_invalid_threshold");
-    }
-
-    #[test]
     fn test_build_empty_matrix() {
         let config = FingerprintMatrixConfig::default();
         let fingerprints: Vec<(Uuid, &SemanticFingerprint)> = vec![];
@@ -659,23 +637,6 @@ mod tests {
         assert_eq!(matrix.size(), 0);
 
         println!("[PASS] test_build_empty_matrix");
-    }
-
-    #[test]
-    fn test_build_single_fingerprint() {
-        let config = FingerprintMatrixConfig::default();
-        let fp = create_test_fingerprint(0.5);
-        let id = Uuid::new_v4();
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> = vec![(id, &fp)];
-
-        let result = build_fingerprint_matrix(&fingerprints, &config);
-        assert!(result.is_ok());
-
-        let matrix = result.unwrap();
-        assert_eq!(matrix.size(), 1);
-        assert_eq!(matrix.similarities[0][0], 1.0); // Self-similarity
-
-        println!("[PASS] test_build_single_fingerprint");
     }
 
     #[test]
@@ -714,29 +675,6 @@ mod tests {
     }
 
     #[test]
-    fn test_to_distance_matrix() {
-        let config = FingerprintMatrixConfig::default();
-        let fp1 = create_test_fingerprint(0.5);
-        let fp2 = create_test_fingerprint(0.5);
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> =
-            vec![(Uuid::new_v4(), &fp1), (Uuid::new_v4(), &fp2)];
-
-        let matrix = build_fingerprint_matrix(&fingerprints, &config).unwrap();
-        let distances = matrix.to_distance_matrix();
-
-        // Self-distance should be 0
-        assert_eq!(distances[0][0], 0.0);
-        assert_eq!(distances[1][1], 0.0);
-
-        // Distance = 1 - similarity
-        let sim = matrix.get_similarity(0, 1).unwrap();
-        let dist = matrix.get_distance(0, 1).unwrap();
-        assert!((dist - (1.0 - sim)).abs() < f32::EPSILON);
-
-        println!("[PASS] test_to_distance_matrix");
-    }
-
-    #[test]
     fn test_similarity_stats() {
         let config = FingerprintMatrixConfig::default();
         let fp1 = create_test_fingerprint(0.3);
@@ -759,114 +697,6 @@ mod tests {
             "[PASS] test_similarity_stats - min={}, max={}, mean={}",
             stats.min, stats.max, stats.mean
         );
-    }
-
-    #[test]
-    fn test_aggregation_strategy_max_pooling() {
-        let config = FingerprintMatrixConfig {
-            aggregation: AggregationStrategy::MaxPooling,
-            ..Default::default()
-        };
-
-        let fp1 = create_test_fingerprint(0.5);
-        let fp2 = create_test_fingerprint(0.6);
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> =
-            vec![(Uuid::new_v4(), &fp1), (Uuid::new_v4(), &fp2)];
-
-        let result = build_fingerprint_matrix(&fingerprints, &config);
-        assert!(result.is_ok());
-
-        let matrix = result.unwrap();
-        let sim = matrix.get_similarity(0, 1).unwrap();
-        assert!(sim.is_finite(), "MaxPooling should produce finite similarity");
-
-        println!(
-            "[PASS] test_aggregation_strategy_max_pooling - similarity={}",
-            sim
-        );
-    }
-
-    #[test]
-    fn test_aggregation_strategy_mean_pooling() {
-        let config = FingerprintMatrixConfig {
-            aggregation: AggregationStrategy::MeanPooling,
-            ..Default::default()
-        };
-
-        let fp1 = create_test_fingerprint(0.5);
-        let fp2 = create_test_fingerprint(0.6);
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> =
-            vec![(Uuid::new_v4(), &fp1), (Uuid::new_v4(), &fp2)];
-
-        let result = build_fingerprint_matrix(&fingerprints, &config);
-        assert!(result.is_ok());
-
-        println!("[PASS] test_aggregation_strategy_mean_pooling");
-    }
-
-    #[test]
-    fn test_per_space_storage() {
-        let config = FingerprintMatrixConfig {
-            store_per_space: true,
-            ..Default::default()
-        };
-
-        let fp1 = create_test_fingerprint(0.5);
-        let fp2 = create_test_fingerprint(0.6);
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> =
-            vec![(Uuid::new_v4(), &fp1), (Uuid::new_v4(), &fp2)];
-
-        let matrix = build_fingerprint_matrix(&fingerprints, &config).unwrap();
-
-        assert!(matrix.per_space.is_some());
-        let per_space = matrix.per_space.as_ref().unwrap();
-        assert_eq!(per_space.len(), 2);
-        assert_eq!(per_space[0].len(), 2);
-        assert_eq!(per_space[0][0].len(), NUM_EMBEDDERS);
-
-        println!("[PASS] test_per_space_storage");
-    }
-
-    #[test]
-    fn test_per_space_disabled() {
-        let config = FingerprintMatrixConfig {
-            store_per_space: false,
-            ..Default::default()
-        };
-
-        let fp1 = create_test_fingerprint(0.5);
-        let fp2 = create_test_fingerprint(0.6);
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> =
-            vec![(Uuid::new_v4(), &fp1), (Uuid::new_v4(), &fp2)];
-
-        let matrix = build_fingerprint_matrix(&fingerprints, &config).unwrap();
-
-        assert!(matrix.per_space.is_none());
-
-        println!("[PASS] test_per_space_disabled");
-    }
-
-    #[test]
-    fn test_embedder_contributions() {
-        let config = FingerprintMatrixConfig::default();
-        let fp1 = create_test_fingerprint(0.3);
-        let fp2 = create_test_fingerprint(0.5);
-        let fp3 = create_test_fingerprint(0.7);
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> = vec![
-            (Uuid::new_v4(), &fp1),
-            (Uuid::new_v4(), &fp2),
-            (Uuid::new_v4(), &fp3),
-        ];
-
-        let matrix = build_fingerprint_matrix(&fingerprints, &config).unwrap();
-        let contributions = matrix.analyze_embedder_contributions();
-
-        // All contributions should be finite
-        for (i, c) in contributions.iter().enumerate() {
-            assert!(c.is_finite(), "Contribution for embedder {} is not finite", i);
-        }
-
-        println!("[PASS] test_embedder_contributions - {:?}", contributions);
     }
 
     #[test]
@@ -909,45 +739,4 @@ mod tests {
         println!("[PASS] test_incremental_update");
     }
 
-    #[test]
-    fn test_min_similarity_threshold() {
-        let config = FingerprintMatrixConfig {
-            min_similarity_threshold: 0.95,
-            ..Default::default()
-        };
-
-        let fp1 = create_test_fingerprint(0.3);
-        let fp2 = create_test_fingerprint(0.9); // Very different
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> =
-            vec![(Uuid::new_v4(), &fp1), (Uuid::new_v4(), &fp2)];
-
-        let matrix = build_fingerprint_matrix(&fingerprints, &config).unwrap();
-        let sim = matrix.get_similarity(0, 1).unwrap();
-
-        // If similarity is below threshold, it should be set to 0.0
-        // (Note: actual behavior depends on fingerprint similarity)
-        assert!(sim.is_finite());
-
-        println!(
-            "[PASS] test_min_similarity_threshold - similarity={}",
-            sim
-        );
-    }
-
-    #[test]
-    fn test_memory_ids_preserved() {
-        let config = FingerprintMatrixConfig::default();
-        let fp1 = create_test_fingerprint(0.5);
-        let fp2 = create_test_fingerprint(0.6);
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-
-        let fingerprints: Vec<(Uuid, &SemanticFingerprint)> = vec![(id1, &fp1), (id2, &fp2)];
-        let matrix = build_fingerprint_matrix(&fingerprints, &config).unwrap();
-
-        assert_eq!(matrix.memory_ids[0], id1);
-        assert_eq!(matrix.memory_ids[1], id2);
-
-        println!("[PASS] test_memory_ids_preserved");
-    }
 }

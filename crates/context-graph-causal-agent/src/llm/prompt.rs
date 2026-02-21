@@ -114,6 +114,7 @@ For each pair, determine if there's a causal relationship.
     }
 
     /// Truncate content to maximum length (UTF-8 safe).
+    #[allow(clippy::incompatible_msrv)] // floor_char_boundary requires 1.80+, our runtime rustc supports it
     fn truncate_content(&self, content: &str) -> String {
         if content.len() <= self.max_content_length {
             content.to_string()

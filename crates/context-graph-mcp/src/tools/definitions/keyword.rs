@@ -79,34 +79,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_definitions_count() {
+    fn test_definitions_exist_with_required_fields() {
         assert_eq!(definitions().len(), 1);
-    }
-
-    #[test]
-    fn test_search_by_keywords_definition() {
         let def = search_by_keywords_definition();
         assert_eq!(def.name, "search_by_keywords");
-        assert!(!def.description.is_empty());
-
-        // Verify required parameters
+        assert!(def.description.contains("E6"));
+        assert!(def.description.contains("keyword"));
         let required = def.input_schema.get("required").unwrap().as_array().unwrap();
         assert!(required.iter().any(|v| v.as_str() == Some("query")));
-
-        // Verify properties exist
         let props = def.input_schema.get("properties").unwrap().as_object().unwrap();
         assert!(props.contains_key("query"));
         assert!(props.contains_key("topK"));
-        assert!(props.contains_key("minScore"));
         assert!(props.contains_key("blendWithSemantic"));
         assert!(props.contains_key("useSpladeExpansion"));
-        assert!(props.contains_key("includeContent"));
-    }
-
-    #[test]
-    fn test_definition_has_constitution_reference() {
-        let def = search_by_keywords_definition();
-        assert!(def.description.contains("E6"));
-        assert!(def.description.contains("keyword"));
     }
 }

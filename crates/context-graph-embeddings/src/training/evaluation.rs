@@ -461,7 +461,7 @@ mod tests {
         let sims = vec![0.6, 0.4, 0.5, 0.3];
         let labels = vec![true, false, true, false];
         let auc = Evaluator::causal_auc(&sims, &labels);
-        assert!(auc >= 0.0 && auc <= 1.0, "AUC should be in [0, 1], got {}", auc);
+        assert!((0.0..=1.0).contains(&auc), "AUC should be in [0, 1], got {}", auc);
     }
 
     #[test]
@@ -486,6 +486,6 @@ mod tests {
 
         let acc = Evaluator::directional_accuracy(&cause, &effect).unwrap();
         // Symmetric cosine → forward == reverse → 0% accuracy (none strictly greater)
-        assert!(acc >= 0.0 && acc <= 1.0, "Accuracy should be in [0,1], got {}", acc);
+        assert!((0.0..=1.0).contains(&acc), "Accuracy should be in [0,1], got {}", acc);
     }
 }

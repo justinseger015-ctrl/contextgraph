@@ -292,7 +292,7 @@ mod tests {
     fn test_default_thresholds_valid() {
         for edge_type in GraphLinkEdgeType::all() {
             let threshold = edge_type.default_threshold();
-            assert!(threshold >= 0.0 && threshold <= 1.0,
+            assert!((0.0..=1.0).contains(&threshold),
                     "{:?} has invalid threshold: {}", edge_type, threshold);
         }
     }

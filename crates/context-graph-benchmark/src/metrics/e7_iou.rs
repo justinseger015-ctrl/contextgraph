@@ -415,16 +415,14 @@ mod tests {
 
     #[test]
     fn test_iou_at_k() {
-        let chunks = vec![
-            "fn a() {}",
+        let chunks = ["fn a() {}",
             "fn b() {}",
-            "fn c() {}",
-        ];
+            "fn c() {}"];
         let ground_truth = "fn a() {} fn b() {}";
 
-        let iou_1 = compute_iou_at_k(&chunks.iter().map(|s| *s).collect::<Vec<_>>(), ground_truth, 1);
-        let iou_2 = compute_iou_at_k(&chunks.iter().map(|s| *s).collect::<Vec<_>>(), ground_truth, 2);
-        let iou_3 = compute_iou_at_k(&chunks.iter().map(|s| *s).collect::<Vec<_>>(), ground_truth, 3);
+        let iou_1 = compute_iou_at_k(chunks.as_ref(), ground_truth, 1);
+        let iou_2 = compute_iou_at_k(chunks.as_ref(), ground_truth, 2);
+        let iou_3 = compute_iou_at_k(chunks.as_ref(), ground_truth, 3);
 
         println!("IoU@1: {}, IoU@2: {}, IoU@3: {}", iou_1, iou_2, iou_3);
 

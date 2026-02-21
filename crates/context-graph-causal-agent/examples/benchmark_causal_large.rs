@@ -314,6 +314,7 @@ fn load_chunks(path: &PathBuf) -> Result<Vec<Chunk>, Box<dyn std::error::Error>>
     Ok(chunks)
 }
 
+#[allow(clippy::type_complexity)]
 fn generate_pairs(chunks: &[Chunk], target_count: usize) -> Result<Vec<(PairType, Chunk, Chunk)>, Box<dyn std::error::Error>> {
     let mut rng = rand::rngs::StdRng::seed_from_u64(42); // Reproducible
     let mut pairs = Vec::new();

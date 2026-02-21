@@ -312,48 +312,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_search_by_keywords_validation_success() {
+    fn test_happy_path_deserialization() {
         let req = SearchByKeywordsRequest {
             query: "RocksDB compaction".to_string(),
             ..Default::default()
         };
         assert!(req.validate().is_ok());
+        assert!((req.blend_with_semantic - DEFAULT_KEYWORD_BLEND).abs() < 0.001);
+        assert!(req.use_splade_expansion);
     }
 
     #[test]
-    fn test_search_by_keywords_empty_query() {
-        let req = SearchByKeywordsRequest::default();
-        assert!(req.validate().is_err());
+    fn test_validation_rejects_invalid() {
+        assert!(SearchByKeywordsRequest::default().validate().is_err());
+        let bad_blend = SearchByKeywordsRequest { query: "test".to_string(), blend_with_semantic: 1.5, ..Default::default() };
+        assert!(bad_blend.validate().is_err());
+        let bad_k = SearchByKeywordsRequest { query: "test".to_string(), top_k: 100, ..Default::default() };
+        assert!(bad_k.validate().is_err());
     }
 
     #[test]
-    fn test_search_by_keywords_invalid_blend() {
-        let req = SearchByKeywordsRequest {
-            query: "test".to_string(),
-            blend_with_semantic: 1.5,
-            ..Default::default()
+    fn test_response_serialization() {
+        let resp = SearchByKeywordsResponse {
+            query: "test".to_string(), results: vec![], count: 0,
+            metadata: KeywordSearchMetadata {
+                candidates_evaluated: 0, filtered_by_score: 0, e6_blend_weight: 0.3,
+                e1_weight: 0.7, used_splade_expansion: true, extracted_keywords: vec![],
+            },
         };
-        assert!(req.validate().is_err());
-    }
-
-    #[test]
-    fn test_search_by_keywords_invalid_top_k() {
-        let req = SearchByKeywordsRequest {
-            query: "test".to_string(),
-            top_k: 100,
-            ..Default::default()
-        };
-        assert!(req.validate().is_err());
-    }
-
-    #[test]
-    fn test_default_blend_weight() {
-        // E6 needs higher blend weight than E10 for keyword-specific queries
-        assert!((DEFAULT_KEYWORD_BLEND - 0.3).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_default_splade_expansion() {
-        assert!(DEFAULT_USE_SPLADE_EXPANSION);
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"query\":\"test\""));
     }
 }

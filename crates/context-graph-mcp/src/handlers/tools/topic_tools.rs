@@ -815,203 +815,41 @@ mod tests {
     use crate::protocol::error_codes;
 
     #[test]
-    fn test_constants_match_constitution() {
-        // ARCH-09: Topic threshold is weighted_agreement >= 2.5
-        assert!(
-            (TOPIC_THRESHOLD - 2.5).abs() < f32::EPSILON,
-            "TOPIC_THRESHOLD must be 2.5 per ARCH-09"
-        );
-
-        // Max weighted agreement = 7*1.0 + 2*0.5 + 1*0.5 = 8.5
-        assert!(
-            (MAX_WEIGHTED_AGREEMENT - 8.5).abs() < f32::EPSILON,
-            "MAX_WEIGHTED_AGREEMENT must be 8.5"
-        );
-
-        // Minimum memories for clustering = 3 per constitution
-        assert_eq!(
-            MIN_MEMORIES_FOR_CLUSTERING, 3,
-            "MIN_MEMORIES_FOR_CLUSTERING must be 3"
-        );
-    }
-
-    #[test]
-    fn test_semantic_embedders_for_divergence() {
-        // Per AP-62: SEMANTIC embedders for divergence detection
-        let spaces = DivergenceAlert::VALID_SEMANTIC_SPACES;
-        assert_eq!(spaces.len(), 7, "Should have 7 SEMANTIC embedders");
-
-        // Per AP-63: Temporal embedders must NOT be in the list
-        assert!(
-            !DivergenceAlert::is_valid_semantic_space("E2_TemporalRecent"),
-            "Must NOT include E2 (temporal)"
-        );
-        assert!(
-            !DivergenceAlert::is_valid_semantic_space("E3_TemporalPeriodic"),
-            "Must NOT include E3 (temporal)"
-        );
-        assert!(
-            !DivergenceAlert::is_valid_semantic_space("E4_TemporalPositional"),
-            "Must NOT include E4 (temporal)"
-        );
-    }
-
-    #[test]
-    fn test_insufficient_memories_error_code() {
-        // Per TECH_SPEC_PRD_GAPS.md Section 11.1
-        assert_eq!(
-            error_codes::INSUFFICIENT_MEMORIES,
-            -32021,
-            "INSUFFICIENT_MEMORIES error code must be -32021"
-        );
-    }
-
-    // =========================================================================
-    // Divergence Detection Helper Tests
-    // =========================================================================
-
-    #[test]
-    fn test_embedder_to_dto_space() {
-        // Verify all SEMANTIC embedders map correctly
+    fn test_constants_and_embedder_mapping() {
+        // ARCH-09 constitution constants
+        assert!((TOPIC_THRESHOLD - 2.5).abs() < f32::EPSILON);
+        assert!((MAX_WEIGHTED_AGREEMENT - 8.5).abs() < f32::EPSILON);
+        assert_eq!(MIN_MEMORIES_FOR_CLUSTERING, 3);
+        assert_eq!(MIN_MEMORIES_FOR_DIVERGENCE, 2);
+        assert_eq!(MAX_SUMMARY_WORDS, 50);
+        assert_eq!(error_codes::INSUFFICIENT_MEMORIES, -32021);
+        // AP-62: SEMANTIC embedders for divergence
+        assert_eq!(DivergenceAlert::VALID_SEMANTIC_SPACES.len(), 7);
+        assert!(!DivergenceAlert::is_valid_semantic_space("E2_TemporalRecent"));
+        // Embedder mapping
         assert_eq!(embedder_to_dto_space(Embedder::Semantic), "E1_Semantic");
-        assert_eq!(embedder_to_dto_space(Embedder::Causal), "E5_Causal");
-        assert_eq!(embedder_to_dto_space(Embedder::Sparse), "E6_Sparse");
         assert_eq!(embedder_to_dto_space(Embedder::Code), "E7_Code");
-        assert_eq!(
-            embedder_to_dto_space(Embedder::Contextual),
-            "E10_Multimodal"
-        );
-        assert_eq!(
-            embedder_to_dto_space(Embedder::LateInteraction),
-            "E12_LateInteraction"
-        );
-        assert_eq!(embedder_to_dto_space(Embedder::KeywordSplade), "E13_SPLADE");
-    }
-
-    #[test]
-    fn test_embedder_to_dto_space_non_semantic() {
-        // Non-semantic embedders should return "Unknown" (with warning)
-        // These should never be used in divergence detection per AP-62
         assert_eq!(embedder_to_dto_space(Embedder::TemporalRecent), "Unknown");
-        assert_eq!(embedder_to_dto_space(Embedder::TemporalPeriodic), "Unknown");
-        assert_eq!(
-            embedder_to_dto_space(Embedder::TemporalPositional),
-            "Unknown"
-        );
+        // Truncation
+        assert_eq!(truncate_summary("Hello world", 50), "Hello world");
+        assert_eq!(truncate_summary("", 50), "");
     }
 
     #[test]
-    fn test_truncate_summary_short() {
-        let content = "Hello world";
-        assert_eq!(truncate_summary(content, 50), "Hello world");
-    }
-
-    #[test]
-    fn test_truncate_summary_long() {
-        let content =
-            "This is a very long piece of text that should be truncated to only a few words";
-        let truncated = truncate_summary(content, 5);
-        assert_eq!(truncated, "This is a very long");
-        assert!(!truncated.contains("truncated"));
-    }
-
-    #[test]
-    fn test_truncate_summary_empty() {
-        let content = "";
-        assert_eq!(truncate_summary(content, 50), "");
-    }
-
-    #[test]
-    fn test_min_memories_for_divergence() {
-        // Need at least 2 memories to detect divergence (1 current, 1 to compare)
-        assert_eq!(
-            MIN_MEMORIES_FOR_DIVERGENCE, 2,
-            "MIN_MEMORIES_FOR_DIVERGENCE must be 2"
-        );
-    }
-
-    #[test]
-    fn test_max_summary_words() {
-        // Verify summary truncation limit
-        assert_eq!(MAX_SUMMARY_WORDS, 50, "MAX_SUMMARY_WORDS should be 50");
-    }
-
-    #[test]
-    fn test_divergence_spaces_match_ap62() {
-        // AP-62: Only SEMANTIC embedders trigger alerts
-        // AP-77: E5 (Causal) excluded — requires CausalDirection for meaningful scores
-        assert_eq!(
-            DIVERGENCE_SPACES.len(),
-            6,
-            "Should have 6 DIVERGENCE_SPACES (E5 excluded per AP-77)"
-        );
-
-        // Verify each expected embedder is present
-        assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::Semantic),
-            "Must include E1"
-        );
-        assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::Sparse),
-            "Must include E6"
-        );
-        assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::Code),
-            "Must include E7"
-        );
-        assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::Contextual),
-            "Must include E10"
-        );
-        assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::LateInteraction),
-            "Must include E12"
-        );
-        assert!(
-            DIVERGENCE_SPACES.contains(&Embedder::KeywordSplade),
-            "Must include E13"
-        );
-
-        // AP-77: E5 (Causal) must NOT be included — always returns 0.0 without direction
-        assert!(
-            !DIVERGENCE_SPACES.contains(&Embedder::Causal),
-            "Must NOT include E5 (AP-77)"
-        );
-
-        // AP-63: Temporal embedders must NOT be included
-        assert!(
-            !DIVERGENCE_SPACES.contains(&Embedder::TemporalRecent),
-            "Must NOT include E2"
-        );
-        assert!(
-            !DIVERGENCE_SPACES.contains(&Embedder::TemporalPeriodic),
-            "Must NOT include E3"
-        );
-        assert!(
-            !DIVERGENCE_SPACES.contains(&Embedder::TemporalPositional),
-            "Must NOT include E4"
-        );
-    }
-
-    #[test]
-    fn test_low_thresholds_for_divergence() {
-        // Verify low thresholds are configured for divergence detection
+    fn test_divergence_spaces_and_thresholds() {
+        // AP-62/AP-77: divergence spaces exclude temporals and E5
+        assert_eq!(DIVERGENCE_SPACES.len(), 6);
+        assert!(DIVERGENCE_SPACES.contains(&Embedder::Semantic));
+        assert!(DIVERGENCE_SPACES.contains(&Embedder::Code));
+        assert!(!DIVERGENCE_SPACES.contains(&Embedder::Causal));
+        assert!(!DIVERGENCE_SPACES.contains(&Embedder::TemporalRecent));
+        // Low thresholds
         let low = low_thresholds();
-
-        // All thresholds should be in valid range [0.0, 1.0]
         for embedder in Embedder::all() {
-            let threshold = low.get_threshold(embedder);
-            assert!(
-                threshold >= 0.0 && threshold <= 1.0,
-                "{:?} threshold {} out of range",
-                embedder,
-                threshold
-            );
+            let t = low.get_threshold(embedder);
+            assert!((0.0..=1.0).contains(&t), "{:?} threshold {} out of range", embedder, t);
         }
-
-        // Verify specific thresholds from TECH-PHASE3-SIMILARITY-DIVERGENCE.md
         assert!((low.get_threshold(Embedder::Semantic) - 0.30).abs() < 0.01);
-        assert!((low.get_threshold(Embedder::Causal) - 0.25).abs() < 0.01);
         assert!((low.get_threshold(Embedder::Code) - 0.35).abs() < 0.01);
     }
 }

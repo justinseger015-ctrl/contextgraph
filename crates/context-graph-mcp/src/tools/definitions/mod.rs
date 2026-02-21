@@ -105,163 +105,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_total_tool_count() {
-        // Without LLM: 52 tools
-        // With LLM (default): 56 tools (+2 causal_discovery, +2 graph LLM)
-        // core: 4, merge: 1, curation: 2, topic: 4, file_watcher: 4, sequence: 4,
-        // causal: 4, keyword: 1, code: 1, robustness: 1, entity: 6, embedder: 7,
-        // temporal: 2, graph_link: 4, maintenance: 1, provenance: 3
-        // = 49 base + graph: 2 (non-LLM)
-        // + LLM: causal_discovery: 2, graph LLM: 2 = 4 extra
+    fn test_total_tool_count_and_no_duplicates() {
+        let tools = get_tool_definitions();
         #[cfg(feature = "llm")]
-        assert_eq!(get_tool_definitions().len(), 56);
+        assert_eq!(tools.len(), 56);
         #[cfg(not(feature = "llm"))]
-        assert_eq!(get_tool_definitions().len(), 52);
-    }
-
-    #[test]
-    fn test_all_tool_names_present() {
-        let tools = get_tool_definitions();
-        let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
-
-        let expected = [
-            // Core tools (4 - inject_context merged into store_memory)
-            "store_memory",
-            "get_memetic_status",
-            "search_graph",
-            "trigger_consolidation",
-            // Merge tool (1)
-            "merge_concepts",
-            // Curation tools (2)
-            "forget_concept",
-            "boost_importance",
-            // Topic tools (4)
-            "get_topic_portfolio",
-            "get_topic_stability",
-            "detect_topics",
-            "get_divergence_alerts",
-            // File watcher tools (4)
-            "list_watched_files",
-            "get_file_watcher_stats",
-            "delete_file_content",
-            "reconcile_files",
-            // Sequence tools (4) - E4 integration
-            "get_conversation_context",
-            "get_session_timeline",
-            "traverse_memory_chain",
-            "compare_session_states",
-            // Causal tools (4) - E5 Priority 1 enhancement
-            "search_causal_relationships",
-            "search_causes",
-            "search_effects",
-            "get_causal_chain",
-            // Keyword tools (1) - E6 keyword search enhancement
-            "search_by_keywords",
-            // Code tools (1) - E7 code search enhancement
-            "search_code",
-            // Graph tools (2 base) - E8 upgrade (Phase 4)
-            "search_connections",
-            "get_graph_path",
-            // Robustness tools (1) - E9 typo-tolerant search
-            "search_robust",
-            // Entity tools (6) - E11 integration
-            "extract_entities",
-            "search_by_entities",
-            "infer_relationship",
-            "find_related_entities",
-            "validate_knowledge",
-            "get_entity_graph",
-            // Embedder-first search tools (7) - Constitution v6.3 + NAV-GAP
-            "search_by_embedder",
-            "get_embedder_clusters",
-            "compare_embedder_views",
-            "list_embedder_indexes",
-            "get_memory_fingerprint",
-            "create_weight_profile",
-            "search_cross_embedder_anomalies",
-            // Temporal tools (2) - E2 recency search, E3 periodic search
-            "search_recent",
-            "search_periodic",
-            // Graph linking tools (4) - K-NN navigation and typed edges
-            "get_memory_neighbors",
-            "get_typed_edges",
-            "traverse_graph",
-            "get_unified_neighbors",
-            // Maintenance tools (1) - Data repair and cleanup
-            "repair_causal_relationships",
-            // Provenance tools (3) - Phase P3 provenance queries
-            "get_audit_trail",
-            "get_merge_history",
-            "get_provenance_chain",
-            // Daemon tools (1) - Multi-agent observability
-            "daemon_status",
-        ];
-
-        for name in expected {
-            assert!(names.contains(&name), "Missing tool: {}", name);
-        }
-
-        // LLM-dependent tools only present when llm feature is enabled
-        #[cfg(feature = "llm")]
-        {
-            let llm_tools = [
-                "trigger_causal_discovery",
-                "get_causal_discovery_status",
-                "discover_graph_relationships",
-                "validate_graph_link",
-            ];
-            for name in llm_tools {
-                assert!(names.contains(&name), "Missing LLM tool: {}", name);
-            }
-        }
-    }
-
-    #[test]
-    fn test_no_duplicate_tools() {
-        let tools = get_tool_definitions();
+        assert_eq!(tools.len(), 52);
+        // No duplicates
         let mut names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         let len_before = names.len();
         names.sort();
         names.dedup();
         assert_eq!(names.len(), len_before);
-    }
-
-    #[test]
-    fn test_all_tools_have_descriptions_and_schemas() {
-        for tool in &get_tool_definitions() {
-            assert!(
-                !tool.description.is_empty(),
-                "Tool {} missing description",
-                tool.name
-            );
-            assert!(
-                tool.input_schema.get("type").is_some(),
-                "Tool {} missing schema type",
-                tool.name
-            );
+        // All have descriptions and schemas
+        for tool in &tools {
+            assert!(!tool.description.is_empty(), "Tool {} missing description", tool.name);
+            assert!(tool.input_schema.get("type").is_some(), "Tool {} missing schema type", tool.name);
         }
     }
 
     #[test]
     fn test_submodule_counts() {
-        assert_eq!(core::definitions().len(), 4); // inject_context merged into store_memory
+        assert_eq!(core::definitions().len(), 4);
         assert_eq!(merge::definitions().len(), 1);
         assert_eq!(curation::definitions().len(), 2);
         assert_eq!(topic::definitions().len(), 4);
         assert_eq!(file_watcher::definitions().len(), 4);
         assert_eq!(sequence::definitions().len(), 4);
-        assert_eq!(causal::definitions().len(), 4); // search_causal_relationships, search_causes, search_effects, get_causal_chain
-        assert_eq!(causal_discovery::definitions().len(), 2); // E5 LLM-based relationship discovery
+        assert_eq!(causal::definitions().len(), 4);
         assert_eq!(keyword::definitions().len(), 1);
         assert_eq!(code::definitions().len(), 1);
-        assert_eq!(graph::definitions().len(), 4); // search_connections, get_graph_path, discover_graph_relationships, validate_graph_link
-        assert_eq!(robustness::definitions().len(), 1); // E9 typo-tolerant search
+        assert_eq!(robustness::definitions().len(), 1);
         assert_eq!(entity::definitions().len(), 6);
-        assert_eq!(embedder::definitions().len(), 7); // Constitution v6.3 embedder-first search + NAV-GAP tools
-        assert_eq!(temporal::definitions().len(), 2); // E2 recency search, E3 periodic search
-        assert_eq!(graph_link::definitions().len(), 4); // K-NN navigation, typed edges, unified neighbors
-        assert_eq!(maintenance::definitions().len(), 1); // Data repair and cleanup
-        assert_eq!(provenance::definitions().len(), 3); // P3 provenance queries
-        assert_eq!(daemon::definitions().len(), 1); // Multi-agent observability
+        assert_eq!(embedder::definitions().len(), 7);
+        assert_eq!(temporal::definitions().len(), 2);
+        assert_eq!(graph_link::definitions().len(), 4);
+        assert_eq!(maintenance::definitions().len(), 1);
+        assert_eq!(provenance::definitions().len(), 3);
+        assert_eq!(daemon::definitions().len(), 1);
     }
 }

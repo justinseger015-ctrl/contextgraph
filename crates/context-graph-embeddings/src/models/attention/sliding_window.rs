@@ -59,7 +59,7 @@ impl AttentionStrategy for SlidingWindowAttention {
         // Build window mask: 0 inside window, -10000 outside
         let mut window_mask_data = vec![-10000.0f32; seq_len * seq_len];
         for i in 0..seq_len {
-            let start = if i >= half_w { i - half_w } else { 0 };
+            let start = i.saturating_sub(half_w);
             let end = (i + half_w + 1).min(seq_len);
             for j in start..end {
                 window_mask_data[i * seq_len + j] = 0.0;

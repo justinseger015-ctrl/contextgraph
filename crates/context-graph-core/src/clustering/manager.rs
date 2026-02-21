@@ -2504,14 +2504,14 @@ mod tests {
             // Set high values in domain-specific region with realistic variation
             for i in start..end.min(dim) {
                 // Add pseudo-random noise based on position and seed
-                let noise = ((seed as f32 + i as f32) * 0.618033988).fract() - 0.5;
+                let noise = ((seed as f32 + i as f32) * 0.618_034).fract() - 0.5;
                 embedding[i] = 0.5 + variation * 0.2 + noise * 0.15;
             }
 
             // Add some "bleed" into other regions (realistic overlap)
             for i in 0..dim {
                 if i < start || i >= end {
-                    let noise = ((seed as f32 + i as f32 + 1000.0) * 0.618033988).fract() - 0.5;
+                    let noise = ((seed as f32 + i as f32 + 1000.0) * 0.618_034).fract() - 0.5;
                     embedding[i] = 0.1 + noise * 0.1 + variation * 0.05;
                 }
             }
@@ -2967,12 +2967,12 @@ mod tests {
 
             // High activation in domain-specific region
             for i in start..end.min(dim) {
-                let noise = ((seed as f32 + i as f32) * 0.618033988).fract() - 0.5;
+                let noise = ((seed as f32 + i as f32) * 0.618_034).fract() - 0.5;
                 embedding[i] = 0.6 + variation * 0.15 + noise * 0.1;
             }
 
             // Add slight bleed to adjacent regions (realistic overlap)
-            let bleed_start = if start > 10 { start - 10 } else { 0 };
+            let bleed_start = start.saturating_sub(10);
             let bleed_end = (end + 10).min(dim);
             for i in bleed_start..start {
                 let decay = (i - bleed_start) as f32 / 10.0;
@@ -2985,7 +2985,7 @@ mod tests {
 
             // Add global noise
             for i in 0..dim {
-                let noise = ((seed as f32 + i as f32 + 5000.0) * 0.618033988).fract() - 0.5;
+                let noise = ((seed as f32 + i as f32 + 5000.0) * 0.618_034).fract() - 0.5;
                 embedding[i] += noise * 0.03;
                 embedding[i] = embedding[i].max(0.01); // Keep positive
             }

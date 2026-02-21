@@ -463,12 +463,12 @@ mod tests {
         );
 
         // Others should be ~1.0 (identical)
-        for i in 1..10 {
+        for (i, &score) in scores.iter().enumerate().skip(1).take(9) {
             assert!(
-                (scores[i] - 1.0).abs() < 1e-5,
+                (score - 1.0).abs() < 1e-5,
                 "Embedder {} should be ~1.0, got {}",
                 i,
-                scores[i]
+                score
             );
         }
     }

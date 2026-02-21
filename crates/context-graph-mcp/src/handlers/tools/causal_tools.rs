@@ -1055,54 +1055,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_infer_causal_direction_cause() {
-        // MCP-L2 FIX: Uses component variance, not L2 norms.
-        // High-variance cause vector (spread activations) vs low-variance effect (uniform)
+    fn test_infer_causal_direction() {
         let mut fp = SemanticFingerprint::zeroed();
-        fp.e5_causal_as_cause = vec![2.0, -1.0, 0.5, -0.3]; // variance ~= 1.17
-        fp.e5_causal_as_effect = vec![0.5, 0.5, 0.5, 0.5];  // variance = 0.0
-
-        let direction = infer_causal_direction(&fp);
-        assert_eq!(direction, CausalDirection::Cause);
-    }
-
-    #[test]
-    fn test_infer_causal_direction_effect() {
-        // High-variance effect vector vs low-variance cause vector
-        let mut fp = SemanticFingerprint::zeroed();
-        fp.e5_causal_as_cause = vec![0.5, 0.5, 0.5, 0.5];  // variance = 0.0
-        fp.e5_causal_as_effect = vec![2.0, -1.0, 0.5, -0.3]; // variance ~= 1.17
-
-        let direction = infer_causal_direction(&fp);
-        assert_eq!(direction, CausalDirection::Effect);
-    }
-
-    #[test]
-    fn test_infer_causal_direction_unknown() {
-        // Same variance in both vectors = unknown
-        let mut fp = SemanticFingerprint::zeroed();
-        fp.e5_causal_as_cause = vec![1.0, 0.5, 0.3];
-        fp.e5_causal_as_effect = vec![1.0, 0.5, 0.3];
-
-        let direction = infer_causal_direction(&fp);
-        assert_eq!(direction, CausalDirection::Unknown);
-    }
-
-    #[test]
-    fn test_infer_causal_direction_empty_vectors() {
-        // Zeroed fingerprint = empty vectors = unknown
-        let fp = SemanticFingerprint::zeroed();
-        let direction = infer_causal_direction(&fp);
-        assert_eq!(direction, CausalDirection::Unknown);
+        fp.e5_causal_as_cause = vec![2.0, -1.0, 0.5, -0.3];
+        fp.e5_causal_as_effect = vec![0.5, 0.5, 0.5, 0.5];
+        assert_eq!(infer_causal_direction(&fp), CausalDirection::Cause);
+        fp.e5_causal_as_cause = vec![0.5, 0.5, 0.5, 0.5];
+        fp.e5_causal_as_effect = vec![2.0, -1.0, 0.5, -0.3];
+        assert_eq!(infer_causal_direction(&fp), CausalDirection::Effect);
+        assert_eq!(infer_causal_direction(&SemanticFingerprint::zeroed()), CausalDirection::Unknown);
     }
 
     #[test]
     fn test_component_variance_f32() {
-        // Known variance: [1, 3] has mean=2, variance=((1-2)^2+(3-2)^2)/2 = 1.0
         assert!((component_variance_f32(&[1.0, 3.0]) - 1.0).abs() < 1e-6);
-        // Uniform vector has zero variance
         assert!((component_variance_f32(&[5.0, 5.0, 5.0]) - 0.0).abs() < 1e-6);
-        // Empty vector returns 0
         assert_eq!(component_variance_f32(&[]), 0.0);
     }
 }

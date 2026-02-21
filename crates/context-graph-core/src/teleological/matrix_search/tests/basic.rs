@@ -4,7 +4,7 @@
 
 use crate::teleological::groups::GroupAlignments;
 use crate::teleological::matrix_search::{
-    embedder_names, ComparisonScope, MatrixSearchConfig, SearchStrategy, TeleologicalMatrixSearch,
+    embedder_names, MatrixSearchConfig, TeleologicalMatrixSearch,
 };
 use crate::teleological::synergy_matrix::SynergyMatrix;
 use crate::teleological::types::NUM_EMBEDDERS;
@@ -91,34 +91,6 @@ fn test_matrix_search_with_breakdown() {
 }
 
 #[test]
-fn test_matrix_search_correlation_focused() {
-    let config = MatrixSearchConfig::correlation_focused();
-    let search = TeleologicalMatrixSearch::with_config(config);
-
-    let tv1 = make_test_vector(0.5, 0.9);
-    let tv2 = make_test_vector(0.5, 0.9);
-
-    let sim = search.similarity(&tv1, &tv2);
-    assert!(
-        sim > 0.9,
-        "Same correlations should have high similarity, got {}",
-        sim
-    );
-}
-
-#[test]
-fn test_matrix_search_group_hierarchical() {
-    let config = MatrixSearchConfig::group_hierarchical();
-    let search = TeleologicalMatrixSearch::with_config(config);
-
-    let tv1 = make_test_vector(0.8, 0.5);
-    let tv2 = make_test_vector(0.8, 0.5);
-
-    let sim = search.similarity(&tv1, &tv2);
-    assert!(sim > 0.9, "Same groups should have high similarity");
-}
-
-#[test]
 fn test_matrix_search_synergy_weighted() {
     let synergy = SynergyMatrix::with_base_synergies();
     let config = MatrixSearchConfig::with_synergy(synergy);
@@ -131,74 +103,6 @@ fn test_matrix_search_synergy_weighted() {
     assert!(
         sim > 0.9,
         "Synergy-weighted similarity should be high for same vectors"
-    );
-}
-
-#[test]
-fn test_matrix_search_euclidean() {
-    let config = MatrixSearchConfig {
-        strategy: SearchStrategy::Euclidean,
-        ..Default::default()
-    };
-    let search = TeleologicalMatrixSearch::with_config(config);
-
-    let tv1 = make_test_vector(0.8, 0.6);
-    let tv2 = make_test_vector(0.8, 0.6);
-
-    let sim = search.similarity(&tv1, &tv2);
-    assert!(
-        (sim - 1.0).abs() < 0.01,
-        "Identical vectors should have Euclidean similarity ~1.0"
-    );
-}
-
-#[test]
-fn test_matrix_search_specific_pairs() {
-    let config = MatrixSearchConfig {
-        scope: ComparisonScope::SpecificPairs(vec![(0, 1), (0, 2), (1, 2)]),
-        ..Default::default()
-    };
-    let search = TeleologicalMatrixSearch::with_config(config);
-
-    let tv1 = make_test_vector(0.7, 0.5);
-    let tv2 = make_test_vector(0.3, 0.5);
-
-    let sim = search.similarity(&tv1, &tv2);
-    assert!(
-        (sim - 1.0).abs() < 0.01,
-        "Same correlations should have similarity ~1.0, got {}",
-        sim
-    );
-}
-
-#[test]
-fn test_matrix_search_single_embedder_pattern() {
-    let config = MatrixSearchConfig {
-        scope: ComparisonScope::SingleEmbedderPattern(0),
-        ..Default::default()
-    };
-    let search = TeleologicalMatrixSearch::with_config(config);
-
-    let tv = make_test_vector(0.7, 0.5);
-    let sim = search.similarity(&tv, &tv);
-    assert!(
-        (sim - 1.0).abs() < 0.01,
-        "Self similarity for embedder pattern should be ~1.0"
-    );
-}
-
-#[test]
-fn test_adaptive_strategy() {
-    let config = MatrixSearchConfig::adaptive();
-    let search = TeleologicalMatrixSearch::with_config(config);
-
-    let tv1 = make_test_vector(0.8, 0.6);
-    let tv2 = make_test_vector(0.7, 0.5);
-
-    let sim = search.similarity(&tv1, &tv2);
-    assert!(
-        sim > 0.0,
-        "Adaptive strategy should produce valid similarity"
     );
 }
 

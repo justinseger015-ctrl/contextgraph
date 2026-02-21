@@ -325,7 +325,7 @@ async fn test_e13_inverted_index_populated() {
 
         for term_id in &known_indices {
             // The key format is typically term_id as 2 bytes (u16)
-            let term_key = (*term_id as u16).to_le_bytes().to_vec();
+            let term_key = { *term_id }.to_le_bytes().to_vec();
 
             match db.get_cf(&cf_inverted, &term_key) {
                 Ok(Some(bytes)) => {

@@ -341,11 +341,12 @@ fn edge_case_10_multi_topic_groups() {
     // Group 1: cluster 1 in semantic spaces
     // Group 2: cluster 2 in semantic spaces
     for embedder in [Embedder::Semantic, Embedder::Causal, Embedder::Code] {
-        let mut entries = Vec::new();
-        entries.push(ClusterMembership::new(group1_a, embedder, 1, 0.9, true));
-        entries.push(ClusterMembership::new(group1_b, embedder, 1, 0.9, true));
-        entries.push(ClusterMembership::new(group2_a, embedder, 2, 0.9, true));
-        entries.push(ClusterMembership::new(group2_b, embedder, 2, 0.9, true));
+        let entries = vec![
+            ClusterMembership::new(group1_a, embedder, 1, 0.9, true),
+            ClusterMembership::new(group1_b, embedder, 1, 0.9, true),
+            ClusterMembership::new(group2_a, embedder, 2, 0.9, true),
+            ClusterMembership::new(group2_b, embedder, 2, 0.9, true),
+        ];
         memberships.insert(embedder, entries);
     }
 

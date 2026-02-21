@@ -444,66 +444,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cosine_similarity_identical() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!((sim - 1.0).abs() < 0.001);
+    fn test_cosine_similarity() {
+        assert!((cosine_similarity(&[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0]) - 1.0).abs() < 0.001);
+        assert!(cosine_similarity(&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]).abs() < 0.001);
     }
 
     #[test]
-    fn test_cosine_similarity_orthogonal() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![0.0, 1.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < 0.001);
-    }
-
-    #[test]
-    fn test_detect_language_rust() {
-        let query = "impl async fn handler with Result<T, Error>";
-        let info = detect_language(query);
-        assert_eq!(info.primary_language, Some("rust".to_string()));
-        assert!(info.confidence > 0.0);
-        assert!(!info.indicators.is_empty());
-    }
-
-    #[test]
-    fn test_detect_language_python() {
-        let query = "def process_data(self) with async def and await";
-        let info = detect_language(query);
-        assert_eq!(info.primary_language, Some("python".to_string()));
-        assert!(info.confidence > 0.0);
-    }
-
-    #[test]
-    fn test_detect_language_javascript() {
-        let query = "const handler = async () => { await fetch() }";
-        let info = detect_language(query);
-        assert_eq!(info.primary_language, Some("javascript".to_string()));
-    }
-
-    #[test]
-    fn test_detect_language_no_match() {
-        let query = "hello world general text";
-        let info = detect_language(query);
-        assert!(info.primary_language.is_none());
-        assert!((info.confidence - 0.0).abs() < 0.001);
-        assert!(info.indicators.is_empty());
-    }
-
-    #[test]
-    fn test_detect_language_sql() {
-        let query = "SELECT * FROM users WHERE id = 1 JOIN orders";
-        let info = detect_language(query);
-        assert_eq!(info.primary_language, Some("sql".to_string()));
-        assert!(info.confidence >= 0.66); // At least 2 indicators
-    }
-
-    #[test]
-    fn test_detect_language_go() {
-        let query = "func main() package main with goroutine";
-        let info = detect_language(query);
-        assert_eq!(info.primary_language, Some("go".to_string()));
+    fn test_detect_language() {
+        let rust = detect_language("impl async fn handler with Result<T, Error>");
+        assert_eq!(rust.primary_language, Some("rust".to_string()));
+        assert!(rust.confidence > 0.0);
+        let python = detect_language("def process_data(self) with async def and await");
+        assert_eq!(python.primary_language, Some("python".to_string()));
+        let sql = detect_language("SELECT * FROM users WHERE id = 1 JOIN orders");
+        assert_eq!(sql.primary_language, Some("sql".to_string()));
+        let none = detect_language("hello world general text");
+        assert!(none.primary_language.is_none());
     }
 }

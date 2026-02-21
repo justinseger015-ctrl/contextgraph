@@ -535,7 +535,7 @@ mod tests {
         let scores = [0.8, 0.0, 0.0, 0.0, 0.7, 0.6, 0.9, 0.6, 0.5, 0.7, 0.6, 0.5, 0.6];
         let weight = proj.project(&scores).unwrap();
 
-        assert!(weight >= 0.0 && weight <= 1.0);
+        assert!((0.0..=1.0).contains(&weight));
         assert!(weight > 0.5); // Should be high with many scores above threshold
     }
 
@@ -548,7 +548,7 @@ mod tests {
         let scores = [0.1, 0.0, 0.0, 0.0, 0.2, 0.1, 0.3, 0.2, 0.1, 0.2, 0.1, 0.2, 0.1];
         let weight = proj.project(&scores).unwrap();
 
-        assert!(weight >= 0.0 && weight <= 1.0);
+        assert!((0.0..=1.0).contains(&weight));
         assert!(weight < 0.2); // Should be low with no scores above threshold
     }
 

@@ -70,73 +70,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_insufficient_data_error() {
-        let err = ClusterError::insufficient_data(3, 1);
-        let msg = err.to_string();
-
-        assert!(msg.contains("required 3"), "should mention required count");
-        assert!(msg.contains("actual 1"), "should mention actual count");
-
-        println!("[PASS] test_insufficient_data_error - message: {}", msg);
-    }
-
-    #[test]
-    fn test_dimension_mismatch_error() {
-        let err = ClusterError::dimension_mismatch(1024, 512);
-        let msg = err.to_string();
-
-        assert!(msg.contains("expected 1024"), "should mention expected dim");
-        assert!(msg.contains("actual 512"), "should mention actual dim");
-
-        println!("[PASS] test_dimension_mismatch_error - message: {}", msg);
-    }
-
-    #[test]
-    fn test_no_valid_clusters_error() {
-        let err = ClusterError::NoValidClusters;
-        let msg = err.to_string();
-
-        assert!(msg.contains("No valid clusters"), "should describe the error");
-
-        println!("[PASS] test_no_valid_clusters_error - message: {}", msg);
-    }
-
-    #[test]
-    fn test_invalid_parameter_error() {
-        let err = ClusterError::invalid_parameter("min_cluster_size must be > 0");
-        let msg = err.to_string();
-
-        assert!(msg.contains("min_cluster_size"), "should include parameter info");
-
-        println!("[PASS] test_invalid_parameter_error - message: {}", msg);
-    }
-
-    #[test]
-    fn test_space_not_initialized_error() {
-        let err = ClusterError::SpaceNotInitialized(Embedder::Semantic);
-        let msg = err.to_string();
-
-        assert!(msg.contains("Semantic"), "should mention the embedder");
-
-        println!("[PASS] test_space_not_initialized_error - message: {}", msg);
-    }
-
-    #[test]
     fn test_error_variants_are_debug() {
-        // Ensure all variants implement Debug
+        // Comprehensive test: all variants implement Debug and Display with correct messages
         let errors: Vec<ClusterError> = vec![
             ClusterError::insufficient_data(3, 1),
             ClusterError::dimension_mismatch(1024, 512),
             ClusterError::NoValidClusters,
-            ClusterError::invalid_parameter("test"),
+            ClusterError::invalid_parameter("min_cluster_size must be > 0"),
             ClusterError::SpaceNotInitialized(Embedder::Semantic),
         ];
 
-        for err in errors {
+        let expected_substrings = [
+            "required 3",
+            "expected 1024",
+            "No valid clusters",
+            "min_cluster_size",
+            "Semantic",
+        ];
+
+        for (err, expected) in errors.iter().zip(expected_substrings.iter()) {
             let debug = format!("{:?}", err);
             assert!(!debug.is_empty(), "Debug should produce output");
+            let display = err.to_string();
+            assert!(
+                display.contains(expected),
+                "Display for {:?} should contain '{}', got: {}",
+                err,
+                expected,
+                display
+            );
         }
 
-        println!("[PASS] test_error_variants_are_debug - all variants implement Debug");
+        println!("[PASS] test_error_variants_are_debug - all variants implement Debug+Display");
     }
 }

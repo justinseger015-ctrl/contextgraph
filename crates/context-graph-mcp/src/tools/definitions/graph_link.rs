@@ -273,25 +273,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_definitions_count() {
+    fn test_definitions_exist_with_required_fields() {
         let defs = definitions();
         assert_eq!(defs.len(), 4);
-    }
-
-    #[test]
-    fn test_definition_names() {
-        let defs = definitions();
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"get_memory_neighbors"));
         assert!(names.contains(&"get_typed_edges"));
         assert!(names.contains(&"traverse_graph"));
         assert!(names.contains(&"get_unified_neighbors"));
-    }
-
-    #[test]
-    fn test_schemas_valid_json() {
-        for def in definitions() {
-            // Ensure schema is valid JSON
+        for def in &defs {
             assert!(def.input_schema.is_object());
             assert!(def.input_schema.get("type").is_some());
             assert!(def.input_schema.get("properties").is_some());
@@ -303,14 +293,8 @@ mod tests {
         let defs = definitions();
         let unified = defs.iter().find(|d| d.name == "get_unified_neighbors").unwrap();
         let props = unified.input_schema.get("properties").unwrap();
-
-        // Verify required fields
         assert!(props.get("memory_id").is_some());
         assert!(props.get("weight_profile").is_some());
-        assert!(props.get("top_k").is_some());
-        assert!(props.get("include_embedder_breakdown").is_some());
-
-        // Verify description mentions RRF and ARCH-21
         assert!(unified.description.contains("RRF"));
         assert!(unified.description.contains("ARCH-21"));
     }

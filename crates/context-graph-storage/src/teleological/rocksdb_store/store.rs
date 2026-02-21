@@ -1056,9 +1056,10 @@ impl RocksDbTeleologicalStore {
     /// 3. `e1_matryoshka_128` - Truncated E1 embedding for Stage 2
     /// 4. `e13_splade_inverted` - Updates inverted index for Stage 1
     /// 5. `e12_late_interaction` - ColBERT token embeddings for Stage 5
+    ///
     /// HIGH-6 FIX: `count_as_new` controls whether total_doc_count is incremented.
-    /// - `true` for new inserts (store_async, store_batch_async)
-    /// - `false` for updates and rollbacks (update_async rollback)
+    ///   - `true` for new inserts (store_async, store_batch_async)
+    ///   - `false` for updates and rollbacks (update_async rollback)
     pub(crate) fn store_fingerprint_internal(
         &self,
         fp: &TeleologicalFingerprint,

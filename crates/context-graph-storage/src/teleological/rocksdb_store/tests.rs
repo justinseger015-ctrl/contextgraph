@@ -467,12 +467,10 @@ async fn test_corruption_detection_error_details() {
     }
 
     // Corrupt by deleting SST files
-    for entry in std::fs::read_dir(&path).expect("Read dir") {
-        if let Ok(entry) = entry {
-            if entry.file_name().to_string_lossy().ends_with(".sst") {
-                std::fs::remove_file(entry.path()).expect("Delete");
-                break; // Delete just one
-            }
+    for entry in std::fs::read_dir(&path).expect("Read dir").flatten() {
+        if entry.file_name().to_string_lossy().ends_with(".sst") {
+            std::fs::remove_file(entry.path()).expect("Delete");
+            break; // Delete just one
         }
     }
 
@@ -830,8 +828,8 @@ async fn test_repair_causal_with_corruption() {
     let cf = store.cf_causal_relationships();
 
     // Write truncated binary data (simulating crash during write)
-    store.db.put_cf(cf, causal_relationship_key(&corrupted_id1), &[0x01, 0x02, 0x03]).unwrap();
-    store.db.put_cf(cf, causal_relationship_key(&corrupted_id2), &[0xff; 50]).unwrap();
+    store.db.put_cf(cf, causal_relationship_key(&corrupted_id1), [0x01, 0x02, 0x03]).unwrap();
+    store.db.put_cf(cf, causal_relationship_key(&corrupted_id2), [0xff; 50]).unwrap();
 
     println!("BEFORE REPAIR:");
     println!("  Valid relationships: {}, {}", id1, id2);
@@ -899,7 +897,7 @@ async fn test_repair_causal_idempotency() {
     // Inject 1 corrupted entry
     let corrupted_id = Uuid::new_v4();
     let cf = store.cf_causal_relationships();
-    store.db.put_cf(cf, causal_relationship_key(&corrupted_id), &[0xde, 0xad, 0xbe, 0xef]).unwrap();
+    store.db.put_cf(cf, causal_relationship_key(&corrupted_id), [0xde, 0xad, 0xbe, 0xef]).unwrap();
 
     println!("RUN 1:");
     let (deleted1, scanned1) = store.repair_corrupted_causal_relationships().await.unwrap();

@@ -441,8 +441,8 @@ impl RocksDbTeleologicalStore {
             // for expired soft-deletes, which would double-decrement without this guard.
             // STOR-H1 FIX: Use fetch_update with checked subtraction to prevent
             // underflow wrapping to usize::MAX, which corrupts all BM25-IDF scoring.
-            if !was_soft_deleted {
-                if self
+            if !was_soft_deleted
+                && self
                     .total_doc_count
                     .fetch_update(
                         std::sync::atomic::Ordering::Relaxed,
@@ -458,7 +458,6 @@ impl RocksDbTeleologicalStore {
                         id
                     );
                 }
-            }
         }
 
         info!("Deleted fingerprint {} (soft={})", id, soft);

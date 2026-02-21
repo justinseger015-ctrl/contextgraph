@@ -234,6 +234,7 @@ Content B:
     }
 
     /// Truncate content to max length at word boundary.
+    #[allow(clippy::incompatible_msrv)] // floor_char_boundary requires 1.80+, our runtime rustc supports it
     fn truncate_content(&self, content: &str) -> String {
         // Normalize whitespace
         let content: String = content

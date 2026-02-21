@@ -18,7 +18,7 @@ mod tests {
             // E8 and E11 moved to PQ8 group with correct dimensions (were Float8E4M3 with wrong dims).
             let (method, dim, data_len) = match i {
                 0 => (QuantizationMethod::PQ8, 1024, 8),              // E1 Semantic (e5-large-v2)
-                1 | 2 | 3 => (QuantizationMethod::Float8E4M3, 512, 512), // E2-E4 Temporal (custom 512D)
+                1..=3 => (QuantizationMethod::Float8E4M3, 512, 512), // E2-E4 Temporal (custom 512D)
                 4 => (QuantizationMethod::PQ8, 768, 8),               // E5 Causal (nomic-embed 768D)
                 5 | 12 => (QuantizationMethod::SparseNative, 30522, 100), // E6, E13 Sparse
                 6 => (QuantizationMethod::PQ8, 1536, 8),              // E7 Code (Qodo-Embed 1536D)

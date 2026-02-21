@@ -53,7 +53,7 @@ async fn test_e2e_empty_stdin_error() {
             TIMEOUT_SESSION_START_MS,
             db_path,
         )
-        .expect(&format!("{} execution failed", script));
+        .unwrap_or_else(|_| panic!("{} execution failed", script));
 
         println!("Exit code: {}", result.exit_code);
         println!("stdout: {}", result.stdout);

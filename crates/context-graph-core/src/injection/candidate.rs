@@ -478,12 +478,10 @@ mod tests {
 
     #[test]
     fn test_category_ord() {
-        let mut categories = vec![
-            InjectionCategory::RecentSession,
+        let mut categories = [InjectionCategory::RecentSession,
             InjectionCategory::DivergenceAlert,
             InjectionCategory::SingleSpaceMatch,
-            InjectionCategory::HighRelevanceCluster,
-        ];
+            InjectionCategory::HighRelevanceCluster];
         categories.sort();
 
         assert_eq!(categories[0], InjectionCategory::DivergenceAlert);
@@ -544,12 +542,10 @@ mod tests {
 
     #[test]
     fn test_candidate_sorting_by_category() {
-        let mut candidates = vec![
-            make_candidate(0.9, 2.0, InjectionCategory::SingleSpaceMatch),
+        let mut candidates = [make_candidate(0.9, 2.0, InjectionCategory::SingleSpaceMatch),
             make_candidate(0.8, 0.5, InjectionCategory::DivergenceAlert),
             make_candidate(0.7, 1.0, InjectionCategory::RecentSession),
-            make_candidate(0.85, 3.0, InjectionCategory::HighRelevanceCluster),
-        ];
+            make_candidate(0.85, 3.0, InjectionCategory::HighRelevanceCluster)];
 
         candidates.sort();
 

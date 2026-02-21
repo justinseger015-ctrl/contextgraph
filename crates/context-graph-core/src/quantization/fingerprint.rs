@@ -801,7 +801,7 @@ mod tests {
         }
         // E5 effect: descending from 0.5 (DIFFERENT from cause)
         for (i, v) in fp.e5_causal_as_effect.iter_mut().enumerate() {
-            *v = (i as f32 / 768.0) * -1.0 + 0.5;
+            *v = -(i as f32 / 768.0) + 0.5;
         }
         for (i, v) in fp.e7_code.iter_mut().enumerate() {
             *v = (i as f32 / 1536.0) * 0.8; // Range [0.0, 0.8]
@@ -959,7 +959,7 @@ mod tests {
 
         // Verify the dequantized values are in the correct range [0.0, 0.8], not [-1, 1]
         for &v in &dequantized {
-            assert!(v >= -0.05 && v <= 0.85,
+            assert!((-0.05..=0.85).contains(&v),
                 "Dequantized value {} outside expected range [0.0, 0.8] (with quantization tolerance)",
                 v);
         }
@@ -984,7 +984,7 @@ mod tests {
 
         // All dequantized values must be within [0.2, 0.6] (with quantization tolerance)
         for (i, &v) in dequantized.iter().enumerate() {
-            assert!(v >= 0.15 && v <= 0.65,
+            assert!((0.15..=0.65).contains(&v),
                 "Dequantized value {} at index {} outside expected range [0.2, 0.6]", v, i);
         }
 

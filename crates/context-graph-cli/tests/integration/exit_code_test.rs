@@ -187,9 +187,7 @@ fn test_exit_code_4_missing_required_fields() {
     );
 
     // At least one of these should return exit code 4
-    let has_invalid_input = [result1.exit_code, result2.exit_code]
-        .iter()
-        .any(|&code| code == EXIT_INVALID_INPUT);
+    let has_invalid_input = [result1.exit_code, result2.exit_code].contains(&EXIT_INVALID_INPUT);
 
     assert!(
         has_invalid_input,

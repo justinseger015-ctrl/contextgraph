@@ -295,7 +295,7 @@ fn test_weighted_similarity() {
 // SCORE FILTER TESTS
 // =============================================================================
 
-/// Test: Score-based filter with Constitution threshold 0.55
+// Test: Score-based filter with Constitution threshold 0.55
 
 // =============================================================================
 // RANKING BEHAVIOR TESTS

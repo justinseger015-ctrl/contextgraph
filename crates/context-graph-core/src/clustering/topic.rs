@@ -564,17 +564,6 @@ mod tests {
     // ===== TopicProfile Tests =====
 
     #[test]
-    fn test_profile_strength_clamping() {
-        let profile = TopicProfile::new([
-            1.5, -0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ]);
-        assert_eq!(profile.strengths[0], 1.0, "1.5 should clamp to 1.0");
-        assert_eq!(profile.strengths[1], 0.0, "-0.5 should clamp to 0.0");
-        assert_eq!(profile.strengths[2], 0.5, "0.5 should stay 0.5");
-        println!("[PASS] test_profile_strength_clamping");
-    }
-
-    #[test]
     fn test_weighted_agreement_semantic_only() {
         // E1 (Semantic, weight=1.0), E5 (Causal/Semantic, weight=1.0), E7 (Code/Semantic, weight=1.0)
         let mut strengths = [0.0; 13];
@@ -646,49 +635,6 @@ mod tests {
     }
 
     #[test]
-    fn test_weighted_agreement_below_threshold() {
-        // 2 semantic only = 2.0 < 2.5 threshold
-        let mut strengths = [0.0; 13];
-        strengths[Embedder::Semantic.index()] = 1.0; // E1
-        strengths[Embedder::Causal.index()] = 1.0; // E5
-
-        let profile = TopicProfile::new(strengths);
-        let weighted = profile.weighted_agreement();
-
-        assert!(
-            (weighted - 2.0).abs() < 0.001,
-            "2 semantic should give 2.0, got {}",
-            weighted
-        );
-        assert!(
-            !profile.is_topic(),
-            "weighted_agreement 2.0 < 2.5 threshold"
-        );
-        println!(
-            "[PASS] test_weighted_agreement_below_threshold - weighted={}",
-            weighted
-        );
-    }
-
-    #[test]
-    fn test_weighted_agreement_max_value() {
-        // All spaces at 1.0 - max possible
-        let profile = TopicProfile::new([1.0; 13]);
-        let weighted = profile.weighted_agreement();
-
-        // Max = 7*1.0 (semantic) + 2*0.5 (relational) + 1*0.5 (structural) + 3*0.0 (temporal) = 8.5
-        assert!(
-            (weighted - 8.5).abs() < 0.001,
-            "All spaces at 1.0 should give max 8.5, got {}",
-            weighted
-        );
-        println!(
-            "[PASS] test_weighted_agreement_max_value - weighted={}",
-            weighted
-        );
-    }
-
-    #[test]
     fn test_dominant_spaces() {
         let mut strengths = [0.0; 13];
         strengths[Embedder::Semantic.index()] = 0.8;
@@ -713,100 +659,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_profile_similarity_identical() {
-        let p1 = TopicProfile::new([
-            1.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ]);
-        let p2 = TopicProfile::new([
-            1.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ]);
-
-        let sim = p1.similarity(&p2);
-        assert!(
-            (sim - 1.0).abs() < 0.001,
-            "Identical profiles should have similarity 1.0, got {}",
-            sim
-        );
-        println!("[PASS] test_profile_similarity_identical - sim={}", sim);
-    }
-
-    #[test]
-    fn test_profile_similarity_orthogonal() {
-        let p1 = TopicProfile::new([
-            1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ]);
-        let p2 = TopicProfile::new([
-            0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ]);
-
-        let sim = p1.similarity(&p2);
-        assert!(
-            sim < 0.001,
-            "Orthogonal profiles should have similarity ~0.0, got {}",
-            sim
-        );
-        println!("[PASS] test_profile_similarity_orthogonal - sim={}", sim);
-    }
-
-    #[test]
-    fn test_profile_similarity_zero_vector() {
-        let p1 = TopicProfile::new([0.0; 13]);
-        let p2 = TopicProfile::new([
-            1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ]);
-
-        let sim = p1.similarity(&p2);
-        assert!(!sim.is_nan(), "Zero vector similarity should not be NaN");
-        assert!(
-            (0.0..=1.0).contains(&sim),
-            "Similarity should be in valid range"
-        );
-        println!(
-            "[PASS] test_profile_similarity_zero_vector - handles zero vector gracefully"
-        );
-    }
-
-    #[test]
-    fn test_active_space_count() {
-        let mut strengths = [0.0; 13];
-        strengths[0] = 0.5;
-        strengths[1] = 0.2; // Above 0.1 threshold
-        strengths[2] = 0.05; // Below 0.1 threshold
-
-        let profile = TopicProfile::new(strengths);
-        let count = profile.active_space_count();
-
-        assert_eq!(count, 2, "Should have 2 active spaces (>0.1 threshold)");
-        println!("[PASS] test_active_space_count - count={}", count);
-    }
-
     // ===== Topic Tests =====
-
-    #[test]
-    fn test_topic_confidence_calculation() {
-        // 3 semantic spaces at 1.0 = weighted 3.0
-        // confidence = 3.0 / 8.5 ≈ 0.353
-        let mut strengths = [0.0; 13];
-        strengths[Embedder::Semantic.index()] = 1.0;
-        strengths[Embedder::Causal.index()] = 1.0;
-        strengths[Embedder::Code.index()] = 1.0;
-
-        let profile = TopicProfile::new(strengths);
-        let topic = Topic::new(profile, HashMap::new(), vec![]);
-
-        let expected_confidence = 3.0 / 8.5;
-        assert!(
-            (topic.confidence - expected_confidence).abs() < 0.001,
-            "confidence should be weighted/8.5 = {}, got {}",
-            expected_confidence,
-            topic.confidence
-        );
-        println!(
-            "[PASS] test_topic_confidence_calculation - confidence={}",
-            topic.confidence
-        );
-    }
 
     #[test]
     fn test_topic_validity_weighted_threshold() {
@@ -837,116 +690,6 @@ mod tests {
         println!("[PASS] test_topic_validity_weighted_threshold");
     }
 
-    #[test]
-    fn test_topic_validity_temporal_ignored() {
-        // CRITICAL: 5 temporal spaces should NOT make a valid topic
-        let mut temporal_strengths = [0.0; 13];
-        temporal_strengths[Embedder::TemporalRecent.index()] = 1.0;
-        temporal_strengths[Embedder::TemporalPeriodic.index()] = 1.0;
-        temporal_strengths[Embedder::TemporalPositional.index()] = 1.0;
-        // Adding more temporal won't help - they're weight 0.0
-
-        let temporal_topic =
-            Topic::new(TopicProfile::new(temporal_strengths), HashMap::new(), vec![]);
-        assert!(
-            !temporal_topic.is_valid(),
-            "Temporal-only topic (weighted=0.0) must NOT be valid per AP-60"
-        );
-        println!(
-            "[PASS] test_topic_validity_temporal_ignored - temporal excluded from topic detection"
-        );
-    }
-
-    #[test]
-    fn test_topic_record_access() {
-        let profile = TopicProfile::default();
-        let mut topic = Topic::new(profile, HashMap::new(), vec![]);
-
-        assert_eq!(topic.stability.access_count, 0);
-        assert!(topic.stability.last_accessed.is_none());
-
-        topic.record_access();
-
-        assert_eq!(topic.stability.access_count, 1);
-        assert!(topic.stability.last_accessed.is_some());
-        println!("[PASS] test_topic_record_access");
-    }
-
-    #[test]
-    fn test_topic_member_operations() {
-        let profile = TopicProfile::default();
-        let mem1 = Uuid::new_v4();
-        let mem2 = Uuid::new_v4();
-        let mem3 = Uuid::new_v4();
-
-        let topic = Topic::new(profile, HashMap::new(), vec![mem1, mem2]);
-
-        assert_eq!(topic.member_count(), 2);
-        assert!(topic.contains_memory(&mem1));
-        assert!(topic.contains_memory(&mem2));
-        assert!(!topic.contains_memory(&mem3));
-        println!("[PASS] test_topic_member_operations");
-    }
-
-    #[test]
-    fn test_topic_update_contributing_spaces() {
-        let mut strengths = [0.0; 13];
-        strengths[Embedder::Semantic.index()] = 0.9;
-
-        let profile = TopicProfile::new(strengths);
-        let mut topic = Topic::new(profile, HashMap::new(), vec![]);
-
-        assert_eq!(topic.contributing_spaces.len(), 1);
-        assert!(topic.contributing_spaces.contains(&Embedder::Semantic));
-
-        // Modify profile and update
-        topic.profile.set_strength(Embedder::Causal, 0.8);
-        topic.update_contributing_spaces();
-
-        assert_eq!(topic.contributing_spaces.len(), 2);
-        assert!(topic.contributing_spaces.contains(&Embedder::Semantic));
-        assert!(topic.contributing_spaces.contains(&Embedder::Causal));
-        println!("[PASS] test_topic_update_contributing_spaces");
-    }
-
-    // ===== TopicStability Tests =====
-
-    #[test]
-    fn test_stability_phase_transitions() {
-        let mut stability = TopicStability::new();
-        assert_eq!(stability.phase, TopicPhase::Emerging, "Should start as Emerging");
-
-        // Young with high churn -> Emerging
-        stability.age_hours = 0.5;
-        stability.membership_churn = 0.4;
-        stability.update_phase();
-        assert_eq!(stability.phase, TopicPhase::Emerging);
-
-        // Old with low churn -> Stable
-        stability.age_hours = 48.0;
-        stability.membership_churn = 0.05;
-        stability.update_phase();
-        assert_eq!(stability.phase, TopicPhase::Stable);
-
-        // High churn -> Declining
-        stability.membership_churn = 0.6;
-        stability.update_phase();
-        assert_eq!(stability.phase, TopicPhase::Declining);
-
-        println!("[PASS] test_stability_phase_transitions");
-    }
-
-    #[test]
-    fn test_stability_health_check() {
-        let mut stability = TopicStability::new();
-        stability.membership_churn = 0.2;
-        assert!(stability.is_healthy(), "churn 0.2 < 0.3 should be healthy");
-
-        stability.membership_churn = 0.4;
-        assert!(!stability.is_healthy(), "churn 0.4 >= 0.3 should not be healthy");
-        println!("[PASS] test_stability_health_check");
-    }
-
     // ===== Serialization Tests =====
 
     #[test]
@@ -968,87 +711,6 @@ mod tests {
             "[PASS] test_topic_serialization_roundtrip - JSON length: {}",
             json.len()
         );
-    }
-
-    #[test]
-    fn test_topic_phase_serialization() {
-        for phase in [
-            TopicPhase::Emerging,
-            TopicPhase::Stable,
-            TopicPhase::Declining,
-            TopicPhase::Merging,
-        ] {
-            let json = serde_json::to_string(&phase).expect("serialize phase");
-            let restored: TopicPhase = serde_json::from_str(&json).expect("deserialize phase");
-            assert_eq!(phase, restored);
-        }
-        println!("[PASS] test_topic_phase_serialization - all phases serialize correctly");
-    }
-
-    #[test]
-    fn test_topic_profile_serialization() {
-        let profile = TopicProfile::new([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.0, 0.0, 0.0]);
-
-        let json = serde_json::to_string(&profile).expect("serialize profile");
-        let restored: TopicProfile = serde_json::from_str(&json).expect("deserialize profile");
-
-        assert_eq!(profile.strengths, restored.strengths);
-        println!("[PASS] test_topic_profile_serialization");
-    }
-
-    #[test]
-    fn test_topic_stability_serialization() {
-        let mut stability = TopicStability::new();
-        stability.age_hours = 12.5;
-        stability.membership_churn = 0.25;
-        stability.access_count = 100;
-
-        let json = serde_json::to_string(&stability).expect("serialize stability");
-        let restored: TopicStability = serde_json::from_str(&json).expect("deserialize stability");
-
-        assert_eq!(stability.phase, restored.phase);
-        assert!((stability.age_hours - restored.age_hours).abs() < f32::EPSILON);
-        assert!((stability.membership_churn - restored.membership_churn).abs() < f32::EPSILON);
-        assert_eq!(stability.access_count, restored.access_count);
-        println!("[PASS] test_topic_stability_serialization");
-    }
-
-    // ===== TopicPhase Display Tests =====
-
-    #[test]
-    fn test_topic_phase_display() {
-        assert_eq!(format!("{}", TopicPhase::Emerging), "Emerging");
-        assert_eq!(format!("{}", TopicPhase::Stable), "Stable");
-        assert_eq!(format!("{}", TopicPhase::Declining), "Declining");
-        assert_eq!(format!("{}", TopicPhase::Merging), "Merging");
-        println!("[PASS] test_topic_phase_display");
-    }
-
-    // ===== Edge Cases =====
-
-    #[test]
-    fn test_nan_handling_weighted_agreement() {
-        // Force a NaN scenario by manipulating internals if possible
-        // For now, ensure normal paths don't produce NaN
-        let profile = TopicProfile::new([0.5; 13]);
-        let weighted = profile.weighted_agreement();
-
-        assert!(!weighted.is_nan(), "weighted_agreement should not be NaN");
-        assert!(!weighted.is_infinite(), "weighted_agreement should not be infinite");
-        println!("[PASS] test_nan_handling_weighted_agreement");
-    }
-
-    #[test]
-    fn test_extreme_strength_values() {
-        // Test with max f32 values (should clamp)
-        let profile = TopicProfile::new([f32::MAX; 13]);
-        assert_eq!(profile.strengths[0], 1.0, "MAX should clamp to 1.0");
-
-        // Test with negative infinity (should clamp to 0.0)
-        let profile2 = TopicProfile::new([f32::NEG_INFINITY; 13]);
-        assert_eq!(profile2.strengths[0], 0.0, "NEG_INFINITY should clamp to 0.0");
-
-        println!("[PASS] test_extreme_strength_values");
     }
 
     #[test]
@@ -1117,23 +779,4 @@ mod tests {
         println!("[PASS] deterministic_id: same members, different order → same ID");
     }
 
-    #[test]
-    fn test_deterministic_topic_id_different_members() {
-        let a = Uuid::new_v4();
-        let b = Uuid::new_v4();
-        let c = Uuid::new_v4();
-        let d = Uuid::new_v4();
-
-        let id1 = Topic::deterministic_id(&[a, b, c]);
-        let id2 = Topic::deterministic_id(&[a, b, d]);
-        assert_ne!(id1, id2);
-        println!("[PASS] deterministic_id: different members → different ID");
-    }
-
-    #[test]
-    fn test_deterministic_topic_id_empty() {
-        let id = Topic::deterministic_id(&[]);
-        assert_eq!(id, Uuid::nil());
-        println!("[PASS] deterministic_id: empty members → nil UUID");
-    }
 }

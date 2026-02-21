@@ -197,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
 
             // Add relevant documents as memories
-            for (doc_id, _relevance) in doc_ids {
+            for doc_id in doc_ids.keys() {
                 if let Some(chunk) = doc_index.get(doc_id) {
                     memories.push(MemoryForGraphAnalysis {
                         id: Uuid::new_v4(),
@@ -316,7 +316,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Update relationship stats
                 let stats = relationship_stats
                     .entry(rel_type_str.clone())
-                    .or_insert_with(RelationshipStats::default);
+                    .or_default();
                 stats.count += 1;
                 stats.confidences.push(result.confidence);
 

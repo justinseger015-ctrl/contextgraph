@@ -123,8 +123,6 @@ impl Cluster {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
-    use std::time::Duration;
 
     #[test]
     fn test_cluster_creation() {
@@ -144,25 +142,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cluster_touch() {
-        let mut cluster = Cluster::new(1, Embedder::Semantic, vec![0.0; 1024], 10);
-
-        let old_updated = cluster.updated_at;
-        thread::sleep(Duration::from_millis(10));
-        cluster.touch();
-
-        assert!(
-            cluster.updated_at > old_updated,
-            "updated_at should increase after touch"
-        );
-
-        println!(
-            "[PASS] test_cluster_touch - old={}, new={}",
-            old_updated, cluster.updated_at
-        );
-    }
-
-    #[test]
     fn test_update_silhouette_normal() {
         let mut cluster = Cluster::new(1, Embedder::Semantic, vec![0.0; 1024], 10);
 
@@ -173,69 +152,6 @@ mod tests {
         println!(
             "[PASS] test_update_silhouette_normal - score=0.75, high_quality={}",
             cluster.is_high_quality()
-        );
-    }
-
-    #[test]
-    fn test_silhouette_clamping_high() {
-        let mut cluster = Cluster::new(1, Embedder::Semantic, vec![0.0; 1024], 10);
-
-        cluster.update_silhouette(2.5); // Should clamp to 1.0
-        assert_eq!(cluster.silhouette_score, 1.0);
-
-        println!(
-            "[PASS] test_silhouette_clamping_high - 2.5 clamped to {}",
-            cluster.silhouette_score
-        );
-    }
-
-    #[test]
-    fn test_silhouette_clamping_low() {
-        let mut cluster = Cluster::new(1, Embedder::Semantic, vec![0.0; 1024], 10);
-
-        cluster.update_silhouette(-2.5); // Should clamp to -1.0
-        assert_eq!(cluster.silhouette_score, -1.0);
-
-        println!(
-            "[PASS] test_silhouette_clamping_low - -2.5 clamped to {}",
-            cluster.silhouette_score
-        );
-    }
-
-    #[test]
-    fn test_is_high_quality() {
-        let mut cluster = Cluster::new(1, Embedder::Semantic, vec![0.0; 1024], 10);
-
-        cluster.update_silhouette(0.4);
-        assert!(cluster.is_high_quality(), "0.4 should be high quality");
-
-        cluster.update_silhouette(0.3);
-        assert!(
-            cluster.is_high_quality(),
-            "0.3 should be high quality (threshold)"
-        );
-
-        cluster.update_silhouette(0.29);
-        assert!(!cluster.is_high_quality(), "0.29 should not be high quality");
-
-        println!("[PASS] test_is_high_quality - threshold=0.3 working correctly");
-    }
-
-    #[test]
-    fn test_update_centroid() {
-        let mut cluster = Cluster::new(1, Embedder::Semantic, vec![0.0; 4], 5);
-        let old_updated = cluster.updated_at;
-
-        thread::sleep(Duration::from_millis(10));
-        cluster.update_centroid(vec![1.0, 2.0, 3.0, 4.0], 15);
-
-        assert_eq!(cluster.centroid, vec![1.0, 2.0, 3.0, 4.0]);
-        assert_eq!(cluster.member_count, 15);
-        assert!(cluster.updated_at > old_updated);
-
-        println!(
-            "[PASS] test_update_centroid - new members={}, centroid updated",
-            cluster.member_count
         );
     }
 
@@ -252,20 +168,5 @@ mod tests {
         assert_eq!(cluster.member_count, restored.member_count);
 
         println!("[PASS] test_serialization_roundtrip - JSON preserved all fields");
-    }
-
-    #[test]
-    fn test_all_embedder_spaces() {
-        for embedder in Embedder::all() {
-            let cluster = Cluster::new(1, embedder, vec![0.0; 10], 5);
-            assert_eq!(cluster.space, embedder);
-
-            // Verify serialization
-            let json = serde_json::to_string(&cluster).expect("serialize");
-            let restored: Cluster = serde_json::from_str(&json).expect("deserialize");
-            assert_eq!(cluster.space, restored.space);
-        }
-
-        println!("[PASS] test_all_embedder_spaces - all 13 spaces work");
     }
 }

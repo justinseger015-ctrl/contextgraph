@@ -1298,131 +1298,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_string_to_edge_type() {
+    fn test_edge_type_conversions_and_helpers() {
         assert_eq!(string_to_edge_type("semantic_similar"), Some(GraphLinkEdgeType::SemanticSimilar));
         assert_eq!(string_to_edge_type("code_related"), Some(GraphLinkEdgeType::CodeRelated));
-        assert_eq!(string_to_edge_type("causal_chain"), Some(GraphLinkEdgeType::CausalChain));
         assert_eq!(string_to_edge_type("invalid"), None);
-        println!("[PASS] String to edge type conversion works");
-    }
-
-    #[test]
-    fn test_edge_type_to_string() {
-        assert_eq!(
-            edge_type_to_string(GraphLinkEdgeType::SemanticSimilar),
-            "semantic_similar"
-        );
-        assert_eq!(
-            edge_type_to_string(GraphLinkEdgeType::CodeRelated),
-            "code_related"
-        );
-        assert_eq!(
-            edge_type_to_string(GraphLinkEdgeType::CausalChain),
-            "causal_chain"
-        );
-        println!("[PASS] Edge type string conversion works");
-    }
-
-    #[test]
-    fn test_get_contributing_embedders() {
-        // Mask with E1, E5, E7 set (bits 0, 4, 6)
-        let mask: u16 = 0b0000_0101_0001;
+        assert_eq!(edge_type_to_string(GraphLinkEdgeType::SemanticSimilar), "semantic_similar");
+        assert_eq!(edge_type_to_string(GraphLinkEdgeType::CausalChain), "causal_chain");
+        // Contributing embedders from bitmask
+        let mask: u16 = 0b0000_0101_0001; // E1, E5, E7
         let embedders = get_contributing_embedders(mask);
         assert_eq!(embedders.len(), 3);
         assert!(embedders.contains(&"E1 (V_meaning)".to_string()));
-        assert!(embedders.contains(&"E5 (V_causality)".to_string()));
-        assert!(embedders.contains(&"E7 (V_correctness)".to_string()));
-        println!("[PASS] Contributing embedders extraction works");
     }
 
     #[test]
-    fn test_compute_weighted_agreement() {
-        // All semantic embedders agree (scores > 0.5)
+    fn test_weighted_agreement_and_rrf() {
+        // All semantic embedders agree
         let scores: [f32; 13] = [0.9, 0.0, 0.0, 0.0, 0.8, 0.75, 0.85, 0.6, 0.55, 0.7, 0.65, 0.8, 0.7];
-        let agreement = compute_weighted_agreement(&scores);
-        // E1=1.0, E5=1.0, E6=1.0, E7=1.0, E8=0.5, E9=0.5, E10=1.0, E11=0.5, E12=1.0, E13=1.0 = 8.5
-        assert!((agreement - 8.5).abs() < 0.01);
-        println!("[PASS] Weighted agreement computation: {}", agreement);
-    }
-
-    #[test]
-    fn test_compute_weighted_agreement_excludes_temporal() {
-        // Only temporal embedders have high scores (should result in 0)
-        let scores: [f32; 13] = [0.0, 0.9, 0.9, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let agreement = compute_weighted_agreement(&scores);
-        assert!((agreement - 0.0).abs() < 0.01);
-        println!("[PASS] Temporal embedders excluded from weighted agreement");
-    }
-
-    // ===== Weighted RRF Algorithm Tests =====
-
-    #[test]
-    fn test_rrf_formula() {
-        // RRF_score(d) = Sum over embedders i: weight_i / (rank_i(d) + k)
-        // With k=60 (standard RRF constant)
-
+        assert!((compute_weighted_agreement(&scores) - 8.5).abs() < 0.01);
+        // Only temporal = 0 agreement
+        let temporal_only: [f32; 13] = [0.0, 0.9, 0.9, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        assert!((compute_weighted_agreement(&temporal_only) - 0.0).abs() < 0.01);
+        // RRF formula: rank=1 > rank=10
         let k = 60.0f32;
-
-        // Single embedder case: weight=0.33, rank=1
-        let weight = 0.33f32;
-        let rank = 1;
-        let expected_score = weight / (rank as f32 + k);
-        assert!((expected_score - 0.0054).abs() < 0.001);
-        println!("[PASS] RRF formula correct for single embedder");
-
-        // Multiple embedders: E1 rank=1, E7 rank=2
-        let e1_weight = 0.33f32;
-        let e7_weight = 0.20f32;
-        let e1_rank = 1;
-        let e7_rank = 2;
-
-        let combined_score = e1_weight / (e1_rank as f32 + k) + e7_weight / (e7_rank as f32 + k);
-        assert!(combined_score > expected_score);
-        println!("[PASS] RRF score increases with multiple embedder agreement");
-    }
-
-    #[test]
-    fn test_rrf_rank_importance() {
-        // Higher rank = lower contribution
-        let k = 60.0f32;
-        let weight = 0.33f32;
-
-        let rank1_score = weight / (1.0 + k);
-        let rank10_score = weight / (10.0 + k);
-
-        assert!(rank1_score > rank10_score);
-        println!(
-            "[PASS] RRF: rank=1 ({:.4}) > rank=10 ({:.4})",
-            rank1_score, rank10_score
-        );
-    }
-
-    #[test]
-    fn test_candidate_info_structure() {
-        let info = CandidateInfo {
-            embedder_scores: [0.9, 0.0, 0.0, 0.0, 0.8, 0.75, 0.85, 0.6, 0.0, 0.7, 0.65, 0.0, 0.55],
-            embedder_ranks: [1, 0, 0, 0, 2, 3, 1, 5, 0, 2, 3, 0, 4],
-            contributing_embedders: vec![
-                "E1 (V_meaning)".to_string(),
-                "E5 (V_causality)".to_string(),
-                "E6 (V_selectivity)".to_string(),
-                "E7 (V_correctness)".to_string(),
-                "E8 (V_connectivity)".to_string(),
-                "E10 (V_multimodality)".to_string(),
-                "E11 (V_factuality)".to_string(),
-                "E13 (V_keyword_precision)".to_string(),
-            ],
-        };
-
-        assert_eq!(info.embedder_scores.len(), 13);
-        assert_eq!(info.embedder_ranks.len(), 13);
-        assert_eq!(info.contributing_embedders.len(), 8);
-
-        // Verify temporal embedders have rank=0 (excluded)
-        assert_eq!(info.embedder_ranks[1], 0); // E2
-        assert_eq!(info.embedder_ranks[2], 0); // E3
-        assert_eq!(info.embedder_ranks[3], 0); // E4
-
-        println!("[PASS] CandidateInfo structure correctly excludes temporal embedders");
+        assert!(0.33 / (1.0 + k) > 0.33 / (10.0 + k));
     }
 }

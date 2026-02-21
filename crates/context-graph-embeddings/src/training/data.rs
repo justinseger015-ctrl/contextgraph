@@ -2940,7 +2940,7 @@ mod tests {
         let pairs = seed_training_pairs();
         let total = pairs.len();
         let mut loader = CausalDataLoader::new(pairs, 8, 42);
-        assert_eq!(loader.num_batches(), (total + 7) / 8);
+        assert_eq!(loader.num_batches(), total.div_ceil(8));
 
         loader.shuffle_epoch();
         let mut total_seen = 0;

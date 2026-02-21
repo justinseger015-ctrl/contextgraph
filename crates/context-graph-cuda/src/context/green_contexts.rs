@@ -572,6 +572,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_min_sms_constant() {
         assert!(
             MIN_SMS_FOR_PARTITIONING >= 8,

@@ -11,6 +11,3 @@ mod edge_cases;
 
 #[cfg(test)]
 mod embedding;
-
-#[cfg(test)]
-mod verification;

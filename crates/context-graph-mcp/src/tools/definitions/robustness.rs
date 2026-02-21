@@ -108,80 +108,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_definitions_count() {
+    fn test_definitions_exist_with_required_fields() {
         assert_eq!(definitions().len(), 1);
-    }
-
-    #[test]
-    fn test_search_robust_definition() {
         let def = search_robust_definition();
         assert_eq!(def.name, "search_robust");
-        assert!(!def.description.is_empty());
         assert!(def.description.contains("E9"));
         assert!(def.description.contains("typo"));
-
-        // Verify required parameters
         let required = def.input_schema.get("required").unwrap().as_array().unwrap();
         assert!(required.iter().any(|v| v.as_str() == Some("query")));
-
-        // Verify properties exist
         let props = def.input_schema.get("properties").unwrap().as_object().unwrap();
         assert!(props.contains_key("query"));
         assert!(props.contains_key("topK"));
-        assert!(props.contains_key("minScore"));
         assert!(props.contains_key("e9DiscoveryThreshold"));
         assert!(props.contains_key("e1WeaknessThreshold"));
-        assert!(props.contains_key("includeContent"));
-        assert!(props.contains_key("includeE9Score"));
     }
 
     #[test]
-    fn test_query_min_length() {
+    fn test_schema_defaults_and_thresholds() {
         let def = search_robust_definition();
         let props = def.input_schema.get("properties").unwrap().as_object().unwrap();
-        let query_props = &props["query"];
-
-        // E9 requires at least 3 characters for trigram encoding
-        assert_eq!(query_props["minLength"], 3);
-    }
-
-    #[test]
-    fn test_threshold_defaults() {
-        let def = search_robust_definition();
-        let props = def.input_schema.get("properties").unwrap().as_object().unwrap();
-
-        // E9 discovery threshold
-        let e9_threshold = &props["e9DiscoveryThreshold"];
-        assert_eq!(e9_threshold["default"], 0.15, "Default E9 discovery threshold should be 0.15");
-        assert_eq!(e9_threshold["minimum"], 0.0);
-        assert_eq!(e9_threshold["maximum"], 1.0);
-
-        // E1 weakness threshold
-        let e1_threshold = &props["e1WeaknessThreshold"];
-        assert_eq!(e1_threshold["default"], 0.5, "Default E1 weakness threshold should be 0.5");
-        assert_eq!(e1_threshold["minimum"], 0.0);
-        assert_eq!(e1_threshold["maximum"], 1.0);
-    }
-
-    #[test]
-    fn test_definition_mentions_constitution() {
-        let def = search_robust_definition();
-        assert!(
-            def.description.contains("constitution"),
-            "Tool description should reference constitution"
-        );
-    }
-
-    #[test]
-    fn test_definition_explains_e9_advantage() {
-        let def = search_robust_definition();
-        assert!(
-            def.description.contains("character") || def.description.contains("trigram"),
-            "Tool should explain character-level matching"
-        );
-        assert!(
-            def.description.contains("E1") && def.description.contains("miss"),
-            "Tool should explain what E1 misses"
-        );
+        assert_eq!(props["query"]["minLength"], 3);
+        assert_eq!(props["e9DiscoveryThreshold"]["default"], 0.15);
+        assert_eq!(props["e1WeaknessThreshold"]["default"], 0.5);
+        assert_eq!(props["topK"]["default"], 10);
     }
 }

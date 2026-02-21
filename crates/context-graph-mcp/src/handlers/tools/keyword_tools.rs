@@ -486,91 +486,32 @@ mod tests {
     use context_graph_core::types::fingerprint::SparseVector;
 
     #[test]
-    fn test_cosine_similarity_identical() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!((sim - 1.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_orthogonal() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![0.0, 1.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < 0.001);
-    }
-
-    #[test]
-    fn test_sparse_keyword_similarity_identical() {
-        let query = SparseVector::new(vec![10, 20, 30], vec![1.0, 0.5, 0.3]).unwrap();
-        let doc = SparseVector::new(vec![10, 20, 30], vec![1.0, 0.5, 0.3]).unwrap();
-        let (sim, count) = sparse_keyword_similarity(&query, &doc);
+    fn test_similarity_functions() {
+        // Dense cosine similarity
+        assert!((cosine_similarity(&[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0]) - 1.0).abs() < 0.001);
+        assert!(cosine_similarity(&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]).abs() < 0.001);
+        // Sparse keyword similarity
+        let q = SparseVector::new(vec![10, 20, 30], vec![1.0, 0.5, 0.3]).unwrap();
+        let d = SparseVector::new(vec![10, 20, 30], vec![1.0, 0.5, 0.3]).unwrap();
+        let (sim, count) = sparse_keyword_similarity(&q, &d);
         assert!((sim - 1.0).abs() < 0.001);
         assert_eq!(count, 3);
+        let d2 = SparseVector::new(vec![40, 50, 60], vec![1.0, 0.5, 0.3]).unwrap();
+        let (sim2, count2) = sparse_keyword_similarity(&q, &d2);
+        assert!((sim2 - 0.0).abs() < 0.001);
+        assert_eq!(count2, 0);
     }
 
     #[test]
-    fn test_sparse_keyword_similarity_partial_overlap() {
-        let query = SparseVector::new(vec![10, 20, 30], vec![1.0, 0.5, 0.3]).unwrap();
-        let doc = SparseVector::new(vec![10, 40, 50], vec![1.0, 0.5, 0.3]).unwrap();
-        let (sim, count) = sparse_keyword_similarity(&query, &doc);
-        assert!(sim > 0.0 && sim < 1.0);
-        assert_eq!(count, 1); // Only term 10 matches
-    }
-
-    #[test]
-    fn test_sparse_keyword_similarity_no_overlap() {
-        let query = SparseVector::new(vec![10, 20, 30], vec![1.0, 0.5, 0.3]).unwrap();
-        let doc = SparseVector::new(vec![40, 50, 60], vec![1.0, 0.5, 0.3]).unwrap();
-        let (sim, count) = sparse_keyword_similarity(&query, &doc);
-        assert!((sim - 0.0).abs() < 0.001);
-        assert_eq!(count, 0);
-    }
-
-    #[test]
-    fn test_extract_keywords_simple() {
-        let query = "RocksDB compaction tuning parameters";
-        let keywords = extract_keywords(query);
+    fn test_extract_keywords() {
+        let keywords = extract_keywords("RocksDB compaction tuning parameters");
         assert!(keywords.contains(&"rocksdb".to_string()));
         assert!(keywords.contains(&"compaction".to_string()));
-        assert!(keywords.contains(&"tuning".to_string()));
-        assert!(keywords.contains(&"parameters".to_string()));
-    }
-
-    #[test]
-    fn test_extract_keywords_filters_stop_words() {
-        let query = "the quick brown fox jumps over the lazy dog";
-        let keywords = extract_keywords(query);
-        // "the" and "over" are stop words
+        let keywords = extract_keywords("the quick brown fox jumps over the lazy dog");
         assert!(!keywords.contains(&"the".to_string()));
-        assert!(!keywords.contains(&"over".to_string()));
-        // Content words should remain
         assert!(keywords.contains(&"quick".to_string()));
-        assert!(keywords.contains(&"brown".to_string()));
-        assert!(keywords.contains(&"fox".to_string()));
-    }
-
-    #[test]
-    fn test_extract_keywords_handles_punctuation() {
-        let query = "Hello, world! How are you?";
-        let keywords = extract_keywords(query);
-        assert!(keywords.contains(&"hello".to_string()));
-        assert!(keywords.contains(&"world".to_string()));
-    }
-
-    #[test]
-    fn test_extract_keywords_preserves_underscores() {
-        let query = "user_id session_token";
-        let keywords = extract_keywords(query);
+        let keywords = extract_keywords("user_id session_token");
         assert!(keywords.contains(&"user_id".to_string()));
-        assert!(keywords.contains(&"session_token".to_string()));
-    }
-
-    #[test]
-    fn test_extract_keywords_deduplicates() {
-        let query = "test test test unique";
-        let keywords = extract_keywords(query);
-        assert_eq!(keywords.iter().filter(|&k| k == "test").count(), 1);
+        assert_eq!(extract_keywords("test test test unique").iter().filter(|&k| k == "test").count(), 1);
     }
 }

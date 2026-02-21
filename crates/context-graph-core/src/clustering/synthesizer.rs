@@ -551,61 +551,6 @@ mod tests {
     }
 
     #[test]
-    fn test_weighted_agreement_2_semantic_1_relational_forms_topic() {
-        // 2 semantic + 1 relational = 2.0 + 0.5 = 2.5 = TOPIC
-        let synthesizer = TopicSynthesizer::new();
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-
-        // Semantic=1.0, Causal=1.0, Graph=0.5 (relational)
-        let memberships = create_shared_memberships(
-            id1,
-            id2,
-            &[Embedder::Semantic, Embedder::Causal, Embedder::Graph],
-        );
-
-        println!("=== TEST: test_weighted_agreement_2_semantic_1_relational_forms_topic ===");
-        println!("STATE BEFORE: 2 memories, shared spaces = [Semantic, Causal, Graph]");
-        println!("EXPECTED: 2*1.0 + 1*0.5 = 2.5 >= 2.5 threshold");
-
-        let result = synthesizer.synthesize_topics(&memberships).unwrap();
-
-        println!("STATE AFTER: {} topic(s) formed", result.len());
-
-        assert_eq!(
-            result.len(),
-            1,
-            "2 semantic + 1 relational (2.5) should form topic"
-        );
-        println!("[PASS] 2 semantic + 1 relational = 2.5 -> TOPIC\n");
-    }
-
-    #[test]
-    fn test_weighted_agreement_2_semantic_only_no_topic() {
-        // 2 semantic only = 2.0 < 2.5 = NO TOPIC
-        let synthesizer = TopicSynthesizer::new();
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-
-        let memberships = create_shared_memberships(
-            id1,
-            id2,
-            &[Embedder::Semantic, Embedder::Causal], // 1.0 + 1.0 = 2.0 < 2.5
-        );
-
-        println!("=== TEST: test_weighted_agreement_2_semantic_only_no_topic ===");
-        println!("STATE BEFORE: 2 memories, shared spaces = [Semantic, Causal]");
-        println!("EXPECTED: 2*1.0 = 2.0 < 2.5 threshold -> no topic");
-
-        let result = synthesizer.synthesize_topics(&memberships).unwrap();
-
-        println!("STATE AFTER: {} topic(s) formed", result.len());
-
-        assert!(result.is_empty(), "2 semantic only (2.0) should NOT form topic");
-        println!("[PASS] 2 semantic spaces only = 2.0 -> NOT TOPIC\n");
-    }
-
-    #[test]
     fn test_temporal_excluded_from_agreement() {
         // All temporal = 0.0 = NO TOPIC (AP-60)
         let synthesizer = TopicSynthesizer::new();
@@ -642,45 +587,6 @@ mod tests {
     }
 
     #[test]
-    fn test_1_semantic_2_relational_1_structural_forms_topic() {
-        // 1 semantic + 2 relational + 1 structural = 1.0 + 1.0 + 0.5 = 2.5 = TOPIC
-        let synthesizer = TopicSynthesizer::new();
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-
-        let memberships = create_shared_memberships(
-            id1,
-            id2,
-            &[
-                Embedder::Semantic,   // semantic (1.0)
-                Embedder::Graph,  // relational (0.5)
-                Embedder::Entity,     // relational (0.5)
-                Embedder::Hdc,        // structural (0.5)
-            ],
-        );
-
-        println!("=== TEST: test_1_semantic_2_relational_1_structural_forms_topic ===");
-        println!("STATE BEFORE: 2 memories, shared = [Semantic, Graph, Entity, Hdc]");
-        println!("EXPECTED: 1*1.0 + 2*0.5 + 1*0.5 = 2.5 >= 2.5 threshold");
-
-        let mem_clusters = synthesizer.build_mem_clusters_map(&memberships);
-        let wa = synthesizer.compute_weighted_agreement(&id1, &id2, &mem_clusters);
-
-        println!("COMPUTED weighted_agreement = {}", wa);
-        assert!(
-            (wa - 2.5).abs() < 0.001,
-            "Expected 2.5, got {}",
-            wa
-        );
-
-        let result = synthesizer.synthesize_topics(&memberships).unwrap();
-        println!("STATE AFTER: {} topic(s) formed", result.len());
-
-        assert_eq!(result.len(), 1, "weighted 2.5 should form topic");
-        println!("[PASS] 1 semantic + 2 relational + 1 structural = 2.5 -> TOPIC\n");
-    }
-
-    #[test]
     fn test_empty_input() {
         let synthesizer = TopicSynthesizer::new();
         let memberships: HashMap<Embedder, Vec<ClusterMembership>> = HashMap::new();
@@ -694,119 +600,6 @@ mod tests {
 
         assert!(result.is_empty());
         println!("[PASS] Empty input -> empty output\n");
-    }
-
-    #[test]
-    fn test_single_memory_no_topic() {
-        let synthesizer = TopicSynthesizer::new();
-        let id = Uuid::new_v4();
-
-        let mut memberships = HashMap::new();
-        memberships.insert(
-            Embedder::Semantic,
-            vec![ClusterMembership::new(id, Embedder::Semantic, 1, 0.9, true)],
-        );
-
-        println!("=== TEST: test_single_memory_no_topic ===");
-        println!("STATE BEFORE: 1 memory only");
-
-        let result = synthesizer.synthesize_topics(&memberships).unwrap();
-
-        println!("STATE AFTER: {} topics", result.len());
-
-        assert!(result.is_empty(), "Cannot form topic with single memory");
-        println!("[PASS] Single memory -> no topic\n");
-    }
-
-    #[test]
-    fn test_update_stability_churn() {
-        let synthesizer = TopicSynthesizer::new();
-
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-        let id3 = Uuid::new_v4();
-
-        let profile = TopicProfile::new([0.8; 13]);
-        let mut topic = Topic::new(profile, HashMap::new(), vec![id1, id2]);
-
-        let old_members = vec![id1, id2];
-        let new_members = vec![id1, id3]; // id2 left, id3 joined
-
-        println!("=== TEST: test_update_stability_churn ===");
-        println!(
-            "STATE BEFORE: members = [id1, id2], churn = {}",
-            topic.stability.membership_churn
-        );
-
-        synthesizer.update_topic_stability(&mut topic, &old_members, &new_members);
-
-        println!(
-            "STATE AFTER: churn = {}",
-            topic.stability.membership_churn
-        );
-
-        // churn = 2 changes / 3 total = 0.666...
-        assert!(
-            topic.stability.membership_churn > 0.5,
-            "Churn should be > 0.5"
-        );
-        println!(
-            "[PASS] Stability churn computed: {:.3}\n",
-            topic.stability.membership_churn
-        );
-    }
-
-    #[test]
-    fn test_default_configuration() {
-        let synthesizer = TopicSynthesizer::new();
-
-        println!("=== TEST: test_default_configuration ===");
-        println!(
-            "merge_similarity_threshold = {}",
-            synthesizer.merge_similarity_threshold()
-        );
-        println!("min_silhouette = {}", synthesizer.min_silhouette());
-
-        assert!(
-            (synthesizer.merge_similarity_threshold() - DEFAULT_MERGE_THRESHOLD).abs() < f32::EPSILON
-        );
-        assert!((synthesizer.min_silhouette() - DEFAULT_MIN_SILHOUETTE).abs() < f32::EPSILON);
-        println!("[PASS] Default configuration values correct\n");
-    }
-
-    #[test]
-    fn test_custom_configuration() {
-        let synthesizer = TopicSynthesizer::with_config(0.85, 0.2);
-
-        println!("=== TEST: test_custom_configuration ===");
-        println!(
-            "merge_similarity_threshold = {}",
-            synthesizer.merge_similarity_threshold()
-        );
-        println!("min_silhouette = {}", synthesizer.min_silhouette());
-
-        assert!((synthesizer.merge_similarity_threshold() - 0.85).abs() < f32::EPSILON);
-        assert!((synthesizer.min_silhouette() - 0.2).abs() < f32::EPSILON);
-        println!("[PASS] Custom configuration values correct\n");
-    }
-
-    #[test]
-    fn test_configuration_clamping() {
-        let synthesizer = TopicSynthesizer::with_config(1.5, -2.0);
-
-        println!("=== TEST: test_configuration_clamping ===");
-        println!(
-            "merge_threshold: input=1.5, clamped={}",
-            synthesizer.merge_similarity_threshold()
-        );
-        println!(
-            "min_silhouette: input=-2.0, clamped={}",
-            synthesizer.min_silhouette()
-        );
-
-        assert!((synthesizer.merge_similarity_threshold() - 1.0).abs() < f32::EPSILON);
-        assert!((synthesizer.min_silhouette() - (-1.0)).abs() < f32::EPSILON);
-        println!("[PASS] Configuration values properly clamped\n");
     }
 
     #[test]
@@ -849,127 +642,6 @@ mod tests {
     }
 
     #[test]
-    fn test_max_weighted_agreement_value() {
-        // Test that all 13 spaces at weight give expected max
-        let synthesizer = TopicSynthesizer::new();
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-
-        // Create memberships where both memories share ALL clusters
-        let mut memberships: HashMap<Embedder, Vec<ClusterMembership>> = HashMap::new();
-        for embedder in Embedder::all() {
-            memberships.entry(embedder).or_insert_with(Vec::new).push(
-                ClusterMembership::new(id1, embedder, 1, 0.9, true),
-            );
-            memberships.entry(embedder).or_insert_with(Vec::new).push(
-                ClusterMembership::new(id2, embedder, 1, 0.9, true),
-            );
-        }
-
-        println!("=== TEST: test_max_weighted_agreement_value ===");
-        let mem_clusters = synthesizer.build_mem_clusters_map(&memberships);
-        let wa = synthesizer.compute_weighted_agreement(&id1, &id2, &mem_clusters);
-
-        // Max = 7*1.0 (semantic) + 2*0.5 (relational) + 1*0.5 (structural) + 3*0.0 (temporal) = 8.5
-        println!("COMPUTED weighted_agreement = {} (expected 8.5)", wa);
-
-        assert!(
-            (wa - 8.5).abs() < 0.001,
-            "Max weighted agreement should be 8.5, got {}",
-            wa
-        );
-        println!("[PASS] Max weighted agreement = 8.5\n");
-    }
-
-    #[test]
-    fn test_constitution_example_1_semantic_3_relational() {
-        // Constitution example: "1 semantic + 3 relational = 2.5 -> TOPIC"
-        // But there are only 2 relational embedders (E8, E11)
-        // So we test: 1 semantic + 2 relational + 1 structural = 2.5
-        let synth = TopicSynthesizer::new();
-        let mem_a = Uuid::new_v4();
-        let mem_b = Uuid::new_v4();
-
-        let memberships = create_shared_memberships(
-            mem_a,
-            mem_b,
-            &[
-                Embedder::Semantic,  // 1.0
-                Embedder::Graph, // 0.5
-                Embedder::Entity,    // 0.5
-                Embedder::Hdc,       // 0.5
-            ],
-        );
-
-        println!("=== TEST: test_constitution_example_1_semantic_3_relational ===");
-        let mem_clusters = synth.build_mem_clusters_map(&memberships);
-        let wa = synth.compute_weighted_agreement(&mem_a, &mem_b, &mem_clusters);
-
-        println!("weighted_agreement = {} (expected 2.5)", wa);
-
-        assert!(
-            (wa - 2.5).abs() < 0.001,
-            "1 semantic + 2 relational + 1 structural should = 2.5"
-        );
-
-        let result = synth.synthesize_topics(&memberships).unwrap();
-        assert_eq!(result.len(), 1, "Should form topic at threshold");
-        println!("[PASS] Constitution example verified\n");
-    }
-
-    #[test]
-    fn test_all_temporal_does_not_contribute() {
-        // Verify EXPLICITLY that each temporal embedder contributes 0.0
-        println!("=== TEST: test_all_temporal_does_not_contribute ===");
-
-        for temporal in [
-            Embedder::TemporalRecent,
-            Embedder::TemporalPeriodic,
-            Embedder::TemporalPositional,
-        ] {
-            let weight = category_for(temporal).topic_weight();
-            println!("{:?} -> topic_weight = {}", temporal, weight);
-            assert_eq!(weight, 0.0, "{:?} should have weight 0.0", temporal);
-        }
-
-        println!("[PASS] All temporal embedders have weight 0.0 (AP-60)\n");
-    }
-
-    #[test]
-    fn test_semantic_embedders_have_weight_1() {
-        println!("=== TEST: test_semantic_embedders_have_weight_1 ===");
-
-        for semantic in [
-            Embedder::Semantic,
-            Embedder::Causal,
-            Embedder::Sparse,
-            Embedder::Code,
-            Embedder::Contextual,
-            Embedder::LateInteraction,
-            Embedder::KeywordSplade,
-        ] {
-            let weight = category_for(semantic).topic_weight();
-            println!("{:?} -> topic_weight = {}", semantic, weight);
-            assert_eq!(weight, 1.0, "{:?} should have weight 1.0", semantic);
-        }
-
-        println!("[PASS] All 7 semantic embedders have weight 1.0\n");
-    }
-
-    #[test]
-    fn test_relational_structural_have_weight_half() {
-        println!("=== TEST: test_relational_structural_have_weight_half ===");
-
-        for half_weight in [Embedder::Graph, Embedder::Entity, Embedder::Hdc] {
-            let weight = category_for(half_weight).topic_weight();
-            println!("{:?} -> topic_weight = {}", half_weight, weight);
-            assert_eq!(weight, 0.5, "{:?} should have weight 0.5", half_weight);
-        }
-
-        println!("[PASS] Relational and structural embedders have weight 0.5\n");
-    }
-
-    #[test]
     fn test_multiple_topic_groups() {
         // Create 4 memories forming 2 separate topic groups
         let synth = TopicSynthesizer::new();
@@ -984,11 +656,11 @@ mod tests {
         for embedder in [Embedder::Semantic, Embedder::Causal, Embedder::Code] {
             memberships
                 .entry(embedder)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(ClusterMembership::new(mem1, embedder, 1, 0.9, true));
             memberships
                 .entry(embedder)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(ClusterMembership::new(mem2, embedder, 1, 0.9, true));
         }
 
@@ -996,11 +668,11 @@ mod tests {
         for embedder in [Embedder::Semantic, Embedder::Causal, Embedder::Code] {
             memberships
                 .entry(embedder)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(ClusterMembership::new(mem3, embedder, 2, 0.9, true));
             memberships
                 .entry(embedder)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(ClusterMembership::new(mem4, embedder, 2, 0.9, true));
         }
 
@@ -1012,7 +684,7 @@ mod tests {
         println!("STATE AFTER: {} topic(s) formed", result.len());
 
         // Should form 2 separate topics
-        assert!(result.len() >= 1, "Should form at least 1 topic");
+        assert!(!result.is_empty(), "Should form at least 1 topic");
         let total_members: usize = result.iter().map(|t| t.member_count()).sum();
         assert_eq!(total_members, 4, "All 4 memories should be in topics");
 

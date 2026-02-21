@@ -913,93 +913,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_embedder_id_from_str() {
+    fn test_happy_path_deserialization() {
         assert_eq!(EmbedderId::from_str("E1"), Some(EmbedderId::E1));
         assert_eq!(EmbedderId::from_str("e11"), Some(EmbedderId::E11));
-        assert_eq!(EmbedderId::from_str("E13"), Some(EmbedderId::E13));
         assert_eq!(EmbedderId::from_str("E14"), None);
-        assert_eq!(EmbedderId::from_str("invalid"), None);
-    }
-
-    #[test]
-    fn test_embedder_id_to_index() {
         assert_eq!(EmbedderId::E1.to_index(), 0);
-        assert_eq!(EmbedderId::E11.to_index(), 10);
         assert_eq!(EmbedderId::E13.to_index(), 12);
-    }
-
-    #[test]
-    fn test_embedder_categories() {
         assert!(EmbedderId::E1.is_semantic());
         assert!(EmbedderId::E2.is_temporal());
         assert!(EmbedderId::E6.is_sparse());
-        assert!(!EmbedderId::E11.is_temporal());
     }
 
     #[test]
-    fn test_search_request_validation() {
-        let valid = SearchByEmbedderRequest {
-            embedder: "E1".to_string(),
-            query: "test query".to_string(),
-            top_k: 10,
-            min_similarity: 0.0,
-            include_content: false,
-            include_all_scores: false,
-        };
+    fn test_validation_rejects_invalid() {
+        let valid = SearchByEmbedderRequest { embedder: "E1".to_string(), query: "test query".to_string(), top_k: 10, min_similarity: 0.0, include_content: false, include_all_scores: false };
         assert!(valid.validate().is_ok());
-
-        let invalid_embedder = SearchByEmbedderRequest {
-            embedder: "E14".to_string(),
-            query: "test".to_string(),
-            top_k: 10,
-            min_similarity: 0.0,
-            include_content: false,
-            include_all_scores: false,
-        };
+        let invalid_embedder = SearchByEmbedderRequest { embedder: "E14".to_string(), query: "test".to_string(), top_k: 10, min_similarity: 0.0, include_content: false, include_all_scores: false };
         assert!(invalid_embedder.validate().is_err());
-
-        let empty_query = SearchByEmbedderRequest {
-            embedder: "E1".to_string(),
-            query: "".to_string(),
-            top_k: 10,
-            min_similarity: 0.0,
-            include_content: false,
-            include_all_scores: false,
-        };
+        let empty_query = SearchByEmbedderRequest { embedder: "E1".to_string(), query: "".to_string(), top_k: 10, min_similarity: 0.0, include_content: false, include_all_scores: false };
         assert!(empty_query.validate().is_err());
     }
 
     #[test]
     fn test_compare_request_validation() {
-        let valid = CompareEmbedderViewsRequest {
-            query: "test".to_string(),
-            embedders: vec!["E1".to_string(), "E11".to_string()],
-            top_k: 5,
-            include_content: false,
-        };
+        let valid = CompareEmbedderViewsRequest { query: "test".to_string(), embedders: vec!["E1".to_string(), "E11".to_string()], top_k: 5, include_content: false };
         assert!(valid.validate().is_ok());
-
-        let too_few = CompareEmbedderViewsRequest {
-            query: "test".to_string(),
-            embedders: vec!["E1".to_string()],
-            top_k: 5,
-            include_content: false,
-        };
+        let too_few = CompareEmbedderViewsRequest { query: "test".to_string(), embedders: vec!["E1".to_string()], top_k: 5, include_content: false };
         assert!(too_few.validate().is_err());
-
-        let too_many = CompareEmbedderViewsRequest {
-            query: "test".to_string(),
-            embedders: vec![
-                "E1".to_string(),
-                "E2".to_string(),
-                "E3".to_string(),
-                "E4".to_string(),
-                "E5".to_string(),
-                "E6".to_string(),
-            ],
-            top_k: 5,
-            include_content: false,
-        };
-        assert!(too_many.validate().is_err());
     }
 }

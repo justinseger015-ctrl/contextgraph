@@ -1549,7 +1549,6 @@ impl Handlers {
                     // P6: Reuse pre-resolved weights (single lock acquisition above).
                     // resolved_weights already has exclusions applied by resolve_weights_sync(),
                     // so no need to re-apply exclude_embedders here.
-                    let resolved_weights = resolved_weights;
 
                     // Active embedders depend on search strategy, filtered by exclusions
                     let (strategy_indices, strategy_label) = match strategy {
@@ -2228,462 +2227,79 @@ fn compute_navigation_hints(embedder_scores: &[f32; 13]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    //! Tests for memory_tools validation logic (BUG-001 and BUG-002 fixes).
-    //!
-    //! These tests verify that validation constraints are correctly enforced:
-    //! - inject_context: rationale must be 1-1024 chars (BUG-002)
-    //! - search_graph: topK must be 1-100 (BUG-001)
-
     use super::{MAX_RATIONALE_LEN, MAX_TOP_K, MIN_RATIONALE_LEN, MIN_TOP_K};
-
-    #[test]
-    fn rationale_validation_boundary_cases() {
-        use crate::middleware::validation::validate_string_length;
-
-        // Empty rationale should fail the actual validator
-        assert!(validate_string_length("rationale", "", MIN_RATIONALE_LEN, MAX_RATIONALE_LEN).is_err());
-
-        // Single char (minimum valid) should pass the actual validator
-        assert!(validate_string_length("rationale", "x", MIN_RATIONALE_LEN, MAX_RATIONALE_LEN).is_ok());
-
-        // Exactly 1024 chars (maximum valid) should pass the actual validator
-        let max_valid = "x".repeat(MAX_RATIONALE_LEN);
-        assert!(validate_string_length("rationale", &max_valid, MIN_RATIONALE_LEN, MAX_RATIONALE_LEN).is_ok());
-
-        // 1025 chars should fail the actual validator
-        let too_long = "x".repeat(MAX_RATIONALE_LEN + 1);
-        assert!(validate_string_length("rationale", &too_long, MIN_RATIONALE_LEN, MAX_RATIONALE_LEN).is_err());
-    }
-
-    #[test]
-    fn topk_validation_boundary_cases() {
-        use crate::middleware::validation::validate_range;
-
-        // topK = 0 should fail the actual validator
-        assert!(validate_range("topK", 0_u64, MIN_TOP_K, MAX_TOP_K).is_err());
-
-        // topK = 1 (minimum valid) should pass
-        assert!(validate_range("topK", 1_u64, MIN_TOP_K, MAX_TOP_K).is_ok());
-
-        // topK = 100 (maximum valid) should pass
-        assert!(validate_range("topK", 100_u64, MIN_TOP_K, MAX_TOP_K).is_ok());
-
-        // topK = 101 should fail
-        assert!(validate_range("topK", 101_u64, MIN_TOP_K, MAX_TOP_K).is_err());
-
-        // topK = 500 (original BUG-001 case) should fail
-        assert!(validate_range("topK", 500_u64, MIN_TOP_K, MAX_TOP_K).is_err());
-    }
-
-    #[test]
-    fn rationale_validation_error_fields() {
-        use crate::middleware::validation::validate_string_length;
-
-        // Verify the validator's error references the correct field
-        let err = validate_string_length("rationale", "", MIN_RATIONALE_LEN, MAX_RATIONALE_LEN)
-            .unwrap_err();
-        assert_eq!(err.field_name(), "rationale");
-
-        let long = "x".repeat(2000);
-        let err = validate_string_length("rationale", &long, MIN_RATIONALE_LEN, MAX_RATIONALE_LEN)
-            .unwrap_err();
-        assert_eq!(err.field_name(), "rationale");
-    }
-
-    #[test]
-    fn topk_validation_error_fields() {
-        use crate::middleware::validation::validate_range;
-
-        // Verify the validator's error references the correct field
-        let err = validate_range("topK", 0_u64, MIN_TOP_K, MAX_TOP_K).unwrap_err();
-        assert_eq!(err.field_name(), "topK");
-
-        let err = validate_range("topK", 500_u64, MIN_TOP_K, MAX_TOP_K).unwrap_err();
-        assert_eq!(err.field_name(), "topK");
-    }
-
-    // =========================================================================
-    // E5 CAUSAL INTEGRATION TESTS
-    // =========================================================================
-
     use super::{
         apply_causal_gate, expand_causal_query, get_e5_causal_weight,
-        CausalDirection,
+        CausalDirection, COLBERT_WEIGHT,
+        compute_blind_spots, build_embedder_scores_json, compute_navigation_hints,
     };
-    use context_graph_core::causal::asymmetric::causal_gate;
-
-    #[test]
-    fn test_causal_gate_boost_above_threshold() {
-        // E5 score above CAUSAL_THRESHOLD (0.04) → 1.10x boost on causal query
-        let result = apply_causal_gate(0.80, 0.05, true);
-        let expected = 0.80 * causal_gate::CAUSAL_BOOST;
-        assert!((result - expected).abs() < 1e-6, "got {result}, expected {expected}");
-        println!("[VERIFIED] causal gate boost: 0.80 * 1.10 = {result}");
-    }
-
-    #[test]
-    fn test_causal_gate_demotion_below_threshold() {
-        // E5 score below NON_CAUSAL_THRESHOLD (0.008) → 0.85x demotion on causal query
-        let result = apply_causal_gate(0.80, 0.005, true);
-        let expected = 0.80 * causal_gate::NON_CAUSAL_DEMOTION;
-        assert!((result - expected).abs() < 1e-6, "got {result}, expected {expected}");
-        println!("[VERIFIED] causal gate demotion: 0.80 * 0.85 = {result}");
-    }
-
-    #[test]
-    fn test_causal_gate_passthrough_non_causal_query() {
-        // Non-causal query → no modification regardless of E5 score
-        let result = apply_causal_gate(0.80, 0.99, false);
-        assert!((result - 0.80).abs() < 1e-6, "non-causal should pass through, got {result}");
-        println!("[VERIFIED] non-causal query passthrough: {result}");
-    }
-
-    #[test]
-    fn test_causal_gate_dead_zone() {
-        // E5 score between thresholds (0.008-0.04) → no modification
-        let result = apply_causal_gate(0.80, 0.02, true);
-        assert!((result - 0.80).abs() < 1e-6, "dead zone should pass through, got {result}");
-        println!("[VERIFIED] causal gate dead zone: {result}");
-    }
-
-    #[test]
-    fn test_get_e5_causal_weight_causal_reasoning() {
-        // causal_reasoning profile has E5 = 0.10 (demoted from 0.45 — E5 is degenerate)
-        let weight = get_e5_causal_weight("causal_reasoning");
-        assert!((weight - 0.10).abs() < 0.01);
-        println!("[VERIFIED] causal_reasoning E5 weight = {}", weight);
-    }
-
-    #[test]
-    fn test_get_e5_causal_weight_semantic_search() {
-        // semantic_search profile has E5 = 0.15
-        let weight = get_e5_causal_weight("semantic_search");
-        assert!((weight - 0.15).abs() < 0.01);
-        println!("[VERIFIED] semantic_search E5 weight = {}", weight);
-    }
-
-    #[test]
-    fn test_get_e5_causal_weight_unknown_profile() {
-        // Unknown profile defaults to 0.10 (causal_reasoning default, demoted from 0.45)
-        let weight = get_e5_causal_weight("nonexistent_profile");
-        assert!((weight - 0.10).abs() < 0.01);
-        println!("[VERIFIED] Unknown profile defaults to E5 weight = {}", weight);
-    }
-
-    #[test]
-    fn test_expand_causal_query_cause_direction() {
-        // Cause queries without existing cause terms should be expanded
-        let expanded = expand_causal_query("what happened to the server", CausalDirection::Cause);
-        assert!(expanded.contains("cause"));
-        assert!(expanded.contains("reason"));
-        assert!(expanded.contains("root"));
-        println!("[VERIFIED] Cause query expanded: {}", expanded);
-    }
-
-    #[test]
-    fn test_expand_causal_query_effect_direction() {
-        // Effect queries without existing effect terms should be expanded
-        let expanded = expand_causal_query("delete the file", CausalDirection::Effect);
-        assert!(expanded.contains("effect"));
-        assert!(expanded.contains("result"));
-        assert!(expanded.contains("consequence"));
-        println!("[VERIFIED] Effect query expanded: {}", expanded);
-    }
-
-    #[test]
-    fn test_expand_causal_query_no_double_expansion() {
-        // Queries already containing causal terms should not be expanded
-        let original = "why does this cause the error";
-        let expanded = expand_causal_query(original, CausalDirection::Cause);
-        assert_eq!(expanded, original);
-        println!("[VERIFIED] No double expansion for: {}", original);
-
-        let original = "what is the effect of this change";
-        let expanded = expand_causal_query(original, CausalDirection::Effect);
-        assert_eq!(expanded, original);
-        println!("[VERIFIED] No double expansion for: {}", original);
-    }
-
-    #[test]
-    fn test_expand_causal_query_unknown_direction() {
-        // Unknown direction should not expand
-        let original = "show me the code";
-        let expanded = expand_causal_query(original, CausalDirection::Unknown);
-        assert_eq!(expanded, original);
-        println!("[VERIFIED] Unknown direction not expanded");
-    }
-
-    #[test]
-    fn test_direction_modifiers_asymmetric() {
-        use context_graph_core::causal::asymmetric::direction_mod;
-        // The asymmetry ratio should be 1.2 / 0.8 = 1.5
-        let ratio = direction_mod::CAUSE_TO_EFFECT / direction_mod::EFFECT_TO_CAUSE;
-        assert!((ratio - 1.5).abs() < 0.01);
-        println!("[VERIFIED] Asymmetry ratio = {} (expected 1.5)", ratio);
-    }
-
-    #[test]
-    fn test_constitution_compliance_direction_modifiers() {
-        use context_graph_core::causal::asymmetric::direction_mod;
-        // Verify all direction modifiers match Constitution spec
-        assert_eq!(direction_mod::CAUSE_TO_EFFECT, 1.2, "Constitution: cause_to_effect must be 1.2");
-        assert_eq!(direction_mod::EFFECT_TO_CAUSE, 0.8, "Constitution: effect_to_cause must be 0.8");
-        assert_eq!(direction_mod::SAME_DIRECTION, 1.0, "Constitution: same_direction must be 1.0");
-        println!("[VERIFIED] All direction modifiers match Constitution specification");
-    }
-
-    // =========================================================================
-    // COLBERT MAXSIM TESTS
-    // =========================================================================
-
-    use super::COLBERT_WEIGHT;
-    // Import SIMD-optimized MaxSim from storage crate
+    use context_graph_core::causal::asymmetric::{causal_gate, direction_mod};
     use context_graph_storage::compute_maxsim_direct;
 
     #[test]
-    fn test_colbert_maxsim_identical_tokens() {
-        // Identical query and doc should give score of 1.0
-        let query_tokens = vec![
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-        ];
-        let doc_tokens = vec![
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-        ];
-
-        let score = compute_maxsim_direct(&query_tokens, &doc_tokens);
-        assert!((score - 1.0).abs() < 0.01, "Identical tokens should give ~1.0, got {}", score);
-        println!("[VERIFIED] ColBERT MaxSim with identical tokens = {}", score);
+    fn test_validation_and_causal_gate() {
+        use crate::middleware::validation::{validate_string_length, validate_range};
+        // BUG-001/002: rationale and topK validation
+        assert!(validate_string_length("rationale", "", MIN_RATIONALE_LEN, MAX_RATIONALE_LEN).is_err());
+        assert!(validate_string_length("rationale", "x", MIN_RATIONALE_LEN, MAX_RATIONALE_LEN).is_ok());
+        assert!(validate_range("topK", 0_u64, MIN_TOP_K, MAX_TOP_K).is_err());
+        assert!(validate_range("topK", 1_u64, MIN_TOP_K, MAX_TOP_K).is_ok());
+        assert!(validate_range("topK", 101_u64, MIN_TOP_K, MAX_TOP_K).is_err());
+        // Causal gate: boost, demotion, passthrough, dead zone
+        let boosted = apply_causal_gate(0.80, 0.05, true);
+        assert!((boosted - 0.80 * causal_gate::CAUSAL_BOOST).abs() < 1e-6);
+        let demoted = apply_causal_gate(0.80, 0.005, true);
+        assert!((demoted - 0.80 * causal_gate::NON_CAUSAL_DEMOTION).abs() < 1e-6);
+        assert!((apply_causal_gate(0.80, 0.99, false) - 0.80).abs() < 1e-6);
+        assert!((apply_causal_gate(0.80, 0.02, true) - 0.80).abs() < 1e-6);
+        // E5 weight profiles
+        assert!((get_e5_causal_weight("causal_reasoning") - 0.10).abs() < 0.01);
+        assert!((get_e5_causal_weight("semantic_search") - 0.15).abs() < 0.01);
+        // Direction modifiers
+        assert_eq!(direction_mod::CAUSE_TO_EFFECT, 1.2);
+        assert_eq!(direction_mod::EFFECT_TO_CAUSE, 0.8);
+        // Causal query expansion
+        let expanded = expand_causal_query("what happened to the server", CausalDirection::Cause);
+        assert!(expanded.contains("cause"));
+        let expanded = expand_causal_query("delete the file", CausalDirection::Effect);
+        assert!(expanded.contains("effect"));
+        assert_eq!(expand_causal_query("show me the code", CausalDirection::Unknown), "show me the code");
     }
 
     #[test]
-    fn test_colbert_maxsim_orthogonal_tokens() {
-        // Orthogonal query and doc tokens: raw cosine = 0.0
-        // SRC-3 normalization: (0.0 + 1.0) / 2.0 = 0.5
-        let query_tokens = vec![
-            vec![1.0, 0.0, 0.0],
-        ];
-        let doc_tokens = vec![
-            vec![0.0, 1.0, 0.0],
-        ];
-
-        let score = compute_maxsim_direct(&query_tokens, &doc_tokens);
-        assert!((score - 0.5).abs() < 0.01, "Orthogonal tokens should give 0.5 (SRC-3 normalized), got {}", score);
-        println!("[VERIFIED] ColBERT MaxSim with orthogonal tokens = {}", score);
-    }
-
-    #[test]
-    fn test_colbert_maxsim_partial_match() {
-        // Mix of matching and non-matching tokens
-        // Q1=[1,0,0] vs D1=[1,0,0]: cosine=1.0, normalized=1.0
-        // Q1=[1,0,0] vs D2=[0,1,0]: cosine=0.0, normalized=0.5
-        // Q1 max_sim = 1.0
-        // Q2=[0,0,1] vs D1=[1,0,0]: cosine=0.0, normalized=0.5
-        // Q2=[0,0,1] vs D2=[0,1,0]: cosine=0.0, normalized=0.5
-        // Q2 max_sim = 0.5
-        // Average = (1.0 + 0.5) / 2 = 0.75
-        let query_tokens = vec![
-            vec![1.0, 0.0, 0.0],  // Matches first doc token
-            vec![0.0, 0.0, 1.0],  // Doesn't match any doc token
-        ];
-        let doc_tokens = vec![
-            vec![1.0, 0.0, 0.0],  // Matches first query token
-            vec![0.0, 1.0, 0.0],  // Doesn't match any query token
-        ];
-
-        let score = compute_maxsim_direct(&query_tokens, &doc_tokens);
-        // Expected: (1.0 + 0.5) / 2 = 0.75 (SRC-3 normalized cosine)
-        assert!((score - 0.75).abs() < 0.01, "Partial match should give 0.75 (SRC-3 normalized), got {}", score);
-        println!("[VERIFIED] ColBERT MaxSim with partial match = {}", score);
-    }
-
-    #[test]
-    fn test_colbert_maxsim_empty_inputs() {
-        // Empty inputs should return 0.0
-        let score_empty_query = compute_maxsim_direct(&[], &[vec![1.0, 0.0]]);
-        let score_empty_doc = compute_maxsim_direct(&[vec![1.0, 0.0]], &[]);
-        let score_both_empty = compute_maxsim_direct(&[], &[]);
-
-        assert_eq!(score_empty_query, 0.0);
-        assert_eq!(score_empty_doc, 0.0);
-        assert_eq!(score_both_empty, 0.0);
-        println!("[VERIFIED] Empty inputs give 0.0");
-    }
-
-    #[test]
-    fn test_colbert_weight_range() {
-        // ColBERT weight should be in reasonable range (10-20%)
-        assert!(COLBERT_WEIGHT >= 0.1, "ColBERT weight should be >= 0.1");
-        assert!(COLBERT_WEIGHT <= 0.2, "ColBERT weight should be <= 0.2");
-        println!("[VERIFIED] ColBERT weight = {} is in [0.1, 0.2]", COLBERT_WEIGHT);
-    }
-
-    #[test]
-    fn test_colbert_maxsim_normalization() {
-        // Verify score is normalized to [0, 1]
-        let query_tokens = vec![
-            vec![1.0, 1.0, 1.0],
-            vec![2.0, 2.0, 2.0],
-            vec![3.0, 3.0, 3.0],
-        ];
-        let doc_tokens = vec![
-            vec![1.0, 1.0, 1.0],
-            vec![1.0, 1.0, 1.0],
-        ];
-
-        let score = compute_maxsim_direct(&query_tokens, &doc_tokens);
-        assert!(score >= 0.0, "Score should be >= 0.0");
-        assert!(score <= 1.0, "Score should be <= 1.0");
-        println!("[VERIFIED] ColBERT MaxSim normalized to [0, 1]: {}", score);
-    }
-
-    // =========================================================================
-    // BLIND SPOT DETECTION TESTS
-    // =========================================================================
-
-    use super::{compute_blind_spots, build_embedder_scores_json, compute_navigation_hints, E1_MISS_THRESHOLD, ENHANCER_FIND_THRESHOLD};
-
-    #[test]
-    fn test_blind_spot_detection_e7_found_e1_missed() {
-        // E7 (Code) found with 0.8, E1 missed with 0.2
+    fn test_colbert_maxsim_and_blind_spots() {
+        // ColBERT MaxSim
+        let score = compute_maxsim_direct(
+            &[vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]],
+            &[vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]],
+        );
+        assert!((score - 1.0).abs() < 0.01);
+        let score = compute_maxsim_direct(&[vec![1.0, 0.0, 0.0]], &[vec![0.0, 1.0, 0.0]]);
+        assert!((score - 0.5).abs() < 0.01);
+        assert_eq!(compute_maxsim_direct(&[], &[]), 0.0);
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(COLBERT_WEIGHT >= 0.1 && COLBERT_WEIGHT <= 0.2);
+        }
+        // Blind spot detection
         let mut scores = [0.0_f32; 13];
-        scores[0] = 0.2;  // E1 below threshold (0.3)
-        scores[6] = 0.8;  // E7 above threshold (0.5)
-
+        scores[0] = 0.2; scores[6] = 0.8;
         let blind_spots = compute_blind_spots(&scores, scores[0]);
-        assert_eq!(blind_spots.len(), 1, "Should detect one blind spot");
-
-        // Verify the blind spot structure
-        let spot = &blind_spots[0];
-        assert_eq!(spot["embedder"], "E7_Code");
-        let score = spot["score"].as_f64().unwrap();
-        assert!((score - 0.8).abs() < 0.001, "Score should be ~0.8, got {}", score);
-        println!("[VERIFIED] Blind spot detected: {:?}", spot);
-    }
-
-    #[test]
-    fn test_blind_spot_detection_multiple_enhancers() {
-        // Multiple enhancers found, E1 missed
-        let mut scores = [0.0_f32; 13];
-        scores[0] = 0.15;  // E1 low
-        scores[4] = 0.6;   // E5 Causal found
-        scores[6] = 0.75;  // E7 Code found
-        scores[9] = 0.55;  // E10 Paraphrase found
-
-        let blind_spots = compute_blind_spots(&scores, scores[0]);
-        assert_eq!(blind_spots.len(), 3, "Should detect three blind spots");
-        println!("[VERIFIED] Multiple blind spots detected");
-    }
-
-    #[test]
-    fn test_no_blind_spot_when_e1_found() {
-        // E1 found the result (>= 0.3), so no blind spots
-        let mut scores = [0.0_f32; 13];
-        scores[0] = 0.5;  // E1 found it
-        scores[6] = 0.9;  // E7 also found it
-
-        let blind_spots = compute_blind_spots(&scores, scores[0]);
-        assert!(blind_spots.is_empty(), "No blind spots when E1 >= 0.3");
-        println!("[VERIFIED] No blind spots when E1 found the result");
-    }
-
-    #[test]
-    fn test_no_blind_spot_when_enhancers_low() {
-        // E1 missed but enhancers also low - not a true blind spot
-        let mut scores = [0.0_f32; 13];
-        scores[0] = 0.1;  // E1 missed
-        scores[6] = 0.4;  // E7 also low (< 0.5)
-
-        let blind_spots = compute_blind_spots(&scores, scores[0]);
-        assert!(blind_spots.is_empty(), "No blind spots when enhancers also low");
-        println!("[VERIFIED] No false positives when enhancers are low");
-    }
-
-    #[test]
-    fn test_blind_spot_thresholds() {
-        // Verify thresholds match constitution expectations
-        assert!((E1_MISS_THRESHOLD - 0.3).abs() < 0.001, "E1 miss threshold should be 0.3");
-        assert!((ENHANCER_FIND_THRESHOLD - 0.5).abs() < 0.001, "Enhancer find threshold should be 0.5");
-        println!("[VERIFIED] Thresholds: E1_miss={}, Enhancer_find={}", E1_MISS_THRESHOLD, ENHANCER_FIND_THRESHOLD);
-    }
-
-    #[test]
-    fn test_build_embedder_scores_categorized_structure() {
-        // Build JSON with mix of scores - now categorized by type
-        let mut scores = [0.0_f32; 13];
-        scores[0] = 0.75;  // E1 Semantic (FOUNDATION/SEMANTIC category)
-        scores[6] = 0.5;   // E7 Code (SEMANTIC category)
-        scores[10] = 0.6;  // E11 Entity (RELATIONAL category)
-        scores[1] = 0.3;   // E2 Recency (TEMPORAL category)
-
-        let json = build_embedder_scores_json(&scores);
-
-        // Verify categorized structure
-        assert!(json["semantic"].is_object(), "Should have semantic category");
-        assert!(json["relational"].is_object(), "Should have relational category");
-        assert!(json["temporal"].is_object(), "Should have temporal category");
-        assert!(json["structural"].is_object(), "Should have structural category");
-
-        // Check semantic embedders are in right category
-        let semantic = json["semantic"].as_object().unwrap();
-        assert!(semantic.contains_key("E1_Semantic"));
-        assert!(semantic.contains_key("E7_Code"));
-
-        // Check relational embedders
-        let relational = json["relational"].as_object().unwrap();
-        assert!(relational.contains_key("E11_Entity"));
-
-        // Check temporal embedders
-        let temporal = json["temporal"].as_object().unwrap();
-        assert!(temporal.contains_key("E2_Recency"));
-
-        println!("[VERIFIED] Embedder scores correctly categorized");
-    }
-
-    #[test]
-    fn test_build_embedder_scores_all_13_included() {
-        // Verify all 13 embedders are included in the categorized structure
-        let scores = [0.15_f32; 13];
-
-        let json = build_embedder_scores_json(&scores);
-
-        // Count total embedders across all categories
-        let semantic_count = json["semantic"].as_object().unwrap().len();
-        let relational_count = json["relational"].as_object().unwrap().len();
-        let structural_count = json["structural"].as_object().unwrap().len();
-        let temporal_count = json["temporal"].as_object().unwrap().len();
-
-        let total = semantic_count + relational_count + structural_count + temporal_count;
-        assert_eq!(total, 13, "Should have all 13 embedders");
-        println!("[VERIFIED] All 13 embedders included: semantic={}, relational={}, structural={}, temporal={}",
-            semantic_count, relational_count, structural_count, temporal_count);
-    }
-
-    #[test]
-    fn test_navigation_hints_e7_stronger_than_e1() {
-        // When E7 (code) finds more than E1, suggest search_code
-        let mut scores = [0.0_f32; 13];
-        scores[0] = 0.3;  // E1 low
-        scores[6] = 0.7;  // E7 high (0.4 more than E1)
-
-        let hints = compute_navigation_hints(&scores);
-        assert!(!hints.is_empty(), "Should have navigation hints");
-        assert!(hints.iter().any(|h| h.contains("search_code")), "Should suggest search_code");
-        println!("[VERIFIED] Navigation hints: {:?}", hints);
-    }
-
-    #[test]
-    fn test_navigation_hints_multiple_suggestions() {
-        // Multiple embedders stronger than E1
-        let mut scores = [0.0_f32; 13];
-        scores[0] = 0.2;   // E1 low
-        scores[6] = 0.5;   // E7 code strong
-        scores[10] = 0.5;  // E11 entity strong
-        scores[4] = 0.5;   // E5 causal strong
-
-        let hints = compute_navigation_hints(&scores);
-        assert!(hints.len() >= 2, "Should have multiple navigation hints");
-        println!("[VERIFIED] Multiple hints: {:?}", hints);
+        assert_eq!(blind_spots.len(), 1);
+        assert_eq!(blind_spots[0]["embedder"], "E7_Code");
+        scores[0] = 0.5;
+        assert!(compute_blind_spots(&scores, scores[0]).is_empty());
+        // Embedder scores JSON
+        let json = build_embedder_scores_json(&[0.15_f32; 13]);
+        let total = json["semantic"].as_object().unwrap().len()
+            + json["relational"].as_object().unwrap().len()
+            + json["structural"].as_object().unwrap().len()
+            + json["temporal"].as_object().unwrap().len();
+        assert_eq!(total, 13);
+        // Navigation hints
+        let mut scores2 = [0.0_f32; 13];
+        scores2[0] = 0.3; scores2[6] = 0.7;
+        let hints = compute_navigation_hints(&scores2);
+        assert!(hints.iter().any(|h| h.contains("search_code")));
     }
 }

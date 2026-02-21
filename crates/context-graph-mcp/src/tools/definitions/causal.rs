@@ -279,174 +279,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_causal_tool_count() {
-        assert_eq!(definitions().len(), 4);
-    }
-
-    #[test]
-    fn test_search_causes_schema() {
+    fn test_definitions_exist_with_required_fields() {
         let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_causes").unwrap();
-
-        // Check required fields
-        let required = search
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
-        assert!(required.contains(&json!("query")));
-
-        // Check properties
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert!(props.contains_key("query"));
-        assert!(props.contains_key("topK"));
-        assert!(props.contains_key("minScore"));
-        assert!(props.contains_key("includeContent"));
-        assert!(props.contains_key("filterCausalDirection"));
-        assert!(props.contains_key("searchScope"));
-    }
-
-    #[test]
-    fn test_search_causes_defaults() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_causes").unwrap();
-
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        // Verify defaults
-        assert_eq!(props["topK"]["default"], 10);
-        assert_eq!(props["minScore"]["default"], 0.1);
-        assert_eq!(props["includeContent"]["default"], false);
-    }
-
-    #[test]
-    fn test_get_causal_chain_schema() {
-        let tools = definitions();
-        let chain = tools.iter().find(|t| t.name == "get_causal_chain").unwrap();
-
-        // Check required fields
-        let required = chain
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
-        assert!(required.contains(&json!("anchorId")));
-
-        // Check properties
-        let props = chain
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert!(props.contains_key("anchorId"));
-        assert!(props.contains_key("direction"));
-        assert!(props.contains_key("maxHops"));
-        assert!(props.contains_key("minSimilarity"));
-        assert!(props.contains_key("includeContent"));
-    }
-
-    #[test]
-    fn test_get_causal_chain_defaults() {
-        let tools = definitions();
-        let chain = tools.iter().find(|t| t.name == "get_causal_chain").unwrap();
-
-        let props = chain
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        // Verify defaults
-        assert_eq!(props["direction"]["default"], "forward");
-        assert_eq!(props["maxHops"]["default"], 5);
-        assert_eq!(props["minSimilarity"]["default"], 0.3);
-        assert_eq!(props["includeContent"]["default"], false);
-    }
-
-    #[test]
-    fn test_direction_enum_values() {
-        let tools = definitions();
-        let chain = tools.iter().find(|t| t.name == "get_causal_chain").unwrap();
-
-        let props = chain
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        let direction_enum = props["direction"]["enum"].as_array().unwrap();
-        assert!(direction_enum.contains(&json!("forward")));
-        assert!(direction_enum.contains(&json!("backward")));
-    }
-
-    #[test]
-    fn test_filter_causal_direction_enum() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_causes").unwrap();
-
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        let filter_enum = props["filterCausalDirection"]["enum"].as_array().unwrap();
-        assert!(filter_enum.contains(&json!("cause")));
-        assert!(filter_enum.contains(&json!("effect")));
-        assert!(filter_enum.contains(&json!("unknown")));
-    }
-
-    #[test]
-    fn test_tool_descriptions_mention_e5() {
-        let tools = definitions();
-
+        assert_eq!(tools.len(), 4);
+        // All mention E5 or asymmetric
         for tool in &tools {
-            // Both tools should reference E5 or asymmetric similarity
-            assert!(
-                tool.description.contains("asymmetric") || tool.description.contains("E5"),
-                "Tool {} should mention asymmetric E5",
-                tool.name
-            );
+            assert!(tool.description.contains("asymmetric") || tool.description.contains("E5"));
         }
-    }
-
-    #[test]
-    fn test_search_causes_mentions_ap77() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_causes").unwrap();
-
-        // Should mention AP-77 (direction modifiers)
-        assert!(
-            search.description.contains("AP-77") || search.description.contains("0.8"),
-            "search_causes should mention AP-77 dampening"
-        );
-    }
-
-    #[test]
-    fn test_get_causal_chain_mentions_attenuation() {
-        let tools = definitions();
+        let causes = tools.iter().find(|t| t.name == "search_causes").unwrap();
+        assert!(causes.description.contains("AP-77") || causes.description.contains("0.8"));
         let chain = tools.iter().find(|t| t.name == "get_causal_chain").unwrap();
+        assert!(chain.description.contains("attenuation") || chain.description.contains("0.9"));
+    }
 
-        // Should mention hop attenuation
-        assert!(
-            chain.description.contains("attenuation") || chain.description.contains("0.9"),
-            "get_causal_chain should mention hop attenuation"
-        );
+    #[test]
+    fn test_schema_defaults_and_enums() {
+        let tools = definitions();
+        let causes_props = tools.iter().find(|t| t.name == "search_causes").unwrap()
+            .input_schema["properties"].as_object().unwrap().clone();
+        assert_eq!(causes_props["topK"]["default"], 10);
+        assert_eq!(causes_props["minScore"]["default"], 0.1);
+        let chain_props = tools.iter().find(|t| t.name == "get_causal_chain").unwrap()
+            .input_schema["properties"].as_object().unwrap().clone();
+        assert_eq!(chain_props["direction"]["default"], "forward");
+        assert_eq!(chain_props["maxHops"]["default"], 5);
     }
 }

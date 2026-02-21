@@ -30,38 +30,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_maintenance_definitions_count() {
+    fn test_definitions_exist_with_required_fields() {
         let tools = definitions();
-        assert_eq!(tools.len(), 1, "Should have 1 maintenance tool");
-    }
-
-    #[test]
-    fn test_repair_causal_relationships_definition() {
-        let tools = definitions();
-        let repair = tools
-            .iter()
-            .find(|t| t.name == "repair_causal_relationships")
-            .unwrap();
-
-        // Should have description mentioning repair
+        assert_eq!(tools.len(), 1);
+        let repair = tools.iter().find(|t| t.name == "repair_causal_relationships").unwrap();
         assert!(repair.description.contains("corrupted"));
         assert!(repair.description.contains("deserialization"));
-
-        // Should be a no-arg tool (empty properties)
+        assert_eq!(repair.input_schema.get("type").unwrap().as_str().unwrap(), "object");
         let props = repair.input_schema.get("properties").unwrap();
         assert!(props.as_object().unwrap().is_empty());
-    }
-
-    #[test]
-    fn test_tool_has_type_object() {
-        let tools = definitions();
-        for tool in &tools {
-            assert_eq!(
-                tool.input_schema.get("type").unwrap().as_str().unwrap(),
-                "object",
-                "Tool {} should have type: object",
-                tool.name
-            );
-        }
     }
 }

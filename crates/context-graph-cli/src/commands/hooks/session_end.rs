@@ -256,6 +256,7 @@ mod tests {
     // SOURCE OF TRUTH: Global SessionCache state
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_012_001_warm_cache_flush() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-001: Warm Cache Flush ===");
@@ -319,6 +320,7 @@ mod tests {
     // SOURCE OF TRUTH: Default values stored in cache
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_012_002_cold_cache_behavior() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-002: Cold Cache Behavior ===");
@@ -426,6 +428,7 @@ mod tests {
     // Verify: Output matches HookOutput schema exactly
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_012_005_json_output_schema() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-005: JSON Output Schema ===");
@@ -494,6 +497,7 @@ mod tests {
     // Verify: Execution time stays under 30000ms timeout
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_012_006_execution_time_budget() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-006: Execution Time Under Budget ===");
@@ -551,6 +555,7 @@ mod tests {
     // Verify: SessionCache contains updated snapshot after session end
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_hooks_012_007_cache_verification() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-HOOKS-012-007: Cache Verification After Session End ===");

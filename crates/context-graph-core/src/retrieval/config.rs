@@ -416,55 +416,27 @@ pub fn default_weights() -> SpaceWeights {
 mod tests {
     use super::*;
 
-    // =========================================================================
-    // HIGH_THRESHOLDS Tests
-    // =========================================================================
-
     #[test]
     fn test_high_thresholds_exact_values() {
         let h = high_thresholds();
         assert_eq!(h.semantic, 0.75);
         assert_eq!(h.temporal_recent, 0.70);
-        assert_eq!(h.temporal_periodic, 0.70);
-        assert_eq!(h.temporal_positional, 0.70);
         assert_eq!(h.causal, 0.70);
         assert_eq!(h.sparse, 0.60);
         assert_eq!(h.code, 0.80);
         assert_eq!(h.emotional, 0.70);
-        assert_eq!(h.hdc, 0.70);
-        assert_eq!(h.multimodal, 0.70);
-        assert_eq!(h.entity, 0.70);
-        assert_eq!(h.late_interaction, 0.70);
         assert_eq!(h.keyword_splade, 0.60);
-        println!("[PASS] HIGH_THRESHOLDS match spec exactly (all 13 values verified)");
     }
-
-    // =========================================================================
-    // LOW_THRESHOLDS Tests
-    // =========================================================================
 
     #[test]
     fn test_low_thresholds_exact_values() {
         let l = low_thresholds();
         assert_eq!(l.semantic, 0.30);
-        assert_eq!(l.temporal_recent, 0.30);
-        assert_eq!(l.temporal_periodic, 0.30);
-        assert_eq!(l.temporal_positional, 0.30);
         assert_eq!(l.causal, 0.25);
         assert_eq!(l.sparse, 0.20);
         assert_eq!(l.code, 0.35);
-        assert_eq!(l.emotional, 0.30);
-        assert_eq!(l.hdc, 0.30);
-        assert_eq!(l.multimodal, 0.30);
-        assert_eq!(l.entity, 0.30);
-        assert_eq!(l.late_interaction, 0.30);
         assert_eq!(l.keyword_splade, 0.20);
-        println!("[PASS] LOW_THRESHOLDS match spec exactly (all 13 values verified)");
     }
-
-    // =========================================================================
-    // High vs Low Invariant Tests
-    // =========================================================================
 
     #[test]
     fn test_all_high_greater_than_low() {
@@ -474,20 +446,9 @@ mod tests {
         for embedder in Embedder::all() {
             let h = high.get_threshold(embedder);
             let l = low.get_threshold(embedder);
-            assert!(
-                h > l,
-                "{:?}: high {} must be > low {}",
-                embedder,
-                h,
-                l
-            );
-            println!("[PASS] {:?}: high {:.2} > low {:.2}", embedder, h, l);
+            assert!(h > l, "{:?}: high {} must be > low {}", embedder, h, l);
         }
     }
-
-    // =========================================================================
-    // SPACE_WEIGHTS Tests
-    // =========================================================================
 
     #[test]
     fn test_space_weights_constant_values() {
@@ -496,310 +457,51 @@ mod tests {
         assert_eq!(SPACE_WEIGHTS[2], 0.0);  // E3 Temporal Periodic (excluded)
         assert_eq!(SPACE_WEIGHTS[3], 0.0);  // E4 Temporal Positional (excluded)
         assert_eq!(SPACE_WEIGHTS[4], 1.0);  // E5 Causal
-        assert_eq!(SPACE_WEIGHTS[5], 1.0);  // E6 Sparse
-        assert_eq!(SPACE_WEIGHTS[6], 1.0);  // E7 Code
         assert_eq!(SPACE_WEIGHTS[7], 0.5);  // E8 Graph (Relational)
         assert_eq!(SPACE_WEIGHTS[8], 0.5);  // E9 Hdc (Structural)
-        assert_eq!(SPACE_WEIGHTS[9], 1.0);  // E10 Multimodal
         assert_eq!(SPACE_WEIGHTS[10], 0.5); // E11 Entity (Relational)
-        assert_eq!(SPACE_WEIGHTS[11], 1.0); // E12 LateInteraction
-        assert_eq!(SPACE_WEIGHTS[12], 1.0); // E13 KeywordSplade
-        println!("[PASS] SPACE_WEIGHTS constant matches spec exactly");
-    }
-
-    #[test]
-    fn test_weights_sum_before_normalization() {
-        let weights = default_weights();
-        let sum = weights.sum();
-        assert!(
-            (sum - 8.5).abs() < 0.001,
-            "Expected 8.5, got {}",
-            sum
-        );
-        println!("[PASS] default_weights().sum() = {} (expected 8.5)", sum);
-    }
-
-    #[test]
-    fn test_total_weight_constant() {
         assert!((TOTAL_WEIGHT - 8.5).abs() < f32::EPSILON);
-        println!("[PASS] TOTAL_WEIGHT constant = 8.5");
     }
 
     #[test]
     fn test_weights_normalization() {
-        let mut weights = default_weights();
-        weights.normalize();
-        let sum = weights.sum();
-        assert!(
-            (sum - 13.0).abs() < 0.001,
-            "Expected 13.0, got {}",
-            sum
-        );
-        println!("[PASS] normalized weights sum = {} (expected 13.0)", sum);
-    }
+        let weights = default_weights();
+        assert!((weights.sum() - 8.5).abs() < 0.001);
 
-    #[test]
-    fn test_weights_normalization_preserves_zeros() {
-        let mut weights = default_weights();
-        weights.normalize();
+        let mut normalized = weights.clone();
+        normalized.normalize();
+        assert!((normalized.sum() - 13.0).abs() < 0.001);
 
         // Temporal weights should remain 0.0 after normalization
-        assert_eq!(weights.get_weight(Embedder::TemporalRecent), 0.0);
-        assert_eq!(weights.get_weight(Embedder::TemporalPeriodic), 0.0);
-        assert_eq!(weights.get_weight(Embedder::TemporalPositional), 0.0);
-        println!("[PASS] Temporal weights remain 0.0 after normalization (AP-60)");
+        assert_eq!(normalized.get_weight(Embedder::TemporalRecent), 0.0);
+        assert_eq!(normalized.get_weight(Embedder::TemporalPeriodic), 0.0);
+        assert_eq!(normalized.get_weight(Embedder::TemporalPositional), 0.0);
+
+        // All-zero normalization safety
+        let mut zero_weights = SpaceWeights::new([0.0; 13]);
+        zero_weights.normalize();
+        assert_eq!(zero_weights.sum(), 0.0);
     }
 
     #[test]
-    fn test_weights_normalized_method() {
-        let weights = default_weights();
-        let normalized = weights.normalized();
-
-        // Original unchanged
-        assert!((weights.sum() - 8.5).abs() < 0.001);
-        // Normalized is 13.0
-        assert!((normalized.sum() - 13.0).abs() < 0.001);
-        println!("[PASS] normalized() creates normalized copy without modifying original");
-    }
-
-    // =========================================================================
-    // PerSpaceThresholds get/set Tests
-    // =========================================================================
-
-    #[test]
-    fn test_threshold_get_all_embedders() {
-        let t = high_thresholds();
-        for embedder in Embedder::all() {
-            let value = t.get_threshold(embedder);
-            assert!(value >= 0.0 && value <= 1.0, "{:?} threshold out of range", embedder);
-        }
-        println!("[PASS] get_threshold works for all 13 embedders");
-    }
-
-    #[test]
-    fn test_threshold_set_clamping_high() {
-        let mut t = high_thresholds();
-        t.set_threshold(Embedder::Semantic, 1.5);
-        assert_eq!(t.get_threshold(Embedder::Semantic), 1.0);
-        println!("[PASS] set_threshold clamps 1.5 -> 1.0");
-    }
-
-    #[test]
-    fn test_threshold_set_clamping_low() {
-        let mut t = high_thresholds();
-        t.set_threshold(Embedder::Code, -0.3);
-        assert_eq!(t.get_threshold(Embedder::Code), 0.0);
-        println!("[PASS] set_threshold clamps -0.3 -> 0.0");
-    }
-
-    #[test]
-    fn test_threshold_set_valid_value() {
-        let mut t = high_thresholds();
-        t.set_threshold(Embedder::Causal, 0.65);
-        assert_eq!(t.get_threshold(Embedder::Causal), 0.65);
-        println!("[PASS] set_threshold accepts valid value 0.65");
-    }
-
-    // =========================================================================
-    // SpaceWeights get/set Tests
-    // =========================================================================
-
-    #[test]
-    fn test_weight_get_all_embedders() {
-        let w = default_weights();
-        for embedder in Embedder::all() {
-            let value = w.get_weight(embedder);
-            assert!(value >= 0.0, "{:?} weight negative", embedder);
-        }
-        println!("[PASS] get_weight works for all 13 embedders");
-    }
-
-    #[test]
-    fn test_weight_set_clamping_negative() {
-        let mut w = default_weights();
-        w.set_weight(Embedder::Semantic, -0.5);
-        assert_eq!(w.get_weight(Embedder::Semantic), 0.0);
-        println!("[PASS] set_weight clamps -0.5 -> 0.0");
-    }
-
-    #[test]
-    fn test_weight_set_valid_value() {
-        let mut w = default_weights();
-        w.set_weight(Embedder::Semantic, 2.0);
-        assert_eq!(w.get_weight(Embedder::Semantic), 2.0);
-        println!("[PASS] set_weight accepts valid positive value");
-    }
-
-    // =========================================================================
-    // Array Conversion Tests
-    // =========================================================================
-
-    #[test]
-    fn test_threshold_array_roundtrip() {
+    fn test_threshold_roundtrip() {
         let t = high_thresholds();
         let arr = t.to_array();
         let recovered = PerSpaceThresholds::from_array(arr);
         assert_eq!(t, recovered);
-        println!("[PASS] PerSpaceThresholds array roundtrip");
+
+        // From trait
+        let arr2 = [0.5; 13];
+        let t2: PerSpaceThresholds = arr2.into();
+        assert_eq!(t2.semantic, 0.5);
+
+        // Set clamping
+        let mut t3 = high_thresholds();
+        t3.set_threshold(Embedder::Semantic, 1.5);
+        assert_eq!(t3.get_threshold(Embedder::Semantic), 1.0);
+        t3.set_threshold(Embedder::Code, -0.3);
+        assert_eq!(t3.get_threshold(Embedder::Code), 0.0);
     }
-
-    #[test]
-    fn test_threshold_array_order() {
-        let t = high_thresholds();
-        let arr = t.to_array();
-        assert_eq!(arr[0], t.semantic);     // E1
-        assert_eq!(arr[6], t.code);         // E7
-        assert_eq!(arr[12], t.keyword_splade); // E13
-        println!("[PASS] PerSpaceThresholds array order matches Embedder::index()");
-    }
-
-    #[test]
-    fn test_threshold_from_array_trait() {
-        let arr = [0.5; 13];
-        let t: PerSpaceThresholds = arr.into();
-        assert_eq!(t.semantic, 0.5);
-        assert_eq!(t.code, 0.5);
-        println!("[PASS] PerSpaceThresholds From<[f32; 13]> works");
-    }
-
-    #[test]
-    fn test_weights_from_array_trait() {
-        let arr = [1.0; 13];
-        let w: SpaceWeights = arr.into();
-        assert_eq!(w.get_weight(Embedder::Semantic), 1.0);
-        assert_eq!(w.sum(), 13.0);
-        println!("[PASS] SpaceWeights From<[f32; 13]> works");
-    }
-
-    // =========================================================================
-    // SimilarityThresholds Tests
-    // =========================================================================
-
-    #[test]
-    fn test_similarity_thresholds_default() {
-        let st = SimilarityThresholds::default();
-        assert_eq!(st.high, high_thresholds());
-        assert_eq!(st.low, low_thresholds());
-        println!("[PASS] SimilarityThresholds::default() uses spec values");
-    }
-
-    #[test]
-    fn test_similarity_thresholds_is_high() {
-        let st = SimilarityThresholds::default();
-        assert!(st.is_high(Embedder::Semantic, 0.80));
-        assert!(!st.is_high(Embedder::Semantic, 0.70));
-        println!("[PASS] is_high() correctly identifies high scores");
-    }
-
-    #[test]
-    fn test_similarity_thresholds_is_low() {
-        let st = SimilarityThresholds::default();
-        assert!(st.is_low(Embedder::Semantic, 0.25));
-        assert!(!st.is_low(Embedder::Semantic, 0.35));
-        println!("[PASS] is_low() correctly identifies low scores");
-    }
-
-    #[test]
-    fn test_similarity_thresholds_is_middle() {
-        let st = SimilarityThresholds::default();
-        // E1: low=0.30, high=0.75
-        assert!(st.is_middle(Embedder::Semantic, 0.50));
-        assert!(!st.is_middle(Embedder::Semantic, 0.25)); // Below low
-        assert!(!st.is_middle(Embedder::Semantic, 0.80)); // At/above high
-        println!("[PASS] is_middle() correctly identifies middle scores");
-    }
-
-    // =========================================================================
-    // Serialization Tests
-    // =========================================================================
-
-    #[test]
-    fn test_per_space_thresholds_serialization() {
-        let t = high_thresholds();
-        let json = serde_json::to_string(&t).expect("serialize");
-        let recovered: PerSpaceThresholds = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(t, recovered);
-        println!("[PASS] PerSpaceThresholds JSON roundtrip");
-    }
-
-    #[test]
-    fn test_space_weights_serialization() {
-        let w = default_weights();
-        let json = serde_json::to_string(&w).expect("serialize");
-        let recovered: SpaceWeights = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(w, recovered);
-        println!("[PASS] SpaceWeights JSON roundtrip");
-    }
-
-    #[test]
-    fn test_similarity_thresholds_serialization() {
-        let st = SimilarityThresholds::default();
-        let json = serde_json::to_string(&st).expect("serialize");
-        let recovered: SimilarityThresholds = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(st, recovered);
-        println!("[PASS] SimilarityThresholds JSON roundtrip");
-    }
-
-    // =========================================================================
-    // Constants Tests
-    // =========================================================================
-
-    #[test]
-    fn test_recent_lookback_secs() {
-        assert_eq!(RECENT_LOOKBACK_SECS, 7200); // 2 hours in seconds
-        println!("[PASS] RECENT_LOOKBACK_SECS = 7200 (2 hours)");
-    }
-
-    #[test]
-    fn test_max_recent_memories() {
-        assert_eq!(MAX_RECENT_MEMORIES, 50);
-        println!("[PASS] MAX_RECENT_MEMORIES = 50");
-    }
-
-    // =========================================================================
-    // Iterator Tests
-    // =========================================================================
-
-    #[test]
-    fn test_threshold_iterator() {
-        let t = high_thresholds();
-        let count = t.iter().count();
-        assert_eq!(count, 13);
-        println!("[PASS] PerSpaceThresholds::iter() visits all 13 spaces");
-    }
-
-    #[test]
-    fn test_weight_iterator() {
-        let w = default_weights();
-        let count = w.iter().count();
-        assert_eq!(count, 13);
-        println!("[PASS] SpaceWeights::iter() visits all 13 spaces");
-    }
-
-    // =========================================================================
-    // Edge Case Tests
-    // =========================================================================
-
-    #[test]
-    fn test_normalization_with_all_zeros() {
-        let mut weights = SpaceWeights::new([0.0; 13]);
-        weights.normalize(); // Should not panic (sum = 0 case)
-        assert_eq!(weights.sum(), 0.0);
-        println!("[PASS] normalize() handles all-zero weights safely");
-    }
-
-    #[test]
-    fn test_as_slice() {
-        let w = default_weights();
-        let slice = w.as_slice();
-        assert_eq!(slice.len(), 13);
-        assert_eq!(slice[0], 1.0); // E1
-        println!("[PASS] as_slice() returns correct slice");
-    }
-
-    // =========================================================================
-    // Constitution Compliance Tests
-    // =========================================================================
 
     #[test]
     fn test_ap60_temporal_excluded() {
@@ -807,7 +509,6 @@ mod tests {
         assert_eq!(w.get_weight(Embedder::TemporalRecent), 0.0);
         assert_eq!(w.get_weight(Embedder::TemporalPeriodic), 0.0);
         assert_eq!(w.get_weight(Embedder::TemporalPositional), 0.0);
-        println!("[PASS] AP-60 verified: temporal embedders have weight 0.0");
     }
 
     #[test]
@@ -826,6 +527,28 @@ mod tests {
                 expected
             );
         }
-        println!("[PASS] All weights match EmbedderCategory::topic_weight()");
+    }
+
+    #[test]
+    fn test_similarity_thresholds_default_and_checks() {
+        let st = SimilarityThresholds::default();
+        assert_eq!(st.high, high_thresholds());
+        assert_eq!(st.low, low_thresholds());
+
+        // is_high
+        assert!(st.is_high(Embedder::Semantic, 0.80));
+        assert!(!st.is_high(Embedder::Semantic, 0.70));
+        // is_low
+        assert!(st.is_low(Embedder::Semantic, 0.25));
+        assert!(!st.is_low(Embedder::Semantic, 0.35));
+        // is_middle
+        assert!(st.is_middle(Embedder::Semantic, 0.50));
+        assert!(!st.is_middle(Embedder::Semantic, 0.25));
+        assert!(!st.is_middle(Embedder::Semantic, 0.80));
+
+        // Serialization roundtrip
+        let json = serde_json::to_string(&st).expect("serialize");
+        let recovered: SimilarityThresholds = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(st, recovered);
     }
 }

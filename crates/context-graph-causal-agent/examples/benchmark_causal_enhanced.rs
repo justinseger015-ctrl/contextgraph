@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use context_graph_causal_agent::llm::{CausalDiscoveryLLM, LlmConfig};
@@ -144,7 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut pairs: Vec<(&Query, &Chunk)> = Vec::new();
     for (query_id, doc_ids) in &qrels {
         if let Some(query) = queries.iter().find(|q| &q.query_id == query_id) {
-            for (doc_id, _relevance) in doc_ids {
+            for doc_id in doc_ids.keys() {
                 if let Some(chunk) = doc_index.get(doc_id) {
                     pairs.push((query, *chunk));
                 }
@@ -201,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_benchmark(
-    model_dir: &PathBuf,
+    model_dir: &Path,
     pairs: &[(&Query, &Chunk)],
     use_few_shot: bool,
 ) -> Result<ModeResults, Box<dyn std::error::Error>> {

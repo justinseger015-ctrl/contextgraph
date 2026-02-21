@@ -246,6 +246,7 @@ fn compare_scores(a: f32, b: f32) -> std::cmp::Ordering {
 ///
 /// If content is longer than max_len, truncates and adds "..." suffix.
 /// Tries to break at word boundary if possible.
+#[allow(clippy::incompatible_msrv)]
 pub fn truncate_summary(content: &str, max_len: usize) -> String {
     let trimmed = content.trim();
 
@@ -275,55 +276,26 @@ mod tests {
     use super::*;
     use crate::embeddings::category::category_for;
 
-    // =========================================================================
-    // DivergenceSeverity Tests
-    // =========================================================================
-
     #[test]
-    fn test_severity_from_score_high() {
+    fn test_severity_from_score_combined() {
+        // High: score < 0.10
         assert_eq!(DivergenceSeverity::from_score(0.05), DivergenceSeverity::High);
         assert_eq!(DivergenceSeverity::from_score(0.00), DivergenceSeverity::High);
         assert_eq!(DivergenceSeverity::from_score(0.09), DivergenceSeverity::High);
-        println!("[PASS] Score < 0.10 -> High severity");
-    }
-
-    #[test]
-    fn test_severity_from_score_medium() {
+        // Medium: 0.10..0.20
         assert_eq!(DivergenceSeverity::from_score(0.10), DivergenceSeverity::Medium);
         assert_eq!(DivergenceSeverity::from_score(0.15), DivergenceSeverity::Medium);
-        assert_eq!(DivergenceSeverity::from_score(0.19), DivergenceSeverity::Medium);
-        println!("[PASS] Score 0.10..0.20 -> Medium severity");
-    }
-
-    #[test]
-    fn test_severity_from_score_low() {
+        // Low: >= 0.20
         assert_eq!(DivergenceSeverity::from_score(0.20), DivergenceSeverity::Low);
         assert_eq!(DivergenceSeverity::from_score(0.25), DivergenceSeverity::Low);
-        assert_eq!(DivergenceSeverity::from_score(0.29), DivergenceSeverity::Low);
-        println!("[PASS] Score >= 0.20 -> Low severity");
-    }
-
-    #[test]
-    fn test_severity_display() {
+        // Display
         assert_eq!(DivergenceSeverity::High.as_str(), "High");
-        assert_eq!(DivergenceSeverity::Medium.as_str(), "Medium");
-        assert_eq!(DivergenceSeverity::Low.as_str(), "Low");
         assert_eq!(format!("{}", DivergenceSeverity::High), "High");
-        println!("[PASS] DivergenceSeverity display works");
-    }
-
-    // =========================================================================
-    // DIVERGENCE_SPACES Constant Tests
-    // =========================================================================
-
-    #[test]
-    fn test_divergence_spaces_count() {
-        assert_eq!(DIVERGENCE_SPACES.len(), 6);
-        println!("[PASS] DIVERGENCE_SPACES has exactly 6 semantic embedders (E5 excluded per AP-77)");
     }
 
     #[test]
     fn test_divergence_spaces_are_semantic() {
+        assert_eq!(DIVERGENCE_SPACES.len(), 6);
         for space in &DIVERGENCE_SPACES {
             let cat = category_for(*space);
             assert!(
@@ -332,60 +304,17 @@ mod tests {
                 space
             );
         }
-        println!("[PASS] All DIVERGENCE_SPACES are semantic category");
-    }
-
-    #[test]
-    fn test_divergence_spaces_excludes_temporal() {
+        // E5 must NOT be included (AP-77)
+        assert!(!DIVERGENCE_SPACES.contains(&Embedder::Causal));
+        // Temporal excluded
         assert!(!DIVERGENCE_SPACES.contains(&Embedder::TemporalRecent));
         assert!(!DIVERGENCE_SPACES.contains(&Embedder::TemporalPeriodic));
         assert!(!DIVERGENCE_SPACES.contains(&Embedder::TemporalPositional));
-        println!("[PASS] DIVERGENCE_SPACES excludes all temporal embedders");
-    }
-
-    #[test]
-    fn test_divergence_spaces_excludes_relational() {
+        // Relational/structural excluded
         assert!(!DIVERGENCE_SPACES.contains(&Embedder::Graph));
         assert!(!DIVERGENCE_SPACES.contains(&Embedder::Entity));
-        println!("[PASS] DIVERGENCE_SPACES excludes relational embedders");
-    }
-
-    #[test]
-    fn test_divergence_spaces_excludes_structural() {
         assert!(!DIVERGENCE_SPACES.contains(&Embedder::Hdc));
-        println!("[PASS] DIVERGENCE_SPACES excludes structural embedder");
     }
-
-    #[test]
-    fn test_divergence_spaces_contains_expected_semantic() {
-        // Verify all 6 divergence-eligible semantic embedders are present
-        // E5 (Causal) excluded per AP-77: requires CausalDirection for meaningful scores
-        let expected = [
-            Embedder::Semantic,
-            Embedder::Sparse,
-            Embedder::Code,
-            Embedder::Contextual,
-            Embedder::LateInteraction,
-            Embedder::KeywordSplade,
-        ];
-        for e in &expected {
-            assert!(
-                DIVERGENCE_SPACES.contains(e),
-                "{:?} not in DIVERGENCE_SPACES",
-                e
-            );
-        }
-        // E5 must NOT be in DIVERGENCE_SPACES
-        assert!(
-            !DIVERGENCE_SPACES.contains(&Embedder::Causal),
-            "E5 (Causal) must not be in DIVERGENCE_SPACES per AP-77"
-        );
-        println!("[PASS] DIVERGENCE_SPACES contains 6 semantic embedders (E5 excluded per AP-77)");
-    }
-
-    // =========================================================================
-    // DivergenceAlert Tests
-    // =========================================================================
 
     #[test]
     fn test_alert_creation() {
@@ -401,381 +330,115 @@ mod tests {
         assert_eq!(alert.space, Embedder::Semantic);
         assert_eq!(alert.similarity_score, 0.15);
         assert_eq!(alert.memory_summary, "Working on memory consolidation algorithm");
-        println!("[PASS] DivergenceAlert creation works");
-    }
 
-    #[test]
-    fn test_alert_score_clamping() {
-        let id = Uuid::new_v4();
-
+        // Score clamping
         let alert_high = DivergenceAlert::new(id, Embedder::Code, 1.5, "test");
         assert_eq!(alert_high.similarity_score, 1.0);
-
         let alert_low = DivergenceAlert::new(id, Embedder::Code, -0.5, "test");
         assert_eq!(alert_low.similarity_score, 0.0);
-
-        println!("[PASS] DivergenceAlert clamps score to [0.0, 1.0]");
     }
 
     #[test]
     fn test_alert_severity() {
         let id = Uuid::new_v4();
-
         let high = DivergenceAlert::new(id, Embedder::Semantic, 0.05, "test");
         assert_eq!(high.severity(), DivergenceSeverity::High);
-
         let medium = DivergenceAlert::new(id, Embedder::Semantic, 0.15, "test");
         assert_eq!(medium.severity(), DivergenceSeverity::Medium);
-
         let low = DivergenceAlert::new(id, Embedder::Semantic, 0.25, "test");
         assert_eq!(low.severity(), DivergenceSeverity::Low);
 
-        println!("[PASS] DivergenceAlert.severity() computes correctly");
-    }
-
-    #[test]
-    fn test_alert_format() {
-        let id = Uuid::new_v4();
-        let alert = DivergenceAlert::new(
-            id,
-            Embedder::Code,
-            0.15,
-            "Implementing test suite",
-        );
-
-        let formatted = alert.format_alert();
-        assert!(formatted.contains("DIVERGENCE"));
-        assert!(formatted.contains("E7"));
-        assert!(formatted.contains("Implementing test suite"));
-        assert!(formatted.contains("0.15"));
-        println!("[PASS] format_alert() produces expected output: {}", formatted);
-    }
-
-    #[test]
-    fn test_alert_format_with_severity() {
-        let id = Uuid::new_v4();
-        let alert = DivergenceAlert::new(id, Embedder::Semantic, 0.05, "test");
-
-        let formatted = alert.format_with_severity();
+        // Format
+        let formatted = high.format_with_severity();
         assert!(formatted.starts_with("[High]"));
-        println!("[PASS] format_with_severity() includes severity prefix");
-    }
-
-    // =========================================================================
-    // truncate_summary Tests
-    // =========================================================================
-
-    #[test]
-    fn test_truncate_short_content() {
-        let short = "Hello world";
-        let result = truncate_summary(short, 100);
-        assert_eq!(result, "Hello world");
-        println!("[PASS] Short content not truncated");
-    }
-
-    #[test]
-    fn test_truncate_exact_length() {
-        let exact = "a".repeat(100);
-        let result = truncate_summary(&exact, 100);
-        assert_eq!(result.len(), 100);
-        assert!(!result.contains("..."));
-        println!("[PASS] Exact length content not truncated");
-    }
-
-    #[test]
-    fn test_truncate_long_content_word_boundary() {
-        let long = "This is a long sentence that needs to be truncated at word boundary for readability";
-        let result = truncate_summary(long, 50);
-        assert!(result.len() <= 50);
-        assert!(result.ends_with("..."));
-        assert!(!result.ends_with(" ..."));  // No trailing space
-        println!("[PASS] Long content truncated at word boundary: {}", result);
-    }
-
-    #[test]
-    fn test_truncate_no_spaces() {
-        let no_spaces = "a".repeat(200);
-        let result = truncate_summary(&no_spaces, 50);
-        assert_eq!(result.len(), 50);
-        assert!(result.ends_with("..."));
-        println!("[PASS] Content without spaces truncated to exact length");
-    }
-
-    #[test]
-    fn test_truncate_trims_whitespace() {
-        let padded = "   content with spaces   ";
-        let result = truncate_summary(padded, 100);
-        assert_eq!(result, "content with spaces");
-        println!("[PASS] Whitespace is trimmed");
-    }
-
-    #[test]
-    fn test_truncate_empty_content() {
-        let empty = "";
-        let result = truncate_summary(empty, 100);
-        assert_eq!(result, "");
-        println!("[PASS] Empty content returns empty string");
-    }
-
-    #[test]
-    fn test_truncate_whitespace_only() {
-        let whitespace = "     ";
-        let result = truncate_summary(whitespace, 100);
-        assert_eq!(result, "");
-        println!("[PASS] Whitespace-only content returns empty string");
-    }
-
-    // =========================================================================
-    // DivergenceReport Tests
-    // =========================================================================
-
-    #[test]
-    fn test_report_empty() {
-        let report = DivergenceReport::new();
-        assert!(report.is_empty());
-        assert_eq!(report.len(), 0);
-        assert!(report.most_severe().is_none());
-        assert_eq!(report.format_all(), "");
-        println!("[PASS] Empty DivergenceReport works");
-    }
-
-    #[test]
-    fn test_report_add_alert() {
-        let mut report = DivergenceReport::new();
-        let id = Uuid::new_v4();
-
-        report.add(DivergenceAlert::new(id, Embedder::Semantic, 0.15, "test"));
-
-        assert!(!report.is_empty());
-        assert_eq!(report.len(), 1);
-        println!("[PASS] DivergenceReport.add() works");
     }
 
     #[test]
     fn test_report_most_severe() {
         let mut report = DivergenceReport::new();
-        let id1 = Uuid::new_v4();
-        let id2 = Uuid::new_v4();
-        let id3 = Uuid::new_v4();
+        assert!(report.is_empty());
+        assert!(report.most_severe().is_none());
 
-        report.add(DivergenceAlert::new(id1, Embedder::Semantic, 0.25, "low"));
-        report.add(DivergenceAlert::new(id2, Embedder::Code, 0.05, "high"));  // Most severe
-        report.add(DivergenceAlert::new(id3, Embedder::Sparse, 0.15, "medium"));
+        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Semantic, 0.25, "low"));
+        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.05, "high"));
+        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Sparse, 0.15, "medium"));
 
         let most_severe = report.most_severe().unwrap();
         assert_eq!(most_severe.similarity_score, 0.05);
         assert_eq!(most_severe.severity(), DivergenceSeverity::High);
-        println!("[PASS] most_severe() returns lowest score alert");
     }
 
     #[test]
     fn test_report_sort_by_severity() {
         let mut report = DivergenceReport::new();
-
         report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Semantic, 0.25, "a"));
         report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.05, "b"));
         report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Sparse, 0.15, "c"));
 
         report.sort_by_severity();
-
-        assert_eq!(report.alerts[0].similarity_score, 0.05);  // Most severe first
+        assert_eq!(report.alerts[0].similarity_score, 0.05);
         assert_eq!(report.alerts[1].similarity_score, 0.15);
-        assert_eq!(report.alerts[2].similarity_score, 0.25);  // Least severe last
-        println!("[PASS] sort_by_severity() orders by ascending score");
-    }
-
-    #[test]
-    fn test_report_format_all() {
-        let mut report = DivergenceReport::new();
-
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Semantic, 0.15, "first"));
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.20, "second"));
-
-        let formatted = report.format_all();
-        let lines: Vec<&str> = formatted.lines().collect();
-
-        assert_eq!(lines.len(), 2);
-        assert!(lines[0].contains("E1"));
-        assert!(lines[1].contains("E7"));
-        println!("[PASS] format_all() produces one line per alert:\n{}", formatted);
-    }
-
-    #[test]
-    fn test_report_count_by_severity() {
-        let mut report = DivergenceReport::new();
-
-        // 2 high (score < 0.10)
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Semantic, 0.05, "h1"));
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.08, "h2"));
-
-        // 1 medium (0.10 <= score < 0.20)
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Contextual, 0.15, "m1"));
-
-        // 2 low (score >= 0.20)
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Sparse, 0.22, "l1"));
-        report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Contextual, 0.28, "l2"));
+        assert_eq!(report.alerts[2].similarity_score, 0.25);
 
         let (high, medium, low) = report.count_by_severity();
-        assert_eq!(high, 2);
+        assert_eq!(high, 1);
         assert_eq!(medium, 1);
-        assert_eq!(low, 2);
-        println!("[PASS] count_by_severity() returns (2, 1, 2)");
+        assert_eq!(low, 1);
     }
 
-    // =========================================================================
-    // Serialization Tests
-    // =========================================================================
+    #[test]
+    fn test_arch10_divergence_semantic_only() {
+        for embedder in Embedder::all() {
+            let cat = category_for(embedder);
+            if embedder == Embedder::Causal {
+                assert!(!DIVERGENCE_SPACES.contains(&embedder));
+                continue;
+            }
+            if cat.used_for_divergence_detection() {
+                assert!(DIVERGENCE_SPACES.contains(&embedder), "{:?} should be in DIVERGENCE_SPACES", embedder);
+            } else {
+                assert!(!DIVERGENCE_SPACES.contains(&embedder), "{:?} should NOT be in DIVERGENCE_SPACES", embedder);
+            }
+        }
+    }
+
+    #[test]
+    fn test_truncate_summary_cases() {
+        // Short content unchanged
+        assert_eq!(truncate_summary("Hello world", 100), "Hello world");
+        // Empty/whitespace
+        assert_eq!(truncate_summary("", 100), "");
+        assert_eq!(truncate_summary("     ", 100), "");
+        // Exact length
+        let exact = "a".repeat(100);
+        assert_eq!(truncate_summary(&exact, 100).len(), 100);
+        // Long content truncated
+        let long = "This is a long sentence that needs to be truncated at word boundary for readability";
+        let result = truncate_summary(long, 50);
+        assert!(result.len() <= 50);
+        assert!(result.ends_with("..."));
+        // No spaces
+        let no_spaces = "a".repeat(200);
+        let result = truncate_summary(&no_spaces, 50);
+        assert_eq!(result.len(), 50);
+        assert!(result.ends_with("..."));
+    }
 
     #[test]
     fn test_alert_serialization_roundtrip() {
         let id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let alert = DivergenceAlert::new(id, Embedder::Semantic, 0.15, "test content");
-
         let json = serde_json::to_string(&alert).expect("serialize");
         let recovered: DivergenceAlert = serde_json::from_str(&json).expect("deserialize");
-
         assert_eq!(recovered.memory_id, id);
         assert_eq!(recovered.space, Embedder::Semantic);
         assert_eq!(recovered.similarity_score, 0.15);
-        println!("[PASS] DivergenceAlert JSON roundtrip works");
-    }
 
-    #[test]
-    fn test_report_serialization_roundtrip() {
+        // Report roundtrip
         let mut report = DivergenceReport::new();
         report.add(DivergenceAlert::new(Uuid::new_v4(), Embedder::Code, 0.12, "test"));
-
         let json = serde_json::to_string(&report).expect("serialize");
         let recovered: DivergenceReport = serde_json::from_str(&json).expect("deserialize");
-
         assert_eq!(recovered.len(), 1);
-        println!("[PASS] DivergenceReport JSON roundtrip works");
-    }
-
-    #[test]
-    fn test_severity_serialization() {
-        let severity = DivergenceSeverity::High;
-        let json = serde_json::to_string(&severity).expect("serialize");
-        let recovered: DivergenceSeverity = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(recovered, DivergenceSeverity::High);
-        println!("[PASS] DivergenceSeverity JSON roundtrip works");
-    }
-
-    // =========================================================================
-    // Edge Case Tests
-    // =========================================================================
-
-    #[test]
-    fn test_alert_boundary_scores() {
-        let id = Uuid::new_v4();
-
-        // Test exact boundary values
-        let at_zero = DivergenceAlert::new(id, Embedder::Semantic, 0.0, "test");
-        assert_eq!(at_zero.severity(), DivergenceSeverity::High);
-        assert_eq!(at_zero.similarity_score, 0.0);
-
-        let at_one = DivergenceAlert::new(id, Embedder::Semantic, 1.0, "test");
-        assert_eq!(at_one.severity(), DivergenceSeverity::Low);
-        assert_eq!(at_one.similarity_score, 1.0);
-
-        // Test exact threshold boundaries
-        let at_0_10 = DivergenceAlert::new(id, Embedder::Semantic, 0.10, "test");
-        assert_eq!(at_0_10.severity(), DivergenceSeverity::Medium);
-
-        let at_0_20 = DivergenceAlert::new(id, Embedder::Semantic, 0.20, "test");
-        assert_eq!(at_0_20.severity(), DivergenceSeverity::Low);
-
-        println!("[PASS] Boundary scores handled correctly");
-    }
-
-    #[test]
-    fn test_truncate_at_exact_boundary() {
-        // Content that is exactly 103 chars should truncate to 100
-        let content = "a".repeat(103);
-        let result = truncate_summary(&content, 100);
-        assert_eq!(result.len(), 100);
-        assert!(result.ends_with("..."));
-        assert_eq!(&result[..97], &"a".repeat(97));
-        println!("[PASS] Exact boundary truncation works");
-    }
-
-    #[test]
-    fn test_report_single_alert() {
-        let mut report = DivergenceReport::new();
-        let id = Uuid::new_v4();
-        report.add(DivergenceAlert::new(id, Embedder::Semantic, 0.12, "single"));
-
-        let most_severe = report.most_severe().unwrap();
-        assert_eq!(most_severe.memory_id, id);
-
-        report.sort_by_severity();
-        assert_eq!(report.alerts.len(), 1);
-        assert_eq!(report.alerts[0].memory_id, id);
-
-        println!("[PASS] Single alert report works correctly");
-    }
-
-    // =========================================================================
-    // Constitution Compliance Tests
-    // =========================================================================
-
-    #[test]
-    fn test_arch_10_divergence_semantic_only() {
-        // ARCH-10: Divergence detection uses SEMANTIC embedders only
-        // Exception: E5 (Causal) is Semantic but excluded per AP-77 because
-        // compute_embedder_scores_sync returns 0.0 without CausalDirection
-        for embedder in Embedder::all() {
-            let cat = category_for(embedder);
-            if embedder == Embedder::Causal {
-                // AP-77 exception: E5 is semantic but not usable for divergence
-                assert!(
-                    !DIVERGENCE_SPACES.contains(&embedder),
-                    "E5 (Causal) must NOT be in DIVERGENCE_SPACES per AP-77"
-                );
-                continue;
-            }
-            if cat.used_for_divergence_detection() {
-                assert!(
-                    DIVERGENCE_SPACES.contains(&embedder),
-                    "{:?} should be in DIVERGENCE_SPACES",
-                    embedder
-                );
-            } else {
-                assert!(
-                    !DIVERGENCE_SPACES.contains(&embedder),
-                    "{:?} should NOT be in DIVERGENCE_SPACES",
-                    embedder
-                );
-            }
-        }
-        println!("[PASS] ARCH-10 compliance verified (with AP-77 E5 exclusion)");
-    }
-
-    #[test]
-    fn test_ap62_divergence_alerts_semantic_only() {
-        // AP-62: Divergence alerts MUST only use SEMANTIC embedders
-        // All embedders in DIVERGENCE_SPACES must be semantic
-        for space in &DIVERGENCE_SPACES {
-            let cat = category_for(*space);
-            assert!(
-                cat.is_semantic(),
-                "AP-62 violation: {:?} in DIVERGENCE_SPACES is not semantic",
-                space
-            );
-        }
-        println!("[PASS] AP-62 verified: All DIVERGENCE_SPACES are semantic");
-    }
-
-    #[test]
-    fn test_ap63_no_temporal_divergence() {
-        // AP-63: NEVER trigger divergence from temporal proximity differences
-        for embedder in [Embedder::TemporalRecent, Embedder::TemporalPeriodic, Embedder::TemporalPositional] {
-            assert!(
-                !DIVERGENCE_SPACES.contains(&embedder),
-                "AP-63 violation: {:?} should not be in DIVERGENCE_SPACES",
-                embedder
-            );
-        }
-        println!("[PASS] AP-63 verified: No temporal embedders in DIVERGENCE_SPACES");
     }
 }

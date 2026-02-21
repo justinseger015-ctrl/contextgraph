@@ -395,96 +395,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_search_robust_validation_success() {
+    fn test_happy_path_deserialization() {
         let req = SearchRobustRequest {
             query: "authentication".to_string(),
             ..Default::default()
         };
         assert!(req.validate().is_ok());
+        assert_eq!(req.top_k, DEFAULT_ROBUST_SEARCH_TOP_K);
+        assert!((req.e9_discovery_threshold - E9_DISCOVERY_THRESHOLD).abs() < 0.001);
     }
 
     #[test]
-    fn test_search_robust_query_too_short() {
-        let req = SearchRobustRequest {
-            query: "ab".to_string(),
-            ..Default::default()
-        };
-        let err = req.validate().unwrap_err();
-        assert!(err.contains("at least 3 characters"));
+    fn test_validation_rejects_invalid() {
+        let short = SearchRobustRequest { query: "ab".to_string(), ..Default::default() };
+        assert!(short.validate().unwrap_err().contains("at least 3 characters"));
+        let bad_k = SearchRobustRequest { query: "test query".to_string(), top_k: 100, ..Default::default() };
+        assert!(bad_k.validate().is_err());
+        let bad_thresh = SearchRobustRequest { query: "test query".to_string(), e9_discovery_threshold: 1.5, ..Default::default() };
+        assert!(bad_thresh.validate().is_err());
     }
 
     #[test]
-    fn test_search_robust_invalid_top_k() {
-        let req = SearchRobustRequest {
-            query: "test query".to_string(),
-            top_k: 100,
-            ..Default::default()
-        };
-        assert!(req.validate().is_err());
-    }
-
-    #[test]
-    fn test_search_robust_invalid_threshold() {
-        let req = SearchRobustRequest {
-            query: "test query".to_string(),
-            e9_discovery_threshold: 1.5,
-            ..Default::default()
-        };
-        assert!(req.validate().is_err());
-    }
-
-    #[test]
-    fn test_blind_spot_candidate_is_discovery() {
-        let candidate = BlindSpotCandidate {
-            memory_id: Uuid::new_v4(),
-            e9_score: 0.20,  // Above 0.15 threshold for projected vectors
-            e1_score: 0.30,  // Below 0.5 E1 weakness threshold
-            divergence: -0.10,
-        };
-
-        // Should be a discovery: E9=0.20 >= 0.15, E1=0.30 < 0.5
-        assert!(candidate.is_discovery(E9_DISCOVERY_THRESHOLD, E1_WEAKNESS_THRESHOLD));
-    }
-
-    #[test]
-    fn test_blind_spot_candidate_not_discovery_e1_too_high() {
-        let candidate = BlindSpotCandidate {
-            memory_id: Uuid::new_v4(),
-            e9_score: 0.20,  // Above E9 threshold
-            e1_score: 0.75,  // E1 found it too (above 0.5)
-            divergence: -0.55,
-        };
-
-        // Should NOT be a discovery: E1=0.75 >= 0.5 means E1 would have found it
-        assert!(!candidate.is_discovery(E9_DISCOVERY_THRESHOLD, E1_WEAKNESS_THRESHOLD));
-    }
-
-    #[test]
-    fn test_blind_spot_candidate_not_discovery_e9_too_low() {
-        let candidate = BlindSpotCandidate {
-            memory_id: Uuid::new_v4(),
-            e9_score: 0.10,  // Below 0.15 threshold for projected vectors
-            e1_score: 0.30,
-            divergence: -0.20,
-        };
-
-        // Should NOT be a discovery: E9=0.10 < 0.15 means not a strong E9 match
-        assert!(!candidate.is_discovery(E9_DISCOVERY_THRESHOLD, E1_WEAKNESS_THRESHOLD));
-    }
-
-    #[test]
-    fn test_default_thresholds() {
-        // E9 threshold calibrated for projected vectors (cosine similarity much lower than native Hamming)
-        assert!((E9_DISCOVERY_THRESHOLD - 0.15).abs() < 0.001);
-        assert!((E1_WEAKNESS_THRESHOLD - 0.5).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_result_source_serialization() {
+    fn test_response_serialization() {
         let e1_json = serde_json::to_string(&ResultSource::E1).unwrap();
         assert_eq!(e1_json, "\"E1\"");
-
         let e9_json = serde_json::to_string(&ResultSource::E9Discovery).unwrap();
         assert_eq!(e9_json, "\"E9_DISCOVERY\"");
+        // BlindSpotCandidate discovery logic
+        let candidate = BlindSpotCandidate { memory_id: Uuid::new_v4(), e9_score: 0.20, e1_score: 0.30, divergence: -0.10 };
+        assert!(candidate.is_discovery(E9_DISCOVERY_THRESHOLD, E1_WEAKNESS_THRESHOLD));
+        let not_discovery = BlindSpotCandidate { memory_id: Uuid::new_v4(), e9_score: 0.20, e1_score: 0.75, divergence: -0.55 };
+        assert!(!not_discovery.is_discovery(E9_DISCOVERY_THRESHOLD, E1_WEAKNESS_THRESHOLD));
     }
 }

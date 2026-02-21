@@ -238,6 +238,6 @@ mod tests {
 
         let auc = compute_auc_roc(&scores, &ground_truth);
         // Allow wider tolerance since tie-breaking is arbitrary
-        assert!(auc >= 0.0 && auc <= 1.0, "AUC should be between 0 and 1");
+        assert!((0.0..=1.0).contains(&auc), "AUC should be between 0 and 1");
     }
 }

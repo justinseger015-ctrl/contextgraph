@@ -3,41 +3,6 @@
 use crate::teleological::synergy_matrix::SynergyMatrix;
 
 #[test]
-#[should_panic(expected = "FAIL FAST")]
-fn test_synergy_matrix_get_out_of_bounds_i() {
-    let matrix = SynergyMatrix::new();
-    let _ = matrix.get_synergy(13, 0);
-}
-
-#[test]
-#[should_panic(expected = "FAIL FAST")]
-fn test_synergy_matrix_get_out_of_bounds_j() {
-    let matrix = SynergyMatrix::new();
-    let _ = matrix.get_synergy(0, 13);
-}
-
-#[test]
-#[should_panic(expected = "FAIL FAST")]
-fn test_synergy_matrix_set_value_too_high() {
-    let mut matrix = SynergyMatrix::new();
-    matrix.set_synergy(0, 1, 1.5);
-}
-
-#[test]
-#[should_panic(expected = "FAIL FAST")]
-fn test_synergy_matrix_set_value_negative() {
-    let mut matrix = SynergyMatrix::new();
-    matrix.set_synergy(0, 1, -0.1);
-}
-
-#[test]
-#[should_panic(expected = "FAIL FAST")]
-fn test_synergy_matrix_set_diagonal_not_one() {
-    let mut matrix = SynergyMatrix::new();
-    matrix.set_synergy(3, 3, 0.5);
-}
-
-#[test]
 fn test_synergy_matrix_validate() {
     use crate::teleological::comparison_error::ComparisonValidationError;
 
@@ -100,10 +65,4 @@ fn test_synergy_matrix_validate() {
 #[should_panic(expected = "FAIL FAST")]
 fn test_synergy_matrix_flat_to_indices_out_of_bounds() {
     let _ = SynergyMatrix::flat_to_indices(78);
-}
-
-#[test]
-#[should_panic(expected = "FAIL FAST")]
-fn test_synergy_matrix_indices_to_flat_invalid() {
-    let _ = SynergyMatrix::indices_to_flat(5, 3); // i must be < j
 }

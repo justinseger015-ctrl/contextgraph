@@ -57,8 +57,8 @@ fn make_test_inputs_with_padding(
     let device = Device::Cpu;
 
     let mut mask_data = vec![0.0f32; seq_len];
-    for i in (seq_len - pad)..seq_len {
-        mask_data[i] = -10000.0;
+    for item in mask_data.iter_mut().skip(seq_len - pad) {
+        *item = -10000.0;
     }
     let mask = Tensor::from_slice(&mask_data, (1, 1, 1, seq_len), &device).unwrap();
 

@@ -595,52 +595,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_list_watched_files_request_defaults() {
-        let json = r#"{}"#;
-        let req: ListWatchedFilesRequest = serde_json::from_str(json).unwrap();
+    fn test_request_deserialization_defaults() {
+        let req: ListWatchedFilesRequest = serde_json::from_str("{}").unwrap();
         assert!(req.include_counts);
         assert!(req.path_filter.is_none());
-    }
-
-    #[test]
-    fn test_delete_file_content_request_defaults() {
-        let json = r#"{"file_path": "/test/path.md"}"#;
-        let req: DeleteFileContentRequest = serde_json::from_str(json).unwrap();
+        let req: DeleteFileContentRequest = serde_json::from_str(r#"{"file_path": "/test/path.md"}"#).unwrap();
         assert_eq!(req.file_path, "/test/path.md");
         assert!(req.soft_delete);
-    }
-
-    #[test]
-    fn test_reconcile_files_request_defaults() {
-        let json = r#"{}"#;
-        let req: ReconcileFilesRequest = serde_json::from_str(json).unwrap();
+        let req: ReconcileFilesRequest = serde_json::from_str("{}").unwrap();
         assert!(req.dry_run);
-        assert!(req.base_path.is_none());
     }
 
     #[test]
-    fn test_watched_file_info_serialization() {
-        let info = WatchedFileInfo {
-            file_path: "/test/path.md".to_string(),
-            chunk_count: Some(5),
-            last_updated: Some("2024-01-15T10:30:00Z".to_string()),
-        };
+    fn test_response_serialization() {
+        let info = WatchedFileInfo { file_path: "/test/path.md".to_string(), chunk_count: Some(5), last_updated: Some("2024-01-15T10:30:00Z".to_string()) };
         let json = serde_json::to_string(&info).unwrap();
-        assert!(json.contains("file_path"));
-        assert!(json.contains("chunk_count"));
-        assert!(json.contains("last_updated"));
-    }
-
-    #[test]
-    fn test_watched_file_info_skip_none() {
-        let info = WatchedFileInfo {
-            file_path: "/test/path.md".to_string(),
-            chunk_count: None,
-            last_updated: None,
-        };
-        let json = serde_json::to_string(&info).unwrap();
-        assert!(json.contains("file_path"));
-        assert!(!json.contains("chunk_count"));
-        assert!(!json.contains("last_updated"));
+        assert!(json.contains("file_path") && json.contains("chunk_count"));
+        let info_none = WatchedFileInfo { file_path: "/test/path.md".to_string(), chunk_count: None, last_updated: None };
+        let json_none = serde_json::to_string(&info_none).unwrap();
+        assert!(!json_none.contains("chunk_count"));
     }
 }

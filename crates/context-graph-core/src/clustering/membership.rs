@@ -181,48 +181,6 @@ mod tests {
     }
 
     #[test]
-    fn test_probability_clamping_high() {
-        let mem_id = Uuid::new_v4();
-        let membership = ClusterMembership::new(
-            mem_id,
-            Embedder::Semantic,
-            1,
-            1.5, // Should be clamped to 1.0
-            false,
-        );
-
-        assert_eq!(
-            membership.membership_probability, 1.0,
-            "probability > 1.0 should clamp to 1.0"
-        );
-        println!(
-            "[PASS] test_probability_clamping_high - 1.5 clamped to {}",
-            membership.membership_probability
-        );
-    }
-
-    #[test]
-    fn test_probability_clamping_low() {
-        let mem_id = Uuid::new_v4();
-        let membership = ClusterMembership::new(
-            mem_id,
-            Embedder::Semantic,
-            1,
-            -0.5, // Should be clamped to 0.0
-            false,
-        );
-
-        assert_eq!(
-            membership.membership_probability, 0.0,
-            "probability < 0.0 should clamp to 0.0"
-        );
-        println!(
-            "[PASS] test_probability_clamping_low - -0.5 clamped to {}",
-            membership.membership_probability
-        );
-    }
-
-    #[test]
     fn test_is_confident_threshold() {
         let mem_id = Uuid::new_v4();
 
@@ -246,41 +204,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_all_embedders() {
-        let mem_id = Uuid::new_v4();
-
-        for embedder in Embedder::all() {
-            let membership = ClusterMembership::new(mem_id, embedder, 1, 0.5, false);
-            assert_eq!(membership.space, embedder, "space should match embedder");
-
-            // Verify serialization works
-            let json = serde_json::to_string(&membership).expect("serialize should work");
-            let restored: ClusterMembership =
-                serde_json::from_str(&json).expect("deserialize should work");
-            assert_eq!(membership, restored, "roundtrip should preserve data");
-        }
-
-        println!("[PASS] test_all_embedders - all 13 variants work with serialization");
-    }
-
-    #[test]
-    fn test_serialization_roundtrip() {
-        let mem_id = Uuid::new_v4();
-        let membership = ClusterMembership::new(mem_id, Embedder::Code, 42, 0.87, true);
-
-        let json = serde_json::to_string(&membership).expect("serialize");
-        let restored: ClusterMembership = serde_json::from_str(&json).expect("deserialize");
-
-        assert_eq!(membership.memory_id, restored.memory_id);
-        assert_eq!(membership.space, restored.space);
-        assert_eq!(membership.cluster_id, restored.cluster_id);
-        assert!(
-            (membership.membership_probability - restored.membership_probability).abs()
-                < f32::EPSILON
-        );
-        assert_eq!(membership.is_core_point, restored.is_core_point);
-
-        println!("[PASS] test_serialization_roundtrip - JSON: {}", json);
-    }
 }

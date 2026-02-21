@@ -30,7 +30,6 @@ fn test_ghost_phase_allows_stubs() {
         phase: Phase::Ghost,
         embedding: EmbeddingConfig {
             model: "stub".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "memory".to_string(),
@@ -66,7 +65,6 @@ fn test_development_phase_allows_stubs() {
         phase: Phase::Development,
         embedding: EmbeddingConfig {
             model: "stub".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "memory".to_string(),
@@ -90,7 +88,6 @@ fn test_production_phase_rejects_stub_embedding() {
         phase: Phase::Production,
         embedding: EmbeddingConfig {
             model: "stub".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),
@@ -135,7 +132,6 @@ fn test_production_phase_rejects_memory_storage() {
         phase: Phase::Production,
         embedding: EmbeddingConfig {
             model: "multi_array_13".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "memory".to_string(), // <-- DANGEROUS
@@ -179,7 +175,6 @@ fn test_production_phase_rejects_memory_index() {
         phase: Phase::Production,
         embedding: EmbeddingConfig {
             model: "multi_array_13".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),
@@ -216,7 +211,6 @@ fn test_production_phase_rejects_stub_utl() {
         phase: Phase::Production,
         embedding: EmbeddingConfig {
             model: "multi_array_13".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),
@@ -297,7 +291,6 @@ fn test_production_phase_reports_all_dangerous_configs() {
         phase: Phase::Production,
         embedding: EmbeddingConfig {
             model: "stub".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "memory".to_string(),
@@ -346,7 +339,6 @@ fn test_uses_stubs_helper() {
     let config_real = Config {
         embedding: EmbeddingConfig {
             model: "multi_array_13".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),
@@ -372,7 +364,6 @@ fn test_uses_stubs_helper() {
     let config_one_stub = Config {
         embedding: EmbeddingConfig {
             model: "stub".to_string(), // <-- One stub
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),
@@ -403,7 +394,6 @@ fn test_is_production_safe_helper() {
         phase: Phase::Production,
         embedding: EmbeddingConfig {
             model: "multi_array_13".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),
@@ -440,7 +430,6 @@ fn test_is_production_safe_helper() {
         phase: Phase::Ghost,
         embedding: EmbeddingConfig {
             model: "multi_array_13".to_string(),
-            ..Default::default()
         },
         storage: StorageConfig {
             backend: "rocksdb".to_string(),

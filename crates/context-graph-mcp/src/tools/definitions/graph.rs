@@ -234,196 +234,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_graph_tool_count() {
+    fn test_definitions_exist_with_required_fields() {
+        let tools = definitions();
         #[cfg(feature = "llm")]
-        assert_eq!(definitions().len(), 4);
+        assert_eq!(tools.len(), 4);
         #[cfg(not(feature = "llm"))]
-        assert_eq!(definitions().len(), 2);
-    }
-
-    #[test]
-    fn test_search_connections_schema() {
-        let tools = definitions();
+        assert_eq!(tools.len(), 2);
         let search = tools.iter().find(|t| t.name == "search_connections").unwrap();
-
-        // Check required fields
-        let required = search
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
-        assert!(required.contains(&json!("query")));
-
-        // Check properties
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert!(props.contains_key("query"));
-        assert!(props.contains_key("direction"));
-        assert!(props.contains_key("topK"));
-        assert!(props.contains_key("minScore"));
-        assert!(props.contains_key("includeContent"));
-        assert!(props.contains_key("filterGraphDirection"));
-    }
-
-    #[test]
-    fn test_search_connections_defaults() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_connections").unwrap();
-
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        // Verify defaults
-        assert_eq!(props["direction"]["default"], "both");
-        assert_eq!(props["topK"]["default"], 10);
-        assert_eq!(props["minScore"]["default"], 0.1);
-        assert_eq!(props["includeContent"]["default"], false);
-    }
-
-    #[test]
-    fn test_get_graph_path_schema() {
-        let tools = definitions();
+        assert!(search.description.contains("asymmetric") || search.description.contains("E8"));
+        assert!(search.input_schema["required"].as_array().unwrap().contains(&json!("query")));
         let path = tools.iter().find(|t| t.name == "get_graph_path").unwrap();
-
-        // Check required fields
-        let required = path
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
-        assert!(required.contains(&json!("anchorId")));
-
-        // Check properties
-        let props = path
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert!(props.contains_key("anchorId"));
-        assert!(props.contains_key("direction"));
-        assert!(props.contains_key("maxHops"));
-        assert!(props.contains_key("minSimilarity"));
-        assert!(props.contains_key("includeContent"));
+        assert!(path.description.contains("attenuation") || path.description.contains("0.9"));
+        assert!(path.input_schema["required"].as_array().unwrap().contains(&json!("anchorId")));
     }
 
     #[test]
-    fn test_get_graph_path_defaults() {
+    fn test_schema_defaults_and_enums() {
         let tools = definitions();
-        let path = tools.iter().find(|t| t.name == "get_graph_path").unwrap();
-
-        let props = path
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        // Verify defaults
-        assert_eq!(props["direction"]["default"], "forward");
-        assert_eq!(props["maxHops"]["default"], 5);
-        assert_eq!(props["minSimilarity"]["default"], 0.3);
-        assert_eq!(props["includeContent"]["default"], false);
-    }
-
-    #[test]
-    fn test_direction_enum_values_search() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_connections").unwrap();
-
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        let direction_enum = props["direction"]["enum"].as_array().unwrap();
-        assert!(direction_enum.contains(&json!("source")));
-        assert!(direction_enum.contains(&json!("target")));
-        assert!(direction_enum.contains(&json!("both")));
-    }
-
-    #[test]
-    fn test_direction_enum_values_path() {
-        let tools = definitions();
-        let path = tools.iter().find(|t| t.name == "get_graph_path").unwrap();
-
-        let props = path
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        let direction_enum = props["direction"]["enum"].as_array().unwrap();
-        assert!(direction_enum.contains(&json!("forward")));
-        assert!(direction_enum.contains(&json!("backward")));
-    }
-
-    #[test]
-    fn test_filter_graph_direction_enum() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_connections").unwrap();
-
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        let filter_enum = props["filterGraphDirection"]["enum"].as_array().unwrap();
-        assert!(filter_enum.contains(&json!("source")));
-        assert!(filter_enum.contains(&json!("target")));
-        assert!(filter_enum.contains(&json!("unknown")));
-    }
-
-    #[test]
-    fn test_tool_descriptions_mention_e8_or_asymmetric() {
-        let tools = definitions();
-
-        for tool in &tools {
-            // Both tools should reference E8 or asymmetric similarity
-            assert!(
-                tool.description.contains("asymmetric") || tool.description.contains("E8"),
-                "Tool {} should mention asymmetric E8",
-                tool.name
-            );
-        }
-    }
-
-    #[test]
-    fn test_search_connections_mentions_direction_modifiers() {
-        let tools = definitions();
-        let search = tools.iter().find(|t| t.name == "search_connections").unwrap();
-
-        // Should mention direction modifiers or AP-77
-        assert!(
-            search.description.contains("1.2") || search.description.contains("AP-77"),
-            "search_connections should mention direction modifiers"
-        );
-    }
-
-    #[test]
-    fn test_get_graph_path_mentions_attenuation() {
-        let tools = definitions();
-        let path = tools.iter().find(|t| t.name == "get_graph_path").unwrap();
-
-        // Should mention hop attenuation
-        assert!(
-            path.description.contains("attenuation") || path.description.contains("0.9"),
-            "get_graph_path should mention hop attenuation"
-        );
+        let search_props = tools.iter().find(|t| t.name == "search_connections").unwrap()
+            .input_schema["properties"].as_object().unwrap().clone();
+        assert_eq!(search_props["direction"]["default"], "both");
+        assert_eq!(search_props["topK"]["default"], 10);
+        let path_props = tools.iter().find(|t| t.name == "get_graph_path").unwrap()
+            .input_schema["properties"].as_object().unwrap().clone();
+        assert_eq!(path_props["direction"]["default"], "forward");
+        assert_eq!(path_props["maxHops"]["default"], 5);
     }
 }

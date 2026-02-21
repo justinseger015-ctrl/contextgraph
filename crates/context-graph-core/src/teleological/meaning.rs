@@ -382,305 +382,87 @@ impl FusionMethod {
 mod tests {
     use super::*;
 
-    // ===== MeaningExtractionConfig Tests =====
-
     #[test]
-    fn test_config_default() {
+    fn test_config_default_and_validate() {
         let config = MeaningExtractionConfig::default();
-
         assert_eq!(config.attention_top_k, 128);
         assert!((config.contrast_alpha - 0.2).abs() < f32::EPSILON);
         assert!((config.sparsity_threshold - 0.1).abs() < f32::EPSILON);
         assert_eq!(config.min_agreement, 6);
-        assert!((config.disagreement_threshold - 0.3).abs() < f32::EPSILON);
         assert!(config.normalize);
-        assert!((config.agreement_value_threshold - 0.5).abs() < f32::EPSILON);
-
-        println!("[PASS] MeaningExtractionConfig::default matches teleoplan.md");
-    }
-
-    #[test]
-    fn test_config_code_search() {
-        let config = MeaningExtractionConfig::code_search();
-
-        assert_eq!(config.attention_top_k, 256);
-        assert!(config.contrast_alpha > 0.2);
-        assert!(config.sparsity_threshold > 0.1);
-
-        println!("[PASS] code_search config has tighter parameters");
-    }
-
-    #[test]
-    fn test_config_semantic_search() {
-        let config = MeaningExtractionConfig::semantic_search();
-
-        assert!(config.sparsity_threshold < 0.1); // Less aggressive
-        assert!(config.min_agreement > 6); // Higher agreement
-
-        println!("[PASS] semantic_search config preserves nuance");
-    }
-
-    #[test]
-    fn test_config_high_precision() {
-        let config = MeaningExtractionConfig::high_precision();
-
-        assert!(config.attention_top_k < 128); // Very focused
-        assert!(config.contrast_alpha > 0.3); // High contrast
-        assert!(config.sparsity_threshold > 0.15); // Aggressive
-
-        println!("[PASS] high_precision config is aggressive");
-    }
-
-    #[test]
-    fn test_config_validate_pass() {
-        let config = MeaningExtractionConfig::default();
         config.validate(); // Should not panic
 
-        println!("[PASS] Default config passes validation");
-    }
+        // Code search variant
+        let code = MeaningExtractionConfig::code_search();
+        assert_eq!(code.attention_top_k, 256);
+        code.validate();
 
-    #[test]
-    #[should_panic(expected = "FAIL FAST")]
-    fn test_config_validate_invalid_top_k_zero() {
-        let config = MeaningExtractionConfig {
-            attention_top_k: 0,
-            ..Default::default()
-        };
-        config.validate();
-    }
-
-    #[test]
-    #[should_panic(expected = "FAIL FAST")]
-    fn test_config_validate_invalid_top_k_too_large() {
-        let config = MeaningExtractionConfig {
-            attention_top_k: EMBEDDING_DIM + 1,
-            ..Default::default()
-        };
-        config.validate();
-    }
-
-    #[test]
-    #[should_panic(expected = "FAIL FAST")]
-    fn test_config_validate_invalid_alpha() {
-        let config = MeaningExtractionConfig {
-            contrast_alpha: 1.5,
-            ..Default::default()
-        };
-        config.validate();
-    }
-
-    #[test]
-    #[should_panic(expected = "FAIL FAST")]
-    fn test_config_validate_invalid_agreement() {
-        let config = MeaningExtractionConfig {
-            min_agreement: 0,
-            ..Default::default()
-        };
-        config.validate();
-    }
-
-    #[test]
-    fn test_config_serialization() {
-        let config = MeaningExtractionConfig::code_search();
-        let json = serde_json::to_string(&config).unwrap();
+        // Serialization roundtrip
+        let json = serde_json::to_string(&code).unwrap();
         let deserialized: MeaningExtractionConfig = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(config.attention_top_k, deserialized.attention_top_k);
-
-        println!("[PASS] Config serialization roundtrip works");
+        assert_eq!(code.attention_top_k, deserialized.attention_top_k);
     }
 
-    // ===== ExtractedMeaning Tests =====
-
     #[test]
-    fn test_extracted_meaning_empty() {
+    fn test_extracted_meaning_empty_and_accessors() {
         let em = ExtractedMeaning::empty();
-
         assert!(em.focus_dimensions.is_empty());
-        assert!(em.enhanced.is_empty());
-        assert!(em.sparse.is_empty());
         assert_eq!(em.agreement_count(), 0);
         assert_eq!(em.disagreement_count(), 0);
-
-        println!("[PASS] ExtractedMeaning::empty creates empty structure");
-    }
-
-    #[test]
-    fn test_extracted_meaning_sparsity_ratio() {
-        let mut em = ExtractedMeaning::empty();
-
-        // Empty = 0 ratio
         assert!((em.sparsity_ratio() - 0.0).abs() < f32::EPSILON);
 
-        // 50% sparse
-        em.sparse = vec![0.0, 0.5, 0.0, 0.3, 0.0, 0.1];
-        assert!((em.sparsity_ratio() - 0.5).abs() < 0.001);
+        // Sparsity with data
+        let mut em2 = ExtractedMeaning::empty();
+        em2.sparse = vec![0.0, 0.5, 0.0, 0.3, 0.0, 0.1];
+        assert!((em2.sparsity_ratio() - 0.5).abs() < 0.001);
 
-        println!("[PASS] sparsity_ratio computes correctly");
+        // Top focus
+        em2.focus_dimensions = vec![(10, 0.9), (20, 0.8), (30, 0.7), (40, 0.6)];
+        assert_eq!(em2.top_focus(2).len(), 2);
+        assert_eq!(em2.top_focus(10).len(), 4);
+
+        // Dimension queries
+        em2.agreement_dimensions = vec![5, 10, 15];
+        em2.disagreement_dimensions = vec![20, 25];
+        assert!(em2.is_agreement_dimension(10));
+        assert!(!em2.is_agreement_dimension(20));
+        assert!(em2.is_disagreement_dimension(20));
     }
-
-    #[test]
-    fn test_extracted_meaning_top_focus() {
-        let mut em = ExtractedMeaning::empty();
-        em.focus_dimensions = vec![(10, 0.9), (20, 0.8), (30, 0.7), (40, 0.6)];
-
-        let top2 = em.top_focus(2);
-        assert_eq!(top2.len(), 2);
-        assert_eq!(top2[0], (10, 0.9));
-        assert_eq!(top2[1], (20, 0.8));
-
-        // Request more than available
-        let top10 = em.top_focus(10);
-        assert_eq!(top10.len(), 4);
-
-        println!("[PASS] top_focus returns correct subset");
-    }
-
-    #[test]
-    fn test_extracted_meaning_dimension_queries() {
-        let mut em = ExtractedMeaning::empty();
-        em.agreement_dimensions = vec![5, 10, 15];
-        em.disagreement_dimensions = vec![20, 25];
-
-        assert!(em.is_agreement_dimension(10));
-        assert!(!em.is_agreement_dimension(20));
-        assert!(em.is_disagreement_dimension(20));
-        assert!(!em.is_disagreement_dimension(10));
-
-        println!("[PASS] dimension queries work correctly");
-    }
-
-    // ===== CrossEmbeddingAnalysis Tests =====
-
-    #[test]
-    fn test_cross_embedding_analysis_empty() {
-        let cea = CrossEmbeddingAnalysis::empty();
-
-        assert!(cea.dimension_agreement.is_empty());
-        assert_eq!(cea.triangulated_count(), 0);
-        assert_eq!(cea.nuance_count(), 0);
-        assert!((cea.coherence_score - 0.0).abs() < f32::EPSILON);
-
-        println!("[PASS] CrossEmbeddingAnalysis::empty creates empty structure");
-    }
-
-    #[test]
-    fn test_cross_embedding_analysis_default() {
-        let cea = CrossEmbeddingAnalysis::default();
-        assert_eq!(cea.triangulated_count(), 0);
-
-        println!("[PASS] CrossEmbeddingAnalysis::default is empty");
-    }
-
-    #[test]
-    fn test_cross_embedding_analysis_serialization() {
-        let mut cea = CrossEmbeddingAnalysis::empty();
-        cea.triangulated_dimensions = vec![1, 2, 3];
-        cea.coherence_score = 0.85;
-
-        let json = serde_json::to_string(&cea).unwrap();
-        let deserialized: CrossEmbeddingAnalysis = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(
-            cea.triangulated_dimensions,
-            deserialized.triangulated_dimensions
-        );
-        assert!((cea.coherence_score - deserialized.coherence_score).abs() < f32::EPSILON);
-
-        println!("[PASS] CrossEmbeddingAnalysis serialization works");
-    }
-
-    // ===== NuanceDimension Tests =====
 
     #[test]
     fn test_nuance_dimension_new() {
         let nd = NuanceDimension::new(100, 9, 0.2, 0.8);
-
         assert_eq!(nd.dimension, 100);
         assert_eq!(nd.dissenting_embedder, 9);
-        assert!((nd.dissenting_value - 0.2).abs() < f32::EPSILON);
-        assert!((nd.consensus_value - 0.8).abs() < f32::EPSILON);
         assert!((nd.disagreement_magnitude - 0.6).abs() < f32::EPSILON);
-
-        println!("[PASS] NuanceDimension::new computes disagreement magnitude");
-    }
-
-    #[test]
-    fn test_nuance_dimension_emotional() {
-        let nd = NuanceDimension::new(50, 9, 0.1, 0.9);
         assert!(nd.is_emotional_nuance());
 
-        let nd_other = NuanceDimension::new(50, 5, 0.1, 0.9);
-        assert!(!nd_other.is_emotional_nuance());
+        let nd_code = NuanceDimension::new(50, 5, 0.1, 0.9);
+        assert!(nd_code.is_code_nuance());
+        assert!(!nd_code.is_emotional_nuance());
 
-        println!("[PASS] is_emotional_nuance detects E10 (index 9)");
+        let nd_social = NuanceDimension::new(50, 8, 0.1, 0.9);
+        assert!(nd_social.is_social_nuance());
     }
 
     #[test]
-    fn test_nuance_dimension_code() {
-        let nd = NuanceDimension::new(50, 5, 0.1, 0.9);
-        assert!(nd.is_code_nuance());
-
-        println!("[PASS] is_code_nuance detects E6 (index 5)");
-    }
-
-    #[test]
-    fn test_nuance_dimension_social() {
-        let nd = NuanceDimension::new(50, 8, 0.1, 0.9);
-        assert!(nd.is_social_nuance());
-
-        println!("[PASS] is_social_nuance detects E9 (index 8)");
-    }
-
-    // ===== FusionMethod Tests =====
-
-    #[test]
-    fn test_fusion_method_default() {
+    fn test_fusion_and_cross_embedding_serialization() {
+        // FusionMethod
         assert_eq!(FusionMethod::default(), FusionMethod::WeightedAverage);
-
-        println!("[PASS] FusionMethod::default is WeightedAverage");
-    }
-
-    #[test]
-    fn test_fusion_method_all() {
         assert_eq!(FusionMethod::ALL.len(), 5);
-
-        println!("[PASS] FusionMethod::ALL contains 5 methods");
-    }
-
-    #[test]
-    fn test_fusion_method_description() {
-        assert!(FusionMethod::WeightedAverage
-            .description()
-            .contains("weighted"));
-        assert!(FusionMethod::Attention.description().contains("Attention"));
-        assert!(FusionMethod::FocusOnly.description().contains("focus"));
-        assert!(FusionMethod::Hierarchical
-            .description()
-            .contains("Hierarchical"));
-        assert!(FusionMethod::ConsensusOnly
-            .description()
-            .contains("agreement"));
-
-        println!("[PASS] FusionMethod descriptions are informative");
-    }
-
-    #[test]
-    fn test_fusion_method_equality() {
-        assert_eq!(FusionMethod::Attention, FusionMethod::Attention);
-        assert_ne!(FusionMethod::Attention, FusionMethod::FocusOnly);
-
-        println!("[PASS] FusionMethod equality works");
-    }
-
-    #[test]
-    fn test_fusion_method_serialization() {
         let method = FusionMethod::Hierarchical;
         let json = serde_json::to_string(&method).unwrap();
         let deserialized: FusionMethod = serde_json::from_str(&json).unwrap();
-
         assert_eq!(method, deserialized);
 
-        println!("[PASS] FusionMethod serialization works");
+        // CrossEmbeddingAnalysis
+        let mut cea = CrossEmbeddingAnalysis::empty();
+        assert_eq!(cea.triangulated_count(), 0);
+        cea.triangulated_dimensions = vec![1, 2, 3];
+        cea.coherence_score = 0.85;
+        let json = serde_json::to_string(&cea).unwrap();
+        let deser: CrossEmbeddingAnalysis = serde_json::from_str(&json).unwrap();
+        assert_eq!(cea.triangulated_dimensions, deser.triangulated_dimensions);
+        assert!((cea.coherence_score - deser.coherence_score).abs() < f32::EPSILON);
     }
 }

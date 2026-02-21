@@ -347,7 +347,7 @@ mod tests {
 
         let original = HookEventType::PreToolUse;
         let copied = original; // Copy
-        let cloned = original.clone(); // Clone
+        let cloned = original; // Clone
 
         assert_eq!(original, copied, "FAIL: Copy must preserve value");
         assert_eq!(original, cloned, "FAIL: Clone must preserve value");

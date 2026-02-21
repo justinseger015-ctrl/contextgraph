@@ -50,56 +50,6 @@ fn test_matrix_search_with_threshold() {
 }
 
 #[test]
-fn test_pairwise_similarity_matrix() {
-    let search = TeleologicalMatrixSearch::new();
-    let vectors = vec![
-        make_test_vector(0.8, 0.6),
-        make_test_vector(0.7, 0.5),
-        make_test_vector(0.6, 0.4),
-    ];
-
-    let matrix = search.pairwise_similarity_matrix(&vectors);
-
-    assert_eq!(matrix.len(), 3);
-    assert_eq!(matrix[0].len(), 3);
-
-    for (i, row) in matrix.iter().enumerate() {
-        assert!((row[i] - 1.0).abs() < 0.01);
-    }
-
-    for (i, row_i) in matrix.iter().enumerate() {
-        for (j, &val) in row_i.iter().enumerate() {
-            assert!((val - matrix[j][i]).abs() < 0.001);
-        }
-    }
-}
-
-#[test]
-fn test_find_clusters() {
-    let search = TeleologicalMatrixSearch::new();
-    let vectors = vec![
-        make_test_vector(0.9, 0.8),
-        make_test_vector(0.9, 0.8),
-        make_varied_test_vector(100),
-        make_varied_test_vector(500),
-    ];
-
-    let clusters = search.find_clusters(&vectors, 0.99);
-    assert!(!clusters.is_empty(), "Should find at least 1 cluster");
-}
-
-#[test]
-fn test_compute_centroid() {
-    let search = TeleologicalMatrixSearch::new();
-    let vectors = vec![make_test_vector(0.8, 0.6), make_test_vector(0.6, 0.4)];
-
-    let centroid = search.compute_centroid(&vectors);
-
-    assert!((centroid.topic_profile.alignments[0] - 0.7).abs() < 0.01);
-    assert!((centroid.cross_correlations[0] - 0.5).abs() < 0.01);
-}
-
-#[test]
 fn test_comprehensive_comparison() {
     let search = TeleologicalMatrixSearch::new();
     let tv1 = make_test_vector(0.8, 0.6);

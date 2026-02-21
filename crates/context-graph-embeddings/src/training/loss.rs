@@ -452,7 +452,7 @@ mod tests {
         let val: f32 = loss.flatten_all().unwrap().to_vec1().unwrap()[0];
 
         // Separation loss is mean cosine similarity, should be in [-1, 1]
-        assert!(val >= -1.0 && val <= 1.0, "Separation loss should be in [-1,1], got {}", val);
+        assert!((-1.0..=1.0).contains(&val), "Separation loss should be in [-1,1], got {}", val);
     }
 
     #[test]

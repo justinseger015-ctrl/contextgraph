@@ -530,7 +530,7 @@ mod tests {
         let mut values: Vec<f32> = terms.iter().map(|(_, v)| *v).collect();
 
         // Sort by indices (required by SparseVector)
-        let mut pairs: Vec<_> = indices.into_iter().zip(values.into_iter()).collect();
+        let mut pairs: Vec<_> = indices.into_iter().zip(values).collect();
         pairs.sort_by_key(|(i, _)| *i);
 
         indices = pairs.iter().map(|(i, _)| *i).collect();

@@ -95,10 +95,11 @@ fn create_test_fingerprint(seed: u64, content: &str) -> TeleologicalFingerprint 
 
 /// Create a SourceMetadata for a given session.
 fn create_test_source_metadata(session_id: &str) -> SourceMetadata {
-    let mut meta = SourceMetadata::default();
-    meta.session_id = Some(session_id.to_string());
-    meta.created_at = Some(Utc::now());
-    meta
+    SourceMetadata {
+        session_id: Some(session_id.to_string()),
+        created_at: Some(Utc::now()),
+        ..SourceMetadata::default()
+    }
 }
 
 /// Open a store and wrap in Arc for trait usage.

@@ -287,7 +287,7 @@ impl Handlers {
                         continue;
                     }
                     Some(conn_dir) => {
-                        let conn_dir_str = format!("{}", conn_dir);
+                        let conn_dir_str = conn_dir.to_string();
                         if conn_dir_str.to_lowercase() != dir_filter.to_lowercase() {
                             debug!(
                                 connection_id = %conn.connection_id,
@@ -1239,48 +1239,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_infer_graph_direction_source() {
-        // Create a fingerprint where source norm > target norm
-        let mut fp = SemanticFingerprint::zeroed();
-        // Set e8_as_source to have higher norm than e8_as_target
-        fp.e8_graph_as_source = vec![1.0, 0.5, 0.3]; // norm ~= 1.14
-        fp.e8_graph_as_target = vec![0.5, 0.2, 0.1]; // norm ~= 0.55
-
-        let direction = infer_graph_direction(&fp);
-        assert_eq!(direction, GraphDirection::Source);
-        println!("[PASS] Correctly inferred Source direction");
-    }
-
-    #[test]
-    fn test_infer_graph_direction_target() {
-        // Create a fingerprint where target norm > source norm
-        let mut fp = SemanticFingerprint::zeroed();
-        fp.e8_graph_as_source = vec![0.5, 0.2, 0.1]; // norm ~= 0.55
-        fp.e8_graph_as_target = vec![1.0, 0.5, 0.3]; // norm ~= 1.14
-
-        let direction = infer_graph_direction(&fp);
-        assert_eq!(direction, GraphDirection::Target);
-        println!("[PASS] Correctly inferred Target direction");
-    }
-
-    #[test]
-    fn test_infer_graph_direction_unknown() {
-        // Create a fingerprint where norms are similar
+    fn test_infer_graph_direction() {
         let mut fp = SemanticFingerprint::zeroed();
         fp.e8_graph_as_source = vec![1.0, 0.5, 0.3];
+        fp.e8_graph_as_target = vec![0.5, 0.2, 0.1];
+        assert_eq!(infer_graph_direction(&fp), GraphDirection::Source);
+        fp.e8_graph_as_source = vec![0.5, 0.2, 0.1];
         fp.e8_graph_as_target = vec![1.0, 0.5, 0.3];
-
-        let direction = infer_graph_direction(&fp);
-        assert_eq!(direction, GraphDirection::Unknown);
-        println!("[PASS] Correctly inferred Unknown direction for equal norms");
-    }
-
-    #[test]
-    fn test_infer_graph_direction_empty_vectors() {
-        // Create a fingerprint with empty vectors
-        let fp = SemanticFingerprint::zeroed();
-        let direction = infer_graph_direction(&fp);
-        assert_eq!(direction, GraphDirection::Unknown);
-        println!("[PASS] Correctly handled empty vectors");
+        assert_eq!(infer_graph_direction(&fp), GraphDirection::Target);
+        fp.e8_graph_as_source = vec![1.0, 0.5, 0.3];
+        fp.e8_graph_as_target = vec![1.0, 0.5, 0.3];
+        assert_eq!(infer_graph_direction(&fp), GraphDirection::Unknown);
+        assert_eq!(infer_graph_direction(&SemanticFingerprint::zeroed()), GraphDirection::Unknown);
     }
 }

@@ -265,17 +265,3 @@ impl MemoryTracker {
     }
 }
 
-#[cfg(test)]
-impl MemoryTracker {
-    /// Test helper: Get mutable access to current_bytes for corruption testing.
-    #[cfg(test)]
-    pub(crate) fn set_current_bytes_for_test(&mut self, bytes: usize) {
-        self.current_bytes = bytes;
-    }
-
-    /// Test helper: Get mutable access to allocations for corruption testing.
-    #[cfg(test)]
-    pub(crate) fn insert_allocation_for_test(&mut self, model_id: ModelId, bytes: usize) {
-        self.allocations.insert(model_id, bytes);
-    }
-}

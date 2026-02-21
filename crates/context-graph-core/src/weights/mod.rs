@@ -556,7 +556,7 @@ mod tests {
 
         for profile_name in semantic_profiles {
             let weights = get_weight_profile(profile_name)
-                .expect(&format!("Profile '{}' should exist", profile_name));
+                .unwrap_or_else(|_| panic!("Profile '{}' should exist", profile_name));
 
             assert_eq!(
                 weights[1], 0.0,

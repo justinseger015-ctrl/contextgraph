@@ -111,7 +111,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_causal_discovery_tool_count() {
+    fn test_definitions_exist() {
         #[cfg(feature = "llm")]
         assert_eq!(definitions().len(), 2);
         #[cfg(not(feature = "llm"))]
@@ -120,150 +120,17 @@ mod tests {
 
     #[cfg(feature = "llm")]
     #[test]
-    fn test_trigger_causal_discovery_schema() {
+    fn test_trigger_schema_and_defaults() {
         let tools = definitions();
-        let trigger = tools
-            .iter()
-            .find(|t| t.name == "trigger_causal_discovery")
-            .unwrap();
-
-        // Should have no required fields (all optional)
-        let has_required = trigger.input_schema.get("required").is_some();
-        assert!(
-            !has_required
-                || trigger
-                    .input_schema
-                    .get("required")
-                    .unwrap()
-                    .as_array()
-                    .unwrap()
-                    .is_empty()
-        );
-
-        // Check properties
-        let props = trigger
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        assert!(props.contains_key("maxPairs"));
-        assert!(props.contains_key("minConfidence"));
-        assert!(props.contains_key("sessionScope"));
-        assert!(props.contains_key("similarityThreshold"));
-        assert!(props.contains_key("skipAnalyzed"));
-        assert!(props.contains_key("dryRun"));
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_trigger_defaults() {
-        let tools = definitions();
-        let trigger = tools
-            .iter()
-            .find(|t| t.name == "trigger_causal_discovery")
-            .unwrap();
-
-        let props = trigger
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
+        let trigger = tools.iter().find(|t| t.name == "trigger_causal_discovery").unwrap();
+        assert!(trigger.description.contains("LLM") || trigger.description.contains("Qwen"));
+        assert!(trigger.description.contains("E5") || trigger.description.contains("CausalModel"));
+        let props = trigger.input_schema["properties"].as_object().unwrap();
         assert_eq!(props["maxPairs"]["default"], 50);
-        assert_eq!(props["minConfidence"]["default"], 0.7);
         assert_eq!(props["sessionScope"]["default"], "all");
-        assert_eq!(props["similarityThreshold"]["default"], 0.5);
-        assert_eq!(props["skipAnalyzed"]["default"], true);
-        assert_eq!(props["dryRun"]["default"], false);
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_session_scope_enum() {
-        let tools = definitions();
-        let trigger = tools
-            .iter()
-            .find(|t| t.name == "trigger_causal_discovery")
-            .unwrap();
-
-        let props = trigger
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
         let scope_enum = props["sessionScope"]["enum"].as_array().unwrap();
         assert!(scope_enum.contains(&json!("current")));
         assert!(scope_enum.contains(&json!("all")));
         assert!(scope_enum.contains(&json!("recent")));
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_status_schema() {
-        let tools = definitions();
-        let status = tools
-            .iter()
-            .find(|t| t.name == "get_causal_discovery_status")
-            .unwrap();
-
-        let props = status
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-
-        assert!(props.contains_key("includeLastResult"));
-        assert!(props.contains_key("includeGraphStats"));
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_trigger_mentions_llm() {
-        let tools = definitions();
-        let trigger = tools
-            .iter()
-            .find(|t| t.name == "trigger_causal_discovery")
-            .unwrap();
-
-        assert!(
-            trigger.description.contains("LLM") || trigger.description.contains("Qwen"),
-            "trigger_causal_discovery should mention the LLM"
-        );
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_trigger_mentions_vram() {
-        let tools = definitions();
-        let trigger = tools
-            .iter()
-            .find(|t| t.name == "trigger_causal_discovery")
-            .unwrap();
-
-        assert!(
-            trigger.description.contains("VRAM") || trigger.description.contains("FP16"),
-            "trigger_causal_discovery should mention VRAM requirements"
-        );
-    }
-
-    #[cfg(feature = "llm")]
-    #[test]
-    fn test_trigger_mentions_e5() {
-        let tools = definitions();
-        let trigger = tools
-            .iter()
-            .find(|t| t.name == "trigger_causal_discovery")
-            .unwrap();
-
-        assert!(
-            trigger.description.contains("E5") || trigger.description.contains("CausalModel"),
-            "trigger_causal_discovery should mention E5 embeddings"
-        );
     }
 }

@@ -517,6 +517,7 @@ mod tests {
     // SOURCE OF TRUTH: SessionCache state before/after
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_post_001_successful_tool_processing() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-POST-001: Successful Tool Processing ===");
@@ -565,6 +566,7 @@ mod tests {
     // Per PRD v6, we create a new session instead of returning error
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_post_002_new_session_created() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-POST-002: New Session Created When Not Found ===");
@@ -642,6 +644,7 @@ mod tests {
     // SOURCE OF TRUTH: SessionCache state values before/after
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_post_006_tool_impact_effects() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-POST-006: Tool Impact Effects ===");
@@ -676,6 +679,7 @@ mod tests {
     // TC-POST-007: Execution Time Tracking
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_post_007_execution_time_tracking() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-POST-007: Execution Time Tracking ===");
@@ -717,6 +721,7 @@ mod tests {
     // SOURCE OF TRUTH: Exit code 4 (InvalidInput)
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_post_008_missing_tool_name() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-POST-008: Missing tool_name (stdin=false) ===");

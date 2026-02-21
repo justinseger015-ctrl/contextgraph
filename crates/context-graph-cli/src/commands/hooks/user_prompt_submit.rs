@@ -1591,6 +1591,7 @@ mod tests {
     // SOURCE OF TRUTH: SessionCache state verified, context_injection generated
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_prompt_001_successful_prompt_processing() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-PROMPT-001: Successful Prompt Processing ===");
@@ -1645,6 +1646,7 @@ mod tests {
     // Note: Per PRD v6, we no longer fail on missing session - we create it.
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_prompt_002_new_session_creation() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-PROMPT-002: New Session Creation ===");
@@ -1729,6 +1731,7 @@ mod tests {
     // SOURCE OF TRUTH: HookOutput.context_injection is Some
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_prompt_005_context_injection_generated() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-PROMPT-005: Context Injection Generated ===");
@@ -1780,6 +1783,7 @@ mod tests {
     // SOURCE OF TRUTH: Default evaluation applied, no crash
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_prompt_006_empty_context_handling() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-PROMPT-006: Empty Context Handling ===");
@@ -1816,6 +1820,7 @@ mod tests {
     // SOURCE OF TRUTH: execution_time_ms < 2000
     // =========================================================================
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn tc_prompt_007_execution_within_timeout() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== TC-PROMPT-007: Execution Within Timeout ===");
@@ -1959,6 +1964,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)] // Lock held intentionally for test serialization
     async fn test_missing_prompt_when_not_stdin() {
         let _guard = GLOBAL_IDENTITY_LOCK.lock().expect("Test lock poisoned");
         println!("\n=== Testing Missing Prompt (stdin=false) ===");

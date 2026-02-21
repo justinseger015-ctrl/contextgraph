@@ -338,7 +338,7 @@ async fn test_search_periodic_auto_detect() {
             let config = json.get("periodicConfig").unwrap();
 
             // Verify auto-detect was applied
-            assert_eq!(config.get("autoDetected").unwrap().as_bool().unwrap(), true);
+            assert!(config.get("autoDetected").unwrap().as_bool().unwrap());
 
             // Should have effective hour and day populated
             let target_hour = config.get("targetHour");
@@ -408,8 +408,8 @@ async fn test_search_periodic_result_fields() {
                   semantic_score, periodic_score, final_score);
 
             // Verify scores are in valid ranges
-            assert!(semantic_score >= 0.0 && semantic_score <= 1.0, "Semantic score out of range");
-            assert!(periodic_score >= 0.0 && periodic_score <= 1.0, "Periodic score out of range");
+            assert!((0.0..=1.0).contains(&semantic_score), "Semantic score out of range");
+            assert!((0.0..=1.0).contains(&periodic_score), "Periodic score out of range");
             assert!(final_score >= 0.0, "Final score should be non-negative");
         }
         Err(e) => {

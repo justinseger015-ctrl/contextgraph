@@ -73,7 +73,7 @@ impl AttentionStrategy for TiledAttention {
 
         let br = self.tile_size; // query tile size
         let bc = self.tile_size; // key/value tile size
-        let num_q_tiles = (seq_len + br - 1) / br;
+        let num_q_tiles = seq_len.div_ceil(br);
 
         // Collect output tiles
         let mut output_tiles: Vec<Tensor> = Vec::with_capacity(num_q_tiles);
@@ -120,7 +120,7 @@ impl AttentionStrategy for TiledAttention {
                 message: format!("TiledAttention init O failed: {}", e),
             })?;
 
-            let num_kv_tiles = (seq_len + bc - 1) / bc;
+            let num_kv_tiles = seq_len.div_ceil(bc);
 
             for kj in 0..num_kv_tiles {
                 let k_start = kj * bc;

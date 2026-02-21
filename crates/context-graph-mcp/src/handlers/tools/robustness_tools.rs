@@ -457,51 +457,19 @@ mod tests {
     use super::super::robustness_dtos::{E1_WEAKNESS_THRESHOLD, E9_DISCOVERY_THRESHOLD};
 
     #[test]
-    fn test_cosine_similarity_identical() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!((sim - 1.0).abs() < 0.001);
+    fn test_cosine_similarity() {
+        assert!((cosine_similarity(&[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0]) - 1.0).abs() < 0.001);
+        assert!(cosine_similarity(&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]).abs() < 0.001);
+        assert!((cosine_similarity(&[1.0, 0.0, 0.0], &[-1.0, 0.0, 0.0]) - (-1.0)).abs() < 0.001);
+        assert_eq!(cosine_similarity(&[], &[1.0, 0.0]), 0.0);
+        assert_eq!(cosine_similarity(&[1.0, 0.0], &[1.0, 0.0, 0.0]), 0.0);
     }
 
     #[test]
-    fn test_cosine_similarity_orthogonal() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![0.0, 1.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!(sim.abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_opposite() {
-        let a = vec![1.0, 0.0, 0.0];
-        let b = vec![-1.0, 0.0, 0.0];
-        let sim = cosine_similarity(&a, &b);
-        assert!((sim - (-1.0)).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_cosine_similarity_empty() {
-        let a: Vec<f32> = vec![];
-        let b = vec![1.0, 0.0];
-        assert_eq!(cosine_similarity(&a, &b), 0.0);
-    }
-
-    #[test]
-    fn test_cosine_similarity_mismatched_length() {
-        let a = vec![1.0, 0.0];
-        let b = vec![1.0, 0.0, 0.0];
-        assert_eq!(cosine_similarity(&a, &b), 0.0);
-    }
-
-    #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_threshold_constants() {
-        // E9 threshold is LOWER than E1 because projected E9 vectors have much
-        // lower cosine similarity than native Hamming. This is expected.
-        // E9 finds blind spots where E9 >= 0.15 AND E1 < 0.5
-        assert!(E9_DISCOVERY_THRESHOLD < E1_WEAKNESS_THRESHOLD,
-                "E9 projected threshold should be lower than E1 semantic threshold");
-        assert!(E9_DISCOVERY_THRESHOLD >= 0.1, "E9 should be at least 0.1");
-        assert!(E1_WEAKNESS_THRESHOLD <= 0.6, "E1 weakness should be <= 0.6");
+        assert!(E9_DISCOVERY_THRESHOLD < E1_WEAKNESS_THRESHOLD);
+        assert!(E9_DISCOVERY_THRESHOLD >= 0.1);
+        assert!(E1_WEAKNESS_THRESHOLD <= 0.6);
     }
 }

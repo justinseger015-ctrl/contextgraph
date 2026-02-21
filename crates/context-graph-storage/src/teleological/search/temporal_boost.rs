@@ -838,13 +838,13 @@ mod tests {
         assert_eq!(compute_e2_recency_score(now - 60_000, now, &options), 1.0);
 
         // < 1 hour = 0.8
-        assert_eq!(compute_e2_recency_score(now - 1800_000, now, &options), 0.8);
+        assert_eq!(compute_e2_recency_score(now - 1_800_000, now, &options), 0.8);
 
         // < 1 day = 0.5
-        assert_eq!(compute_e2_recency_score(now - 43200_000, now, &options), 0.5);
+        assert_eq!(compute_e2_recency_score(now - 43_200_000, now, &options), 0.5);
 
         // > 1 week = 0.1
-        assert_eq!(compute_e2_recency_score(now - 1000000_000, now, &options), 0.1);
+        assert_eq!(compute_e2_recency_score(now - 1_000_000_000, now, &options), 0.1);
     }
 
     #[test]
@@ -856,7 +856,7 @@ mod tests {
 
         // All timestamps return 1.0
         assert_eq!(compute_e2_recency_score(now, now, &options), 1.0);
-        assert_eq!(compute_e2_recency_score(now - 1000000_000, now, &options), 1.0);
+        assert_eq!(compute_e2_recency_score(now - 1_000_000_000, now, &options), 1.0);
     }
 
     #[test]

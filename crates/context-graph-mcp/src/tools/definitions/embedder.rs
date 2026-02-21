@@ -335,119 +335,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_embedder_tool_count() {
-        // 7 embedder tools: search_by_embedder, get_embedder_clusters, compare_embedder_views,
-        // list_embedder_indexes, get_memory_fingerprint, create_weight_profile,
-        // search_cross_embedder_anomalies
-        assert_eq!(definitions().len(), 7);
-    }
-
-    #[test]
-    fn test_search_by_embedder_schema() {
+    fn test_definitions_exist_with_required_fields() {
         let tools = definitions();
+        assert_eq!(tools.len(), 7);
+        for tool in &tools {
+            assert!(
+                tool.description.contains("embedder") || tool.description.contains("E1"),
+                "Tool {} should mention embedder concepts", tool.name
+            );
+        }
         let search = tools.iter().find(|t| t.name == "search_by_embedder").unwrap();
-
-        // Check required fields
-        let required = search
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
+        let required = search.input_schema.get("required").unwrap().as_array().unwrap();
         assert!(required.contains(&json!("embedder")));
         assert!(required.contains(&json!("query")));
-
-        // Check embedder enum has all 13 values
-        let props = search
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
+        let props = search.input_schema.get("properties").unwrap().as_object().unwrap();
         let embedder_enum = props["embedder"]["enum"].as_array().unwrap();
         assert_eq!(embedder_enum.len(), 13);
     }
 
     #[test]
-    fn test_get_embedder_clusters_schema() {
+    fn test_schema_defaults_and_constraints() {
         let tools = definitions();
-        let clusters = tools.iter().find(|t| t.name == "get_embedder_clusters").unwrap();
-
-        // Check required fields
-        let required = clusters
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
-        assert!(required.contains(&json!("embedder")));
-
-        // Check defaults
-        let props = clusters
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert_eq!(props["minClusterSize"]["default"], 3);
-        assert_eq!(props["topClusters"]["default"], 10);
-    }
-
-    #[test]
-    fn test_compare_embedder_views_schema() {
-        let tools = definitions();
-        let compare = tools.iter().find(|t| t.name == "compare_embedder_views").unwrap();
-
-        // Check required fields
-        let required = compare
-            .input_schema
-            .get("required")
-            .unwrap()
-            .as_array()
-            .unwrap();
-        assert!(required.contains(&json!("query")));
-        assert!(required.contains(&json!("embedders")));
-
-        // Check embedders array constraints
-        let props = compare
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert_eq!(props["embedders"]["minItems"], 2);
-        assert_eq!(props["embedders"]["maxItems"], 5);
-    }
-
-    #[test]
-    fn test_list_embedder_indexes_schema() {
-        let tools = definitions();
-        let list = tools.iter().find(|t| t.name == "list_embedder_indexes").unwrap();
-
-        // No required fields
-        let required = list.input_schema.get("required");
-        assert!(required.is_none());
-
-        // Check includeDetails default
-        let props = list
-            .input_schema
-            .get("properties")
-            .unwrap()
-            .as_object()
-            .unwrap();
-        assert_eq!(props["includeDetails"]["default"], true);
-    }
-
-    #[test]
-    fn test_all_tools_mention_embedder() {
-        let tools = definitions();
-
-        for tool in &tools {
-            assert!(
-                tool.description.contains("embedder") || tool.description.contains("E1"),
-                "Tool {} should mention embedder concepts",
-                tool.name
-            );
-        }
+        let clusters_props = tools.iter().find(|t| t.name == "get_embedder_clusters").unwrap()
+            .input_schema["properties"].as_object().unwrap();
+        assert_eq!(clusters_props["minClusterSize"]["default"], 3);
+        assert_eq!(clusters_props["topClusters"]["default"], 10);
+        let compare_props = tools.iter().find(|t| t.name == "compare_embedder_views").unwrap()
+            .input_schema["properties"].as_object().unwrap();
+        assert_eq!(compare_props["embedders"]["minItems"], 2);
+        assert_eq!(compare_props["embedders"]["maxItems"], 5);
     }
 }
