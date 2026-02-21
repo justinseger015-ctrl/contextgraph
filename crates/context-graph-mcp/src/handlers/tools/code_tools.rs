@@ -395,8 +395,8 @@ impl Handlers {
 /// Language detection patterns: (language_name, indicator_patterns)
 const LANGUAGE_PATTERNS: &[(&str, &[&str])] = &[
     ("rust", &["impl ", "fn ", "let mut", "struct ", "enum ", "pub fn", "trait ", "cargo", ".rs", "unwrap(", "match "]),
-    ("python", &["def ", "import ", "self.", "__init__", "python", ".py", "pip ", "async def", "await ", "pytest"]),
-    ("javascript", &["function ", "const ", "let ", "var ", "=>", "async ", "await ", ".js", "npm ", "node ", "react", "vue", "angular"]),
+    ("python", &["def ", "import ", "self.", "__init__", "python", ".py", "pip ", "async def", "pytest"]),
+    ("javascript", &["function ", "const ", "let ", "var ", "=>", ".js", "npm ", "node ", "react", "vue", "angular"]),
     ("typescript", &["interface ", ": string", ": number", ": boolean", ".ts", "type ", "<T>"]),
     ("go", &["func ", "package ", "import ", "go ", "goroutine", "chan ", "defer ", ".go", "golang"]),
     ("java", &["public class", "private ", "protected ", "static void", "extends ", "implements ", ".java", "maven", "gradle", "@Override"]),

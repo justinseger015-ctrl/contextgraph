@@ -96,6 +96,13 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "default": 0.20,
                         "minimum": 0,
                         "maximum": 1
+                    },
+                    "rerankWeight": {
+                        "type": "number",
+                        "description": "E12 rerank weight for blending with fusion score (0-1, default: 0.4). Only used when strategy='pipeline'.",
+                        "default": 0.4,
+                        "minimum": 0,
+                        "maximum": 1
                     }
                 }
             }),

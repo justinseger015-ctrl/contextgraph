@@ -971,23 +971,30 @@ impl Handlers {
             .e12_late_interaction
             .clone();
 
-        // E10: Compute dual vectors using same weighted average approach
-        let e10_multimodal_paraphrase = Self::weighted_average_dense_slices(
+        // E10: Compute dual vectors — filter weights in sync with slices to prevent misalignment
+        let (e10_paraphrase_slices, e10_paraphrase_weights): (Vec<&[f32]>, Vec<f32>) =
             fingerprints
                 .iter()
-                .map(|f| f.semantic.get_e10_as_paraphrase())
-                .filter(|v| !v.is_empty())
-                .collect(),
-            &weights,
-        );
-        let e10_multimodal_as_context = Self::weighted_average_dense_slices(
+                .zip(weights.iter())
+                .filter_map(|(f, &w)| {
+                    let v = f.semantic.get_e10_as_paraphrase();
+                    if v.is_empty() { None } else { Some((v, w)) }
+                })
+                .unzip();
+        let e10_multimodal_paraphrase =
+            Self::weighted_average_dense_slices(e10_paraphrase_slices, &e10_paraphrase_weights);
+
+        let (e10_context_slices, e10_context_weights): (Vec<&[f32]>, Vec<f32>) =
             fingerprints
                 .iter()
-                .map(|f| f.semantic.get_e10_as_context())
-                .filter(|v| !v.is_empty())
-                .collect(),
-            &weights,
-        );
+                .zip(weights.iter())
+                .filter_map(|(f, &w)| {
+                    let v = f.semantic.get_e10_as_context();
+                    if v.is_empty() { None } else { Some((v, w)) }
+                })
+                .unzip();
+        let e10_multimodal_as_context =
+            Self::weighted_average_dense_slices(e10_context_slices, &e10_context_weights);
 
         SemanticFingerprint {
             e1_semantic,

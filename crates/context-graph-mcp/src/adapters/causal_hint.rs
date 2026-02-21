@@ -202,15 +202,24 @@ impl CausalHintProvider for LlmCausalHintProvider {
                     .relationships
                     .into_iter()
                     .map(|r| {
+                        let mechanism = match context_graph_core::traits::MechanismType::from_str(
+                            r.mechanism_type.as_str(),
+                        ) {
+                            Some(m) => m,
+                            None => {
+                                warn!(
+                                    invalid_type = r.mechanism_type.as_str(),
+                                    "LlmCausalHintProvider: Unknown mechanism type, defaulting to Direct"
+                                );
+                                context_graph_core::traits::MechanismType::Direct
+                            }
+                        };
                         ExtractedCausalRelationship::new(
                             r.cause,
                             r.effect,
                             r.explanation,
                             r.confidence,
-                            context_graph_core::traits::MechanismType::from_str(
-                                r.mechanism_type.as_str(),
-                            )
-                            .unwrap_or_default(),
+                            mechanism,
                         )
                     })
                     .collect()

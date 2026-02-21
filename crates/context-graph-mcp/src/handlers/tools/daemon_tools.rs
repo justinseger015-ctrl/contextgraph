@@ -56,6 +56,12 @@ impl Handlers {
 
         let pid = std::process::id();
 
+        let graph_builder_running = self
+            .graph_builder
+            .as_ref()
+            .map(|b| b.is_running())
+            .unwrap_or(false);
+
         let (uptime_secs, active_connections, max_connections, models_state, background_shutdown) =
             match &self.daemon_state {
                 Some(state) => {
@@ -77,16 +83,21 @@ impl Handlers {
                     (uptime, active, max, models, shutdown)
                 }
                 None => {
-                    // Daemon state not injected (stdio mode or tests)
-                    (0u64, 0usize, 0usize, "unknown".to_string(), false)
+                    // Daemon state not injected — running in stdio mode (not TCP daemon)
+                    // Report distinct sentinel values so callers can distinguish from a crashed daemon
+                    return self.tool_result(
+                        id,
+                        json!({
+                            "pid": pid,
+                            "mode": "stdio",
+                            "note": "Running in stdio mode (not TCP daemon). Uptime and connection metrics are not available.",
+                            "background_tasks": {
+                                "graph_builder": graph_builder_running,
+                            }
+                        }),
+                    );
                 }
             };
-
-        let graph_builder_running = self
-            .graph_builder
-            .as_ref()
-            .map(|b| b.is_running())
-            .unwrap_or(false);
 
         let result = json!({
             "pid": pid,

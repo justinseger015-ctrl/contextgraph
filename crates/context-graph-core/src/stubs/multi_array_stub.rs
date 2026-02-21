@@ -289,8 +289,8 @@ impl MultiArrayEmbeddingProvider for StubMultiArrayProvider {
         // so that tests can actually verify asymmetric search logic.
         fingerprint.e5_causal_as_cause = Self::fill_dense_embedding(content, 768, 4);
         fingerprint.e5_causal_as_effect = Self::fill_dense_embedding(content, 768, 17);
-        // Legacy field uses cause vector for backward compatibility
-        fingerprint.e5_causal = fingerprint.e5_causal_as_cause.clone();
+        // Legacy field left empty to match production behavior (dual-vector format)
+        // Production provider does NOT populate e5_causal for new-format fingerprints.
         fingerprint.e7_code = Self::fill_dense_embedding(content, 1536, 6);
         // E8: CORE-01 FIX: Generate DISTINCT vectors for asymmetric source/target fields.
         fingerprint.e8_graph_as_source = Self::fill_dense_embedding(content, 1024, 7);
@@ -558,7 +558,9 @@ mod tests {
         assert_eq!(fp.e2_temporal_recent.len(), 512);
         assert_eq!(fp.e3_temporal_periodic.len(), 512);
         assert_eq!(fp.e4_temporal_positional.len(), 512);
-        assert_eq!(fp.e5_causal.len(), 768);
+        assert!(fp.e5_causal.is_empty(), "Legacy e5_causal should be empty in new format");
+        assert_eq!(fp.e5_causal_as_cause.len(), 768);
+        assert_eq!(fp.e5_causal_as_effect.len(), 768);
         assert_eq!(fp.e7_code.len(), 1536);
         assert_eq!(fp.e8_graph.len(), 1024); // Upgraded from 384D
         assert_eq!(fp.e9_hdc.len(), 1024); // HDC projected

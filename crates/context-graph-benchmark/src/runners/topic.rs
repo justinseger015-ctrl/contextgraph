@@ -202,7 +202,7 @@ fn compute_multispace_distance_matrix(dataset: &BenchmarkDataset, ids: &[Uuid]) 
             if let (Some(fp_a), Some(fp_b)) = (id_to_fp.get(&ids[i]), id_to_fp.get(&ids[j])) {
                 // Weighted combination of semantic embedders
                 let sim_e1 = cosine_similarity(&fp_a.e1_semantic, &fp_b.e1_semantic);
-                let sim_e5 = cosine_similarity(&fp_a.e5_causal, &fp_b.e5_causal);
+                let sim_e5 = cosine_similarity(fp_a.e5_active_vector(), fp_b.e5_active_vector());
                 let sim_e7 = cosine_similarity(&fp_a.e7_code, &fp_b.e7_code);
                 let sim_e10 = cosine_similarity(&fp_a.e10_multimodal_paraphrase, &fp_b.e10_multimodal_paraphrase);
 
@@ -235,7 +235,7 @@ fn multi_space_clustering(
         .iter()
         .map(|(_, fp)| {
             let mut concat = fp.e1_semantic.clone();
-            concat.extend_from_slice(&fp.e5_causal);
+            concat.extend_from_slice(fp.e5_active_vector());
             concat.extend_from_slice(&fp.e7_code);
             concat.extend_from_slice(&fp.e10_multimodal_paraphrase);
             concat

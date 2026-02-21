@@ -331,10 +331,20 @@ impl McpServer {
             .collect();
 
         // Poll interval (default: 5 seconds)
-        let poll_interval_secs: u64 = std::env::var("CODE_WATCH_INTERVAL")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(5);
+        let poll_interval_secs: u64 = match std::env::var("CODE_WATCH_INTERVAL") {
+            Ok(s) => match s.parse::<u64>() {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(
+                        value = %s,
+                        error = %e,
+                        "CODE_WATCH_INTERVAL is not a valid u64 — defaulting to 5 seconds"
+                    );
+                    5
+                }
+            },
+            Err(_) => 5,
+        };
 
         info!(
             code_store_path = %code_store_path,

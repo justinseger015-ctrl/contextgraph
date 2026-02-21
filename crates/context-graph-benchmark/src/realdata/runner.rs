@@ -480,7 +480,7 @@ fn build_multi_space_index(fps: &[(Uuid, &SemanticFingerprint)]) -> MultiSpaceIn
 fn multi_space_similarity(a: &SemanticFingerprint, b: &SemanticFingerprint) -> f32 {
     // Weighted combination of similarities
     let e1_sim = cosine_similarity(&a.e1_semantic, &b.e1_semantic);
-    let e5_sim = cosine_similarity(&a.e5_causal, &b.e5_causal);
+    let e5_sim = cosine_similarity(a.e5_active_vector(), b.e5_active_vector());
     let e7_sim = cosine_similarity(&a.e7_code, &b.e7_code);
     let e10_sim = cosine_similarity(&a.e10_multimodal_paraphrase, &b.e10_multimodal_paraphrase);
 
@@ -516,7 +516,7 @@ fn combine_embeddings(fp: &SemanticFingerprint) -> Vec<f32> {
     }
 
     // Add E5 (already 768, take first 384)
-    combined.extend(fp.e5_causal.iter().take(dim).copied());
+    combined.extend(fp.e5_active_vector().iter().take(dim).copied());
     while combined.len() < dim * 2 {
         combined.push(0.0);
     }

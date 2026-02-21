@@ -233,6 +233,20 @@ impl Handlers {
             }
         }
 
+        // Validate: autoDetect=false requires at least one of targetHour or targetDayOfWeek
+        if !params.auto_detect
+            && params.target_hour.is_none()
+            && params.target_day_of_week.is_none()
+        {
+            error!(
+                "search_periodic: autoDetect=false but no targetHour or targetDayOfWeek provided"
+            );
+            return self.tool_error(
+                id,
+                "When autoDetect is false, at least one of targetHour or targetDayOfWeek must be provided",
+            );
+        }
+
         // Clamp periodic weight
         let periodic_weight = params.periodic_weight.clamp(0.1, 1.0);
 

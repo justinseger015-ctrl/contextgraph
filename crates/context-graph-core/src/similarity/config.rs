@@ -191,67 +191,37 @@ impl WeightingStrategy {
 
     /// Create static weights that emphasize semantic search.
     ///
-    /// Per constitution.yaml:
-    /// - w_semantic: 0.40
-    /// - w_causal: 0.15
-    /// - w_entity: 0.15
-    /// - others: balanced (0.30 / 10 = 0.03 each)
+    /// Delegates to canonical WEIGHT_PROFILES to avoid value divergence.
     pub fn semantic_search_weights() -> [f32; NUM_EMBEDDERS] {
-        let mut weights = [0.03; NUM_EMBEDDERS]; // Base: 0.30 split among 10 others
-        weights[0] = 0.40; // E1 Semantic
-        weights[4] = 0.15; // E5 Causal
-        weights[10] = 0.15; // E11 Entity
-        weights
+        crate::weights::get_weight_profile("semantic_search")
+            .expect("semantic_search profile must exist in WEIGHT_PROFILES")
     }
 
     /// Create static weights that emphasize code search.
     ///
-    /// Per constitution.yaml:
-    /// - w_code: 0.50
-    /// - w_semantic: 0.20
-    /// - w_graph: 0.15
-    /// - others: reduced
+    /// Delegates to canonical WEIGHT_PROFILES to avoid value divergence.
     pub fn code_search_weights() -> [f32; NUM_EMBEDDERS] {
-        let mut weights = [0.015; NUM_EMBEDDERS]; // Base: ~0.15 split among 10 others
-        weights[6] = 0.50; // E7 Code
-        weights[0] = 0.20; // E1 Semantic
-        weights[7] = 0.15; // E8 Graph
-        weights
+        crate::weights::get_weight_profile("code_search")
+            .expect("code_search profile must exist in WEIGHT_PROFILES")
     }
 
     /// Create static weights that emphasize causal reasoning.
     ///
-    /// Per constitution.yaml:
-    /// - w_causal: 0.50
-    /// - w_semantic: 0.20
-    /// - w_entity: 0.15
-    /// - others: reduced
+    /// Delegates to canonical WEIGHT_PROFILES to avoid value divergence.
     pub fn causal_reasoning_weights() -> [f32; NUM_EMBEDDERS] {
-        let mut weights = [0.015; NUM_EMBEDDERS];
-        weights[4] = 0.50; // E5 Causal
-        weights[0] = 0.20; // E1 Semantic
-        weights[10] = 0.15; // E11 Entity
-        weights
+        crate::weights::get_weight_profile("causal_reasoning")
+            .expect("causal_reasoning profile must exist in WEIGHT_PROFILES")
     }
 
     /// Create static weights that emphasize graph/relational reasoning.
     ///
     /// Per E8 upgrade specification (Phase 5):
-    /// - w_graph: 0.45 (E8 primary for structural relationships)
-    /// - w_semantic: 0.25 (E1 supporting context)
-    /// - w_entity: 0.15 (E11 entity relationships)
-    /// - others: reduced (~0.15 / 10 = 0.015 each)
+    /// Create static weights that emphasize graph/relational reasoning.
     ///
-    /// Use this weight profile for queries about:
-    /// - Module dependencies ("what imports X?", "what uses X?")
-    /// - Code structure ("what extends BaseClass?")
-    /// - Connectivity patterns ("what connects to X?")
+    /// Delegates to canonical WEIGHT_PROFILES to avoid value divergence.
     pub fn graph_reasoning_weights() -> [f32; NUM_EMBEDDERS] {
-        let mut weights = [0.015; NUM_EMBEDDERS]; // Base: ~0.15 split among 10 others
-        weights[7] = 0.45; // E8 Graph (PRIMARY)
-        weights[0] = 0.25; // E1 Semantic (supporting context)
-        weights[10] = 0.15; // E11 Entity (entity relationships)
-        weights
+        crate::weights::get_weight_profile("graph_reasoning")
+            .expect("graph_reasoning profile must exist in WEIGHT_PROFILES")
     }
 }
 
@@ -377,13 +347,14 @@ mod tests {
             "Graph reasoning weights should sum close to 1.0, got {}",
             sum
         );
+        // Canonical values from WEIGHT_PROFILES (weights/mod.rs)
         assert!(
             weights[7] > weights[0],
             "E8 Graph should have highest weight in graph_reasoning"
         );
-        assert_eq!(weights[7], 0.45, "E8 Graph should be 0.45");
-        assert_eq!(weights[0], 0.25, "E1 Semantic should be 0.25");
-        assert_eq!(weights[10], 0.15, "E11 Entity should be 0.15");
+        assert_eq!(weights[7], 0.40, "E8 Graph should be 0.40");
+        assert_eq!(weights[0], 0.15, "E1 Semantic should be 0.15");
+        assert_eq!(weights[10], 0.20, "E11 Entity should be 0.20");
         println!(
             "[PASS] Graph reasoning weights: E8={:.2}, E1={:.2}, E11={:.2}",
             weights[7], weights[0], weights[10]
@@ -393,9 +364,10 @@ mod tests {
     #[test]
     fn test_code_search_weights_include_e8() {
         let weights = WeightingStrategy::code_search_weights();
-        // E8 should have meaningful weight in code search
-        assert_eq!(weights[7], 0.15, "E8 Graph should be 0.15 in code_search");
+        // Canonical: E8=0.0 in code_search (WEIGHT_PROFILES), E7=0.40 primary
+        assert_eq!(weights[7], 0.0, "E8 Graph should be 0.0 in code_search");
         assert!(weights[6] > weights[7], "E7 Code should be higher than E8 in code_search");
+        assert_eq!(weights[6], 0.40, "E7 Code should be 0.40 in code_search");
         println!(
             "[PASS] Code search weights: E7={:.2}, E1={:.2}, E8={:.2}",
             weights[6], weights[0], weights[7]

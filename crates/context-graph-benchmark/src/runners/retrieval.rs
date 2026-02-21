@@ -183,7 +183,7 @@ impl MultiSpaceIndex {
 
         for (id, fp) in &dataset.fingerprints {
             e1_index.push((*id, fp.e1_semantic.clone()));
-            e5_index.push((*id, fp.e5_causal.clone()));
+            e5_index.push((*id, fp.e5_active_vector().to_vec()));
             e7_index.push((*id, fp.e7_code.clone()));
             e10_index.push((*id, fp.e10_multimodal_paraphrase.clone()));
         }
@@ -210,7 +210,7 @@ impl MultiSpaceIndex {
         #[allow(clippy::type_complexity)]
         let spaces: [(&[(Uuid, Vec<f32>)], &[f32]); 4] = [
             (&self.e1_index, &query_fp.e1_semantic),
-            (&self.e5_index, &query_fp.e5_causal),
+            (&self.e5_index, query_fp.e5_active_vector()),
             (&self.e7_index, &query_fp.e7_code),
             (&self.e10_index, &query_fp.e10_multimodal_paraphrase),
         ];

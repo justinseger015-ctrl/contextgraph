@@ -117,8 +117,8 @@ async fn test_search_periodic_basic_structure() {
     // Give time for indexing
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Query with search_periodic
-    let result = search_periodic(&handlers, "meeting", None, None, false).await;
+    // Query with search_periodic — use autoDetect=true since we have no explicit targets
+    let result = search_periodic(&handlers, "meeting", None, None, true).await;
 
     match result {
         Ok(json) => {
@@ -436,7 +436,7 @@ async fn test_search_periodic_day_names() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let result = search_periodic(&handlers, "project planning", None, None, false).await;
+    let result = search_periodic(&handlers, "project planning", None, None, true).await;
 
     match result {
         Ok(json) => {

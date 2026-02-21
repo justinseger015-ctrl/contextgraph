@@ -186,10 +186,12 @@ fn test_cosine_similarity() {
     let a = vec![1.0, 0.0, 0.0];
     let b = vec![1.0, 0.0, 0.0];
     let sim = cosine_similarity(&a, &b);
+    // Identical vectors: raw cosine=1.0, normalized (1+1)/2 = 1.0
     assert!((sim - 1.0).abs() < 1e-6);
     let c = vec![0.0, 1.0, 0.0];
     let sim2 = cosine_similarity(&a, &c);
-    assert!(sim2.abs() < 1e-6);
+    // Orthogonal vectors: raw cosine=0.0, normalized (0+1)/2 = 0.5
+    assert!((sim2 - 0.5).abs() < 1e-6);
 }
 
 #[tokio::test]

@@ -590,7 +590,19 @@ impl PidFileGuard {
                     // Another process holds the lock — read its PID for diagnostics
                     let mut contents = String::new();
                     let mut f = &file;
-                    let _ = f.read_to_string(&mut contents);
+                    if let Err(e) = f.read_to_string(&mut contents) {
+                        error!(
+                            error = %e,
+                            pid_path = %pid_path.display(),
+                            "E_PID_READ_FAIL: Failed to read PID file while lock is held. \
+                             Treating lock as HELD (not stale) to prevent concurrent DB access."
+                        );
+                        return Err(anyhow::anyhow!(
+                            "Database '{}' is locked by another process (PID file unreadable: {}). \
+                             Cannot safely determine if lock holder is alive.",
+                            db_path.display(), e
+                        ));
+                    }
                     let holder_pid_str = contents.trim().to_string();
 
                     // Check if the holding process is actually alive
@@ -736,8 +748,16 @@ impl PidFileGuard {
 impl Drop for PidFileGuard {
     fn drop(&mut self) {
         // Release flock (implicit on file close) and remove PID file
-        let _ = fs::remove_file(&self.path);
-        debug!("PID file guard released: '{}'", self.path.display());
+        if let Err(e) = fs::remove_file(&self.path) {
+            warn!(
+                error = %e,
+                pid_path = %self.path.display(),
+                "E_PID_CLEANUP: Failed to remove PID file on guard drop. \
+                 Stale PID file may confuse next startup."
+            );
+        } else {
+            debug!("PID file guard released: '{}'", self.path.display());
+        }
     }
 }
 
@@ -1031,9 +1051,19 @@ async fn kill_stale_standalone_holder(db_path: &Path) -> bool {
         // Simpler heuristic: the process was started without --daemon, has
         // a socket stdin, and isn't listening on any port → it's a disconnected
         // stdio server.
-        let cmdline = fs::read_to_string(format!("/proc/{}/cmdline", pid))
-            .unwrap_or_default()
-            .replace('\0', " ");
+        let cmdline = match fs::read_to_string(format!("/proc/{}/cmdline", pid)) {
+            Ok(c) => c.replace('\0', " "),
+            Err(e) => {
+                warn!(
+                    pid = pid,
+                    error = %e,
+                    "Cannot read /proc/{}/cmdline — treating as alive (not stale) to prevent misclassification",
+                    pid
+                );
+                // Cannot determine if standalone or daemon — assume alive, don't kill
+                return false;
+            }
+        };
         let is_standalone = !cmdline.contains("--daemon");
         if is_standalone {
             // Audit-7 MCP7-M2 FIX: Check if THIS process owns any listening socket.

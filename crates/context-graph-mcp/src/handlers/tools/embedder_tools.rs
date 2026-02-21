@@ -329,8 +329,24 @@ impl Handlers {
                 );
                 let mut cm = self.cluster_manager.write();
                 cm.clear_all_spaces();
+                let mut insert_failures = 0usize;
                 for (fp_id, cluster_array) in &fingerprints {
-                    let _ = cm.insert(*fp_id, cluster_array);
+                    if let Err(e) = cm.insert(*fp_id, cluster_array) {
+                        insert_failures += 1;
+                        warn!(
+                            error = %e,
+                            fingerprint_id = %fp_id,
+                            "get_embedder_clusters: Failed to insert fingerprint into cluster manager"
+                        );
+                    }
+                }
+                if insert_failures > 0 {
+                    warn!(
+                        failed = insert_failures,
+                        total = fingerprints.len(),
+                        "get_embedder_clusters: {} of {} fingerprint inserts failed — clustering may be incomplete",
+                        insert_failures, fingerprints.len()
+                    );
                 }
                 if let Err(e) = cm.recluster() {
                     error!(error = %e, "get_embedder_clusters: Auto-recluster failed");

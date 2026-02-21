@@ -115,11 +115,11 @@ impl DefaultCrossSpaceEngine {
 
     /// Compute MaxSim for token-level embeddings (E12 ColBERT).
     ///
-    /// Formula: MaxSim(Q, D) = SUM_i MAX_j (q_i . d_j)
+    /// Formula: MaxSim(Q, D) = SUM_i MAX_j cosine(q_i, d_j)
     /// where q_i are query tokens and d_j are document tokens.
     ///
-    /// Note: ColBERT tokens are L2-normalized at embedding time, so
-    /// dot product == cosine similarity. No explicit normalization needed.
+    /// Uses proper cosine similarity (not dot product) because PQ-8
+    /// dequantization can break unit-normality of vectors.
     #[inline]
     fn maxsim_token_level(query_tokens: &[Vec<f32>], doc_tokens: &[Vec<f32>]) -> f32 {
         if query_tokens.is_empty() || doc_tokens.is_empty() {
@@ -132,7 +132,7 @@ impl DefaultCrossSpaceEngine {
             let mut max_sim = f32::NEG_INFINITY;
             for d in doc_tokens {
                 if q.len() == d.len() {
-                    let sim = Self::dot_product(q, d);
+                    let sim = Self::cosine_similarity_dense(q, d).unwrap_or(0.0);
                     if sim > max_sim {
                         max_sim = sim;
                     }
@@ -145,12 +145,6 @@ impl DefaultCrossSpaceEngine {
 
         // Normalize by number of query tokens (early return above guarantees non-empty)
         total / query_tokens.len() as f32
-    }
-
-    /// Simple dot product for token vectors.
-    #[inline]
-    fn dot_product(a: &[f32], b: &[f32]) -> f32 {
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
     }
 
     /// Compute similarity between two embedding slices.
@@ -487,9 +481,11 @@ impl CrossSpaceSimilarityEngine for DefaultCrossSpaceEngine {
             WeightingStrategy::TopicWeightedRRF { .. } => WeightingStrategy::uniform_weights(),
             WeightingStrategy::LateInteraction => {
                 // Emphasize E12 for late interaction
-                let mut weights = [0.05; NUM_EMBEDDERS];
+                // Base: 11 slots * (0.40/11) ≈ 0.0364 each, E1=0.20, E12=0.40 → sum=1.0
+                let base = 0.40 / (NUM_EMBEDDERS as f32 - 2.0); // 0.40/11 ≈ 0.03636
+                let mut weights = [base; NUM_EMBEDDERS];
                 weights[11] = 0.40; // E12 ColBERT
-                weights[0] = 0.20; // E1 Semantic
+                weights[0] = 0.20;  // E1 Semantic
                 weights
             }
         }
@@ -564,10 +560,15 @@ mod tests {
         let query = vec![vec![1.0, 0.0], vec![0.0, 1.0]];
         let doc = vec![vec![0.8, 0.2], vec![0.1, 0.9]];
         let sim = DefaultCrossSpaceEngine::maxsim_token_level(&query, &doc);
-        // q[0] best match: doc[0] = 0.8*1 + 0.2*0 = 0.8
-        // q[1] best match: doc[1] = 0.1*0 + 0.9*1 = 0.9
-        // Average: (0.8 + 0.9) / 2 = 0.85
-        assert!((sim - 0.85).abs() < 1e-6, "MaxSim mismatch: {}", sim);
+        // Uses cosine similarity (not dot product) per ARCH-12:
+        // q[0]=[1,0] vs d[0]=[0.8,0.2]: cos = 0.8/sqrt(0.68) ≈ 0.9701
+        // q[0]=[1,0] vs d[1]=[0.1,0.9]: cos = 0.1/sqrt(0.82) ≈ 0.1104
+        // q[0] max = 0.9701
+        // q[1]=[0,1] vs d[0]=[0.8,0.2]: cos = 0.2/sqrt(0.68) ≈ 0.2425
+        // q[1]=[0,1] vs d[1]=[0.1,0.9]: cos = 0.9/sqrt(0.82) ≈ 0.9938
+        // q[1] max = 0.9938
+        // MaxSim = (0.9701 + 0.9938) / 2 ≈ 0.9820
+        assert!((sim - 0.982).abs() < 0.001, "MaxSim mismatch: {}", sim);
         println!("[PASS] MaxSim token level: {}", sim);
     }
 

@@ -25,7 +25,8 @@ pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if denom < f32::EPSILON {
         0.0
     } else {
-        dot / denom
+        // Normalize from [-1,1] to [0,1] to match production (SRC-3: (raw+1)/2)
+        (dot / denom + 1.0) / 2.0
     }
 }
 
@@ -51,8 +52,8 @@ pub(crate) fn compute_semantic_scores(
         &target.e4_temporal_positional,
     );
 
-    // E5: Causal
-    scores[4] = cosine_similarity(&query.e5_causal, &target.e5_causal);
+    // E5: Causal - use active vector (supports both legacy and dual format)
+    scores[4] = cosine_similarity(query.e5_active_vector(), target.e5_active_vector());
 
     // E6: Sparse (use sparse dot product normalized)
     scores[5] = query.e6_sparse.cosine_similarity(&target.e6_sparse);

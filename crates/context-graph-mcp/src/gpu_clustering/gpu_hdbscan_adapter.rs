@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use thiserror::Error;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use context_graph_core::teleological::Embedder;
@@ -40,6 +40,10 @@ pub enum GpuClusteringError {
     /// Insufficient data for clustering.
     #[error("Insufficient data: need at least {required} points, got {actual}")]
     InsufficientData { required: usize, actual: usize },
+
+    /// All embedding spaces failed during clustering.
+    #[error("All spaces failed: {0}")]
+    AllSpacesFailed(String),
 }
 
 /// Result of GPU topic detection.
@@ -246,6 +250,17 @@ impl GpuTopicDetector {
         }
 
         let total_time_ms = start.elapsed().as_millis() as u64;
+
+        if memberships.is_empty() {
+            error!(
+                n_fingerprints = n,
+                total_time_ms,
+                "GPU topic detection FAILED: all embedding spaces failed to cluster"
+            );
+            return Err(GpuClusteringError::AllSpacesFailed(
+                "All embedding spaces failed during GPU clustering — no results available".to_string(),
+            ));
+        }
 
         info!(
             n_fingerprints = n,

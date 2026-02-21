@@ -272,7 +272,7 @@ async fn run_benchmark() -> Result<(), Box<dyn std::error::Error>> {
             let mut combined = Vec::with_capacity(384 * 4);
             // Take first 384 dims from E1, E5, E7, E10 (semantic embedders)
             combined.extend(fp.e1_semantic.iter().take(384).cloned());
-            combined.extend(fp.e5_causal.iter().take(384).cloned());
+            combined.extend(fp.e5_active_vector().iter().take(384).cloned());
             combined.extend(fp.e7_code.iter().take(384).cloned());
             combined.extend(fp.e10_multimodal_paraphrase.iter().take(384).cloned());
             (*uuid, combined)
@@ -353,7 +353,7 @@ fn multi_space_similarity(a: &SemanticFingerprint, b: &SemanticFingerprint) -> f
     // SEMANTIC: E1, E5, E6, E7, E10, E12, E13 (weight 1.0)
     // Using E1, E5, E7, E10 for dense comparison
     let e1_sim = cosine_similarity(&a.e1_semantic, &b.e1_semantic);
-    let e5_sim = cosine_similarity(&a.e5_causal, &b.e5_causal);
+    let e5_sim = cosine_similarity(a.e5_active_vector(), b.e5_active_vector());
     let e7_sim = cosine_similarity(&a.e7_code, &b.e7_code);
     let e10_sim = cosine_similarity(&a.e10_multimodal_paraphrase, &b.e10_multimodal_paraphrase);
 

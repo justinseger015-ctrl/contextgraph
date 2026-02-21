@@ -51,9 +51,9 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     },
                     "temporalScale": {
                         "type": "string",
-                        "enum": ["micro", "meso", "macro", "long"],
+                        "enum": ["micro", "meso", "macro", "long", "archival"],
                         "default": "meso",
-                        "description": "Time scale for decay. 'micro' = 1 hour horizon, 'meso' = 1 day (default), 'macro' = 1 week, 'long' = 1 month"
+                        "description": "Time scale for decay. 'micro' = 1 hour horizon, 'meso' = 1 day (default), 'macro' = 1 week, 'long' = 1 month, 'archival' = 1 year"
                     },
                     "includeContent": {
                         "type": "boolean",

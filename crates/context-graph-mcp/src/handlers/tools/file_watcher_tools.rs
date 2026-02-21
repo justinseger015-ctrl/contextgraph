@@ -503,6 +503,7 @@ impl Handlers {
                         }
                     };
 
+                    let fp_count = ids.len();
                     for fp_id in ids {
                         // Use soft delete per SEC-06
                         if let Err(e) = self.teleological_store.delete(fp_id, true).await {
@@ -512,6 +513,8 @@ impl Handlers {
                                 "reconcile_files: Failed to delete orphan fingerprint"
                             );
                             failed_deletions.push(format!("{}:{}", entry.file_path, fp_id));
+                        } else {
+                            deleted_count += 1;
                         }
                     }
 
@@ -528,9 +531,9 @@ impl Handlers {
                         );
                     }
 
-                    deleted_count += 1;
                     info!(
                         file_path = %entry.file_path,
+                        fingerprints_deleted = fp_count,
                         "reconcile_files: Deleted orphaned file embeddings"
                     );
                 }
