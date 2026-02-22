@@ -251,115 +251,18 @@ pub(crate) async fn create_test_handlers() -> (Handlers, TempDir) {
 }
 
 // ============================================================================
-// Real RocksDB Test Helpers (Integration Testing)
+// Real GPU Embedding Test Helpers (FSV Integration Testing)
 // ============================================================================
 
-/// Create test handlers with REAL RocksDbTeleologicalStore for integration testing.
+/// Create test handlers with REAL RocksDB + REAL GPU embeddings.
 ///
-/// Uses `tempfile::TempDir` for automatic cleanup after tests complete.
-/// The returned TempDir MUST be kept alive for the duration of the test -
-/// dropping it deletes the database directory.
+/// Uses the global warm-loaded embedding provider for fast initialization.
 ///
 /// # Returns
 ///
-/// `(Handlers, TempDir)` - The Handlers instance and the TempDir that owns the database.
-///
-/// # Components
-///
-/// - **Storage**: RocksDbTeleologicalStore (real persistence)
-/// - **Embeddings**: ProductionMultiArrayProvider (real GPU)
-/// - **GraphDiscovery**: Stub service with unloaded LLM (FAIL FAST on graph ops)
-///
-/// # HNSW Initialization
-///
-/// This function **MUST** be async to initialize HNSW indexes before use.
-/// Without HNSW initialization, store operations will fail with "Index not initialized" errors.
-///
-/// # Example
-///
-/// ```ignore
-/// #[tokio::test]
-/// async fn test_with_real_storage() {
-///     let (handlers, _tempdir) = create_test_handlers_with_rocksdb().await;
-///     // _tempdir keeps the database alive until end of test
-///
-///     // Store and retrieve operations use real RocksDB with initialized HNSW
-///     let result = handlers.handle_memory_store(...).await;
-///     assert!(result.is_ok());
-/// }
-/// ```
-///
-/// # Panics
-///
-/// Panics if TempDir creation, RocksDB opening, or HNSW initialization fails.
-/// This is intentional - tests should fail immediately if infrastructure cannot be set up.
+/// `(Handlers, TempDir)` - The Handlers instance and TempDir that owns the database.
+/// The TempDir MUST be kept alive for the duration of the test.
 #[cfg(feature = "llm")]
-#[allow(dead_code)] // Available for integration tests that need real RocksDB
-pub(crate) async fn create_test_handlers_with_rocksdb() -> (Handlers, TempDir) {
-    let tempdir = TempDir::new().expect("Failed to create temp directory for RocksDB test");
-    let db_path = tempdir.path().join("test_rocksdb");
-
-    // Open RocksDB store
-    let rocksdb_store = RocksDbTeleologicalStore::open(&db_path)
-        .expect("Failed to open RocksDbTeleologicalStore in test");
-
-    // Note: EmbedderIndexRegistry is initialized in constructor
-
-    let teleological_store: Arc<dyn TeleologicalMemoryStore> = Arc::new(rocksdb_store);
-
-    let multi_array_provider = get_warm_loaded_provider().await;
-    let layer_status_provider: Arc<dyn LayerStatusProvider> = Arc::new(StubLayerStatusProvider);
-    let graph_discovery_service = create_stub_graph_discovery_service();
-
-    let handlers = Handlers::with_defaults(
-        teleological_store,
-        multi_array_provider,
-        layer_status_provider,
-        graph_discovery_service,
-    );
-
-    (handlers, tempdir)
-}
-
-/// Create test handlers with REAL RocksDB + REAL GPU embeddings and EXPOSED store reference.
-///
-/// For Full State Verification tests that need to directly inspect the underlying store.
-///
-/// # Returns
-///
-/// `(Handlers, Arc<dyn TeleologicalMemoryStore>, TempDir)`
-#[cfg(feature = "llm")]
-#[allow(dead_code)] // Available for FSV tests but no current callers
-pub(crate) async fn create_test_handlers_with_rocksdb_store_access(
-) -> (Handlers, Arc<dyn TeleologicalMemoryStore>, TempDir) {
-    let tempdir = TempDir::new().expect("Failed to create temp directory for RocksDB test");
-    let db_path = tempdir.path().join("test_rocksdb_fsv");
-
-    let rocksdb_store = RocksDbTeleologicalStore::open(&db_path)
-        .expect("Failed to open RocksDbTeleologicalStore in FSV test");
-
-    let teleological_store: Arc<dyn TeleologicalMemoryStore> = Arc::new(rocksdb_store);
-    let multi_array_provider = get_warm_loaded_provider().await;
-    let layer_status_provider: Arc<dyn LayerStatusProvider> = Arc::new(StubLayerStatusProvider);
-    let graph_discovery_service = create_stub_graph_discovery_service();
-
-    let handlers = Handlers::with_defaults(
-        Arc::clone(&teleological_store),
-        multi_array_provider,
-        layer_status_provider,
-        graph_discovery_service,
-    );
-
-    (handlers, teleological_store, tempdir)
-}
-
-// ============================================================================
-// TASK-P3-01: Real GPU Embedding Test Helpers (FSV Integration Testing)
-// ============================================================================
-
-/// Alias for create_test_handlers(). All helpers now use real GPU embeddings.
-#[cfg(feature = "llm")]
-#[allow(dead_code)]
 pub(crate) async fn create_test_handlers_with_real_embeddings() -> (Handlers, TempDir) {
     let tempdir = TempDir::new().expect("Failed to create temp directory for RocksDB FSV test");
     let db_path = tempdir.path().join("test_rocksdb_fsv_real_embeddings");

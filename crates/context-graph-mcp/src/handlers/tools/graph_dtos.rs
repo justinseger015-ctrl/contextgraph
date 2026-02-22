@@ -187,13 +187,6 @@ impl SearchConnectionsRequest {
         self.direction == "source"
     }
 
-    /// Returns true if searching for targets (outgoing connections).
-    /// Used in tests and reserved for future bidirectional search implementation.
-    #[allow(dead_code)]
-    pub fn is_target(&self) -> bool {
-        self.direction == "target"
-    }
-
     /// Returns true if searching bidirectionally.
     pub fn is_both(&self) -> bool {
         self.direction == "both"
@@ -962,14 +955,13 @@ mod tests {
     }
 
     #[test]
-    fn test_is_source_and_is_target() {
+    fn test_is_source_and_is_both() {
         let source = SearchConnectionsRequest {
             query: "test".to_string(),
             direction: "source".to_string(),
             ..Default::default()
         };
         assert!(source.is_source());
-        assert!(!source.is_target());
         assert!(!source.is_both());
 
         let target = SearchConnectionsRequest {
@@ -978,7 +970,6 @@ mod tests {
             ..Default::default()
         };
         assert!(!target.is_source());
-        assert!(target.is_target());
         assert!(!target.is_both());
 
         // MCP-7 FIX: "both" is now truly bidirectional, not an alias for "source"
@@ -988,10 +979,9 @@ mod tests {
             ..Default::default()
         };
         assert!(!both.is_source(), "MCP-7: 'both' must NOT map to is_source()");
-        assert!(!both.is_target(), "MCP-7: 'both' must NOT map to is_target()");
         assert!(both.is_both(), "MCP-7: 'both' must map to is_both()");
 
-        println!("[PASS] is_source, is_target, is_both work correctly");
+        println!("[PASS] is_source, is_both work correctly");
     }
 
     // ===== GetGraphPathRequest Tests =====

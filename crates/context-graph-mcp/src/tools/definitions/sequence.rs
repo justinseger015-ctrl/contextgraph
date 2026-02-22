@@ -176,10 +176,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": ["integer", "string"],
                         "description": "Ending sequence number or \"current\" for current position"
                     },
-                    "topicFilter": {
-                        "type": "string",
-                        "description": "Optional topic to focus the comparison on"
-                    },
                     "sessionId": {
                         "type": "string",
                         "description": "Session ID to compare within (default: current session)"

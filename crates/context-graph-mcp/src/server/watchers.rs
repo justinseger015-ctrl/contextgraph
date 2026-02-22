@@ -9,18 +9,13 @@
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::Result;
 use tracing::{debug, error, info, warn};
 
 use context_graph_core::memory::watcher::GitFileWatcher;
-use context_graph_core::memory::{CodeCaptureService, CodeFileWatcher, MemoryCaptureService, MultiArrayEmbeddingAdapter};
+use context_graph_core::memory::{MemoryCaptureService, MultiArrayEmbeddingAdapter};
 use context_graph_core::memory::store::MemoryStore;
-
-use crate::adapters::CodeStoreAdapter;
-use context_graph_embeddings::adapters::E7CodeEmbeddingProvider;
-use context_graph_storage::code::CodeStore;
 
 use super::McpServer;
 
@@ -260,222 +255,9 @@ impl McpServer {
     // E7-WIRING: Code File Watcher
     // =========================================================================
 
-    /// Start the code file watcher for AST-based code indexing.
-    ///
-    /// E7-WIRING: This method enables the code embedding pipeline which provides:
-    /// - Tree-sitter AST parsing for Rust source files
-    /// - E7 (Qodo-Embed-1-1.5B) embedding for code entities
-    /// - Separate CodeStore for code-specific search
-    ///
-    /// # Configuration
-    ///
-    /// Environment variables:
-    /// - `CODE_PIPELINE_ENABLED=true` - Enable the code pipeline
-    /// - `CODE_STORE_PATH` - Path to CodeStore (defaults to db_path/code_store)
-    /// - `CODE_WATCH_PATHS` - Comma-separated list of paths to watch (defaults to crate roots)
-    ///
-    /// # Returns
-    ///
-    /// `Ok(true)` if watcher started, `Ok(false)` if disabled, `Err` on failure.
-    ///
-    /// # Note
-    ///
-    /// The code pipeline is SEPARATE from the 13-embedder teleological system.
-    /// It stores E7-only embeddings for faster code-specific search.
-    #[allow(dead_code)]
-    pub async fn start_code_watcher(&self) -> Result<bool> {
-        // Check if code pipeline is enabled
-        let enabled = std::env::var("CODE_PIPELINE_ENABLED").is_ok_and(|v| v == "true");
-        if !enabled {
-            debug!("Code pipeline disabled (set CODE_PIPELINE_ENABLED=true to enable)");
-            return Ok(false);
-        }
-
-        info!("E7-WIRING: Code pipeline enabled - starting code file watcher...");
-
-        // Wait for embedding models to be ready (E7 is part of the 13-embedder system)
-        if self.models_loading.load(Ordering::SeqCst) {
-            info!("Waiting for embedding models to load before starting code watcher...");
-            for _ in 0..120 {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                if !self.models_loading.load(Ordering::SeqCst) {
-                    break;
-                }
-            }
-            if self.models_loading.load(Ordering::SeqCst) {
-                error!("Embedding models still loading after 60s - skipping code watcher");
-                return Ok(false);
-            }
-        }
-
-        // Check if model loading failed
-        {
-            let failed = self.models_failed.read().await;
-            if let Some(ref err) = *failed {
-                error!("Cannot start code watcher - embedding models failed: {}", err);
-                return Ok(false);
-            }
-        }
-
-        // E7-WIRING: Full implementation
-        // 1. Resolve paths
-        let code_store_path = std::env::var("CODE_STORE_PATH").unwrap_or_else(|_| {
-            let base = Self::resolve_storage_path(&self.config);
-            base.join("code_store").to_string_lossy().to_string()
-        });
-
-        let watch_paths_str = std::env::var("CODE_WATCH_PATHS").unwrap_or_else(|_| ".".to_string());
-        let watch_paths: Vec<PathBuf> = watch_paths_str
-            .split(',')
-            .map(|s| PathBuf::from(s.trim()))
-            .collect();
-
-        // Poll interval (default: 5 seconds)
-        let poll_interval_secs: u64 = match std::env::var("CODE_WATCH_INTERVAL") {
-            Ok(s) => match s.parse::<u64>() {
-                Ok(v) => v,
-                Err(e) => {
-                    warn!(
-                        value = %s,
-                        error = %e,
-                        "CODE_WATCH_INTERVAL is not a valid u64 — defaulting to 5 seconds"
-                    );
-                    5
-                }
-            },
-            Err(_) => 5,
-        };
-
-        info!(
-            code_store_path = %code_store_path,
-            watch_paths = ?watch_paths,
-            poll_interval_secs = poll_interval_secs,
-            "E7-WIRING: Starting code file watcher"
-        );
-
-        // 2. Open CodeStore and wrap in adapter
-        let raw_store = CodeStore::open(&code_store_path).map_err(|e| {
-            anyhow::anyhow!("Failed to open CodeStore at {}: {}", code_store_path, e)
-        })?;
-        let code_store = Arc::new(CodeStoreAdapter::new(Arc::new(raw_store)));
-        info!("Opened CodeStore at {}", code_store_path);
-
-        // 3. Get existing multi-array provider (all 13 embedders)
-        // E7CodeEmbeddingProvider now requires full MultiArrayEmbeddingProvider per ARCH-01/ARCH-05
-        let multi_array_provider = {
-            let slot = self.multi_array_provider.read().await;
-            match slot.as_ref() {
-                Some(p) => Arc::clone(p),
-                None => {
-                    error!("Multi-array provider not available - models not loaded");
-                    return Ok(false);
-                }
-            }
-        };
-        info!("Using existing multi-array provider for code embedding");
-
-        // 4. Create E7 embedding provider (uses all 13 embedders internally)
-        let e7_provider = Arc::new(E7CodeEmbeddingProvider::new(multi_array_provider));
-
-        // 5. Create CodeCaptureService
-        let session_id = std::env::var("CLAUDE_SESSION_ID").unwrap_or_else(|_| "default".to_string());
-        let capture_service: Arc<CodeCaptureService<E7CodeEmbeddingProvider, CodeStoreAdapter>> =
-            Arc::new(CodeCaptureService::new(
-                e7_provider.clone(),
-                code_store.clone(),
-                session_id.clone(),
-            ));
-
-        // 6. Create and start CodeFileWatcher
-        let mut watcher: CodeFileWatcher<E7CodeEmbeddingProvider, CodeStoreAdapter> =
-            CodeFileWatcher::new(
-                watch_paths.clone(),
-                capture_service,
-                session_id,
-            ).map_err(|e| anyhow::anyhow!("Failed to create CodeFileWatcher: {}", e))?;
-
-        watcher.start().await.map_err(|e| {
-            anyhow::anyhow!("Failed to start CodeFileWatcher: {}", e)
-        })?;
-
-        let stats = watcher.stats().await;
-        info!(
-            files_tracked = stats.files_tracked,
-            watch_paths = ?stats.watch_paths,
-            "CodeFileWatcher initial scan complete"
-        );
-
-        // 7. Spawn background polling task
-        self.code_watcher_running.store(true, Ordering::SeqCst);
-        let running_flag = self.code_watcher_running.clone();
-        let poll_interval = Duration::from_secs(poll_interval_secs);
-
-        let task = tokio::spawn(async move {
-            info!("Code watcher background task started (polling every {}s)", poll_interval_secs);
-            let mut consecutive_errors: u32 = 0;
-            const MAX_CONSECUTIVE_ERRORS: u32 = 20; // ~100s at base interval before shutdown
-
-            while running_flag.load(Ordering::SeqCst) {
-                tokio::time::sleep(poll_interval).await;
-
-                if !running_flag.load(Ordering::SeqCst) {
-                    break;
-                }
-
-                match watcher.process_events().await {
-                    Ok(files_processed) => {
-                        consecutive_errors = 0; // Reset on success
-                        if files_processed > 0 {
-                            info!(files_processed, "Code watcher processed file changes");
-                        } else {
-                            debug!("Code watcher: no changes detected");
-                        }
-                    }
-                    Err(e) => {
-                        consecutive_errors += 1;
-                        error!(
-                            error = %e,
-                            consecutive_errors,
-                            "Code watcher failed to process events ({}/{})",
-                            consecutive_errors,
-                            MAX_CONSECUTIVE_ERRORS
-                        );
-                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
-                            error!(
-                                consecutive_errors,
-                                "Code watcher exceeded {} consecutive errors — shutting down watcher loop",
-                                MAX_CONSECUTIVE_ERRORS
-                            );
-                            break;
-                        }
-                        // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s (capped)
-                        let backoff_secs = std::cmp::min(
-                            poll_interval_secs * (1u64 << consecutive_errors.min(5)),
-                            160,
-                        );
-                        warn!(backoff_secs, "Code watcher backing off before retry");
-                        tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
-                    }
-                }
-            }
-
-            info!("Code watcher background task stopped");
-        });
-
-        // Store the task handle
-        {
-            let mut task_guard = self.code_watcher_task.write().await;
-            *task_guard = Some(task);
-        }
-
-        info!("E7-WIRING: Code file watcher started successfully");
-        Ok(true)
-    }
-
     /// Stop the code file watcher.
     ///
     /// Signals the background task to stop and waits for it to complete.
-    #[allow(dead_code)]
     pub async fn stop_code_watcher(&self) {
         // Signal stop
         self.code_watcher_running.store(false, Ordering::SeqCst);
@@ -571,7 +353,6 @@ impl McpServer {
     /// Stop the background graph builder worker.
     ///
     /// Signals the worker to stop and waits for it to complete.
-    #[allow(dead_code)]
     pub async fn stop_graph_builder(&self) {
         if let Some(ref builder) = self.graph_builder {
             builder.stop();

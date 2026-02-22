@@ -442,8 +442,17 @@ impl Handlers {
             }
         };
 
-        // Validate max_memories bounds
-        let max_memories = request.max_memories.clamp(1, 50_000);
+        // Audit-11 SB-9 FIX: Reject out-of-range instead of silent clamping
+        if request.max_memories < 1 || request.max_memories > 50_000 {
+            return self.tool_error(
+                id,
+                &format!(
+                    "max_memories must be between 1 and 50000, got {}",
+                    request.max_memories
+                ),
+            );
+        }
+        let max_memories = request.max_memories;
 
         debug!(force = request.force, max_memories = max_memories, "detect_topics: Processing request");
 

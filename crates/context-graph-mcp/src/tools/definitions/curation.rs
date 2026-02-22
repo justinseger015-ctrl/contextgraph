@@ -35,6 +35,14 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "boolean",
                         "default": true,
                         "description": "Use soft delete with 30-day recovery (default true per BR-MCP-001)"
+                    },
+                    "operator_id": {
+                        "type": "string",
+                        "description": "Operator ID for provenance tracking (who performed the deletion)"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for deletion (for audit trail)"
                     }
                 },
                 "additionalProperties": false
@@ -59,6 +67,10 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "minimum": -1.0,
                         "maximum": 1.0,
                         "description": "Importance change value (-1.0 to 1.0)"
+                    },
+                    "operator_id": {
+                        "type": "string",
+                        "description": "Operator ID for provenance tracking (who performed the boost)"
                     }
                 },
                 "additionalProperties": false

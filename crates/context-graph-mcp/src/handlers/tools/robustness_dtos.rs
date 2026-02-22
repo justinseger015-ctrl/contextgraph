@@ -216,8 +216,9 @@ impl SearchRobustRequest {
         }
 
         // Validate strategy if provided
+        // Audit-11 SB-5 FIX: Accept e1_only (matches schema enum)
         if let Some(ref strat) = self.strategy {
-            let valid = ["multi_space", "pipeline"];
+            let valid = ["e1_only", "multi_space", "pipeline"];
             if !valid.contains(&strat.as_str()) {
                 return Err(format!(
                     "strategy must be one of {:?}, got '{}'",

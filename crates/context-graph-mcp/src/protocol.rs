@@ -164,10 +164,11 @@ pub mod error_codes {
     /// Assessor component error
     pub const ASSESSOR_ERROR: i32 = -32094;
 
-    // Deprecated method error codes (JSON-RPC standard) - TASK-CORE-001
+    // Deprecated method error codes - TASK-CORE-001
     /// Deprecated method - functionality removed per ARCH-03 (autonomous-first)
-    /// Same as METHOD_NOT_FOUND per JSON-RPC spec.
-    pub const DEPRECATED_METHOD: i32 = -32601;
+    /// Distinct from METHOD_NOT_FOUND (-32601) to differentiate "known but deprecated"
+    /// from "completely unknown method".
+    pub const DEPRECATED_METHOD: i32 = -32010;
 
     // Causal inference error codes (-32100 to -32109) - TASK-CAUSAL-001
     /// Causal inference engine not initialized
@@ -212,7 +213,6 @@ pub mod error_codes {
 }
 
 /// MCP method names.
-#[allow(dead_code)]
 pub mod methods {
     // MCP lifecycle methods
     pub const INITIALIZE: &str = "initialize";
@@ -221,75 +221,6 @@ pub mod methods {
     // MCP tools protocol methods
     pub const TOOLS_LIST: &str = "tools/list";
     pub const TOOLS_CALL: &str = "tools/call";
-
-    // Memory operations
-    pub const MEMORY_STORE: &str = "memory/store";
-    pub const MEMORY_RETRIEVE: &str = "memory/retrieve";
-    pub const MEMORY_SEARCH: &str = "memory/search";
-    pub const MEMORY_DELETE: &str = "memory/delete";
-
-    // Memory injection and comparison operations (TASK-INTEG-001)
-    /// Inject content with automatic 13-embedder fingerprint generation
-    pub const MEMORY_INJECT: &str = "memory/inject";
-    /// Batch injection with parallel embedding
-    pub const MEMORY_INJECT_BATCH: &str = "memory/inject_batch";
-    /// Multi-embedder perspective search with RRF fusion
-    pub const MEMORY_SEARCH_MULTI_PERSPECTIVE: &str = "memory/search_multi_perspective";
-    /// Single pair comparison using TeleologicalComparator
-    pub const MEMORY_COMPARE: &str = "memory/compare";
-    /// 1-to-N comparison using BatchComparator
-    pub const MEMORY_BATCH_COMPARE: &str = "memory/batch_compare";
-    /// N×N similarity matrix using BatchComparator::compare_all_pairs
-    pub const MEMORY_SIMILARITY_MATRIX: &str = "memory/similarity_matrix";
-
-    // Search operations (TASK-S002)
-    pub const SEARCH_MULTI: &str = "search/multi";
-    pub const SEARCH_SINGLE_SPACE: &str = "search/single_space";
-    pub const SEARCH_BY_PURPOSE: &str = "search/by_purpose";
-    pub const SEARCH_WEIGHT_PROFILES: &str = "search/weight_profiles";
-
-    // Graph operations
-    pub const GRAPH_CONNECT: &str = "graph/connect";
-    pub const GRAPH_TRAVERSE: &str = "graph/traverse";
-
-    // UTL operations
-    pub const UTL_COMPUTE: &str = "utl/compute";
-    pub const UTL_METRICS: &str = "utl/metrics";
-
-    // System operations
-    pub const SYSTEM_STATUS: &str = "system/status";
-    pub const SYSTEM_HEALTH: &str = "system/health";
-
-    // Purpose/goal operations (TASK-S003)
-    /// Query memories by 13D purpose vector similarity
-    pub const PURPOSE_QUERY: &str = "purpose/query";
-    /// Navigate goal hierarchy (get_children, get_ancestors, get_subtree, get_aligned_memories)
-    pub const GOAL_HIERARCHY_QUERY: &str = "goal/hierarchy_query";
-    /// Find memories aligned to a specific goal
-    pub const GOAL_ALIGNED_MEMORIES: &str = "goal/aligned_memories";
-    /// Detect purpose drift in memories (to be refactored in TASK-LOGIC-010 to use teleological arrays)
-    pub const PURPOSE_DRIFT_CHECK: &str = "purpose/drift_check";
-
-    // Meta-UTL operations (TASK-S005)
-    /// Get per-embedder learning trajectory and accuracy trends
-    pub const META_UTL_LEARNING_TRAJECTORY: &str = "meta_utl/learning_trajectory";
-    /// Get system health metrics with constitution.yaml targets
-    pub const META_UTL_HEALTH_METRICS: &str = "meta_utl/health_metrics";
-    /// Predict storage impact before committing
-    pub const META_UTL_PREDICT_STORAGE: &str = "meta_utl/predict_storage";
-    /// Predict retrieval quality before querying
-    pub const META_UTL_PREDICT_RETRIEVAL: &str = "meta_utl/predict_retrieval";
-    /// Validate prediction against actual outcome
-    pub const META_UTL_VALIDATE_PREDICTION: &str = "meta_utl/validate_prediction";
-    /// Get meta-learned optimized weights
-    pub const META_UTL_OPTIMIZED_WEIGHTS: &str = "meta_utl/optimized_weights";
-
-    // Coherence operations
-    // Note: Use topic-based coherence per PRD v6
-    /// Get workspace status and active memory
-    pub const COHERENCE_WORKSPACE_STATUS: &str = "coherence/workspace_status";
-    /// Get meta-cognitive loop status
-    pub const COHERENCE_META_STATUS: &str = "coherence/meta_status";
 }
 
 #[cfg(test)]

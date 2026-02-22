@@ -455,19 +455,8 @@ pub struct DetectTopicsResponse {
 }
 
 impl DetectTopicsResponse {
-    /// Create an empty response when detection found nothing.
-    #[allow(dead_code)] // Constructor for clustering integration
-    pub fn empty() -> Self {
-        Self {
-            new_topics: Vec::new(),
-            merged_topics: Vec::new(),
-            total_after: 0,
-            message: None,
-        }
-    }
-
     /// Create a response when insufficient memories exist.
-    #[allow(dead_code)] // Constructor for clustering integration
+    #[allow(dead_code)]
     pub fn insufficient_memories(current_count: usize) -> Self {
         Self {
             new_topics: Vec::new(),

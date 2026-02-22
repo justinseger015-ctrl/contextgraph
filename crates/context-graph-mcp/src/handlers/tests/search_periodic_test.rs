@@ -17,7 +17,7 @@ use crate::protocol::JsonRpcId;
 
 use super::{create_test_handlers_with_real_embeddings, extract_mcp_tool_data, make_request};
 
-/// Store a memory via inject_context.
+/// Store a memory via store_memory tool.
 async fn store_memory(
     handlers: &crate::handlers::core::Handlers,
     content: &str,
@@ -27,7 +27,7 @@ async fn store_memory(
         "tools/call",
         Some(JsonRpcId::Number(1)),
         Some(json!({
-            "name": "inject_context",
+            "name": "store_memory",
             "arguments": {
                 "content": content,
                 "rationale": rationale,
@@ -39,13 +39,12 @@ async fn store_memory(
     let response = handlers.dispatch(req).await;
 
     if let Some(error) = response.error {
-        return Err(format!("inject_context failed: {:?}", error));
+        return Err(format!("store_memory failed: {:?}", error));
     }
 
     let result = response.result.ok_or("No result")?;
     let data = extract_mcp_tool_data(&result);
 
-    // Extract fingerprintId from response (inject_context returns fingerprintId, not node_id)
     let fingerprint_id = data.get("fingerprintId")
         .and_then(|id| id.as_str())
         .map(|s| s.to_string())

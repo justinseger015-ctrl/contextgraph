@@ -398,25 +398,5 @@ fn test_edge_statistics() {
     println!("[PASS] Statistics test completed\n");
 }
 
-/// Summary test that runs all verifications
-#[test]
-fn test_graph_linking_integration_summary() {
-    println!("\n");
-    println!("╔══════════════════════════════════════════════════════════════╗");
-    println!("║       GRAPH LINKING INTEGRATION TEST SUMMARY                 ║");
-    println!("╠══════════════════════════════════════════════════════════════╣");
-    println!("║ ✓ K-NN edges store and retrieve correctly                    ║");
-    println!("║ ✓ Typed edges store and retrieve correctly                   ║");
-    println!("║ ✓ Multiple embedders maintain isolated edges                 ║");
-    println!("║ ✓ Edges persist across database close/reopen                 ║");
-    println!("║ ✓ Edge deletion works correctly                              ║");
-    println!("║ ✓ db_arc() returns shared Arc<DB> instance                   ║");
-    println!("║ ✓ Statistics reporting works                                 ║");
-    println!("╠══════════════════════════════════════════════════════════════╣");
-    println!("║ EdgeRepository integration with RocksDbTeleologicalStore:    ║");
-    println!("║   - db_arc() method exposes Arc<DB> correctly                ║");
-    println!("║   - EdgeRepository shares same RocksDB instance              ║");
-    println!("║   - Column families (embedder_edges, typed_edges) work       ║");
-    println!("║   - NO FALLBACKS - all operations succeed or error           ║");
-    println!("╚══════════════════════════════════════════════════════════════╝");
-}
+// Audit-11 TST-H1: Removed test_graph_linking_integration_summary — it had zero assertions
+// (only println! statements). All functionality is already covered by the individual tests above.

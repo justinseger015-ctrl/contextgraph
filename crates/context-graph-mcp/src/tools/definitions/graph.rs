@@ -156,19 +156,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         },
                         "description": "Filter to specific relationship types. Omit to discover all types."
                     },
-                    "relationship_categories": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": ["containment", "dependency", "reference", "implementation", "extension", "invocation"]
-                        },
-                        "description": "Filter by relationship categories. Omit for all categories."
-                    },
-                    "content_domain": {
-                        "type": "string",
-                        "enum": ["code", "legal", "academic", "general"],
-                        "description": "Hint for content domain. Auto-detected if not specified."
-                    },
                     "min_confidence": {
                         "type": "number",
                         "description": "Minimum confidence threshold for discovered relationships (0-1, default: 0.7).",

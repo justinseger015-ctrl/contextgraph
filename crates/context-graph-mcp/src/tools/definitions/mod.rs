@@ -2,7 +2,7 @@
 //!
 //! Includes 17 original tools (inject_context merged into store_memory)
 //! plus 4 sequence tools for E4 integration
-//! plus 2 causal tools for E5 Priority 1 enhancement
+//! plus 4 causal tools for E5 Priority 1 enhancement
 //! plus 2 causal discovery tools for E5 LLM-based relationship discovery
 //! plus 1 keyword tool for E6 keyword search enhancement
 //! plus 1 code tool for E7 code search enhancement
@@ -58,7 +58,7 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     // Sequence tools (4) - E4 integration
     tools.extend(sequence::definitions());
 
-    // Causal tools (2) - E5 Priority 1 enhancement
+    // Causal tools (4) - E5 Priority 1 enhancement
     tools.extend(causal::definitions());
 
     // Causal discovery tools (2) - E5 LLM-based relationship discovery

@@ -105,11 +105,12 @@ async fn test_e2e_mcp_handshake_with_gpu() {
     println!("=== HANDSHAKE COMPLETE ===\n");
 }
 
-/// Verify all 12 MCP tools are listed.
+/// Verify all MCP tools are listed (56 with LLM, 52 without).
+/// Audit-11 TST-H3: Fixed test name and assertions to match actual 56 tools.
 #[tokio::test]
 #[cfg(feature = "llm")]
-async fn test_e2e_tools_list_all_12_tools() {
-    println!("\n=== E2E TEST: Verify All 12 Tools Listed ===");
+async fn test_e2e_tools_list_all_tools() {
+    println!("\n=== E2E TEST: Verify All Tools Listed ===");
 
     let (handlers, _store, _tempdir) =
         create_test_handlers_with_real_embeddings_store_access().await;
@@ -167,13 +168,14 @@ async fn test_e2e_tools_list_all_12_tools() {
         );
     }
 
+    // Audit-11 TST-H3: Assert actual tool count (56 with LLM feature)
     assert!(
-        tools.len() >= 11,
-        "Expected at least 11 tools, found {}",
+        tools.len() >= 52,
+        "Expected at least 52 tools (56 with LLM), found {}",
         tools.len()
     );
 
-    println!("=== ALL 12 TOOLS VERIFIED ===\n");
+    println!("=== ALL {} TOOLS VERIFIED ===\n", tools.len());
 }
 
 /// Full E2E workflow: store memories, search, get status.
@@ -286,15 +288,15 @@ async fn test_e2e_core_tools_workflow() {
     );
 
     // STEP 4: search_graph - Search for related memories
-    // Use enrichMode: "off" to get legacy response format with fingerprintId and similarity
+    // Audit-11 TST-H2: Removed ghost "enrichMode" param — schema has additionalProperties:false,
+    // handler never reads it. It was silently dropped.
     println!("\n--- STEP 4: search_graph ---");
     let search_params = json!({
         "name": "search_graph",
         "arguments": {
             "query": "async programming in Rust",
             "topK": 10,
-            "includeContent": true,
-            "enrichMode": "off"
+            "includeContent": true
         }
     });
     let search_request = make_request(
@@ -731,28 +733,46 @@ async fn test_e2e_all_11_tools_callable() {
         successful_tools.insert("store_memory");
     }
 
-    // Get the fingerprint ID from the response
-    let params = json!({
+    // Audit-11 TST-M1: Store TWO memories and extract both IDs for merge_concepts test.
+    // Helper to extract fingerprintId from a store_memory response
+    fn extract_fingerprint_id(response: &crate::protocol::JsonRpcResponse) -> String {
+        response
+            .result
+            .as_ref()
+            .and_then(|r| r.get("content"))
+            .and_then(|c| c.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|item| item.get("text"))
+            .and_then(|t| t.as_str())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            .and_then(|data| data.get("fingerprintId").cloned())
+            .and_then(|id| id.as_str().map(String::from))
+            .unwrap_or_else(|| "00000000-0000-0000-0000-000000000000".to_string())
+    }
+
+    // Store second memory and extract its ID
+    let params2 = json!({
         "name": "store_memory",
         "arguments": {
-            "content": "Second test memory",
+            "content": "Second test memory for merge target",
             "importance": 0.6
         }
     });
-    let request = make_request("tools/call", Some(JsonRpcId::Number(99)), Some(params));
-    let response = handlers.dispatch(request).await;
-    let fingerprint_id = response
-        .result
-        .as_ref()
-        .and_then(|r| r.get("content"))
-        .and_then(|c| c.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|item| item.get("text"))
-        .and_then(|t| t.as_str())
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
-        .and_then(|data| data.get("fingerprintId").cloned())
-        .and_then(|id| id.as_str().map(String::from))
-        .unwrap_or_else(|| "00000000-0000-0000-0000-000000000000".to_string());
+    let request2 = make_request("tools/call", Some(JsonRpcId::Number(99)), Some(params2));
+    let response2 = handlers.dispatch(request2).await;
+    let fingerprint_id = extract_fingerprint_id(&response2);
+
+    // Store third memory for merge source (different from target)
+    let params3 = json!({
+        "name": "store_memory",
+        "arguments": {
+            "content": "Third test memory for merge source",
+            "importance": 0.5
+        }
+    });
+    let request3 = make_request("tools/call", Some(JsonRpcId::Number(98)), Some(params3));
+    let response3 = handlers.dispatch(request3).await;
+    let fingerprint_id_for_merge = extract_fingerprint_id(&response3);
 
     // Core tools (4 - inject_context merged into store_memory)
     println!("\n--- Core Tools ---");
@@ -868,14 +888,13 @@ async fn test_e2e_all_11_tools_callable() {
     {
         successful_tools.insert("forget_concept");
     }
-    // TST-03 FIX: merge_concepts was previously auto-credited without testing.
-    // It requires 2+ valid UUIDs, which are available after store_memory above.
-    // Actually test it instead of hardcoding success.
+    // TST-03 FIX: merge_concepts requires 2+ valid UUIDs with DIFFERENT source and target.
+    // fingerprint_id_for_merge (third memory) is the source, fingerprint_id (second memory) is the target.
     if call_tool(
         &handlers,
         "merge_concepts",
         json!({
-            "source_ids": [&fingerprint_id],
+            "source_ids": [&fingerprint_id_for_merge],
             "target_id": &fingerprint_id,
             "strategy": "absorb"
         }),
@@ -892,9 +911,8 @@ async fn test_e2e_all_11_tools_callable() {
         println!("  ✓ {}", tool);
     }
 
-    // TST-03 FIX: Reduced expectation from 11 to 10 since merge_concepts
-    // may legitimately fail with a single ID. The point is: no auto-crediting.
-    let expected = 10;
+    // All 11 tools should succeed with proper inputs
+    let expected = 11;
     let actual = successful_tools.len();
     assert!(
         actual >= expected,

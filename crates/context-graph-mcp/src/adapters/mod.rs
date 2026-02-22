@@ -19,8 +19,6 @@ pub mod lazy_provider;
 // LazyMultiArrayProvider allows immediate MCP startup while models load in background
 pub use lazy_provider::LazyMultiArrayProvider;
 
-// CodeStoreAdapter bridges CodeStore to CodeStorage trait for code capture pipeline
-pub use code_store_adapter::CodeStoreAdapter;
 
 // LlmCausalHintProvider wraps CausalDiscoveryLLM for causal hint generation
 #[cfg(feature = "llm")]

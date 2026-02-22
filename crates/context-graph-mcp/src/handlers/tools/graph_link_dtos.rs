@@ -256,17 +256,6 @@ impl GetTypedEdgesRequest {
         Ok(memory_uuid)
     }
 
-    /// Returns true if searching for outgoing edges.
-    #[allow(dead_code)] // Utility method for direction queries
-    pub fn is_outgoing(&self) -> bool {
-        self.direction == "outgoing" || self.direction == "both"
-    }
-
-    /// Returns true if searching for incoming edges.
-    #[allow(dead_code)] // Utility method for direction queries
-    pub fn is_incoming(&self) -> bool {
-        self.direction == "incoming" || self.direction == "both"
-    }
 }
 
 /// Request parameters for traverse_graph tool.
@@ -1118,31 +1107,35 @@ mod tests {
     }
 
     #[test]
-    fn test_get_edges_request_direction_helpers() {
+    fn test_get_edges_request_direction_validation() {
         let outgoing = GetTypedEdgesRequest {
             memory_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             direction: "outgoing".to_string(),
             ..Default::default()
         };
-        assert!(outgoing.is_outgoing());
-        assert!(!outgoing.is_incoming());
+        assert!(outgoing.validate().is_ok());
 
         let incoming = GetTypedEdgesRequest {
             memory_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             direction: "incoming".to_string(),
             ..Default::default()
         };
-        assert!(!incoming.is_outgoing());
-        assert!(incoming.is_incoming());
+        assert!(incoming.validate().is_ok());
 
         let both = GetTypedEdgesRequest {
             memory_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             direction: "both".to_string(),
             ..Default::default()
         };
-        assert!(both.is_outgoing());
-        assert!(both.is_incoming());
-        println!("[PASS] Direction helpers work correctly");
+        assert!(both.validate().is_ok());
+
+        let invalid = GetTypedEdgesRequest {
+            memory_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            direction: "invalid".to_string(),
+            ..Default::default()
+        };
+        assert!(invalid.validate().is_err());
+        println!("[PASS] Direction validation works correctly");
     }
 
     // ===== TraverseGraphRequest Tests =====

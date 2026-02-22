@@ -18,19 +18,14 @@ pub use context_graph_core::weights::space_name;
 /// The 13-element weight array if found.
 ///
 /// # Errors
-/// Returns error if profile name is not found — FAIL FAST, no silent fallback.
-pub fn get_weight_profile(name: &str) -> Option<[f32; NUM_EMBEDDERS]> {
-    match context_graph_core::weights::get_weight_profile(name) {
-        Ok(weights) => Some(weights),
-        Err(e) => {
-            tracing::error!(
-                profile = %name,
-                error = %e,
-                "Weight profile lookup failed — FAIL FAST"
-            );
-            None
-        }
-    }
+/// Returns error string if profile name is not found — FAIL FAST, no silent fallback.
+/// Audit-11 MCP-H3 FIX: Returns Result instead of Option to propagate error details.
+pub fn get_weight_profile(name: &str) -> Result<[f32; NUM_EMBEDDERS], String> {
+    context_graph_core::weights::get_weight_profile(name).map_err(|e| {
+        let msg = format!("Weight profile '{}' lookup failed: {}", name, e);
+        tracing::error!(profile = %name, error = %e, "Weight profile lookup failed — FAIL FAST");
+        msg
+    })
 }
 
 #[cfg(test)]
@@ -115,14 +110,15 @@ mod tests {
     #[test]
     fn test_get_weight_profile() {
         let semantic = get_weight_profile("semantic_search");
-        assert!(semantic.is_some(), "semantic_search profile should exist");
+        assert!(semantic.is_ok(), "semantic_search profile should exist");
         assert!(
             (semantic.unwrap()[0] - 0.33).abs() < 0.001,
             "E1 should be 0.33 in semantic_search profile"
         );
 
         let missing = get_weight_profile("nonexistent");
-        assert!(missing.is_none(), "Unknown profile should return None");
+        assert!(missing.is_err(), "Unknown profile should return Err");
+        assert!(missing.unwrap_err().contains("nonexistent"), "Error should contain profile name");
     }
 
     #[test]
@@ -133,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_typo_tolerant_profile_exists() {
-        assert!(get_weight_profile("typo_tolerant").is_some());
+        assert!(get_weight_profile("typo_tolerant").is_ok());
     }
 
     #[test]
@@ -164,8 +160,8 @@ mod tests {
         ];
 
         for profile_name in semantic_profiles {
-            let weights = get_weight_profile(profile_name).unwrap_or_else(|| {
-                panic!("Profile '{}' should exist", profile_name)
+            let weights = get_weight_profile(profile_name).unwrap_or_else(|e| {
+                panic!("Profile '{}' should exist: {}", profile_name, e)
             });
             assert_eq!(weights[1], 0.0, "E2 should be 0.0 in '{}'", profile_name);
             assert_eq!(weights[2], 0.0, "E3 should be 0.0 in '{}'", profile_name);
@@ -233,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_sequence_navigation_profile_exists() {
-        assert!(get_weight_profile("sequence_navigation").is_some());
+        assert!(get_weight_profile("sequence_navigation").is_ok());
     }
 
     #[test]
@@ -246,16 +242,16 @@ mod tests {
 
     #[test]
     fn test_pipeline_stage1_recall_profile_exists() {
-        assert!(get_weight_profile("pipeline_stage1_recall").is_some());
+        assert!(get_weight_profile("pipeline_stage1_recall").is_ok());
     }
 
     #[test]
     fn test_pipeline_stage2_scoring_profile_exists() {
-        assert!(get_weight_profile("pipeline_stage2_scoring").is_some());
+        assert!(get_weight_profile("pipeline_stage2_scoring").is_ok());
     }
 
     #[test]
     fn test_pipeline_full_profile_exists() {
-        assert!(get_weight_profile("pipeline_full").is_some());
+        assert!(get_weight_profile("pipeline_full").is_ok());
     }
 }

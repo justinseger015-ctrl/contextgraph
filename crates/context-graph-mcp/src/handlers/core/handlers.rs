@@ -140,56 +140,6 @@ pub struct Handlers {
 }
 
 impl Handlers {
-    /// Create handlers with graph linking enabled.
-    ///
-    /// TASK-GRAPHLINK: Constructor for graph linking support with K-NN edges.
-    /// NO FALLBACKS - EdgeRepository and GraphDiscoveryService MUST work.
-    ///
-    /// # Arguments
-    /// * `teleological_store` - Store for TeleologicalFingerprint
-    /// * `multi_array_provider` - 13-embedding generator
-    /// * `layer_status_provider` - Provider for layer status information
-    /// * `edge_repository` - Edge repository for K-NN graph edges and typed edges
-    /// * `graph_discovery_service` - REQUIRED LLM-based graph relationship discovery
-    ///
-    /// # Panics
-    ///
-    /// Panics if EdgeRepository column families are missing from the database.
-    #[cfg(feature = "llm")]
-    #[allow(dead_code)]
-    pub fn with_graph_linking(
-        teleological_store: Arc<dyn TeleologicalMemoryStore>,
-        multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
-        layer_status_provider: Arc<dyn LayerStatusProvider>,
-        edge_repository: EdgeRepository,
-        graph_discovery_service: Arc<GraphDiscoveryService>,
-    ) -> Self {
-        info!("Creating Handlers with graph linking enabled - NO FALLBACKS, LLM required");
-
-        let cluster_manager = MultiSpaceClusterManager::with_defaults()
-            .expect("Default cluster manager should always succeed");
-
-        Self {
-            teleological_store,
-            multi_array_provider,
-            layer_status_provider,
-            cluster_manager: Arc::new(RwLock::new(cluster_manager)),
-            session_sequence_counter: Arc::new(AtomicU64::new(0)),
-            current_session_id: Arc::new(RwLock::new(None)),
-            code_store: None,
-            code_embedding_provider: None,
-            edge_repository: Some(edge_repository),
-            // Graph builder will be set separately via set_graph_builder
-            graph_builder: None,
-            graph_discovery_service: Some(graph_discovery_service),
-            causal_hint_provider: None,
-            custom_profiles: Arc::new(RwLock::new(HashMap::new())),
-            causal_discovery_llm: None,
-            causal_model: None,
-            daemon_state: None,
-        }
-    }
-
     /// Create handlers with default clustering components.
     #[cfg(feature = "llm")]
     #[allow(dead_code)]
@@ -213,8 +163,8 @@ impl Handlers {
             current_session_id: Arc::new(RwLock::new(None)),
             code_store: None,
             code_embedding_provider: None,
-            edge_repository: None, // Not available in with_defaults — requires explicit EdgeRepository
-            graph_builder: None, // Not available in with_defaults — requires explicit BackgroundGraphBuilder
+            edge_repository: None,
+            graph_builder: None,
             graph_discovery_service: Some(graph_discovery_service),
             causal_hint_provider: Some(Arc::new(context_graph_embeddings::provider::NoOpCausalHintProvider)),
             custom_profiles: Arc::new(RwLock::new(HashMap::new())),

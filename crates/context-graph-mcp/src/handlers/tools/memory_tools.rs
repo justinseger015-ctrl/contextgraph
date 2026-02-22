@@ -72,8 +72,8 @@ const CAUSAL_DIRECTION_THRESHOLD: f32 = 0.1;
 /// - "effect" if effect vector has significantly higher variance
 /// - "unknown" if variances are similar or both are near zero
 fn infer_causal_direction_from_fingerprint(fingerprint: &SemanticFingerprint) -> String {
-    let cause_variance = component_variance(&fingerprint.e5_causal_as_cause);
-    let effect_variance = component_variance(&fingerprint.e5_causal_as_effect);
+    let cause_variance = super::helpers::component_variance_f32(&fingerprint.e5_causal_as_cause);
+    let effect_variance = super::helpers::component_variance_f32(&fingerprint.e5_causal_as_effect);
 
     let max_var = cause_variance.max(effect_variance);
     if max_var < f32::EPSILON {
@@ -89,16 +89,6 @@ fn infer_causal_direction_from_fingerprint(fingerprint: &SemanticFingerprint) ->
     } else {
         "unknown".to_string()
     }
-}
-
-/// Compute variance of vector components (measures how spread out activations are).
-fn component_variance(v: &[f32]) -> f32 {
-    if v.is_empty() {
-        return 0.0;
-    }
-    let n = v.len() as f32;
-    let mean = v.iter().sum::<f32>() / n;
-    v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n
 }
 
 /// CHAIN-1: Infer causal direction from content text using keyword heuristics.
@@ -213,10 +203,10 @@ impl Handlers {
         let session_sequence = self.get_next_sequence();
 
         // PHASE-1.2: Extract operatorId for provenance tracking
-        // Accepts both camelCase (schema) and snake_case (legacy) for backward compatibility
+        // Audit-11 SA-7 FIX: Schema has additionalProperties:false so only "operatorId" passes.
+        // Removed dead snake_case fallback that was unreachable.
         let operator_id = args
             .get("operatorId")
-            .or_else(|| args.get("operator_id"))
             .and_then(|v| v.as_str())
             .map(String::from);
 
@@ -1257,20 +1247,22 @@ impl Handlers {
                 let resolved_weights: [f32; 13] = if let Some(cw) = custom_weights {
                     cw
                 } else if let Some(ref profile_name) = effective_weight_profile {
-                    match self.custom_profiles.read().get(profile_name).copied()
-                        .or_else(|| get_weight_profile(profile_name))
-                    {
+                    // Audit-11 MCP-H3: get_weight_profile now returns Result, propagate errors.
+                    match self.custom_profiles.read().get(profile_name).copied() {
                         Some(weights) => weights,
-                        None => {
-                            return self.tool_error_typed(
-                                id,
-                                ToolErrorKind::Validation,
-                                &format!(
-                                    "Unknown weightProfile '{}'. Use one of the built-in profiles or create a custom one via create_weight_profile.",
-                                    profile_name
-                                ),
-                            );
-                        }
+                        None => match get_weight_profile(profile_name) {
+                            Ok(weights) => weights,
+                            Err(e) => {
+                                return self.tool_error_typed(
+                                    id,
+                                    ToolErrorKind::Validation,
+                                    &format!(
+                                        "Unknown weightProfile '{}': {}. Use one of the built-in profiles or create a custom one via create_weight_profile.",
+                                        profile_name, e
+                                    ),
+                                );
+                            }
+                        },
                     }
                 } else {
                     // WEIGHT-1 FIX: Use semantic_search profile (matches DEFAULT_SEMANTIC_WEIGHTS
@@ -1631,11 +1623,15 @@ use context_graph_core::traits::TeleologicalSearchResult;
 /// * `profile_name` - Name of the weight profile
 ///
 /// # Returns
-/// E5 weight (index 4) from the profile, or 0.10 if profile not found
+/// E5 weight (index 4) from the profile, or 0.10 if profile not found.
+/// Audit-11 MCP-H3: Now uses Result-based get_weight_profile.
 fn get_e5_causal_weight(profile_name: &str) -> f32 {
     get_weight_profile(profile_name)
         .map(|weights| weights[4]) // E5 is at index 4
-        .unwrap_or(0.10) // Default to causal_reasoning E5 weight (demoted from 0.45)
+        .unwrap_or_else(|e| {
+            tracing::warn!(profile = %profile_name, error = %e, "Weight profile not found, using default E5 weight 0.10");
+            0.10
+        })
 }
 
 /// Apply asymmetric E5 reranking to search results using binary causal gate.

@@ -48,8 +48,17 @@ impl Handlers {
             return self.tool_error(id, "Query cannot be empty");
         }
 
-        // Clamp temporal weight
-        let temporal_weight = params.temporal_weight.clamp(0.1, 1.0);
+        // Audit-11 SB-8 FIX: Reject out-of-range instead of silent clamping
+        if params.temporal_weight < 0.1 || params.temporal_weight > 1.0 {
+            return self.tool_error(
+                id,
+                &format!(
+                    "temporalWeight must be between 0.1 and 1.0, got {}",
+                    params.temporal_weight
+                ),
+            );
+        }
+        let temporal_weight = params.temporal_weight;
         let decay_function: DecayFunction = params.decay_function.into();
 
         debug!(
@@ -247,8 +256,17 @@ impl Handlers {
             );
         }
 
-        // Clamp periodic weight
-        let periodic_weight = params.periodic_weight.clamp(0.1, 1.0);
+        // Audit-11 SB-8 FIX: Reject out-of-range instead of silent clamping
+        if params.periodic_weight < 0.1 || params.periodic_weight > 1.0 {
+            return self.tool_error(
+                id,
+                &format!(
+                    "periodicWeight must be between 0.1 and 1.0, got {}",
+                    params.periodic_weight
+                ),
+            );
+        }
+        let periodic_weight = params.periodic_weight;
 
         // Compute effective targets (auto-detect if needed)
         let now = Utc::now();

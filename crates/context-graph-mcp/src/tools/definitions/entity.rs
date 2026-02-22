@@ -104,6 +104,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "default": 1.15,
                         "minimum": 1.0,
                         "maximum": 3.0
+                    },
+                    "strategy": {
+                        "type": "string",
+                        "enum": ["e1_only", "multi_space", "pipeline"],
+                        "description": "Search strategy: 'e1_only' (default, E1+E11 union), 'multi_space' (multi-embedder fusion), 'pipeline' (E13 recall -> E1 -> E12 rerank)."
                     }
                 },
                 "additionalProperties": false
@@ -263,13 +268,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "default": 50,
                         "minimum": 1,
                         "maximum": 500
-                    },
-                    "maxDepth": {
-                        "type": "integer",
-                        "description": "Maximum hops from center entity (1-5, default: 2).",
-                        "default": 2,
-                        "minimum": 1,
-                        "maximum": 5
                     },
                     "entityTypes": {
                         "type": "array",

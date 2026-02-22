@@ -19,7 +19,6 @@
 pub mod aliases;
 pub mod definitions;
 pub mod names;
-pub mod registry;
 pub mod types;
 
 pub use self::definitions::get_tool_definitions;

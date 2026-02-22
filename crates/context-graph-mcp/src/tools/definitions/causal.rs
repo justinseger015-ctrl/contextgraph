@@ -69,6 +69,13 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "description": "Enable multi-embedder search for maximum accuracy (default: false). Uses E1+E5+E8+E11 with consensus scoring. Requires direction to be 'cause' or 'effect'.",
                         "default": false
                     },
+                    "minConsensus": {
+                        "type": "number",
+                        "description": "Minimum consensus threshold for multi-embedder search (0-1, default: 0.0). Results below this across embedders are filtered.",
+                        "default": 0.0,
+                        "minimum": 0,
+                        "maximum": 1
+                    },
                     "e1Weight": {
                         "type": "number",
                         "description": "E1 semantic weight in multi-embedder mode (0-1, default: 0.30).",
@@ -94,13 +101,6 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "type": "number",
                         "description": "E11 entity weight in multi-embedder mode (0-1, default: 0.20).",
                         "default": 0.20,
-                        "minimum": 0,
-                        "maximum": 1
-                    },
-                    "rerankWeight": {
-                        "type": "number",
-                        "description": "E12 rerank weight for blending with fusion score (0-1, default: 0.4). Only used when strategy='pipeline'.",
-                        "default": 0.4,
                         "minimum": 0,
                         "maximum": 1
                     }
@@ -154,8 +154,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     },
                     "strategy": {
                         "type": "string",
-                        "enum": ["multi_space", "pipeline"],
-                        "description": "Search strategy: 'multi_space' (default, multi-embedder fusion) or 'pipeline' (E13 SPLADE recall -> E1 -> E12 ColBERT rerank)."
+                        "enum": ["e1_only", "multi_space", "pipeline"],
+                        "description": "Search strategy: 'e1_only' (E1 only), 'multi_space' (default, multi-embedder fusion), or 'pipeline' (E13 SPLADE recall -> E1 -> E12 ColBERT rerank)."
                     },
                     "rerankWeight": {
                         "type": "number",
@@ -214,8 +214,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     },
                     "strategy": {
                         "type": "string",
-                        "enum": ["multi_space", "pipeline"],
-                        "description": "Search strategy: 'multi_space' (default, multi-embedder fusion) or 'pipeline' (E13 SPLADE recall -> E1 -> E12 ColBERT rerank)."
+                        "enum": ["e1_only", "multi_space", "pipeline"],
+                        "description": "Search strategy: 'e1_only' (E1 only), 'multi_space' (default, multi-embedder fusion), or 'pipeline' (E13 SPLADE recall -> E1 -> E12 ColBERT rerank)."
                     },
                     "rerankWeight": {
                         "type": "number",

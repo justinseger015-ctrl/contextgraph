@@ -63,7 +63,7 @@ use crate::protocol::JsonRpcId;
 use crate::protocol::JsonRpcResponse;
 
 use super::entity_dtos::{
-    cosine_to_confidence, transe_score_to_confidence, validation_from_score, EntityByType,
+    transe_score_to_confidence, validation_from_score, EntityByType,
     EntityEdge, EntityLinkDto, EntityNode, EntitySearchResult, ExtractEntitiesRequest,
     ExtractEntitiesResponse, FindRelatedEntitiesRequest, FindRelatedEntitiesResponse,
     GetEntityGraphRequest, GetEntityGraphResponse, InferRelationshipRequest,
@@ -961,7 +961,9 @@ impl Handlers {
         let inferred_relations: Vec<RelationCandidate> = relation_scores
             .into_iter()
             .map(|(relation, score)| {
-                let confidence = cosine_to_confidence(score);
+                // Audit-11 MCP-H1 FIX: score is already SRC-3 normalized [0,1] at line 951.
+                // cosine_to_confidence() would apply (score+1)/2 AGAIN, compressing to [0.5,1.0].
+                let confidence = score;
                 RelationCandidate {
                     relation: relation.to_string(),
                     score: if include_score { Some(score) } else { None },
@@ -1535,13 +1537,11 @@ impl Handlers {
         };
 
         let max_nodes = request.max_nodes;
-        let max_depth = request.max_depth;
         let min_relation_score = request.min_relation_score;
 
         info!(
             center_entity = ?request.center_entity,
             max_nodes = max_nodes,
-            max_depth = max_depth,
             min_relation_score = min_relation_score,
             "get_entity_graph: Building entity relationship graph"
         );
