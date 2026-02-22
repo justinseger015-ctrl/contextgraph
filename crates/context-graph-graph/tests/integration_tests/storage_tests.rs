@@ -74,13 +74,8 @@ fn test_storage_lifecycle_complete() {
         "Apertures should match"
     );
 
-    // Delete and verify
-    storage
-        .delete_hyperbolic(1)
-        .expect("Delete hyperbolic failed");
+    // Delete cone and verify
     storage.delete_cone(1).expect("Delete cone failed");
-
-    verify_storage_state(&storage, 0, 0, 1).expect("Post-delete state verification failed");
 
     println!("=== PASSED: Storage Lifecycle ===\n");
 }

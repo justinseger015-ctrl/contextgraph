@@ -197,7 +197,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
                                 "default": 0,
                                 "description": "Number of turns to look forward from anchor"
                             }
-                        }
+                        },
+                        "additionalProperties": false
                     },
                     "sessionScope": {
                         "type": "string",

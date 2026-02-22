@@ -169,6 +169,10 @@ impl InferenceResult {
 ///
 /// Performs causal inference in multiple directions based on the
 /// structural causal model represented in the knowledge graph.
+///
+/// **Note**: Stub implementation — all inference methods return placeholder values.
+/// Not reachable from any MCP handler. Candidate for removal.
+#[deprecated(note = "Stub implementation — returns placeholder values. Not reachable from MCP.")]
 #[derive(Debug, Clone)]
 pub struct OmniInfer {
     /// Minimum confidence for results to be included [0, 1]
@@ -179,6 +183,7 @@ pub struct OmniInfer {
     pub include_indirect: bool,
 }
 
+#[allow(deprecated)]
 impl OmniInfer {
     /// Create a new OmniInfer with default configuration.
     ///
@@ -358,14 +363,6 @@ impl OmniInfer {
             .collect()
     }
 
-    /// Filter results by maximum path length.
-    pub fn filter_by_path_length(&self, results: Vec<InferenceResult>) -> Vec<InferenceResult> {
-        results
-            .into_iter()
-            .filter(|r| r.path_length() <= self.max_path_length)
-            .collect()
-    }
-
     /// Sort results by confidence (highest first).
     pub fn sort_by_confidence(mut results: Vec<InferenceResult>) -> Vec<InferenceResult> {
         results.sort_by(|a, b| {
@@ -387,6 +384,7 @@ impl OmniInfer {
     }
 }
 
+#[allow(deprecated)]
 impl Default for OmniInfer {
     fn default() -> Self {
         Self::new()
@@ -394,6 +392,7 @@ impl Default for OmniInfer {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

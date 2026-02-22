@@ -395,7 +395,7 @@ pub trait Memex: Send + Sync {
     /// Consider maintaining a reverse index for large graphs.
     ///
     /// `Constraint: latency < 50ms for graphs with < 100K edges`
-    fn get_edges_to(&self, target_id: &NodeId) -> Result<Vec<GraphEdge>, StorageError>;
+    fn get_edges_to(&self, target_id: &NodeId, limit: Option<usize>) -> Result<Vec<GraphEdge>, StorageError>;
 
     // =========================================================================
     // Query Operations

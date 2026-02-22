@@ -275,13 +275,4 @@ impl EmbeddingConfig {
         })
     }
 
-    /// Serialize configuration to TOML string.
-    ///
-    /// # Errors
-    /// - `EmbeddingError::ConfigError` if serialization fails
-    pub fn to_toml_string(&self) -> EmbeddingResult<String> {
-        toml::to_string_pretty(self).map_err(|e| EmbeddingError::ConfigError {
-            message: format!("Failed to serialize to TOML: {}", e),
-        })
-    }
 }

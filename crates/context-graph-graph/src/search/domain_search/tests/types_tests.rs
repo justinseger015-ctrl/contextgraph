@@ -33,7 +33,6 @@ mod tests {
         assert_eq!(result.modulated_score, 0.9);
         assert!(result.domain_matched);
         assert!((result.modulation_delta() - 0.2).abs() < 1e-6);
-        assert!((result.boost_ratio() - (0.9 / 0.7)).abs() < 1e-6);
     }
 
     #[test]
@@ -55,23 +54,6 @@ mod tests {
         );
 
         assert!(!result.domain_matched);
-    }
-
-    #[test]
-    fn test_boost_ratio_zero_base() {
-        let item = SemanticSearchResultItem {
-            faiss_id: 1,
-            node_id: None,
-            distance: 10.0,
-            similarity: 0.0, // Zero base
-            domain: None,
-            relevance_score: None,
-        };
-
-        let result = DomainSearchResult::from_semantic_item(&item, 0.0, 0.0, Domain::General);
-
-        // Should return 1.0 to avoid division by zero
-        assert_eq!(result.boost_ratio(), 1.0);
     }
 
     #[test]

@@ -20,7 +20,7 @@ fn default_lazy_loading() -> bool {
 }
 
 fn default_max_loaded_models() -> usize {
-    12 // All models can be loaded by default
+    13 // All 13 embedders (E1-E13) can be loaded by default
 }
 
 // ============================================================================

@@ -206,7 +206,9 @@ impl MultiArrayEmbeddingProvider for LazyMultiArrayProvider {
                 Some(provider) => provider.health_status(),
                 None => [false; NUM_EMBEDDERS],
             },
-            Err(_) => [true; NUM_EMBEDDERS], // lock contended, assume healthy
+            // Audit-10 SRV-L7 FIX: Unknown state ≠ healthy. Return all-false on lock contention
+            // so callers don't falsely assume embedders are ready.
+            Err(_) => [false; NUM_EMBEDDERS],
         }
     }
 

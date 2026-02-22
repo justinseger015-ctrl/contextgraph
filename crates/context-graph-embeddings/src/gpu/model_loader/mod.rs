@@ -51,9 +51,8 @@
 //! // Load a model (manages memory automatically)
 //! loader.load_model(ModelId::Semantic).expect("Load failed");
 //!
-//! // Check memory usage
-//! let stats = loader.memory_stats().expect("Stats");
-//! println!("Allocated: {} MB", stats.allocated / (1024 * 1024));
+//! // Check if model is loaded
+//! assert!(loader.is_loaded(ModelId::Semantic));
 //! ```
 
 mod batch_loader;
@@ -70,9 +69,7 @@ mod weights;
 pub use config::BertConfig;
 pub use error::ModelLoadError;
 pub use loader::GpuModelLoader;
-pub use unified::{
-    LoaderConfig, LoaderConfigError, MemoryStatsSnapshot, UnifiedLoaderError, UnifiedModelLoader,
-};
+pub use unified::{LoaderConfig, LoaderConfigError, UnifiedLoaderError, UnifiedModelLoader};
 pub use weights::{
     AttentionWeights, BertWeights, EmbeddingWeights, EncoderLayerWeights, FfnWeights, PoolerWeights,
 };

@@ -126,38 +126,6 @@ impl CausalEdge {
         }
     }
 
-    /// Create a CausalEdge with embeddings for direct retrieval.
-    ///
-    /// # Arguments
-    /// * `source` - UUID of the cause node
-    /// * `target` - UUID of the effect node
-    /// * `strength` - Causal strength [0, 1]
-    /// * `mechanism` - Description of the causal mechanism
-    /// * `cause_embedding` - E5 cause embedding (768D)
-    /// * `effect_embedding` - E5 effect embedding (768D)
-    pub fn with_embeddings(
-        source: Uuid,
-        target: Uuid,
-        strength: f32,
-        mechanism: impl Into<String>,
-        cause_embedding: Vec<f32>,
-        effect_embedding: Vec<f32>,
-    ) -> Self {
-        Self {
-            source,
-            target,
-            strength: strength.clamp(0.0, 1.0),
-            mechanism: mechanism.into(),
-            cause_embedding: Some(cause_embedding),
-            effect_embedding: Some(effect_embedding),
-            is_bidirectional: false,
-            reverse_embeddings: None,
-            llm_confidence: 0.0,
-            mechanism_type: None,
-            embedding_hint_provenance: None,
-        }
-    }
-
     /// Create a bidirectional CausalEdge (feedback loop).
     ///
     /// # Arguments

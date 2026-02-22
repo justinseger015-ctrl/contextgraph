@@ -107,39 +107,6 @@ impl BatchProcessor {
         Ok(results)
     }
 
-    /// Submit request with priority (higher = more urgent).
-    ///
-    /// # Arguments
-    /// * `model_id` - Target model
-    /// * `input` - Input to embed
-    /// * `priority` - Priority level (0-255, higher = more urgent)
-    ///
-    /// # Returns
-    /// The embedding result when processing completes.
-    ///
-    /// # Errors
-    /// Same as `submit()`
-    pub async fn submit_with_priority(
-        &self,
-        model_id: ModelId,
-        input: ModelInput,
-        priority: u8,
-    ) -> EmbeddingResult<ModelEmbedding> {
-        if !self.is_running_internal() {
-            return Err(EmbeddingError::BatchError {
-                message: "BatchProcessor is shutting down".to_string(),
-            });
-        }
-
-        let (request, rx) = BatchRequest::with_priority(input, model_id, priority);
-        self.inc_requests_submitted();
-        self.send_request(request).await?;
-
-        rx.await.map_err(|_| EmbeddingError::BatchError {
-            message: "Request was dropped before completion".to_string(),
-        })?
-    }
-
     // ========================================================================
     // INTERNAL HELPERS
     // ========================================================================

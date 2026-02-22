@@ -43,13 +43,4 @@ impl GraphStorage {
         Ok(())
     }
 
-    /// Delete hyperbolic coordinates for a node.
-    pub fn delete_hyperbolic(&self, node_id: NodeId) -> GraphResult<()> {
-        let cf = self.cf_hyperbolic()?;
-        let key = node_id.to_le_bytes();
-
-        self.db.delete_cf(cf, key)?;
-        log::trace!("DELETE hyperbolic node_id={}", node_id);
-        Ok(())
-    }
 }

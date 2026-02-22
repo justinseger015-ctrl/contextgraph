@@ -1240,18 +1240,4 @@ impl RocksDbTeleologicalStore {
         Ok(())
     }
 
-    /// Get raw bytes from a specific column family (for debugging).
-    pub fn get_raw_bytes(
-        &self,
-        cf_name: &str,
-        key: &[u8],
-    ) -> TeleologicalStoreResult<Option<Vec<u8>>> {
-        let cf = self.get_cf(cf_name)?;
-        self.db.get_cf(cf, key).map_err(|e| {
-            TeleologicalStoreError::Internal(format!(
-                "RocksDB get_raw failed on CF '{}': {}",
-                cf_name, e
-            ))
-        })
-    }
 }

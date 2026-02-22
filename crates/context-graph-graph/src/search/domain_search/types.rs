@@ -75,15 +75,6 @@ impl DomainSearchResult {
         self.modulated_score - self.base_similarity
     }
 
-    /// Get boost ratio (modulated / base).
-    #[inline]
-    pub fn boost_ratio(&self) -> f32 {
-        if self.base_similarity > 1e-6 {
-            self.modulated_score / self.base_similarity
-        } else {
-            1.0
-        }
-    }
 }
 
 /// Container for domain search results with metadata.

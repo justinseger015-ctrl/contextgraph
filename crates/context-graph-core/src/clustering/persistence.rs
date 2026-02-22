@@ -212,22 +212,6 @@ impl PersistedTopicPortfolio {
         Ok(json)
     }
 
-    /// Serialize the portfolio to pretty-printed JSON bytes.
-    ///
-    /// Useful for debugging and human inspection.
-    ///
-    /// # Returns
-    ///
-    /// Pretty-printed JSON-encoded bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns `PersistenceError::Serialization` if JSON encoding fails.
-    pub fn to_bytes_pretty(&self) -> Result<Vec<u8>, PersistenceError> {
-        let json = serde_json::to_vec_pretty(self)?;
-        Ok(json)
-    }
-
     /// Deserialize a portfolio from JSON bytes.
     ///
     /// # Arguments
@@ -269,12 +253,6 @@ impl PersistedTopicPortfolio {
     #[inline]
     pub fn is_unstable(&self) -> bool {
         self.churn_rate >= 0.5
-    }
-
-    /// Check if entropy is high (> 0.7 per AP-70).
-    #[inline]
-    pub fn has_high_entropy(&self) -> bool {
-        self.entropy > 0.7
     }
 
     /// Get total member count across all topics.

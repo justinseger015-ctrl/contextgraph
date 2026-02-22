@@ -240,40 +240,6 @@ impl GraphModel {
     // - target→source direction: 0.8x dampening
     // =========================================================================
 
-    /// Embed text as a potential SOURCE in graph relationships.
-    ///
-    /// Uses the base embedding projected through W_source matrix.
-    /// Use this when embedding text that "points to" other entities
-    /// (e.g., "Module A imports B, C, D").
-    ///
-    /// # Arguments
-    /// * `content` - Text content to embed as a source
-    ///
-    /// # Returns
-    /// 1024D embedding vector with source-role semantics
-    pub async fn embed_as_source(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
-        // Note: embed_dual uses single forward pass + two projections.
-        // The "unused" projection cost is ~0.1ms, not worth separate code path.
-        let (source_vec, _) = self.embed_dual(content).await?;
-        Ok(source_vec)
-    }
-
-    /// Embed text as a potential TARGET in graph relationships.
-    ///
-    /// Uses the base embedding projected through W_target matrix.
-    /// Use this when embedding text that "is pointed to" by other entities
-    /// (e.g., "Module X is imported by A, B, C").
-    ///
-    /// # Arguments
-    /// * `content` - Text content to embed as a target
-    ///
-    /// # Returns
-    /// 1024D embedding vector with target-role semantics
-    pub async fn embed_as_target(&self, content: &str) -> EmbeddingResult<Vec<f32>> {
-        let (_, target_vec) = self.embed_dual(content).await?;
-        Ok(target_vec)
-    }
-
     /// Embed text as BOTH source and target roles simultaneously.
     ///
     /// Produces two distinct 1024D vectors from a single encoder pass:

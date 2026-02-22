@@ -38,10 +38,12 @@ pub use chain::{
     AbductionResult, CausalHop, CausalPairEmbedding, HOP_ATTENUATION, MAX_CHAIN_LENGTH,
     MIN_CHAIN_SCORE,
 };
+#[allow(deprecated)]
 pub use inference::{InferenceDirection, InferenceResult, OmniInfer};
 pub use scm::{CausalEdge, CausalGraph, CausalNode};
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use uuid::Uuid;

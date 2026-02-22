@@ -71,20 +71,6 @@ fn test_integration_config_rejects_invalid_curvatures() {
     }
 }
 
-#[test]
-fn test_integration_config_rejects_invalid_dimension() {
-    // Dimension must be exactly 64 for CUDA kernel
-    let invalid_dims = [0, 1, 32, 63, 65, 128, 256, 512];
-    for dim in invalid_dims {
-        let result = PoincareCudaConfig::with_dim_and_curvature(dim, -1.0);
-        assert!(result.is_err(), "Dimension {} should be invalid", dim);
-    }
-
-    // Dimension 64 should be valid
-    let result = PoincareCudaConfig::with_dim_and_curvature(64, -1.0);
-    assert!(result.is_ok(), "Dimension 64 should be valid");
-}
-
 // ============================================================================
 // CPU DISTANCE COMPUTATION TESTS - REAL DATA
 // ============================================================================

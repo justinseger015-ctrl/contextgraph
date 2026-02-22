@@ -108,6 +108,6 @@ fn test_traversed_since() {
 
     assert!(!edge.traversed_since(before));
 
-    edge.record_traversal_default(true);
+    edge.record_traversal(true, 0.1);
     assert!(edge.traversed_since(before));
 }

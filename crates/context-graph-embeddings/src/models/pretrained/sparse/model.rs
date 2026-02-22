@@ -507,40 +507,6 @@ pub struct DualEmbedding {
     pub dense: ModelEmbedding,
 }
 
-impl DualEmbedding {
-    /// Convert the embeddings SparseVector to context-graph-core SparseVector.
-    ///
-    /// This converts from the embeddings crate format (indices: Vec<usize>)
-    /// to the core crate format (indices: Vec<u16>) for storage in
-    /// TeleologicalFingerprint.e6_sparse.
-    ///
-    /// # Returns
-    /// The sparse vector in context-graph-core format, ready for storage.
-    ///
-    /// # Panics
-    /// Debug builds will panic if any index > u16::MAX (should never happen
-    /// since SPLADE vocab is 30522 < 65535).
-    pub fn to_core_sparse(&self) -> context_graph_core::types::fingerprint::SparseVector {
-        // Convert indices from usize to u16 (SPLADE vocab 30522 fits in u16)
-        let indices: Vec<u16> = self
-            .sparse
-            .indices
-            .iter()
-            .map(|&i| {
-                debug_assert!(i <= u16::MAX as usize, "Index {} exceeds u16::MAX", i);
-                i as u16
-            })
-            .collect();
-
-        // Use weights as values (same semantics, different field name)
-        let values = self.sparse.weights.clone();
-
-        // Use the constructor which validates sorting and bounds
-        context_graph_core::types::fingerprint::SparseVector::new(indices, values)
-            .expect("SparseVector conversion failed - indices should already be valid")
-    }
-}
-
 // Implement Send and Sync manually since RwLock is involved
 unsafe impl Send for SparseModel {}
 unsafe impl Sync for SparseModel {}

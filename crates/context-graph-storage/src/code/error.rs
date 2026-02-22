@@ -79,18 +79,9 @@ impl CodeStorageError {
         Self::EmbeddingNotFound { id }
     }
 
-    /// Create a file not found error.
-    pub fn file_not_found(path: impl Into<String>) -> Self {
-        Self::FileNotFound { path: path.into() }
-    }
-
     /// Create a column family not found error.
     pub fn cf_not_found(name: impl Into<String>) -> Self {
         Self::ColumnFamilyNotFound { name: name.into() }
     }
 
-    /// Check if this is a not found error.
-    pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound { .. } | Self::FileNotFound { .. })
-    }
 }

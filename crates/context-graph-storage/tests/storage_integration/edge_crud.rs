@@ -106,7 +106,7 @@ fn test_get_edges_from_and_to() {
     assert_eq!(from_node1.len(), 2, "node1 should have 2 outgoing edges");
 
     // Get edges to node2
-    let to_node2 = db.get_edges_to(&node2.id).expect("get edges to node2");
+    let to_node2 = db.get_edges_to(&node2.id, None).expect("get edges to node2");
     println!("VERIFY: edges to node2 = {}", to_node2.len());
     assert_eq!(to_node2.len(), 2, "node2 should have 2 incoming edges");
 

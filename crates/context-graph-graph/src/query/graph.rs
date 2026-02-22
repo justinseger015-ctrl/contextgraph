@@ -23,7 +23,6 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::config::IndexConfig;
 use crate::error::{GraphError, GraphResult};
@@ -161,24 +160,6 @@ impl Graph {
         Ok(faiss_id)
     }
 
-    /// Add a node with UUID.
-    ///
-    /// Associates a UUID with the FAISS internal ID for tracking.
-    pub fn add_node_with_uuid(
-        &mut self,
-        embedding: &[f32],
-        domain: Domain,
-        uuid: Uuid,
-    ) -> GraphResult<i64> {
-        let faiss_id = self.add_node(embedding, domain)?;
-
-        // Store UUID mapping (would need faiss_ids column family)
-        // For now, just return the faiss_id
-        log::debug!("Added node {} with FAISS ID {}", uuid, faiss_id);
-
-        Ok(faiss_id)
-    }
-
     // ========== Edge Operations ==========
 
     /// Add an edge between two nodes.
@@ -247,21 +228,6 @@ impl Graph {
             .await
     }
 
-    /// Search with domain filter.
-    pub async fn search_in_domain(
-        &self,
-        embedding: &[f32],
-        domain: Domain,
-        top_k: usize,
-    ) -> GraphResult<QueryResult> {
-        let options = SemanticSearchOptions::default()
-            .with_top_k(top_k)
-            .with_domain(domain);
-
-        super::semantic::semantic_search_simple(&self.index, &self.storage, embedding, options)
-            .await
-    }
-
     // ========== Statistics ==========
 
     /// Get the number of vectors in the index.
@@ -281,60 +247,6 @@ impl Graph {
     pub fn is_trained(&self) -> bool {
         self.index.is_trained()
     }
-
-    /// Get storage statistics.
-    pub fn storage_stats(&self) -> GraphResult<GraphStats> {
-        Ok(GraphStats {
-            vector_count: self.index.len(),
-            hyperbolic_count: self.storage.hyperbolic_count()?,
-            cone_count: self.storage.cone_count()?,
-            edge_count: self.storage.edge_count()?,
-            adjacency_count: self.storage.adjacency_count()?,
-        })
-    }
-}
-
-/// Statistics about the graph.
-#[derive(Debug, Clone)]
-pub struct GraphStats {
-    /// Number of vectors in FAISS index.
-    pub vector_count: usize,
-
-    /// Number of hyperbolic points stored.
-    pub hyperbolic_count: usize,
-
-    /// Number of entailment cones stored.
-    pub cone_count: usize,
-
-    /// Number of edges stored.
-    pub edge_count: usize,
-
-    /// Number of adjacency lists.
-    pub adjacency_count: usize,
-}
-
-impl std::fmt::Display for GraphStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Graph: {} vectors, {} hyperbolic, {} cones, {} edges, {} adjacency lists",
-            self.vector_count,
-            self.hyperbolic_count,
-            self.cone_count,
-            self.edge_count,
-            self.adjacency_count
-        )
-    }
-}
-
-/// Convert UUID to i64 for RocksDB key lookup.
-#[inline]
-#[allow(dead_code)]
-fn uuid_to_i64(uuid: &Uuid) -> i64 {
-    let bytes = uuid.as_bytes();
-    i64::from_le_bytes([
-        bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
-    ])
 }
 
 impl std::fmt::Debug for Graph {
@@ -347,45 +259,3 @@ impl std::fmt::Debug for Graph {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_graph_stats_display() {
-        let stats = GraphStats {
-            vector_count: 1000,
-            hyperbolic_count: 500,
-            cone_count: 500,
-            edge_count: 2000,
-            adjacency_count: 800,
-        };
-
-        let display = stats.to_string();
-        assert!(display.contains("1000 vectors"));
-        assert!(display.contains("500 hyperbolic"));
-        assert!(display.contains("2000 edges"));
-    }
-
-    #[test]
-    fn test_uuid_to_i64_deterministic() {
-        let uuid = Uuid::from_u128(0x12345678_9abc_def0_1234_567890abcdef);
-        let i64_1 = uuid_to_i64(&uuid);
-        let i64_2 = uuid_to_i64(&uuid);
-        assert_eq!(i64_1, i64_2);
-    }
-
-    #[test]
-    fn test_uuid_to_i64_different_uuids() {
-        let uuid1 = Uuid::new_v4();
-        let uuid2 = Uuid::new_v4();
-        // Different UUIDs should (almost certainly) produce different i64s
-        // This is a probabilistic test
-        if uuid1 != uuid2 {
-            let i64_1 = uuid_to_i64(&uuid1);
-            let i64_2 = uuid_to_i64(&uuid2);
-            // Note: Could technically collide but extremely unlikely
-            assert_ne!(i64_1, i64_2);
-        }
-    }
-}

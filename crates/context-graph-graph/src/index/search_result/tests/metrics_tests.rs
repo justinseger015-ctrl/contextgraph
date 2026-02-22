@@ -12,8 +12,8 @@ fn test_total_valid_results_multiple_queries() {
     );
 
     assert_eq!(result.total_valid_results(), 4);
-    assert_eq!(result.num_valid_results(0), 2); // 1, 2
-    assert_eq!(result.num_valid_results(1), 2); // 4, 6
+    assert_eq!(result.query_results(0).count(), 2); // 1, 2
+    assert_eq!(result.query_results(1).count(), 2); // 4, 6
 }
 
 #[test]

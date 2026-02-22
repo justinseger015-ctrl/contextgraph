@@ -213,18 +213,6 @@ impl ForgetConceptResponse {
         }
     }
 
-    /// Create a response for a soft delete operation with a specific deletion time.
-    ///
-    /// Utility function for testing or when the deletion timestamp is known.
-    #[allow(dead_code)]
-    pub fn soft_deleted_at(id: Uuid, deleted_at: DateTime<Utc>) -> Self {
-        Self {
-            forgotten_id: id,
-            soft_deleted: true,
-            recoverable_until: Some(compute_recovery_deadline(deleted_at)),
-        }
-    }
-
     /// Create a response for a hard delete operation.
     pub fn hard_deleted(id: Uuid) -> Self {
         Self {

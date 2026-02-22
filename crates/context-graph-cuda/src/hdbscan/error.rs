@@ -65,30 +65,6 @@ impl GpuHdbscanError {
         }
     }
 
-    /// Create a FAISS resource error.
-    pub fn faiss_resource(operation: impl Into<String>, code: i32) -> Self {
-        Self::FaissResourceError {
-            operation: operation.into(),
-            code,
-        }
-    }
-
-    /// Create a FAISS index error.
-    pub fn faiss_index(operation: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self::FaissIndexError {
-            operation: operation.into(),
-            reason: reason.into(),
-        }
-    }
-
-    /// Create a FAISS search error.
-    pub fn faiss_search(operation: impl Into<String>, code: i32) -> Self {
-        Self::FaissSearchError {
-            operation: operation.into(),
-            code,
-        }
-    }
-
     /// Create an invalid parameter error.
     pub fn invalid_parameter(
         parameter: impl Into<String>,

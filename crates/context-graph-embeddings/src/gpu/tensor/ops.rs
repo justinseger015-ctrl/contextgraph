@@ -70,13 +70,6 @@ impl GpuTensor {
         Ok(Self::new(result))
     }
 
-    /// Softmax with temperature scaling.
-    pub fn softmax_with_temperature(&self, temperature: f32) -> candle_core::Result<Self> {
-        let scaled = (&self.inner / temperature as f64)?;
-        let result = candle_nn::ops::softmax(&scaled, candle_core::D::Minus1)?;
-        Ok(Self::new(result))
-    }
-
     /// Apply GELU activation.
     pub fn gelu(&self) -> candle_core::Result<Self> {
         let result = self.inner.gelu()?;

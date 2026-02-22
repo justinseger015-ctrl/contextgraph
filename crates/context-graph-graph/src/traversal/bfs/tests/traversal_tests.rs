@@ -97,10 +97,10 @@ fn test_bfs_basic_traversal() {
     );
     assert_eq!(result.nodes[0], 1, "Start node should be first");
 
-    // Verify depth counts
-    assert_eq!(result.nodes_at_depth(0), 1, "Depth 0: 1 node");
-    assert_eq!(result.nodes_at_depth(1), 2, "Depth 1: 2 nodes");
-    assert_eq!(result.nodes_at_depth(2), 4, "Depth 2: 4 nodes");
+    // Verify depth counts via depth_counts map
+    assert_eq!(*result.depth_counts.get(&0).unwrap_or(&0), 1, "Depth 0: 1 node");
+    assert_eq!(*result.depth_counts.get(&1).unwrap_or(&0), 2, "Depth 1: 2 nodes");
+    assert_eq!(*result.depth_counts.get(&2).unwrap_or(&0), 4, "Depth 2: 4 nodes");
 
     assert!(!result.truncated);
     assert_eq!(result.max_depth_reached, 2);

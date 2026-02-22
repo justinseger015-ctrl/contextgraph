@@ -105,8 +105,6 @@ pub struct McpServer {
     pub(in crate::server) models_failed: Arc<RwLock<Option<String>>>,
     /// Arc-wrapped handlers for safe sharing across TCP client tasks.
     pub(in crate::server) handlers: Arc<Handlers>,
-    #[allow(dead_code)] // Used in TCP transport initialization checks
-    pub(in crate::server) initialized: Arc<RwLock<bool>>,
     /// Connection semaphore for limiting concurrent TCP connections.
     pub(in crate::server) connection_semaphore: Arc<Semaphore>,
     /// Active connection counter for monitoring.
@@ -689,7 +687,6 @@ impl McpServer {
             models_failed,
             // TASK-INTEG-018: Arc-wrap handlers for TCP sharing
             handlers: Arc::new(handlers),
-            initialized: Arc::new(RwLock::new(false)),
             connection_semaphore,
             active_connections,
             // E7-WIRING: Code watcher fields initialized as None/false
@@ -805,12 +802,16 @@ impl McpServer {
 
             // MCP-H2 FIX: Pre-parse request id before handle_request consumes the input.
             // This ensures timeout errors include the correct id per JSON-RPC 2.0 spec.
-            let request_id: Option<crate::protocol::JsonRpcId> =
-                serde_json::from_str::<serde_json::Value>(trimmed)
-                    .ok()
-                    .and_then(|v| v.get("id").cloned())
-                    .and_then(|id_val| serde_json::from_value(id_val).ok());
-            let is_notification = request_id.is_none();
+            // Audit-10 SRV-M2 FIX: Distinguish absent "id" (notification) from "id": null
+            // (valid request per JSON-RPC 2.0). Only absent "id" is a notification.
+            let parsed_value = serde_json::from_str::<serde_json::Value>(trimmed).ok();
+            let is_notification = parsed_value
+                .as_ref()
+                .map(|v| !v.as_object().is_some_and(|o| o.contains_key("id")))
+                .unwrap_or(false);
+            let request_id: Option<crate::protocol::JsonRpcId> = parsed_value
+                .and_then(|v| v.get("id").cloned())
+                .and_then(|id_val| serde_json::from_value(id_val).ok());
 
             let response = match tokio::time::timeout(
                 std::time::Duration::from_secs(request_timeout),

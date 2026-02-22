@@ -5,7 +5,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::types::{Domain, GraphEdge, NeurotransmitterWeights};
+use super::types::{Domain, GraphEdge};
 
 impl GraphEdge {
     /// Get modulated weight for a specific query domain.
@@ -99,28 +99,10 @@ impl GraphEdge {
         self.steering_reward = self.steering_reward.clamp(0.0, 1.0);
     }
 
-    /// Record traversal with default EMA alpha (0.1).
-    #[inline]
-    pub fn record_traversal_default(&mut self, success: bool) {
-        self.record_traversal(success, 0.1);
-    }
-
     /// Mark this edge as an amortized shortcut (learned during dream consolidation).
     #[inline]
     pub fn mark_as_shortcut(&mut self) {
         self.is_amortized_shortcut = true;
-    }
-
-    /// Update confidence score.
-    #[inline]
-    pub fn update_confidence(&mut self, new_confidence: f32) {
-        self.confidence = new_confidence.clamp(0.0, 1.0);
-    }
-
-    /// Update neurotransmitter weights.
-    #[inline]
-    pub fn update_nt_weights(&mut self, weights: NeurotransmitterWeights) {
-        self.neurotransmitter_weights = weights;
     }
 
     /// Check if edge has been traversed since given timestamp.

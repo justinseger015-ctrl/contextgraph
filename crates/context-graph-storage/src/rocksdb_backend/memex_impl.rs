@@ -46,8 +46,8 @@ impl Memex for RocksDbMemex {
         RocksDbMemex::get_edges_from(self, source_id)
     }
 
-    fn get_edges_to(&self, target_id: &NodeId) -> Result<Vec<GraphEdge>, StorageError> {
-        RocksDbMemex::get_edges_to(self, target_id)
+    fn get_edges_to(&self, target_id: &NodeId, limit: Option<usize>) -> Result<Vec<GraphEdge>, StorageError> {
+        RocksDbMemex::get_edges_to(self, target_id, limit)
     }
 
     fn query_by_tag(&self, tag: &str, limit: Option<usize>) -> Result<Vec<NodeId>, StorageError> {
@@ -338,7 +338,7 @@ mod tests {
         println!("=== MEMEX GET_EDGES_TO TEST ===");
 
         let edges = memex
-            .get_edges_to(&target.id)
+            .get_edges_to(&target.id, None)
             .expect("get_edges_to via Memex");
 
         println!("RESULT: Found {} incoming edges", edges.len());

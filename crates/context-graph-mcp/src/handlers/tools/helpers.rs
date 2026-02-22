@@ -231,3 +231,16 @@ pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     // SRC-3: Normalize [-1,1] → [0,1]
     (raw + 1.0) / 2.0
 }
+
+/// Compute variance of vector components (measures how spread out activations are).
+///
+/// Used by both `infer_graph_direction` (E8) and `infer_causal_direction` (E5)
+/// to determine directional strength from asymmetric embeddings.
+pub(crate) fn component_variance_f32(v: &[f32]) -> f32 {
+    if v.is_empty() {
+        return 0.0;
+    }
+    let n = v.len() as f32;
+    let mean = v.iter().sum::<f32>() / n;
+    v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n
+}

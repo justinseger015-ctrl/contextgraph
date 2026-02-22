@@ -34,27 +34,6 @@ impl DfsResult {
         }
     }
 
-    /// Reconstruct path from start to target.
-    ///
-    /// Returns None if target was not visited.
-    #[must_use]
-    pub fn path_to(&self, target: NodeId) -> Option<Vec<NodeId>> {
-        if !self.parents.contains_key(&target) {
-            return None;
-        }
-
-        let mut path = vec![target];
-        let mut current = target;
-
-        while let Some(Some(parent)) = self.parents.get(&current) {
-            path.push(*parent);
-            current = *parent;
-        }
-
-        path.reverse();
-        Some(path)
-    }
-
     /// Get total node count.
     #[must_use]
     pub fn node_count(&self) -> usize {

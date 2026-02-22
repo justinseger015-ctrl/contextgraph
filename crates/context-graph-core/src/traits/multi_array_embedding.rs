@@ -703,12 +703,6 @@ impl EmbeddingMetadata {
         parts.join(" ")
     }
 
-    /// Format E2/E3 instruction string (always uses timestamp).
-    #[must_use]
-    pub fn temporal_instruction(&self) -> String {
-        let ts = self.timestamp.unwrap_or_else(Utc::now);
-        format!("epoch:{}", ts.timestamp())
-    }
 }
 
 /// Multi-Array Embedding Provider trait.

@@ -53,13 +53,6 @@ impl DfsParams {
         self
     }
 
-    /// Builder: set unlimited depth.
-    #[must_use]
-    pub fn unlimited_depth(mut self) -> Self {
-        self.max_depth = None;
-        self
-    }
-
     /// Builder: set max nodes.
     #[must_use]
     pub fn max_nodes(mut self, nodes: usize) -> Self {

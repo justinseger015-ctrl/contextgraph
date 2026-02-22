@@ -119,16 +119,6 @@ pub fn is_entailed(storage: &GraphStorage, ancestor_id: i64, descendant_id: i64)
     low_level_is_entailed(storage, ancestor_id, descendant_id, &config)
 }
 
-/// Check if one concept is entailed by another with custom config.
-pub fn is_entailed_with_config(
-    storage: &GraphStorage,
-    ancestor_id: i64,
-    descendant_id: i64,
-    config: &HyperbolicConfig,
-) -> GraphResult<bool> {
-    low_level_is_entailed(storage, ancestor_id, descendant_id, config)
-}
-
 /// Get the entailment membership score between two concepts.
 ///
 /// Returns a score in [0, 1] indicating how strongly the descendant
@@ -150,16 +140,6 @@ pub fn entailment_membership_score(
 ) -> GraphResult<f32> {
     let config = HyperbolicConfig::default();
     low_level_score(storage, ancestor_id, descendant_id, &config)
-}
-
-/// Get the entailment membership score with custom config.
-pub fn entailment_membership_score_with_config(
-    storage: &GraphStorage,
-    ancestor_id: i64,
-    descendant_id: i64,
-    config: &HyperbolicConfig,
-) -> GraphResult<f32> {
-    low_level_score(storage, ancestor_id, descendant_id, config)
 }
 
 /// Batch check entailment relationships.
@@ -184,15 +164,6 @@ pub fn batch_check_entailment(
 ) -> GraphResult<Vec<BatchEntailmentResult>> {
     let config = HyperbolicConfig::default();
     low_level_batch(storage, checks, &config)
-}
-
-/// Batch check entailment with custom config.
-pub fn batch_check_entailment_with_config(
-    storage: &GraphStorage,
-    checks: &[(i64, i64)],
-    config: &HyperbolicConfig,
-) -> GraphResult<Vec<BatchEntailmentResult>> {
-    low_level_batch(storage, checks, config)
 }
 
 /// Find the lowest common ancestor of two concepts.
@@ -223,16 +194,6 @@ pub fn find_lowest_common_ancestor(
 ) -> GraphResult<LcaResult> {
     let params = EntailmentQueryParams::default();
     low_level_lca(storage, node_a, node_b, &params)
-}
-
-/// Find the lowest common ancestor with custom parameters.
-pub fn find_lowest_common_ancestor_with_params(
-    storage: &GraphStorage,
-    node_a: i64,
-    node_b: i64,
-    params: &EntailmentQueryParams,
-) -> GraphResult<LcaResult> {
-    low_level_lca(storage, node_a, node_b, params)
 }
 
 /// Get all direct children of a concept (depth 1 descendants).

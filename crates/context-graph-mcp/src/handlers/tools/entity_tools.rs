@@ -942,11 +942,13 @@ impl Handlers {
             // Cosine similarity between predicted relation (r̂ = t-h) and known relation embedding
             let dot: f32 = predicted_r.iter().zip(relation_e11.iter()).map(|(a, b)| a * b).sum();
             let norm_r: f32 = relation_e11.iter().map(|x| x * x).sum::<f32>().sqrt();
-            let score = if predicted_r_norm > 0.0 && norm_r > 0.0 {
+            let raw_score = if predicted_r_norm > 0.0 && norm_r > 0.0 {
                 dot / (predicted_r_norm * norm_r)
             } else {
                 0.0
             };
+            // Audit-10 MCP-L4 FIX: SRC-3 normalize cosine [-1,1] → [0,1]
+            let score = (raw_score + 1.0) / 2.0;
 
             relation_scores.push((relation_name, score));
         }

@@ -214,12 +214,6 @@ impl GraphExpansionConfig {
         }
     }
 
-    /// Set edge type routing based on query.
-    pub fn with_query_routing(mut self, query: &str, weight_profile: Option<&str>) -> Self {
-        let query_type = QueryType::from_query(query, weight_profile);
-        self.edge_type_routing = EdgeTypeRouting::QuerySpecific { query_type };
-        self
-    }
 }
 
 // ============================================================================

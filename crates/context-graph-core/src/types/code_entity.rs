@@ -147,28 +147,9 @@ impl CodeEntity {
         }
     }
 
-    /// Check if this is a test entity (has #[test] or similar).
-    pub fn is_test(&self) -> bool {
-        self.attributes.iter().any(|a| a.contains("test"))
-    }
-
-    /// Check if this is a public entity.
-    pub fn is_public(&self) -> bool {
-        matches!(self.visibility, Visibility::Public | Visibility::PublicCrate)
-    }
-
     /// Get a display-friendly location string.
     pub fn location(&self) -> String {
         format!("{}:{}-{}", self.file_path, self.line_start, self.line_end)
-    }
-
-    /// Get a short identifier for display.
-    pub fn short_id(&self) -> String {
-        if let Some(ref parent) = self.parent_type {
-            format!("{}::{}", parent, self.name)
-        } else {
-            self.name.clone()
-        }
     }
 
     /// Builder method to set module path.

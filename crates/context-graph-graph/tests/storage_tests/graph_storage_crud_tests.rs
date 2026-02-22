@@ -90,13 +90,7 @@ fn test_graph_storage_hyperbolic_crud() {
     assert!((after_update.coords[0] - 0.9).abs() < 0.0001);
     println!("UPDATE: Point updated successfully");
 
-    // Delete
-    storage.delete_hyperbolic(node_id).expect("DELETE failed");
-    let deleted = storage.get_hyperbolic(node_id).expect("GET failed");
-    assert!(deleted.is_none());
-    println!("DELETE: Point deleted successfully");
-
-    println!("AFTER: Hyperbolic CRUD operations complete");
+    println!("AFTER: Hyperbolic CRU operations complete");
 }
 
 #[test]

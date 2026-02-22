@@ -28,7 +28,7 @@ use std::sync::{Arc, RwLock};
 
 use context_graph_core::teleological::embedder::Embedder;
 
-use crate::gpu::memory::{MemoryError, MemoryPressure, ModelSlotManager};
+use crate::gpu::memory::{MemoryError, ModelSlotManager};
 use crate::types::ModelId;
 
 use super::error::ModelLoadError;
@@ -295,122 +295,6 @@ impl UnifiedModelLoader {
             .unwrap_or(false)
     }
 
-    /// Get the current memory pressure level.
-    pub fn memory_pressure(&self) -> Result<MemoryPressure, UnifiedLoaderError> {
-        let slot_manager = self
-            .slot_manager
-            .read()
-            .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-        Ok(slot_manager.pressure_level())
-    }
-
-    /// Get memory statistics.
-    pub fn memory_stats(&self) -> Result<MemoryStatsSnapshot, UnifiedLoaderError> {
-        let slot_manager = self
-            .slot_manager
-            .read()
-            .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-
-        Ok(MemoryStatsSnapshot {
-            allocated: slot_manager.allocated(),
-            available: slot_manager.available(),
-            budget: slot_manager.budget(),
-            loaded_count: slot_manager.loaded_count(),
-            pressure: slot_manager.pressure_level(),
-        })
-    }
-
-    /// Check if the model is loaded and touch its LRU timestamp.
-    ///
-    /// Returns true if the model is loaded, false otherwise.
-    /// This also updates the LRU timestamp for the slot.
-    pub fn touch_model(&self, model_id: ModelId) -> Result<bool, UnifiedLoaderError> {
-        let embedder: Embedder = model_id.into();
-        let loaded = self
-            .loaded_weights
-            .read()
-            .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-
-        let is_loaded = loaded.contains_key(&embedder);
-
-        // Touch the slot to update LRU timestamp
-        if is_loaded {
-            drop(loaded);
-            let mut slot_manager = self
-                .slot_manager
-                .write()
-                .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-            slot_manager.touch(&embedder);
-        }
-
-        Ok(is_loaded)
-    }
-
-    /// Get a reference to the loaded weights map for read access.
-    ///
-    /// # Note
-    ///
-    /// The returned guard holds a read lock. Drop it as soon as possible.
-    /// For accessing weights, prefer using `with_weights()` callback pattern.
-    pub fn weights_lock(
-        &self,
-    ) -> Result<
-        std::sync::RwLockReadGuard<'_, std::collections::HashMap<Embedder, BertWeights>>,
-        UnifiedLoaderError,
-    > {
-        self.loaded_weights
-            .read()
-            .map_err(|_| UnifiedLoaderError::LockPoisoned)
-    }
-
-    /// Execute a callback with access to loaded weights.
-    ///
-    /// This is the preferred way to access weights as it properly manages locking.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use context_graph_embeddings::gpu::{UnifiedModelLoader, LoaderConfig};
-    /// # use context_graph_embeddings::types::ModelId;
-    /// # let loader = UnifiedModelLoader::new(LoaderConfig::default()).unwrap();
-    /// loader.with_weights(ModelId::Semantic, |weights| {
-    ///     println!("Model has {} parameters", weights.param_count());
-    /// });
-    /// ```
-    pub fn with_weights<F, R>(
-        &self,
-        model_id: ModelId,
-        f: F,
-    ) -> Result<Option<R>, UnifiedLoaderError>
-    where
-        F: FnOnce(&BertWeights) -> R,
-    {
-        let embedder: Embedder = model_id.into();
-        let loaded = self
-            .loaded_weights
-            .read()
-            .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-
-        // Touch the slot to update LRU timestamp
-        if loaded.contains_key(&embedder) {
-            drop(loaded);
-            {
-                let mut slot_manager = self
-                    .slot_manager
-                    .write()
-                    .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-                slot_manager.touch(&embedder);
-            }
-            let loaded = self
-                .loaded_weights
-                .read()
-                .map_err(|_| UnifiedLoaderError::LockPoisoned)?;
-            Ok(loaded.get(&embedder).map(f))
-        } else {
-            Ok(None)
-        }
-    }
-
     /// List all currently loaded models.
     pub fn loaded_models(&self) -> Result<Vec<ModelId>, UnifiedLoaderError> {
         let loaded = self
@@ -561,21 +445,6 @@ impl UnifiedModelLoader {
     }
 }
 
-/// Snapshot of memory statistics.
-#[derive(Debug, Clone)]
-pub struct MemoryStatsSnapshot {
-    /// Total allocated bytes.
-    pub allocated: usize,
-    /// Available bytes.
-    pub available: usize,
-    /// Total budget bytes.
-    pub budget: usize,
-    /// Number of loaded models.
-    pub loaded_count: usize,
-    /// Current memory pressure level.
-    pub pressure: MemoryPressure,
-}
-
 /// Errors from the unified model loader.
 #[derive(Debug, thiserror::Error)]
 pub enum UnifiedLoaderError {
@@ -670,21 +539,6 @@ mod tests {
             Err(LoaderConfigError::ModelsDirectoryNotFound { .. })
         ));
         println!("[PASS] LoaderConfig validation rejects missing directory");
-    }
-
-    #[test]
-    fn test_memory_stats_snapshot_debug() {
-        let stats = MemoryStatsSnapshot {
-            allocated: 1024 * 1024 * 1024,
-            available: 7 * 1024 * 1024 * 1024,
-            budget: 8 * 1024 * 1024 * 1024,
-            loaded_count: 3,
-            pressure: MemoryPressure::Low,
-        };
-        let debug_str = format!("{:?}", stats);
-        assert!(debug_str.contains("allocated"));
-        assert!(debug_str.contains("loaded_count"));
-        println!("[PASS] MemoryStatsSnapshot Debug impl works");
     }
 
     // Note: Tests requiring actual GPU/model loading are in integration tests

@@ -26,14 +26,14 @@
 //! - AP-60: Temporal embedders NEVER count toward topic detection
 //! - AP-62: Divergence alerts MUST only use SEMANTIC embedders
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use thiserror::Error;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use super::budget::{estimate_tokens, SelectionStats, TokenBudget, TokenBudgetManager, BRIEF_BUDGET};
+use super::budget::{estimate_tokens, TokenBudget, TokenBudgetManager, BRIEF_BUDGET};
 use super::candidate::{InjectionCandidate, InjectionCategory};
 use super::formatter::ContextFormatter;
 use super::priority::PriorityRanker;
@@ -394,19 +394,6 @@ impl InjectionPipeline {
         Ok(candidates)
     }
 
-    /// Get selection statistics from last operation.
-    ///
-    /// Returns empty stats - use `generate_context` return value for actual stats.
-    /// This method exists for API compatibility only.
-    pub fn empty_stats(&self) -> SelectionStats {
-        SelectionStats {
-            selected_count: 0,
-            rejected_count: 0,
-            tokens_used: 0,
-            tokens_available: self.budget.total,
-            by_category: HashMap::new(),
-        }
-    }
 }
 
 // =============================================================================

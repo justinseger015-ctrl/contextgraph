@@ -70,21 +70,6 @@ impl PoincareCudaConfig {
         })
     }
 
-    /// Create config with custom dimension and curvature.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if dimension is not 64 or curvature is not negative.
-    pub fn with_dim_and_curvature(dim: usize, curvature: f32) -> CudaResult<Self> {
-        if dim != POINCARE_DIM {
-            return Err(CudaError::InvalidConfig(format!(
-                "Poincare dimension must be {} for CUDA kernel, got {}",
-                POINCARE_DIM, dim
-            )));
-        }
-        Self::with_curvature(curvature)
-    }
-
     /// Validate configuration parameters.
     ///
     /// # Errors

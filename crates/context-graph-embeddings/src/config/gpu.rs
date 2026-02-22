@@ -131,43 +131,6 @@ impl GpuConfig {
         Ok(())
     }
 
-    /// Create CPU-only configuration (GPU disabled).
-    ///
-    /// Use when:
-    /// - No GPU available
-    /// - Testing without CUDA
-    /// - Fallback for non-Blackwell hardware
-    pub fn cpu_only() -> Self {
-        Self {
-            enabled: false,
-            device_ids: vec![],
-            memory_fraction: 0.0,
-            use_cuda_graphs: false,
-            mixed_precision: false,
-            green_contexts: false,
-            gds_enabled: false,
-        }
-    }
-
-    /// Create high-performance configuration for RTX 5090.
-    ///
-    /// Enables all optimizations:
-    /// - CUDA graphs
-    /// - Mixed precision
-    /// - Green contexts
-    /// - GDS (if available)
-    pub fn rtx_5090_optimized() -> Self {
-        Self {
-            enabled: true,
-            device_ids: vec![0],
-            memory_fraction: 0.75, // Leave headroom for VRAM pressure
-            use_cuda_graphs: true,
-            mixed_precision: true,
-            green_contexts: true,
-            gds_enabled: true,
-        }
-    }
-
     /// Check if this config uses GPU acceleration.
     pub fn is_gpu_enabled(&self) -> bool {
         self.enabled && !self.device_ids.is_empty()

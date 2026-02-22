@@ -171,21 +171,6 @@ impl TimeWindow {
         }
     }
 
-    /// Create a time window for a specific day.
-    pub fn for_date(year: i32, month: u32, day: u32) -> Self {
-        use chrono::{TimeZone, Utc};
-        if let Some(date) = Utc.with_ymd_and_hms(year, month, day, 0, 0, 0).single() {
-            let start_ms = date.timestamp_millis();
-            let end_ms = start_ms + 24 * 3600 * 1000;
-            Self {
-                start_ms: Some(start_ms),
-                end_ms: Some(end_ms),
-            }
-        } else {
-            Self::default()
-        }
-    }
-
     /// Check if a timestamp falls within this window.
     pub fn contains(&self, timestamp_ms: i64) -> bool {
         if let Some(start) = self.start_ms {
@@ -307,12 +292,6 @@ impl PeriodicOptions {
             return Err("Day must be 0-6 (Sun-Sat)");
         }
         Ok(Self::for_day(day))
-    }
-
-    /// Alias for try_for_day for clarity.
-    #[inline]
-    pub fn try_for_day_of_week(day_of_week: u8) -> Result<Self, &'static str> {
-        Self::try_for_day(day_of_week)
     }
 
     /// Set the periodic boost weight.
@@ -531,13 +510,6 @@ impl SequenceOptions {
         }
     }
 
-    /// Check if this sequence options is anchored by sequence number.
-    ///
-    /// Returns true if anchor_sequence is set (regardless of anchor_id).
-    pub fn is_sequence_anchored(&self) -> bool {
-        self.anchor_sequence.is_some()
-    }
-
     /// Create sequence options to find memories between two anchors.
     ///
     /// This finds memories that are temporally positioned between the two
@@ -565,51 +537,6 @@ impl SequenceOptions {
     /// Set the sequence boost weight.
     pub fn with_weight(mut self, weight: f32) -> Self {
         self.weight = weight.clamp(0.0, 1.0);
-        self
-    }
-
-    /// Use exponential decay for fallback (when E4 embeddings unavailable).
-    pub fn with_exponential_fallback(mut self, use_exponential: bool) -> Self {
-        self.use_exponential_fallback = use_exponential;
-        self
-    }
-
-    /// Add additional anchor(s) for multi-anchor queries.
-    ///
-    /// Use this for "between" queries that find memories positioned
-    /// relative to multiple anchors.
-    pub fn with_additional_anchors(mut self, anchors: Vec<Uuid>) -> Self {
-        self.additional_anchors = anchors;
-        self
-    }
-
-    /// Add a single additional anchor.
-    pub fn with_additional_anchor(mut self, anchor: Uuid) -> Self {
-        self.additional_anchors.push(anchor);
-        self
-    }
-
-    /// Set the mode for combining multi-anchor scores.
-    pub fn with_multi_anchor_mode(mut self, mode: MultiAnchorMode) -> Self {
-        self.multi_anchor_mode = mode;
-        self
-    }
-
-    /// Set the anchor's session sequence number.
-    ///
-    /// When set, enables sequence-based direction filtering using session
-    /// sequence numbers instead of timestamps.
-    pub fn with_anchor_sequence(mut self, sequence: u64) -> Self {
-        self.anchor_sequence = Some(sequence);
-        self
-    }
-
-    /// Set the anchor's session ID.
-    ///
-    /// When set, can be used to ensure sequence comparisons only happen
-    /// between memories from the same session.
-    pub fn with_anchor_session_id(mut self, session_id: String) -> Self {
-        self.anchor_session_id = Some(session_id);
         self
     }
 
@@ -831,12 +758,6 @@ impl TemporalSearchOptions {
             || self.session_id.is_some()
     }
 
-    /// Check if time window filtering is active.
-    pub fn has_time_filter(&self) -> bool {
-        self.time_window.as_ref().is_some_and(|w| w.is_defined())
-            || self.session_id.is_some()
-    }
-
     /// Get effective decay half-life based on temporal scale.
     pub fn effective_half_life(&self) -> u64 {
         if self.decay_half_life_secs != Self::default_decay_half_life() {
@@ -933,24 +854,6 @@ impl TemporalSearchOptions {
         self
     }
 
-    /// Set periodic pattern matching options.
-    pub fn with_periodic_options(mut self, options: PeriodicOptions) -> Self {
-        self.periodic_options = Some(options);
-        self
-    }
-
-    /// Enable periodic matching for current time.
-    pub fn with_current_time_periodic(mut self) -> Self {
-        self.periodic_options = Some(PeriodicOptions::current_time());
-        self
-    }
-
-    /// Set sequence-based retrieval options.
-    pub fn with_sequence_options(mut self, options: SequenceOptions) -> Self {
-        self.sequence_options = Some(options);
-        self
-    }
-
     /// Find memories before a specific anchor.
     pub fn with_sequence_before(mut self, anchor_id: Uuid) -> Self {
         self.sequence_options = Some(SequenceOptions::before(anchor_id));
@@ -1005,23 +908,6 @@ impl TemporalSearchOptions {
         self
     }
 
-    /// Set component weights for combining E2/E3/E4 scores.
-    ///
-    /// # Arguments
-    ///
-    /// * `e2_recency` - Weight for E2 recency score [0.0, 1.0]
-    /// * `e3_periodic` - Weight for E3 periodic score [0.0, 1.0]
-    /// * `e4_sequence` - Weight for E4 sequence score [0.0, 1.0]
-    ///
-    /// Note: Weights are normalized internally, so they don't need to sum to 1.0.
-    pub fn with_component_weights(mut self, e2_recency: f32, e3_periodic: f32, e4_sequence: f32) -> Self {
-        self.component_weights = (
-            e2_recency.max(0.0),
-            e3_periodic.max(0.0),
-            e4_sequence.max(0.0),
-        );
-        self
-    }
 }
 
 impl Default for TemporalSearchOptions {
@@ -1303,15 +1189,6 @@ impl TeleologicalSearchOptions {
         self
     }
 
-    /// Attach semantic fingerprint for computing per-embedder similarity scores.
-    /// When provided, computes actual cosine similarities between query and
-    /// stored semantic fingerprints instead of returning zeros.
-    #[inline]
-    pub fn with_semantic_query(mut self, semantic: SemanticFingerprint) -> Self {
-        self.semantic_query = Some(semantic);
-        self
-    }
-
     /// Set whether to include original content text in search results.
     ///
     /// When `true`, content will be fetched and included in results.
@@ -1418,17 +1295,6 @@ impl TeleologicalSearchOptions {
             weight
         );
         self.rerank_weight = weight;
-        self
-    }
-
-    /// Set the normalization strategy for score fusion.
-    ///
-    /// # Arguments
-    ///
-    /// * `strategy` - Normalization strategy
-    #[inline]
-    pub fn with_normalization(mut self, strategy: NormalizationStrategyOption) -> Self {
-        self.normalization = strategy;
         self
     }
 
@@ -1618,21 +1484,6 @@ impl TeleologicalSearchOptions {
         self
     }
 
-    /// Enable E3 periodic pattern matching for current time.
-    ///
-    /// Boosts memories created at similar times (same hour/day of week).
-    ///
-    /// # Arguments
-    ///
-    /// * `weight` - Weight for periodic boost [0.0, 1.0]
-    #[inline]
-    pub fn with_periodic_boost(mut self, weight: f32) -> Self {
-        let mut periodic = PeriodicOptions::current_time();
-        periodic.weight = weight.clamp(0.0, 1.0);
-        self.temporal_options.periodic_options = Some(periodic);
-        self
-    }
-
     /// Find memories before a specific anchor memory using E4.
     ///
     /// Uses E4 positional embeddings to find memories that occurred before
@@ -1732,14 +1583,6 @@ impl TeleologicalSearchOptions {
     pub fn with_causal_direction(mut self, direction: CausalDirection) -> Self {
         self.causal_direction = direction;
         self
-    }
-
-    /// Check if asymmetric E5 causal retrieval is active.
-    ///
-    /// Returns true if causal_direction is `Cause` or `Effect` (not `Unknown`).
-    #[inline]
-    pub fn has_causal_direction(&self) -> bool {
-        !matches!(self.causal_direction, CausalDirection::Unknown)
     }
 
 }

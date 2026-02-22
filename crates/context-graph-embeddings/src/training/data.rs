@@ -85,12 +85,6 @@ impl CausalTrainingPair {
         self
     }
 
-    /// Set the rationale.
-    pub fn with_rationale(mut self, rationale: impl Into<String>) -> Self {
-        self.rationale = Some(rationale.into());
-        self
-    }
-
     /// Set the domain.
     pub fn with_domain(mut self, domain: impl Into<String>) -> Self {
         self.domain = domain.into();
@@ -141,25 +135,6 @@ impl TrainingBatch {
     /// Whether the batch is empty.
     pub fn is_empty(&self) -> bool {
         self.pairs.is_empty()
-    }
-
-    /// Get all cause texts.
-    pub fn cause_texts(&self) -> Vec<&str> {
-        self.pairs.iter().map(|p| p.cause_text.as_str()).collect()
-    }
-
-    /// Get all effect texts.
-    pub fn effect_texts(&self) -> Vec<&str> {
-        self.pairs.iter().map(|p| p.effect_text.as_str()).collect()
-    }
-
-    /// Get all hard negative texts (non-empty only).
-    pub fn hard_negatives(&self) -> Vec<&str> {
-        self.pairs
-            .iter()
-            .filter(|p| !p.hard_negative.is_empty())
-            .map(|p| p.hard_negative.as_str())
-            .collect()
     }
 
     /// Get soft label targets (LLM confidence scores).
@@ -235,47 +210,6 @@ impl CausalDataLoader {
         Some(TrainingBatch { pairs, batch_idx })
     }
 
-    /// Filter pairs by maximum difficulty level (for curriculum learning).
-    pub fn filter_by_difficulty(&self, max_difficulty: f32) -> Vec<CausalTrainingPair> {
-        self.pairs
-            .iter()
-            .filter(|p| p.difficulty() <= max_difficulty)
-            .cloned()
-            .collect()
-    }
-
-    /// Split into train and eval sets.
-    pub fn train_eval_split(
-        mut self,
-        eval_fraction: f32,
-        seed: u64,
-    ) -> (CausalDataLoader, CausalDataLoader) {
-        use rand::SeedableRng;
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-        self.pairs.shuffle(&mut rng);
-
-        let eval_count = (self.pairs.len() as f32 * eval_fraction).ceil() as usize;
-        let eval_pairs: Vec<CausalTrainingPair> =
-            self.pairs.drain(self.pairs.len() - eval_count..).collect();
-        let train_pairs = self.pairs;
-
-        let train_loader = CausalDataLoader::new(train_pairs, self.batch_size, seed);
-        let eval_loader = CausalDataLoader::new(eval_pairs, self.batch_size, seed + 1);
-
-        (train_loader, eval_loader)
-    }
-
-    /// Add a new pair to the dataset (for online distillation).
-    pub fn add_pair(&mut self, pair: CausalTrainingPair) {
-        let idx = self.pairs.len();
-        self.pairs.push(pair);
-        self.indices.push(idx);
-    }
-
-    /// Get all pairs (immutable reference).
-    pub fn pairs(&self) -> &[CausalTrainingPair] {
-        &self.pairs
-    }
 }
 
 /// Seed causal training pairs spanning multiple domains.

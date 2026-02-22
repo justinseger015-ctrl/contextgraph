@@ -166,12 +166,21 @@ pub fn validate_optional_int(
     max: i64,
     default: i64,
 ) -> Result<i64, ValidationError> {
-    match value.and_then(|v| v.as_i64()) {
-        Some(n) => {
-            validate_range(field, n, min, max)?;
-            Ok(n)
-        }
+    match value {
         None => Ok(default),
+        Some(v) => match v.as_i64() {
+            Some(n) => {
+                validate_range(field, n, min, max)?;
+                Ok(n)
+            }
+            // Audit-10 SRV-L2 FIX: Present-but-wrong-type returns error, not silent default.
+            // Previously, a string "abc" for an integer field silently returned the default.
+            None if v.is_null() => Ok(default),
+            None => Err(ValidationError::InvalidFormat {
+                field: field.to_string(),
+                expected: format!("integer (got {:?})", v),
+            }),
+        },
     }
 }
 
@@ -185,19 +194,27 @@ pub fn validate_optional_float(
     max: f64,
     default: f64,
 ) -> Result<f64, ValidationError> {
-    match value.and_then(|v| v.as_f64()) {
-        Some(n) => {
-            if n < min || n > max {
-                return Err(ValidationError::OutOfRange {
-                    field: field.to_string(),
-                    value: n.to_string(),
-                    min: min.to_string(),
-                    max: max.to_string(),
-                });
-            }
-            Ok(n)
-        }
+    match value {
         None => Ok(default),
+        Some(v) => match v.as_f64() {
+            Some(n) => {
+                if n < min || n > max {
+                    return Err(ValidationError::OutOfRange {
+                        field: field.to_string(),
+                        value: n.to_string(),
+                        min: min.to_string(),
+                        max: max.to_string(),
+                    });
+                }
+                Ok(n)
+            }
+            // Audit-10 SRV-L2 FIX: Present-but-wrong-type returns error, not silent default.
+            None if v.is_null() => Ok(default),
+            None => Err(ValidationError::InvalidFormat {
+                field: field.to_string(),
+                expected: format!("number (got {:?})", v),
+            }),
+        },
     }
 }
 
@@ -463,16 +480,16 @@ mod tests {
     fn test_edge_case_wrong_type_for_int() {
         let args = json!({"limit": "not a number"});
         let result = validate_optional_int("limit", args.get("limit"), 1, 100, 20);
-        // Should use default when type is wrong
-        assert_eq!(result.unwrap(), 20);
+        // Audit-10 SRV-L2 FIX: Wrong type now returns error instead of silent default
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_edge_case_float_for_int_field() {
         let args = json!({"limit": 50.7});
-        // as_i64() on 50.7 returns None, so should use default
+        // Audit-10 SRV-L2 FIX: Float for integer field now returns error
         let result = validate_optional_int("limit", args.get("limit"), 1, 100, 20);
-        assert_eq!(result.unwrap(), 20);
+        assert!(result.is_err());
     }
 
     #[test]

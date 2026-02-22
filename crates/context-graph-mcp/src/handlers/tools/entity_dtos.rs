@@ -136,24 +136,6 @@ impl Default for _EntityBoostConfig {
 }
 
 impl _EntityBoostConfig {
-    /// Create a new EntityBoostConfig with custom parameters.
-    pub fn _new(
-        strong_e1_boost: f32,
-        medium_e1_boost: f32,
-        weak_e1_boost: f32,
-        boost_range: f32,
-        neutral_point: f32,
-    ) -> Self {
-        Self {
-            strong_e1_boost,
-            medium_e1_boost,
-            weak_e1_boost,
-            boost_range,
-            neutral_point,
-            enabled: true,
-        }
-    }
-
     /// Create a disabled config (returns raw E1 scores).
     pub fn _disabled() -> Self {
         Self {

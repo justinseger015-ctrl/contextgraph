@@ -149,7 +149,14 @@ impl RocksDbMemex {
     /// # Errors
     /// - `StorageError::Serialization` if any edge deserialization fails
     /// - `StorageError::ReadFailed` if RocksDB iteration fails
-    pub fn get_edges_to(&self, target_id: &NodeId) -> Result<Vec<GraphEdge>, StorageError> {
+    ///
+    /// Audit-10 STOR-M2 FIX: Added `limit` parameter to prevent unbounded full scans.
+    /// Pass `None` for unlimited (original behavior) or `Some(n)` for bounded results.
+    pub fn get_edges_to(
+        &self,
+        target_id: &NodeId,
+        limit: Option<usize>,
+    ) -> Result<Vec<GraphEdge>, StorageError> {
         let cf_edges = self.get_cf(cf_names::EDGES)?;
         let mut edges = Vec::new();
 
@@ -162,6 +169,11 @@ impl RocksDbMemex {
 
             if &edge.target_id == target_id {
                 edges.push(edge);
+                if let Some(max) = limit {
+                    if edges.len() >= max {
+                        break;
+                    }
+                }
             }
         }
 

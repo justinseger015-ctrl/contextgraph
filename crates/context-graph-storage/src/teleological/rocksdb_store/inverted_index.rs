@@ -251,13 +251,19 @@ impl RocksDbTeleologicalStore {
         let cf_inverted = self.get_cf(CF_E6_SPARSE_INVERTED)?;
         let mut candidate_counts: HashMap<Uuid, usize> = HashMap::new();
 
-        // For each query term, fetch the posting list and count matches
-        // STOR-2 FIX: Filter out soft-deleted IDs from posting lists
-        for &term_id in &query_sparse.indices {
-            let term_key = e6_sparse_inverted_key(term_id);
+        // Audit-10 STOR-M3 FIX: Batch-read all posting lists via multi_get_cf
+        // (was: per-term sequential db.get_cf). Matches E13 SPLADE pattern.
+        let term_keys: Vec<[u8; 2]> = query_sparse.indices.iter()
+            .map(|&term_id| e6_sparse_inverted_key(term_id))
+            .collect();
 
-            let existing = self.db.get_cf(cf_inverted, term_key).map_err(|e| {
-                TeleologicalStoreError::rocksdb_op("get", CF_E6_SPARSE_INVERTED, None, e)
+        let results = self.db.multi_get_cf(
+            term_keys.iter().map(|k| (cf_inverted, k.as_slice()))
+        );
+
+        for result in results {
+            let existing = result.map_err(|e| {
+                TeleologicalStoreError::rocksdb_op("multi_get", CF_E6_SPARSE_INVERTED, None, e)
             })?;
 
             if let Some(data) = existing {
@@ -280,39 +286,4 @@ impl RocksDbTeleologicalStore {
         Ok(candidates)
     }
 
-    /// Get E6 term overlap score between a query and stored fingerprint.
-    ///
-    /// Returns the fraction of query terms that appear in the document.
-    /// Used for E6 tie-breaking when E1 scores are close (Stage 3.5).
-    ///
-    /// # Arguments
-    /// * `query_sparse` - The query's E6 sparse vector
-    /// * `doc_sparse` - The document's E6 sparse vector
-    ///
-    /// # Returns
-    /// Score in [0.0, 1.0] representing query term coverage
-    pub fn e6_term_overlap_score(query_sparse: &SparseVector, doc_sparse: &SparseVector) -> f32 {
-        if query_sparse.indices.is_empty() {
-            return 0.0;
-        }
-
-        // Count shared terms using merge-join (both vectors are sorted by term_id)
-        let mut shared = 0usize;
-        let mut i = 0;
-        let mut j = 0;
-
-        while i < query_sparse.indices.len() && j < doc_sparse.indices.len() {
-            match query_sparse.indices[i].cmp(&doc_sparse.indices[j]) {
-                std::cmp::Ordering::Less => i += 1,
-                std::cmp::Ordering::Greater => j += 1,
-                std::cmp::Ordering::Equal => {
-                    shared += 1;
-                    i += 1;
-                    j += 1;
-                }
-            }
-        }
-
-        shared as f32 / query_sparse.indices.len() as f32
-    }
 }

@@ -104,7 +104,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
                         "minimum": 0,
                         "maximum": 1
                     }
-                }
+                },
+                "additionalProperties": false
             }),
         ),
         // search_causes - Abductive reasoning to find likely causes

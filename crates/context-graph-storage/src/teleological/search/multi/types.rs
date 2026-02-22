@@ -356,24 +356,6 @@ impl MultiEmbedderSearchResults {
         }
     }
 
-    /// Get results above a minimum aggregated score.
-    #[inline]
-    pub fn above_score(&self, min_score: f32) -> Vec<&AggregatedHit> {
-        self.aggregated_hits
-            .iter()
-            .filter(|h| h.aggregated_score >= min_score)
-            .collect()
-    }
-
-    /// Get results found by multiple embedders.
-    #[inline]
-    pub fn multi_modal_only(&self) -> Vec<&AggregatedHit> {
-        self.aggregated_hits
-            .iter()
-            .filter(|h| h.is_multi_modal())
-            .collect()
-    }
-
     /// Get average aggregated score.
     #[inline]
     pub fn average_score(&self) -> Option<f32> {

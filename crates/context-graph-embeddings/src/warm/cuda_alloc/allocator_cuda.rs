@@ -335,11 +335,6 @@ impl WarmCudaAllocator {
         Ok(())
     }
 
-    /// Verify that a VRAM pointer is valid.
-    pub fn verify_allocation(&self, ptr: u64) -> WarmResult<bool> {
-        Ok(ptr != 0)
-    }
-
     /// Get GPU information.
     pub fn get_gpu_info(&self) -> WarmResult<GpuInfo> {
         self.gpu_info
@@ -452,42 +447,6 @@ impl WarmCudaAllocator {
             ptr = format!("0x{:016x}", ptr),
             "Allocation verified as real CUDA memory"
         );
-
-        Ok(())
-    }
-
-    /// Verify all tracked allocations are real (not fake).
-    ///
-    /// # Panics
-    ///
-    /// This method will cause the process to exit with code 109 if ANY
-    /// allocation is detected as fake.
-    ///
-    /// # Constitution Compliance
-    ///
-    /// AP-007: Mock/stub data is FORBIDDEN in production.
-    pub fn verify_all_allocations_real(&self) -> WarmResult<()> {
-        tracing::info!(
-            target: "warm::cuda",
-            code = "EMB-I009",
-            device_id = self.device_id,
-            total_allocated = format_bytes(self.total_allocated_bytes),
-            "Verifying all CUDA allocations are real"
-        );
-
-        // Since we don't track individual pointers in the current implementation,
-        // this method verifies that the allocator itself is using real CUDA.
-        // The actual per-allocation verification happens in allocate_protected().
-
-        // Verify by attempting a small test allocation
-        if self.total_allocated_bytes > 0 {
-            tracing::debug!(
-                target: "warm::cuda",
-                "Allocator has {} active allocations totaling {}",
-                self.allocation_history.len(),
-                format_bytes(self.total_allocated_bytes)
-            );
-        }
 
         Ok(())
     }

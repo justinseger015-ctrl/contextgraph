@@ -18,14 +18,6 @@ fn test_query_results_basic() {
     assert_eq!(q1, vec![(4, 0.4), (5, 0.5), (6, 0.6)]);
 }
 
-#[test]
-fn test_query_results_vec() {
-    let result = SearchResult::new(vec![10, 20, 30], vec![1.0, 2.0, 3.0], 3, 1);
-
-    let items = result.query_results_vec(0);
-    assert_eq!(items, vec![(10, 1.0), (20, 2.0), (30, 3.0)]);
-}
-
 // ========== Sentinel Filtering Tests ==========
 
 #[test]
@@ -59,17 +51,17 @@ fn test_partial_sentinels() {
 
     let q: Vec<_> = result.query_results(0).collect();
     assert_eq!(q, vec![(100, 0.5)]);
-    assert_eq!(result.num_valid_results(0), 1);
+    assert_eq!(result.query_results(0).count(), 1);
     assert!(result.has_results(0));
 }
 
 // ========== Count and Check Methods ==========
 
 #[test]
-fn test_num_valid_results() {
+fn test_valid_results_count() {
     let result = SearchResult::new(vec![1, -1, 3], vec![0.1, 0.0, 0.3], 3, 1);
 
-    assert_eq!(result.num_valid_results(0), 2);
+    assert_eq!(result.query_results(0).count(), 2);
     assert_eq!(result.total_valid_results(), 2);
 }
 
@@ -146,27 +138,6 @@ fn test_all_results_filters_sentinels() {
             (1, 3, 0.3), // Query 1: only ID 3
         ]
     );
-}
-
-// ========== to_items Conversion ==========
-
-#[test]
-fn test_to_items() {
-    let result = SearchResult::new(
-        vec![10, 20, -1],
-        vec![0.0, 2.0, 0.0], // 0.0 = sim 1.0, 2.0 = sim 0.0
-        3,
-        1,
-    );
-
-    let items = result.to_items(0);
-    assert_eq!(items.len(), 2); // -1 filtered
-
-    assert_eq!(items[0].id, 10);
-    assert!((items[0].similarity - 1.0).abs() < 1e-6);
-
-    assert_eq!(items[1].id, 20);
-    assert!((items[1].similarity - 0.0).abs() < 1e-6);
 }
 
 // ========== Panic Tests ==========

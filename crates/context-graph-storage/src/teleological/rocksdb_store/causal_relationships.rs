@@ -764,18 +764,43 @@ impl RocksDbTeleologicalStore {
         query_embedding: &[f32],
         top_k: usize,
     ) -> CoreResult<Vec<(Uuid, f32)>> {
-        // Use HNSW index for O(log n) search
-        let results = self.causal_e11_index.search(query_embedding, top_k)?;
+        let db = Arc::clone(&self.db);
+        let causal_e11_index = Arc::clone(&self.causal_e11_index);
+        let query_vec = query_embedding.to_vec();
 
-        debug!(
-            query_dim = query_embedding.len(),
-            top_k = top_k,
-            results_count = results.len(),
-            index_size = self.causal_e11_index.len(),
-            "Searched causal relationships using E11 HNSW index"
-        );
+        let filtered = tokio::task::spawn_blocking(move || -> CoreResult<Vec<(Uuid, f32)>> {
+            // Over-fetch to compensate for ghost entries filtered below
+            let fetch_k = top_k * 2;
+            let results = causal_e11_index.search(&query_vec, fetch_k)?;
 
-        Ok(results)
+            // Audit-10 STOR-M7 FIX: Filter ghost entries that exist in HNSW but
+            // were deleted from primary CF_CAUSAL_RELATIONSHIPS (soft-delete residue).
+            let cf = db
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let filtered: Vec<(Uuid, f32)> = results
+                .into_iter()
+                .filter(|(id, _)| {
+                    let key = causal_relationship_key(id);
+                    db.get_cf(cf, key).ok().flatten().is_some()
+                })
+                .take(top_k)
+                .collect();
+
+            debug!(
+                query_dim = query_vec.len(),
+                top_k = top_k,
+                results_count = filtered.len(),
+                index_size = causal_e11_index.len(),
+                "Searched causal relationships using E11 HNSW index"
+            );
+
+            Ok(filtered)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
+
+        Ok(filtered)
     }
 
     /// Search causal relationships using all 4 embedders for maximum accuracy.
@@ -824,26 +849,23 @@ impl RocksDbTeleologicalStore {
             "Starting multi-embedder causal search"
         );
 
-        // Run all 4 searches (not using tokio::join! since we're on sync iterator)
-        let e1_results = self
-            .search_causal_relationships(e1_embedding, fetch_k, None)
-            .await?;
-
-        let e5_results = self
-            .search_causal_e5_hybrid(
+        // Audit-10 STOR-M6 FIX: Run all 4 searches concurrently via tokio::join!
+        let (e1_results, e5_results, e8_results, e11_results) = tokio::join!(
+            self.search_causal_relationships(e1_embedding, fetch_k, None),
+            self.search_causal_e5_hybrid(
                 e5_embedding,
                 search_causes,
                 fetch_k,
                 0.6, // source_weight
                 0.4, // explanation_weight
-            )
-            .await?;
-
-        let e8_results = self
-            .search_causal_e8(e8_embedding, search_causes, fetch_k)
-            .await?;
-
-        let e11_results = self.search_causal_e11(e11_embedding, fetch_k).await?;
+            ),
+            self.search_causal_e8(e8_embedding, search_causes, fetch_k),
+            self.search_causal_e11(e11_embedding, fetch_k),
+        );
+        let e1_results = e1_results?;
+        let e5_results = e5_results?;
+        let e8_results = e8_results?;
+        let e11_results = e11_results?;
 
         debug!(
             e1_count = e1_results.len(),
@@ -977,7 +999,49 @@ impl RocksDbTeleologicalStore {
         .await
         .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
 
-        info!(deleted = deleted_count, scanned = total_scanned, "Causal relationship repair complete");
+        // Audit-10 STOR-M5 FIX: Scan CF_CAUSAL_BY_SOURCE to remove orphaned secondary
+        // index entries that reference non-existent primary records.
+        let db2 = Arc::clone(&self.db);
+        let orphan_count = tokio::task::spawn_blocking(move || -> CoreResult<usize> {
+            let cf_by_source = db2
+                .cf_handle(CF_CAUSAL_BY_SOURCE)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_BY_SOURCE not found".to_string()))?;
+            let cf_primary = db2
+                .cf_handle(CF_CAUSAL_RELATIONSHIPS)
+                .ok_or_else(|| CoreError::Internal("CF_CAUSAL_RELATIONSHIPS not found".to_string()))?;
+            let iter = db2.iterator_cf(cf_by_source, rocksdb::IteratorMode::Start);
+            let mut orphan_count = 0;
+
+            for item in iter {
+                let (key, value) = match item {
+                    Ok((k, v)) => (k, v),
+                    Err(_) => continue,
+                };
+                // Value is the causal relationship UUID
+                if value.len() == 16 {
+                    if let Ok(causal_id) = Uuid::from_slice(&value) {
+                        let primary_key = causal_relationship_key(&causal_id);
+                        if db2.get_cf(cf_primary, primary_key).ok().flatten().is_none() {
+                            if let Err(e) = db2.delete_cf(cf_by_source, &key) {
+                                error!("Failed to delete orphaned secondary index entry: {}", e);
+                                continue;
+                            }
+                            orphan_count += 1;
+                            debug!(causal_id = %causal_id, "Deleted orphaned CF_CAUSAL_BY_SOURCE entry");
+                        }
+                    }
+                }
+            }
+            Ok(orphan_count)
+        })
+        .await
+        .map_err(|e| CoreError::Internal(format!("spawn_blocking failed: {}", e)))??;
+
+        if orphan_count > 0 {
+            info!(orphan_count, "Removed orphaned secondary index entries from CF_CAUSAL_BY_SOURCE");
+        }
+
+        info!(deleted = deleted_count, scanned = total_scanned, orphans_removed = orphan_count, "Causal relationship repair complete");
         Ok((deleted_count, total_scanned))
     }
 

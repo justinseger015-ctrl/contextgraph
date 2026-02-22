@@ -81,15 +81,6 @@ impl RetrievalPipeline {
         }
     }
 
-    /// Set the edge repository for graph expansion.
-    ///
-    /// # Arguments
-    /// * `edge_repository` - Edge repository for typed edges
-    pub fn with_edge_repository(mut self, edge_repository: Arc<EdgeRepository>) -> Self {
-        self.edge_repository = Some(edge_repository);
-        self
-    }
-
     /// Get the edge repository.
     pub fn edge_repository(&self) -> Option<&Arc<EdgeRepository>> {
         self.edge_repository.as_ref()
@@ -126,23 +117,6 @@ impl RetrievalPipeline {
             query_semantic,
             query_tokens,
             &PipelineStage::all(),
-        )
-    }
-
-    /// Execute core stages only (without graph expansion).
-    pub fn execute_core(
-        &self,
-        query_splade: &[(usize, f32)],
-        query_matryoshka: &[f32],
-        query_semantic: &[f32],
-        query_tokens: &[Vec<f32>],
-    ) -> Result<PipelineResult, PipelineError> {
-        self.execute_stages(
-            query_splade,
-            query_matryoshka,
-            query_semantic,
-            query_tokens,
-            &PipelineStage::core(),
         )
     }
 

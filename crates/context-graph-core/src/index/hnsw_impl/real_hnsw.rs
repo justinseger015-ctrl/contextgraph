@@ -333,8 +333,10 @@ impl RealHnswIndex {
                             1.0 - n.distance
                         }
                         DistanceMetric::Euclidean => 1.0 / (1.0 + n.distance),
-                        DistanceMetric::DotProduct => -n.distance,
-                        DistanceMetric::MaxSim | DistanceMetric::Jaccard => 0.0,
+                        DistanceMetric::DotProduct => 1.0 - n.distance,
+                        DistanceMetric::MaxSim | DistanceMetric::Jaccard => {
+                            unreachable!("MaxSim/Jaccard not supported in HNSW search")
+                        }
                     };
                     (uuid, similarity)
                 })

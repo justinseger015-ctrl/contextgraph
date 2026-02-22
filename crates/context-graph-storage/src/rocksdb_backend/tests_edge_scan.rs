@@ -110,7 +110,7 @@ fn test_edge_crud_get_edges_to_full_scan() {
     db.store_edge(&edge2).expect("store2 failed");
     db.store_edge(&edge3).expect("store3 failed");
 
-    let edges = db.get_edges_to(&target).expect("get_edges_to failed");
+    let edges = db.get_edges_to(&target, None).expect("get_edges_to failed");
 
     assert_eq!(edges.len(), 3);
     for edge in &edges {
@@ -123,7 +123,7 @@ fn test_edge_crud_get_edges_to_empty() {
     let (_tmp, db) = create_temp_db();
     let target = uuid::Uuid::new_v4();
 
-    let edges = db.get_edges_to(&target).expect("get_edges_to failed");
+    let edges = db.get_edges_to(&target, None).expect("get_edges_to failed");
     assert!(edges.is_empty());
 }
 

@@ -24,12 +24,16 @@ pub struct JsonRpcResponse {
     pub error: Option<JsonRpcError>,
 }
 
-/// JSON-RPC ID (can be string, number, or null).
+/// JSON-RPC ID (can be string, number, or null per JSON-RPC 2.0 spec).
+///
+/// The `Null` variant handles `"id": null` in requests, which is a valid
+/// (if unusual) request ID per the spec — distinct from absent `"id"` (notification).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum JsonRpcId {
     String(String),
     Number(i64),
+    Null,
 }
 
 /// JSON-RPC error object.
@@ -82,7 +86,6 @@ pub mod error_codes {
     // Context Graph specific error codes (-32001 to -32099)
     pub const FEATURE_DISABLED: i32 = -32001;
     pub const NODE_NOT_FOUND: i32 = -32002;
-    pub const PAYLOAD_TOO_LARGE: i32 = -32003;
     pub const STORAGE_ERROR: i32 = -32004;
     pub const EMBEDDING_ERROR: i32 = -32005;
     pub const TOOL_NOT_FOUND: i32 = -32006;
@@ -91,24 +94,6 @@ pub mod error_codes {
     pub const INDEX_ERROR: i32 = -32008;
     /// GPU/CUDA operation failed (memory allocation, kernel execution) - TASK-CORE-014
     pub const GPU_ERROR: i32 = -32009;
-
-    // Teleological-specific error codes (-32010 to -32019) - TASK-S001
-    /// TeleologicalFingerprint not found by UUID
-    pub const FINGERPRINT_NOT_FOUND: i32 = -32010;
-    /// Multi-array embedding provider not ready (13 embedders)
-    pub const EMBEDDER_NOT_READY: i32 = -32011;
-    /// Embedder category classification failed
-    pub const CATEGORY_CLASSIFICATION_ERROR: i32 = -32013;
-    /// Sparse search (SPLADE E13) failed
-    pub const SPARSE_SEARCH_ERROR: i32 = -32014;
-    /// Semantic search (13-embedding) failed
-    pub const SEMANTIC_SEARCH_ERROR: i32 = -32015;
-    /// Checkpoint/restore operation failed
-    pub const CHECKPOINT_ERROR: i32 = -32017;
-    /// Batch operation failed
-    pub const BATCH_OPERATION_ERROR: i32 = -32018;
-    /// Tool not yet implemented - FAIL FAST per AP-007
-    pub const TOOL_NOT_IMPLEMENTED: i32 = -32019;
 
     /// Insufficient memories for topic detection (< min_cluster_size)
     /// Per constitution clustering.parameters.min_cluster_size: 3

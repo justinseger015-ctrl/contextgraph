@@ -13,20 +13,6 @@ fn test_mark_as_shortcut() {
 }
 
 #[test]
-fn test_update_confidence() {
-    let mut edge = GraphEdge::default();
-    edge.update_confidence(0.8);
-    assert!((edge.confidence - 0.8).abs() < 1e-6);
-
-    // Test clamping
-    edge.update_confidence(1.5);
-    assert!((edge.confidence - 1.0).abs() < 1e-6);
-
-    edge.update_confidence(-0.5);
-    assert!((edge.confidence - 0.0).abs() < 1e-6);
-}
-
-#[test]
 fn test_edge_type_variants() {
     let types = EdgeType::all();
     assert_eq!(types.len(), 5);

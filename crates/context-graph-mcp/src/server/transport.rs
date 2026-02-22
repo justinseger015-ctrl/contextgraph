@@ -286,8 +286,9 @@ impl McpServer {
             let request: JsonRpcRequest = match serde_json::from_str(trimmed) {
                 Ok(r) => r,
                 Err(e) => {
-                    // MCP-L4 FIX: Log message was misleading — code actually returns error
-                    // via Err() below (which does disconnect), but the message should match.
+                    // TCP disconnects on parse error (returns Err → connection closes) unlike
+                    // stdio which continues reading. TCP parse errors are unrecoverable since
+                    // the byte stream may be misaligned — no line-delimited framing guarantee.
                     warn!(
                         "[{}] {} sent invalid JSON, sending error and closing: {}",
                         conn_tag, peer_addr, e

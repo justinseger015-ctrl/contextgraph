@@ -2,7 +2,7 @@
 //!
 //! Methods for extracting per-query results and filtering sentinels.
 
-use super::types::{SearchResult, SearchResultItem};
+use super::types::SearchResult;
 
 impl SearchResult {
     /// Get results for a specific query index as an iterator.
@@ -54,36 +54,6 @@ impl SearchResult {
             .map(|(&id, &dist)| (id, dist))
     }
 
-    /// Get results for a specific query as a collected Vec.
-    ///
-    /// Convenience method that collects `query_results()` into a Vec.
-    ///
-    /// # Arguments
-    ///
-    /// * `query_idx` - Index of the query (0-based)
-    ///
-    /// # Panics
-    ///
-    /// Panics if `query_idx >= num_queries`.
-    #[inline]
-    pub fn query_results_vec(&self, query_idx: usize) -> Vec<(i64, f32)> {
-        self.query_results(query_idx).collect()
-    }
-
-    /// Get the number of valid results for a query (excluding -1 sentinels).
-    ///
-    /// # Arguments
-    ///
-    /// * `query_idx` - Index of the query (0-based)
-    ///
-    /// # Panics
-    ///
-    /// Panics if `query_idx >= num_queries`.
-    #[inline]
-    pub fn num_valid_results(&self, query_idx: usize) -> usize {
-        self.query_results(query_idx).count()
-    }
-
     /// Check if any results were found for a query.
     ///
     /// # Arguments
@@ -122,20 +92,4 @@ impl SearchResult {
             .flat_map(move |q| self.query_results(q).map(move |(id, dist)| (q, id, dist)))
     }
 
-    /// Convert to SearchResultItems for a single query.
-    ///
-    /// Creates `SearchResultItem` instances with L2 to cosine conversion.
-    ///
-    /// # Arguments
-    ///
-    /// * `query_idx` - Index of the query (0-based)
-    ///
-    /// # Panics
-    ///
-    /// Panics if `query_idx >= num_queries`.
-    pub fn to_items(&self, query_idx: usize) -> Vec<SearchResultItem> {
-        self.query_results(query_idx)
-            .map(|(id, dist)| SearchResultItem::from_l2(id, dist))
-            .collect()
-    }
 }

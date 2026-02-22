@@ -487,13 +487,16 @@ impl Handlers {
                     is_forward, // query_is_source
                 );
 
-                // Apply direction modifier
-                let direction_mod = if is_forward { 1.2 } else { 0.8 };
-                let adjusted_sim = asymmetric_sim * direction_mod;
-
-                if adjusted_sim < min_similarity {
+                // Audit-10 MCP-H1 FIX: Filter on RAW similarity before direction modifier.
+                // Previously, direction_mod was applied before the threshold check, making
+                // the effective threshold direction-dependent (matches causal_tools.rs pattern).
+                if asymmetric_sim < min_similarity {
                     continue;
                 }
+
+                // Apply direction modifier for RANKING only (not threshold filtering)
+                let direction_mod = if is_forward { 1.2 } else { 0.8 };
+                let adjusted_sim = asymmetric_sim * direction_mod;
 
                 // Track best candidate
                 if best_candidate.is_none()
@@ -1207,27 +1210,30 @@ impl Handlers {
 ///
 /// Documents that describe sources tend to have stronger "as_source" vectors,
 /// while documents describing targets have stronger "as_target" vectors.
+/// Audit-10 MCP-H2 FIX: Use component variance instead of L2 norms.
+/// L2 norms can't distinguish direction when vectors have similar magnitudes
+/// but different activation patterns. Variance captures spread of activations,
+/// which is a better signal for directional strength.
 fn infer_graph_direction(fingerprint: &SemanticFingerprint) -> GraphDirection {
+    use super::helpers::component_variance_f32;
+
     let source_vec = &fingerprint.e8_graph_as_source;
     let target_vec = &fingerprint.e8_graph_as_target;
 
-    // Compare vector norms as a proxy for directional strength
-    let source_norm: f32 = source_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let target_norm: f32 = target_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let source_variance = component_variance_f32(source_vec);
+    let target_variance = component_variance_f32(target_vec);
+
+    let max_var = source_variance.max(target_variance);
+    if max_var < f32::EPSILON {
+        return GraphDirection::Unknown; // Both zero vectors
+    }
+
+    let diff_ratio = (source_variance - target_variance) / max_var;
 
     // Require >10% difference to be confident in direction
-    let threshold = 0.1;
-    let diff_ratio = if target_norm > f32::EPSILON {
-        (source_norm - target_norm) / target_norm
-    } else if source_norm > f32::EPSILON {
-        1.0 // All source, no target
-    } else {
-        0.0 // Both zero
-    };
-
-    if diff_ratio > threshold {
+    if diff_ratio > 0.1 {
         GraphDirection::Source
-    } else if diff_ratio < -threshold {
+    } else if diff_ratio < -0.1 {
         GraphDirection::Target
     } else {
         GraphDirection::Unknown

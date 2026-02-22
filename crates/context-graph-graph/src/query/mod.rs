@@ -67,7 +67,7 @@ pub use types::{QueryMode, QueryResult, QueryStats, SearchResult, SemanticSearch
 pub use builder::QueryBuilder;
 
 // High-level Graph API
-pub use graph::{Graph, GraphStats};
+pub use graph::Graph;
 
 // Semantic search
 pub use semantic::{semantic_search, semantic_search_simple};

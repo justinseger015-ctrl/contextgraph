@@ -229,7 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("--- Example 9: Incoming Edge Query ---");
 
     // Get all incoming edges to node2
-    let incoming = memex.get_edges_to(&node2.id)?;
+    let incoming = memex.get_edges_to(&node2.id, None)?;
     println!("Incoming edges to node2:");
     for e in &incoming {
         println!("  <- {} ({:?})", e.source_id, e.edge_type);

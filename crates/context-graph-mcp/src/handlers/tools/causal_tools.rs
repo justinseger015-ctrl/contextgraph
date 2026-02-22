@@ -1040,15 +1040,7 @@ fn infer_causal_direction(fingerprint: &SemanticFingerprint) -> CausalDirection 
     }
 }
 
-/// Compute variance of vector components (measures how spread out activations are).
-fn component_variance_f32(v: &[f32]) -> f32 {
-    if v.is_empty() {
-        return 0.0;
-    }
-    let n = v.len() as f32;
-    let mean = v.iter().sum::<f32>() / n;
-    v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n
-}
+use super::helpers::component_variance_f32;
 
 #[cfg(test)]
 mod tests {

@@ -395,44 +395,6 @@ impl TopicSynthesizer {
         Ok(topics)
     }
 
-    /// Update topic stability based on membership changes.
-    ///
-    /// Computes membership churn as the Jaccard distance between old and new members:
-    /// churn = |symmetric_difference| / |union|
-    ///
-    /// Also updates the topic's age and phase based on stability thresholds.
-    ///
-    /// # Arguments
-    ///
-    /// * `topic` - Topic to update (modified in place)
-    /// * `old_members` - Previous member list
-    /// * `new_members` - Current member list
-    pub fn update_topic_stability(
-        &self,
-        topic: &mut Topic,
-        old_members: &[Uuid],
-        new_members: &[Uuid],
-    ) {
-        let old_set: HashSet<_> = old_members.iter().collect();
-        let new_set: HashSet<_> = new_members.iter().collect();
-
-        let sym_diff = old_set.symmetric_difference(&new_set).count();
-        let union_size = old_set.union(&new_set).count();
-
-        let churn = if union_size > 0 {
-            sym_diff as f32 / union_size as f32
-        } else {
-            0.0
-        };
-
-        topic.stability.membership_churn = churn;
-
-        let age = chrono::Utc::now() - topic.created_at;
-        topic.stability.age_hours = age.num_minutes() as f32 / 60.0;
-
-        topic.stability.update_phase();
-    }
-
     /// Compute the average weighted agreement for a group of memories.
     ///
     /// Useful for evaluating topic cohesion.

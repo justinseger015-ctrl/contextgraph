@@ -219,24 +219,6 @@ fn test_dfs_weight_threshold() {
 }
 
 #[test]
-fn test_dfs_path_reconstruction() {
-    let (storage, start, _dir) = setup_test_graph();
-
-    let result = dfs_traverse(&storage, start, DfsParams::default()).expect("DFS failed");
-
-    // Test path to node 4 (should be 1 -> 2 -> 4)
-    let path = result.path_to(4);
-    assert!(path.is_some(), "Path to node 4 should exist");
-    let path = path.unwrap();
-    assert_eq!(path[0], 1, "Path should start at 1");
-    assert_eq!(*path.last().unwrap(), 4, "Path should end at 4");
-
-    // Test path to nonexistent node
-    let no_path = result.path_to(99);
-    assert!(no_path.is_none(), "Path to nonexistent node should be None");
-}
-
-#[test]
 fn test_dfs_empty_graph() {
     let dir = tempdir().expect("Failed to create temp dir");
     let storage = GraphStorage::open_default(dir.path()).expect("Failed to open storage");

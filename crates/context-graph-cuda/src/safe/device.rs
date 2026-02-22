@@ -268,29 +268,6 @@ impl GpuDevice {
         }
     }
 
-    /// Get the raw CUDA device handle.
-    ///
-    /// # Usage Notes
-    ///
-    /// The returned handle is valid as long as `self` exists.
-    /// Do not destroy or modify the device through this handle.
-    #[inline]
-    #[must_use]
-    pub fn raw_device(&self) -> CUdevice {
-        self.device
-    }
-
-    /// Get the raw CUDA context handle.
-    ///
-    /// # Usage Notes
-    ///
-    /// The returned handle is valid as long as `self` exists.
-    /// Do not destroy or modify the context through this handle.
-    #[inline]
-    #[must_use]
-    pub fn raw_context(&self) -> CUcontext {
-        self.context
-    }
 }
 
 impl Drop for GpuDevice {

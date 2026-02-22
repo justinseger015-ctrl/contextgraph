@@ -253,11 +253,6 @@ impl CodeStore {
         }
     }
 
-    /// Get a code entity by ID, returning error if not found.
-    pub fn get_or_error(&self, id: Uuid) -> CodeStorageResult<CodeEntity> {
-        self.get(id)?.ok_or(CodeStorageError::not_found(id))
-    }
-
     /// Get the full SemanticFingerprint for an entity.
     ///
     /// # Arguments
@@ -290,23 +285,6 @@ impl CodeStore {
     /// For full multi-space search, use `get_fingerprint()` instead.
     pub fn get_e7_embedding(&self, id: Uuid) -> CodeStorageResult<Option<Vec<f32>>> {
         self.get_fingerprint(id).map(|opt| opt.map(|fp| fp.e7_code))
-    }
-
-    /// Get entity and its full fingerprint together.
-    pub fn get_with_fingerprint(
-        &self,
-        id: Uuid,
-    ) -> CodeStorageResult<Option<(CodeEntity, SemanticFingerprint)>> {
-        let entity = match self.get(id)? {
-            Some(e) => e,
-            None => return Ok(None),
-        };
-
-        let fingerprint = self
-            .get_fingerprint(id)?
-            .ok_or(CodeStorageError::embedding_not_found(id))?;
-
-        Ok(Some((entity, fingerprint)))
     }
 
     /// Delete a code entity and its embedding.

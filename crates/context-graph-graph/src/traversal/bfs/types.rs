@@ -163,11 +163,6 @@ impl BfsResult {
         self.edges.len()
     }
 
-    /// Get count of nodes at specific depth.
-    #[must_use]
-    pub fn nodes_at_depth(&self, depth: usize) -> usize {
-        *self.depth_counts.get(&depth).unwrap_or(&0)
-    }
 }
 
 /// Convert UUID to i64 for storage key operations.

@@ -27,7 +27,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::inference::InferenceDirection;
 
 /// Direction modifiers per Constitution specification.
 ///
@@ -179,17 +178,6 @@ pub enum CausalDirection {
 }
 
 impl CausalDirection {
-    /// Convert from InferenceDirection.
-    pub fn from_inference_direction(dir: InferenceDirection) -> Self {
-        match dir {
-            InferenceDirection::Forward => Self::Cause, // Forward = we're the cause
-            InferenceDirection::Backward => Self::Effect, // Backward = we're looking for causes
-            InferenceDirection::Bidirectional => Self::Unknown,
-            InferenceDirection::Bridge => Self::Unknown,
-            InferenceDirection::Abduction => Self::Effect, // Looking for cause of observation
-        }
-    }
-
     /// Get direction modifier when comparing query_direction to result_direction.
     ///
     /// # Returns

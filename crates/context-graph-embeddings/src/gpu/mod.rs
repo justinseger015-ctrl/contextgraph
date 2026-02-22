@@ -29,13 +29,10 @@ pub use memory::{
 };
 pub use model_loader::{
     AttentionWeights, BertConfig, BertWeights, EmbeddingWeights, EncoderLayerWeights, FfnWeights,
-    GpuModelLoader, LoaderConfig, LoaderConfigError, MemoryStatsSnapshot, ModelLoadError,
-    PoolerWeights, UnifiedLoaderError, UnifiedModelLoader,
+    GpuModelLoader, LoaderConfig, LoaderConfigError, ModelLoadError, PoolerWeights,
+    UnifiedLoaderError, UnifiedModelLoader,
 };
-pub use ops::{
-    cosine_similarity_gpu, l2_norm_gpu, matmul_gpu, normalize_gpu, softmax_gpu,
-    softmax_with_temperature_gpu,
-};
+pub use ops::normalize_gpu;
 pub use tensor::GpuTensor;
 
 /// GPU device information for runtime queries.
