@@ -600,7 +600,6 @@ pub struct SourceInfo {
     pub display_string: Option<String>,
 }
 
-
 /// Response for search_causes tool.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchCausesResponse {

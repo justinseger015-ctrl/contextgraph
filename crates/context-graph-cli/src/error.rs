@@ -126,7 +126,6 @@ pub fn exit_code_for_error(e: &(dyn std::error::Error + 'static)) -> CliExitCode
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
