@@ -24,9 +24,6 @@ use crate::error::{GraphError, GraphResult};
 /// Each increment requires a corresponding migration function.
 pub const SCHEMA_VERSION: u32 = 1;
 
-/// Key for schema version in metadata CF.
-#[allow(dead_code)]
-const SCHEMA_VERSION_KEY: &[u8] = b"schema_version";
 
 /// Migration function signature.
 type MigrationFn = fn(&GraphStorage) -> GraphResult<()>;

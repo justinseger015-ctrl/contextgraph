@@ -62,8 +62,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
                     "sessionScope": {
                         "type": "string",
                         "enum": ["current", "all", "recent"],
-                        "description": "Scope of indexed files to analyze: 'current' (last 10 indexed files), 'recent' (last 50 indexed files), 'all' (all indexed files). MCP-5 FIX: Causal discovery is file-based, not session-scoped. Default: 'all'.",
+                        "description": "Scope of memories to analyze: 'current' (current session if session_id provided, else last 10 files), 'recent' (last 50 indexed files), 'all' (all indexed files). Default: 'all'.",
                         "default": "all"
+                    },
+                    "session_id": {
+                        "type": "string",
+                        "description": "Optional session ID. When provided with sessionScope='current', filters memories by actual session_id from source_metadata instead of using a file-count proxy."
                     },
                     "dryRun": {
                         "type": "boolean",

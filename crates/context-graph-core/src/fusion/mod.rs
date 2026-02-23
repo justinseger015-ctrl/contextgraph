@@ -198,7 +198,14 @@ pub fn score_weighted_rrf(
     results.sort_by(|a, b| {
         b.fused_score
             .partial_cmp(&a.fused_score)
-            .unwrap_or(Ordering::Equal)
+            .unwrap_or_else(|| {
+                // STOR-L3: NaN goes last for deterministic ordering
+                if a.fused_score.is_nan() {
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                }
+            })
     });
     results.truncate(top_k);
 
@@ -254,7 +261,14 @@ pub fn weighted_sum(rankings: &[EmbedderRanking], top_k: usize) -> Vec<FusedResu
     results.sort_by(|a, b| {
         b.fused_score
             .partial_cmp(&a.fused_score)
-            .unwrap_or(Ordering::Equal)
+            .unwrap_or_else(|| {
+                // STOR-L3: NaN goes last for deterministic ordering
+                if a.fused_score.is_nan() {
+                    Ordering::Greater
+                } else {
+                    Ordering::Less
+                }
+            })
     });
     results.truncate(top_k);
 

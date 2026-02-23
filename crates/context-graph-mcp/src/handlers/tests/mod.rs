@@ -245,7 +245,8 @@ pub(crate) async fn create_test_handlers() -> (Handlers, TempDir) {
         multi_array_provider,
         layer_status_provider,
         graph_discovery_service,
-    );
+    )
+    .expect("Default cluster manager should always succeed in tests");
 
     (handlers, tempdir)
 }
@@ -290,7 +291,8 @@ pub(crate) async fn create_test_handlers_with_real_embeddings() -> (Handlers, Te
         multi_array_provider,
         layer_status_provider,
         graph_discovery_service,
-    );
+    )
+    .expect("Default cluster manager should always succeed in tests");
 
     (handlers, tempdir)
 }
@@ -336,7 +338,8 @@ pub(crate) async fn create_test_handlers_with_real_embeddings_store_access(
         multi_array_provider,
         layer_status_provider,
         graph_discovery_service,
-    );
+    )
+    .expect("Default cluster manager should always succeed in tests");
 
     (handlers, teleological_store, tempdir)
 }

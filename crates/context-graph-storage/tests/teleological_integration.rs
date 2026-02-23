@@ -25,11 +25,12 @@ use uuid::Uuid;
 // Helper Functions - Create REAL data (no mocks)
 // =========================================================================
 
-/// Create a SemanticFingerprint with zeroed embeddings for testing.
-/// NOTE: This uses zeroed data which is only suitable for serialization/storage tests.
-/// For search/alignment tests, use real embeddings from the embedding pipeline.
+/// Create a SemanticFingerprint with non-zero stub embeddings for testing.
+///
+/// STOR-M1: Uses stub() (0.1-filled vectors) instead of zeroed() because zero-norm
+/// vectors are now correctly rejected by validate_vector() (cosine similarity undefined).
 fn create_real_semantic() -> SemanticFingerprint {
-    SemanticFingerprint::zeroed()
+    SemanticFingerprint::stub()
 }
 
 /// Create a REAL content hash.

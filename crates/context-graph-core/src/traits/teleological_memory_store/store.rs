@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::error::CoreResult;
+use crate::error::{CoreError, CoreResult};
 use crate::types::fingerprint::{
     SemanticFingerprint, SparseVector, TeleologicalFingerprint,
 };
@@ -565,6 +565,11 @@ pub trait TeleologicalMemoryStore: Send + Sync {
 
     // =========================================================================
     // Causal Relationship Storage (CF_CAUSAL_RELATIONSHIPS)
+    //
+    // STOR-L8: All causal methods provide default implementations that return
+    // `CoreError::Internal("Causal methods not supported")`. This allows new
+    // backends to omit causality support without implementing every method.
+    // Production backends (RocksDB) override all of these.
     // =========================================================================
 
     /// Store a causal relationship with embedded description.
@@ -584,7 +589,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     async fn store_causal_relationship(
         &self,
         relationship: &crate::types::CausalRelationship,
-    ) -> CoreResult<Uuid>;
+    ) -> CoreResult<Uuid> {
+        let _ = relationship;
+        Err(CoreError::Internal("Causal relationship storage not supported by this backend".into()))
+    }
 
     /// Retrieve a causal relationship by ID.
     ///
@@ -596,7 +604,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     async fn get_causal_relationship(
         &self,
         id: Uuid,
-    ) -> CoreResult<Option<crate::types::CausalRelationship>>;
+    ) -> CoreResult<Option<crate::types::CausalRelationship>> {
+        let _ = id;
+        Err(CoreError::Internal("Causal relationship storage not supported by this backend".into()))
+    }
 
     /// Get all causal relationships derived from a source fingerprint.
     ///
@@ -608,7 +619,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     async fn get_causal_relationships_by_source(
         &self,
         source_id: Uuid,
-    ) -> CoreResult<Vec<crate::types::CausalRelationship>>;
+    ) -> CoreResult<Vec<crate::types::CausalRelationship>> {
+        let _ = source_id;
+        Err(CoreError::Internal("Causal relationship storage not supported by this backend".into()))
+    }
 
     /// Search causal relationships by description similarity (E1-based fallback).
     ///
@@ -624,13 +638,16 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         query_embedding: &[f32],
         top_k: usize,
         direction_filter: Option<&str>,
-    ) -> CoreResult<Vec<(Uuid, f32)>>;
+    ) -> CoreResult<Vec<(Uuid, f32)>> {
+        let _ = (query_embedding, top_k, direction_filter);
+        Err(CoreError::Internal("Causal relationship search not supported by this backend".into()))
+    }
 
     /// Search causal relationships using E5 asymmetric embeddings.
     ///
     /// E5 dual embeddings enable directional causal search:
-    /// - "What caused X?" → Query as effect (768D), search cause index
-    /// - "What are effects of X?" → Query as cause (768D), search effect index
+    /// - "What caused X?" -> Query as effect (768D), search cause index
+    /// - "What are effects of X?" -> Query as cause (768D), search effect index
     ///
     /// # Arguments
     /// * `query_embedding` - E5 768D query embedding (either as_cause or as_effect)
@@ -645,7 +662,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         query_embedding: &[f32],
         search_causes: bool,
         top_k: usize,
-    ) -> CoreResult<Vec<(Uuid, f32)>>;
+    ) -> CoreResult<Vec<(Uuid, f32)>> {
+        let _ = (query_embedding, search_causes, top_k);
+        Err(CoreError::Internal("Causal E5 search not supported by this backend".into()))
+    }
 
     /// Search causal relationships using hybrid source + explanation scoring.
     ///
@@ -672,7 +692,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         top_k: usize,
         source_weight: f32,
         explanation_weight: f32,
-    ) -> CoreResult<Vec<(Uuid, f32)>>;
+    ) -> CoreResult<Vec<(Uuid, f32)>> {
+        let _ = (query_embedding, search_causes, top_k, source_weight, explanation_weight);
+        Err(CoreError::Internal("Causal E5 hybrid search not supported by this backend".into()))
+    }
 
     /// Search causal relationships using E8 graph embeddings.
     ///
@@ -688,7 +711,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         query_embedding: &[f32],
         search_sources: bool,
         top_k: usize,
-    ) -> CoreResult<Vec<(Uuid, f32)>>;
+    ) -> CoreResult<Vec<(Uuid, f32)>> {
+        let _ = (query_embedding, search_sources, top_k);
+        Err(CoreError::Internal("Causal E8 search not supported by this backend".into()))
+    }
 
     /// Search causal relationships using E11 entity embeddings.
     ///
@@ -702,7 +728,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         &self,
         query_embedding: &[f32],
         top_k: usize,
-    ) -> CoreResult<Vec<(Uuid, f32)>>;
+    ) -> CoreResult<Vec<(Uuid, f32)>> {
+        let _ = (query_embedding, top_k);
+        Err(CoreError::Internal("Causal E11 search not supported by this backend".into()))
+    }
 
     /// Search causal relationships using all 4 embedders for maximum accuracy.
     ///
@@ -733,7 +762,10 @@ pub trait TeleologicalMemoryStore: Send + Sync {
         search_causes: bool,
         top_k: usize,
         config: &crate::types::MultiEmbedderConfig,
-    ) -> CoreResult<Vec<crate::types::CausalSearchResult>>;
+    ) -> CoreResult<Vec<crate::types::CausalSearchResult>> {
+        let _ = (e1_embedding, e5_embedding, e8_embedding, e11_embedding, search_causes, top_k, config);
+        Err(CoreError::Internal("Causal multi-embedder search not supported by this backend".into()))
+    }
 
     /// Count total stored causal relationships.
     ///
@@ -742,7 +774,9 @@ pub trait TeleologicalMemoryStore: Send + Sync {
     ///
     /// # Errors
     /// - `CoreError::StorageError` - Storage backend failure
-    async fn count_causal_relationships(&self) -> CoreResult<usize>;
+    async fn count_causal_relationships(&self) -> CoreResult<usize> {
+        Err(CoreError::Internal("Causal relationship storage not supported by this backend".into()))
+    }
 
     // ==================== Audit Log (Phase 1.1) ====================
 

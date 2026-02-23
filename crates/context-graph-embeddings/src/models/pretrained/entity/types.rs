@@ -26,15 +26,24 @@ pub const ENTITY_LATENCY_BUDGET_MS: u64 = 2;
 /// Note: This is the deprecated MiniLM model. Production uses ModelId::Kepler with KEPLER 768D.
 pub const ENTITY_MODEL_NAME: &str = "sentence-transformers/all-MiniLM-L6-v2";
 
-/// Entity embedding model (deprecated - use ModelId::Kepler for production).
+/// LEGACY entity embedding model -- use [`KeplerModel`] for production E11 embedding.
 ///
-/// This model produces 768D vectors optimized for named entity embeddings
-/// and TransE-style knowledge graph operations.
+/// # WARNING: Legacy Model
 ///
-/// # Architecture
+/// This is the **legacy** MiniLM-based entity model producing **384D** vectors
+/// (`ModelId::Entity`, `ENTITY_DIMENSION = 384`).
 ///
-/// Production uses KEPLER (RoBERTa-base + TransE) at 768D.
-/// This EntityModel is legacy code using MiniLM - prefer KeplerModel for new code.
+/// **Production uses [`KeplerModel`]** (RoBERTa-base + TransE) at **768D**
+/// (`ModelId::Kepler`). The two model IDs have **different dimensions**:
+///
+/// | Model | ModelId | Dimension | Status |
+/// |-------|---------|-----------|--------|
+/// | `EntityModel` | `ModelId::Entity` | 384 | **LEGACY** (MiniLM-L6-v2) |
+/// | `KeplerModel` | `ModelId::Kepler` | 768 | **PRODUCTION** (E11 slot) |
+///
+/// This model is **only** used when `ModelId::Entity` is explicitly requested.
+/// Do NOT confuse `ModelId::Entity` (384D) with `ModelId::Kepler` (768D) -- they
+/// are separate model identities with incompatible vector spaces.
 ///
 /// # Entity-Specific Features
 ///
@@ -65,6 +74,8 @@ pub const ENTITY_MODEL_NAME: &str = "sentence-transformers/all-MiniLM-L6-v2";
 ///     Ok(())
 /// }
 /// ```
+// EMB-M1: NOT deprecated via attribute — too disruptive across the crate.
+// The doc comment above provides sufficient warning about legacy status.
 pub struct EntityModel {
     /// Model weights and inference engine.
     #[allow(dead_code)]

@@ -104,8 +104,11 @@ impl SemanticModel {
 
     /// Sequential processing of multiple inputs.
     ///
-    /// Note: processes items one at a time (no GPU batching).
-    /// For true batch inference, see Kepler model.
+    /// **Known limitation (EMB-L3):** This processes items one at a time in a
+    /// sequential loop. True GPU batching would require concatenating tokenized
+    /// inputs into a single padded tensor and running a single forward pass,
+    /// which is not yet implemented. For batch-optimized inference, see the
+    /// Kepler model which supports tensor-level batching.
     ///
     /// # Arguments
     /// * `inputs` - Slice of ModelInput to embed

@@ -19,6 +19,7 @@ use context_graph_core::types::fingerprint::TeleologicalFingerprint;
 use crate::protocol::JsonRpcId;
 use crate::protocol::JsonRpcResponse;
 
+use super::helpers::compute_position_label;
 use super::super::Handlers;
 
 /// Input validation constants for sequence tools
@@ -102,7 +103,13 @@ impl Handlers {
         let direction = match direction_str {
             "before" => SequenceDirection::Before,
             "after" => SequenceDirection::After,
-            _ => SequenceDirection::Both,
+            "both" => SequenceDirection::Both,
+            other => {
+                error!(direction = %other, "get_conversation_context: Invalid direction parameter");
+                return self.tool_error(id, &format!(
+                    "Invalid direction '{}'. Must be one of: before, after, both", other
+                ));
+            }
         };
 
         // Parse and validate window size (FAIL FAST)
@@ -431,16 +438,18 @@ impl Handlers {
             vec![]
         };
 
-        // Filter to only fingerprints in the requested session
-        let session_fingerprints: Vec<&TeleologicalFingerprint> = all_fingerprints
-            .iter()
-            .zip(all_metadata.iter())
-            .filter(|(_fp, meta): &(&TeleologicalFingerprint, &Option<SourceMetadata>)| {
+        // ST-M1 FIX: Filter to session fingerprints AND keep their metadata.
+        // Previously this discarded metadata here and re-fetched it below via a
+        // second get_source_metadata_batch call. Since the filtered IDs are a strict
+        // subset of all_ids, we reuse the already-fetched metadata directly.
+        let session_items: Vec<(TeleologicalFingerprint, Option<SourceMetadata>)> = all_fingerprints
+            .into_iter()
+            .zip(all_metadata.into_iter())
+            .filter(|(_fp, meta): &(TeleologicalFingerprint, Option<SourceMetadata>)| {
                 meta.as_ref()
                     .and_then(|m| m.session_id.as_deref())
                     .is_some_and(|sid| sid == session_id)
             })
-            .map(|(fp, _): (&TeleologicalFingerprint, &Option<SourceMetadata>)| fp)
             .collect();
 
         // Convert to TeleologicalSearchResult for compatibility with downstream code
@@ -448,9 +457,9 @@ impl Handlers {
         // by session_sequence below. Pre-sorting pagination produces wrong results
         // when offset > 0 because the second skip/take on sorted data operates on
         // an already-truncated set.
-        let results: Vec<TeleologicalSearchResult> = session_fingerprints
-            .into_iter()
-            .map(|fp| TeleologicalSearchResult {
+        let results: Vec<TeleologicalSearchResult> = session_items
+            .iter()
+            .map(|(fp, _)| TeleologicalSearchResult {
                 fingerprint: fp.clone(),
                 similarity: 1.0, // No semantic bias
                 embedder_scores: [0.0; 13],
@@ -479,18 +488,11 @@ impl Handlers {
             vec![None; ids.len()]
         };
 
-        // Batch retrieve source metadata (FAIL FAST)
-        let source_metadata: Vec<Option<SourceMetadata>> = if !results.is_empty() {
-            match self.teleological_store.get_source_metadata_batch(&ids).await {
-                Ok(m) => m,
-                Err(e) => {
-                    error!(error = %e, "get_session_timeline: Source metadata retrieval FAILED");
-                    return self.tool_error(id, &format!("Source metadata retrieval failed: {}", e));
-                }
-            }
-        } else {
-            vec![]
-        };
+        // Reuse metadata from the first batch call (session_items already has it)
+        let source_metadata: Vec<Option<SourceMetadata>> = session_items
+            .into_iter()
+            .map(|(_, meta)| meta)
+            .collect();
 
         // Build response - filter to those with sequence info and sort
         let mut results_with_seq: Vec<(u64, serde_json::Value)> = results
@@ -602,7 +604,13 @@ impl Handlers {
         let direction = match direction_str {
             "forward" => SequenceDirection::After,
             "backward" => SequenceDirection::Before,
-            _ => SequenceDirection::Both,
+            "both" => SequenceDirection::Both,
+            other => {
+                error!(direction = %other, "traverse_memory_chain: Invalid direction parameter");
+                return self.tool_error(id, &format!(
+                    "Invalid direction '{}'. Must be one of: forward, backward, both", other
+                ));
+            }
         };
 
         // Parse and validate hops (FAIL FAST)
@@ -919,23 +927,5 @@ impl Handlers {
     }
 }
 
-/// Compute human-readable position label for sequence numbers.
-fn compute_position_label(result_seq: u64, current_seq: u64) -> String {
-    if result_seq == current_seq {
-        "current turn".to_string()
-    } else if result_seq < current_seq {
-        let turns_ago = current_seq - result_seq;
-        if turns_ago == 1 {
-            "previous turn".to_string()
-        } else {
-            format!("{} turns ago", turns_ago)
-        }
-    } else {
-        let turns_ahead = result_seq - current_seq;
-        if turns_ahead == 1 {
-            "next turn".to_string()
-        } else {
-            format!("{} turns ahead", turns_ahead)
-        }
-    }
-}
+// MT-L1: compute_position_label moved to helpers.rs to eliminate duplication
+// with memory_tools.rs. Import via `use super::helpers::compute_position_label;`

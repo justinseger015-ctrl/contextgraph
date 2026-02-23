@@ -181,7 +181,7 @@ async fn test_search_periodic_hour_validation() {
 
                 // Should contain error about hour validation
                 assert!(
-                    text.contains("targetHour must be 0-23") || text.contains("error"),
+                    text.contains("targetHour must be 0-23") || text.contains("targetHour") || text.contains("validation"),
                     "Expected hour validation error, got: {}", text
                 );
                 info!("Hour validation correctly returned error: {}", text);
@@ -198,7 +198,10 @@ async fn test_search_periodic_hour_validation() {
     if let Some(error) = response.error {
         info!("Hour validation returned JsonRpc error: {:?}", error);
         println!("✓ Hour validation error returned correctly");
+        return;
     }
+
+    panic!("Unexpected response format: neither success-with-isError nor JsonRpc error matched for invalid hour");
 }
 
 /// Test day of week validation - targetDayOfWeek > 6 should return error.
@@ -239,7 +242,7 @@ async fn test_search_periodic_dow_validation() {
 
                 // Should contain error about day validation
                 assert!(
-                    text.contains("targetDayOfWeek must be 0-6") || text.contains("error"),
+                    text.contains("targetDayOfWeek must be 0-6") || text.contains("targetDayOfWeek") || text.contains("validation"),
                     "Expected day validation error, got: {}", text
                 );
                 info!("Day of week validation correctly returned error: {}", text);
@@ -254,7 +257,10 @@ async fn test_search_periodic_dow_validation() {
     if let Some(error) = response.error {
         info!("Day of week validation returned JsonRpc error: {:?}", error);
         println!("✓ Day of week validation error returned correctly");
+        return;
     }
+
+    panic!("Unexpected response format: neither success-with-isError nor JsonRpc error matched for invalid day of week");
 }
 
 /// Test empty query validation.
@@ -293,7 +299,7 @@ async fn test_search_periodic_empty_query() {
 
                 // Should contain error about empty query
                 assert!(
-                    text.contains("cannot be empty") || text.contains("error"),
+                    text.contains("cannot be empty") || text.contains("query") || text.contains("required"),
                     "Expected empty query error, got: {}", text
                 );
                 info!("Empty query validation correctly returned error: {}", text);
@@ -308,7 +314,10 @@ async fn test_search_periodic_empty_query() {
     if let Some(error) = response.error {
         info!("Empty query validation returned JsonRpc error: {:?}", error);
         println!("✓ Empty query validation error returned correctly");
+        return;
     }
+
+    panic!("Unexpected response format: neither success-with-isError nor JsonRpc error matched for empty query");
 }
 
 /// Test auto-detect uses current time.

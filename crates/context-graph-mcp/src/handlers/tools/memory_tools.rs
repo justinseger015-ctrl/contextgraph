@@ -43,7 +43,8 @@ use crate::weights::get_weight_profile;
 use crate::protocol::JsonRpcId;
 use crate::protocol::JsonRpcResponse;
 
-use super::helpers::ToolErrorKind;
+use super::graph_link_dtos::RRF_K;
+use super::helpers::{ToolErrorKind, compute_position_label};
 use super::super::Handlers;
 
 // Validation constants for store_memory rationale (merged from inject_context)
@@ -1415,7 +1416,7 @@ impl Handlers {
                                         .filter(|&&s| s > score)
                                         .count();
                                     let weight = resolved_weights[idx];
-                                    let rrf_contribution = weight / (60.0 + rank as f32 + 1.0);
+                                    let rrf_contribution = weight / (RRF_K + rank as f32 + 1.0);
                                     if rrf_contribution > max_rrf {
                                         max_rrf = rrf_contribution;
                                         dominant_idx = idx;
@@ -2001,42 +2002,8 @@ impl Handlers {
     }
 }
 
-// =============================================================================
-// SEQUENCE POSITION LABEL HELPER
-// =============================================================================
-
-/// Compute human-readable position label for sequence numbers.
-///
-/// Returns labels like:
-/// - "current turn" (same sequence)
-/// - "previous turn" (1 turn ago)
-/// - "2 turns ago" (2 turns ago)
-/// - "N turns ago" (N turns ago)
-/// - "future" (if result_seq > current_seq)
-///
-/// # Arguments
-/// * `result_seq` - The session sequence of the result
-/// * `current_seq` - The current session sequence
-fn compute_position_label(result_seq: u64, current_seq: u64) -> String {
-    if result_seq == current_seq {
-        "current turn".to_string()
-    } else if result_seq < current_seq {
-        let turns_ago = current_seq - result_seq;
-        if turns_ago == 1 {
-            "previous turn".to_string()
-        } else {
-            format!("{} turns ago", turns_ago)
-        }
-    } else {
-        // Future turn (shouldn't normally happen, but handle gracefully)
-        let turns_ahead = result_seq - current_seq;
-        if turns_ahead == 1 {
-            "next turn".to_string()
-        } else {
-            format!("{} turns ahead", turns_ahead)
-        }
-    }
-}
+// MT-L1: compute_position_label moved to helpers.rs to eliminate duplication
+// with sequence_tools.rs. Import via `use super::helpers::compute_position_label;`
 
 // =============================================================================
 // 13-EMBEDDER VISIBILITY SYSTEM

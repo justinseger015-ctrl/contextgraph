@@ -80,9 +80,8 @@ pub trait MultiSpaceIndexProvider: Send + Sync {
 /// let results = engine.search_multi_space(&queries, None, 100, 20)?;
 /// ```
 pub struct MultiSpaceSearchEngine<S: QuantizedFingerprintRetriever> {
-    /// Storage backend for fingerprint retrieval (reserved for future use)
-    #[allow(dead_code)]
-    storage: Arc<S>,
+    /// Type parameter marker for storage backend.
+    _storage: std::marker::PhantomData<S>,
 
     /// HNSW index manager (from context-graph-core)
     hnsw_manager: Arc<dyn MultiSpaceIndexProvider>,
@@ -101,9 +100,9 @@ impl<S: QuantizedFingerprintRetriever> MultiSpaceSearchEngine<S> {
     /// let hnsw = Arc::new(HnswMultiSpaceIndex::new());
     /// let engine = MultiSpaceSearchEngine::new(storage, hnsw);
     /// ```
-    pub fn new(storage: Arc<S>, hnsw_manager: Arc<dyn MultiSpaceIndexProvider>) -> Self {
+    pub fn new(_storage: Arc<S>, hnsw_manager: Arc<dyn MultiSpaceIndexProvider>) -> Self {
         Self {
-            storage,
+            _storage: std::marker::PhantomData,
             hnsw_manager,
         }
     }

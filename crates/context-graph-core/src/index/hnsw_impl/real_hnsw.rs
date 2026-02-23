@@ -191,15 +191,21 @@ impl RealHnswIndex {
             return Err(IndexError::ZeroNormVector { memory_id: id });
         }
 
-        let data_id = if let Some(&existing_id) = self.uuid_to_data_id.get(&id) {
-            warn!("Re-inserting vector for existing UUID {}", id);
-            existing_id
-        } else {
-            let new_id = self.next_data_id.fetch_add(1, Ordering::SeqCst);
-            self.uuid_to_data_id.insert(id, new_id);
-            self.data_id_to_uuid.insert(new_id, id);
-            new_id
-        };
+        // STOR-M5: On re-insert, retire old data_id to prevent ghost points.
+        // The old vector remains in the HNSW graph but its data_id is removed
+        // from data_id_to_uuid, so search results will filter it out.
+        if let Some(&old_data_id) = self.uuid_to_data_id.get(&id) {
+            warn!(
+                "Re-inserting vector for existing UUID {} — retiring old data_id={}",
+                id, old_data_id
+            );
+            self.data_id_to_uuid.remove(&old_data_id);
+            self.uuid_to_data_id.remove(&id);
+        }
+
+        let data_id = self.next_data_id.fetch_add(1, Ordering::SeqCst);
+        self.uuid_to_data_id.insert(id, data_id);
+        self.data_id_to_uuid.insert(data_id, id);
 
         match self.active_metric {
             DistanceMetric::Cosine | DistanceMetric::AsymmetricCosine => {

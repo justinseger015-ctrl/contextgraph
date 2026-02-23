@@ -666,8 +666,9 @@ impl Handlers {
                 continue;
             }
 
-            // Check if we have enough paths
-            if paths.len() >= max_results {
+            // Check if we have enough paths — but only break after exhausting
+            // the current BFS depth level so we don't miss equally-short paths
+            if paths.len() >= max_results && hop_level > paths.iter().map(|p| p.hop_count).min().unwrap_or(0) {
                 break;
             }
 

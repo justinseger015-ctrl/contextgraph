@@ -46,6 +46,11 @@ pub struct SemanticModel {
     pub(crate) memory_size: usize,
 }
 
-// Implement Send and Sync manually since RwLock is involved
+// Implement Send and Sync manually since RwLock is involved.
+// TODO(EMB-L2): Audit all 15+ `unsafe impl Send/Sync` across the embeddings crate.
+// Most model types (SemanticModel, CausalModel, etc.) contain only std::sync
+// primitives (RwLock, AtomicBool) which are auto-Send/Sync. These manual impls
+// may be unnecessary and could be removed after verifying no field type blocks
+// auto-derivation (e.g., raw pointers from candle tensors behind feature flags).
 unsafe impl Send for SemanticModel {}
 unsafe impl Sync for SemanticModel {}

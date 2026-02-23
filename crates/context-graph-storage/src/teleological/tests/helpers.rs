@@ -2,11 +2,14 @@
 
 use context_graph_core::types::fingerprint::{SemanticFingerprint, TeleologicalFingerprint};
 
-/// Create a SemanticFingerprint with zeroed embeddings for testing.
-/// NOTE: This uses zeroed data which is only suitable for serialization tests.
-/// For search/alignment tests, use real embeddings from the embedding pipeline.
+/// Create a SemanticFingerprint with non-zero stub embeddings for testing.
+///
+/// STOR-M1: Uses 0.1-filled vectors instead of zeros because zero-norm vectors
+/// are now correctly rejected by validate_vector() (cosine similarity is undefined
+/// for zero-norm vectors). The previous `zeroed()` call produced all-zero vectors
+/// that passed validation but gave meaningless HNSW results.
 pub fn create_real_semantic() -> SemanticFingerprint {
-    SemanticFingerprint::zeroed()
+    SemanticFingerprint::stub()
 }
 
 /// Create a REAL content hash.

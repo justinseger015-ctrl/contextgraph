@@ -487,7 +487,8 @@ mod tests {
         println!();
         println!("Edge 4: Search with k > len returns all");
         let small_index = HnswEmbedderIndex::new(EmbedderIndex::E8Graph);
-        for i in 0..5 {
+        for i in 1..=5 {
+            // STOR-M1: start at 1 to avoid zero-norm vector when i=0
             small_index
                 .insert(Uuid::new_v4(), &vec![(i as f32) / 5.0; 1024])
                 .unwrap();
@@ -514,25 +515,28 @@ mod tests {
         assert!(ids.contains(&rm_id2), "Non-removed ID should appear");
         println!("    PASS");
 
-        // Edge case 6: Zero vector (normalized to zero)
+        // Edge case 6: Zero vector (STOR-M1: now correctly rejected)
         println!();
         println!("Edge 6: Zero vector handling");
         let zero_index = HnswEmbedderIndex::new(EmbedderIndex::E8Graph);
         let zero_id = Uuid::new_v4();
         let zero_vec = vec![0.0f32; 1024];
-        // Zero vector is valid (though cosine similarity will be undefined)
-        zero_index.insert(zero_id, &zero_vec).unwrap();
-        assert_eq!(zero_index.len(), 1);
-        println!("    Zero vector inserted (cosine undefined but no crash)");
+        // STOR-M1: Zero-norm vectors are now rejected (cosine similarity undefined)
+        let result = zero_index.insert(zero_id, &zero_vec);
+        assert!(result.is_err(), "Zero-norm vector should be rejected");
+        assert_eq!(zero_index.len(), 0);
+        println!("    Zero vector correctly rejected (cosine undefined)");
         println!("    PASS");
 
         // Edge case 7: Very small float values
+        // STOR-M1: 1e-38 squared underflows to 0.0 in f32, so norm_sq=0.0 is rejected.
+        // Use 1e-20 instead: (1e-20)^2 = 1e-40 > f32::MIN_POSITIVE_SUBNORMAL (1.4e-45).
         println!();
         println!("Edge 7: Very small float values");
         let tiny_index = HnswEmbedderIndex::new(EmbedderIndex::E8Graph);
-        let tiny_vec: Vec<f32> = (0..1024).map(|_| 1e-38).collect();
+        let tiny_vec: Vec<f32> = (0..1024).map(|_| 1e-20).collect();
         tiny_index.insert(Uuid::new_v4(), &tiny_vec).unwrap();
-        println!("    Subnormal floats accepted");
+        println!("    Small floats accepted");
         println!("    PASS");
 
         // Edge case 8: Maximum safe float values

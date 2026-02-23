@@ -374,7 +374,7 @@ mod tests {
         let id_far = Uuid::new_v4();
 
         let vec_close: Vec<f32> = vec![0.99; 1024]; // Very similar
-        let vec_far: Vec<f32> = vec![0.0; 1024]; // Very different
+        let vec_far: Vec<f32> = vec![-0.5; 1024]; // Very different (opposite direction)
 
         index.insert(id_far, &vec_far).unwrap();
         index.insert(id_close, &vec_close).unwrap();
@@ -490,7 +490,8 @@ mod tests {
 
         // Edge case 2: Insert same ID multiple times
         println!("  2. Multiple updates to same ID");
-        for i in 0..10 {
+        for i in 1..=10 {
+            // STOR-M1: start at 1 to avoid zero-norm vector when i=0
             let vec: Vec<f32> = vec![(i as f32) / 10.0; dim];
             index.insert(id1, &vec).unwrap();
         }

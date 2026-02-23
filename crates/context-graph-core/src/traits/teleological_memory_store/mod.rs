@@ -33,7 +33,6 @@
 //! - [`ext`]: Extension trait (`TeleologicalMemoryStoreExt`)
 
 mod backend;
-mod defaults;
 mod ext;
 mod options;
 mod result;

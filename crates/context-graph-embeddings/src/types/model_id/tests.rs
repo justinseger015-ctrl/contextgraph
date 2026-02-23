@@ -200,3 +200,42 @@ fn test_custom_model_no_repo() {
     }
     println!("Edge Case 3 PASSED: All 4 custom models return None for repo");
 }
+
+#[test]
+fn test_production_returns_13_variants() {
+    // EMB-M2: production() must return exactly NUM_EMBEDDERS (13) models
+    let prod = ModelId::production();
+    assert_eq!(prod.len(), 13, "production() must return 13 models");
+}
+
+#[test]
+fn test_production_excludes_entity() {
+    // EMB-M2: production() excludes legacy Entity variant
+    let prod = ModelId::production();
+    assert!(
+        !prod.contains(&ModelId::Entity),
+        "production() must NOT contain legacy Entity"
+    );
+}
+
+#[test]
+fn test_production_includes_kepler() {
+    // EMB-M2: production() includes Kepler as the E11 production replacement
+    let prod = ModelId::production();
+    assert!(
+        prod.contains(&ModelId::Kepler),
+        "production() must contain Kepler"
+    );
+}
+
+#[test]
+fn test_production_order_matches_pipeline() {
+    // EMB-M2: Verify production() order is E1-E10, E12, E13, Kepler
+    let prod = ModelId::production();
+    assert_eq!(prod[0], ModelId::Semantic);           // E1
+    assert_eq!(prod[4], ModelId::Causal);             // E5
+    assert_eq!(prod[9], ModelId::Contextual);         // E10
+    assert_eq!(prod[10], ModelId::LateInteraction);   // E12
+    assert_eq!(prod[11], ModelId::Splade);            // E13
+    assert_eq!(prod[12], ModelId::Kepler);            // E11 production
+}

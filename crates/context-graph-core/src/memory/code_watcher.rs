@@ -25,7 +25,6 @@ use tracing::{debug, error, info, instrument, warn};
 
 use super::ast_chunker::{AstChunkConfig, AstChunkerError, AstCodeChunker};
 use super::code_capture::{CodeCaptureError, CodeCaptureService, CodeEmbeddingProvider, CodeStorage};
-use crate::types::CodeLanguage;
 
 /// Errors from CodeFileWatcher operations.
 #[derive(Debug, Error)]
@@ -531,12 +530,6 @@ impl<E: CodeEmbeddingProvider, S: CodeStorage> CodeFileWatcher<E, S> {
         format!("{:x}", hasher.finalize())
     }
 
-    /// Detect language from file extension.
-    #[allow(dead_code)]
-    fn detect_language(path: &Path) -> CodeLanguage {
-        CodeLanguage::from_path(&path.to_string_lossy())
-    }
-
     /// Get statistics about watched files.
     pub async fn stats(&self) -> WatcherStats {
         let hashes = self.file_hashes.read().await;
@@ -571,6 +564,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::code_capture::{CodeEmbedderError, CodeEmbeddingProvider, CodeStorage};
+    use crate::types::CodeLanguage;
     use crate::types::fingerprint::SemanticFingerprint;
     use crate::types::CodeEntity;
 
@@ -703,17 +697,17 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_language() {
+    fn test_detect_language_from_path() {
         assert_eq!(
-            CodeFileWatcher::<MockCodeEmbedder, MockCodeStorage>::detect_language(Path::new("test.rs")),
+            CodeLanguage::from_path("test.rs"),
             CodeLanguage::Rust
         );
         assert_eq!(
-            CodeFileWatcher::<MockCodeEmbedder, MockCodeStorage>::detect_language(Path::new("test.py")),
+            CodeLanguage::from_path("test.py"),
             CodeLanguage::Python
         );
         assert_eq!(
-            CodeFileWatcher::<MockCodeEmbedder, MockCodeStorage>::detect_language(Path::new("test.unknown")),
+            CodeLanguage::from_path("test.unknown"),
             CodeLanguage::Unknown
         );
     }

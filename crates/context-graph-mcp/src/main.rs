@@ -77,8 +77,6 @@ struct CliArgs {
     transport: Option<String>,
     /// TCP port override (--port)
     port: Option<u16>,
-    /// SSE port override (--sse-port, TASK-42)
-    sse_port: Option<u16>,
     /// TCP bind address override (--bind)
     bind_address: Option<String>,
     /// Show help
@@ -112,7 +110,6 @@ impl CliArgs {
             config_path: None,
             transport: None,
             port: None,
-            sse_port: None,
             bind_address: None,
             help: false,
             no_warm: false,
@@ -147,18 +144,6 @@ impl CliArgs {
                             cli.port = Some(port);
                         } else {
                             eprintln!("[E_CLI_PORT_001] Invalid --port value '{}': must be a valid port number (1-65535)", args[i]);
-                            cli.help = true;
-                        }
-                    }
-                }
-                "--sse-port" => {
-                    // TASK-42: SSE port argument
-                    i += 1;
-                    if i < args.len() {
-                        if let Ok(port) = args[i].parse::<u16>() {
-                            cli.sse_port = Some(port);
-                        } else {
-                            eprintln!("[E_CLI_PORT_002] Invalid --sse-port value '{}': must be a valid port number (1-65535)", args[i]);
                             cli.help = true;
                         }
                     }
@@ -388,17 +373,6 @@ fn apply_overrides(config: &mut Config, cli: &CliArgs) {
         if let Ok(port) = port_str.parse::<u16>() {
             info!("ENV override: tcp_port = {}", port);
             config.mcp.tcp_port = port;
-        }
-    }
-
-    // TASK-42: Override SSE port from CLI
-    if let Some(port) = cli.sse_port {
-        info!("CLI override: sse_port = {}", port);
-        config.mcp.sse_port = port;
-    } else if let Ok(port_str) = env::var("CONTEXT_GRAPH_SSE_PORT") {
-        if let Ok(port) = port_str.parse::<u16>() {
-            info!("ENV override: sse_port = {}", port);
-            config.mcp.sse_port = port;
         }
     }
 
@@ -1543,7 +1517,11 @@ async fn spawn_daemon_process(
     // SIGHUP/SIGTERM when the parent's terminal or process group dies.
     unsafe {
         cmd.pre_exec(|| {
-            libc::setsid();
+            // INFRA-H1 FIX: Check setsid() return value — failure means
+            // child stays in parent's process group and dies with terminal.
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
             Ok(())
         });
     }
@@ -1604,15 +1582,24 @@ async fn spawn_daemon_process(
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    // CRITICAL: MCP servers must be silent - set this BEFORE any config loading.
-    // L2 NOTE: env::set_var is technically UB in multi-threaded context per POSIX.
-    // This is the first statement before any async tasks spawn. When upgrading to
-    // Rust 2024 edition, this must move to a pre-runtime init or use unsafe{}.
-    // For now on edition 2021, this is safe in practice (no concurrent readers yet).
+/// Synchronous entry point: sets environment variables BEFORE any tokio threads
+/// exist, then hands off to the async entry point.
+///
+/// INFRA-H2 FIX: `env::set_var` is unsound when other threads may call `getenv`
+/// concurrently (POSIX UB, and Rust 2024 edition marks it `unsafe`).
+/// `#[tokio::main]` spawns the runtime *before* the body executes, so any
+/// `env::set_var` inside it races with tokio worker threads.  By constructing
+/// the runtime manually we guarantee the `set_var` happens in a single-threaded
+/// context.
+fn main() -> Result<()> {
+    // CRITICAL: Set env vars while still single-threaded (no tokio runtime yet).
     env::set_var("CONTEXT_GRAPH_MCP_QUIET", "1");
 
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> Result<()> {
     // Parse CLI arguments first (before logging init so --help works cleanly)
     let cli = CliArgs::parse();
 

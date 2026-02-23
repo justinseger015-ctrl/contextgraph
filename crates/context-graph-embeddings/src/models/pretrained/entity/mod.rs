@@ -1,5 +1,8 @@
 //! Entity embedding model using sentence-transformers/all-MiniLM-L6-v2.
 //!
+//! **DEPRECATED**: This module contains the legacy MiniLM-based EntityModel (384D).
+//! Production uses [`KeplerModel`] (768D) for the E11 slot.
+//!
 //! This model (E11) produces 384D vectors optimized for named entity embeddings
 //! and TransE-style knowledge graph operations where `head + relation = tail`.
 //!
@@ -34,6 +37,8 @@
 //! - `transe_score(h, r, t)` - Compute TransE score: -||h + r - t||_2
 //! - `predict_tail(h, r)` - Predict tail embedding: t_hat = h + r
 //! - `predict_relation(h, t)` - Predict relation embedding: r_hat = t - h
+
+// EntityModel is deprecated but this module defines and re-exports it for backward compatibility.
 
 mod attention;
 mod attention_projection;

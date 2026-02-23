@@ -126,6 +126,14 @@ impl RocksDbTeleologicalStore {
     /// Remove fingerprint from all per-embedder indexes.
     ///
     /// Removes the ID from all 13 HNSW indexes (including E5CausalCause and E5CausalEffect).
+    ///
+    /// STOR-M2: KNOWN LIMITATION — HNSW vectors become orphaned on remove.
+    /// usearch does not support true vector deletion. This method removes the ID
+    /// from the id_to_key/key_to_id lookup maps so the vector is invisible to
+    /// search, but the raw vector data remains in the usearch index until the next
+    /// compaction rebuild. The `removed_count` counter tracks orphans and triggers
+    /// a full index rebuild when the compaction threshold is reached, reclaiming
+    /// all orphaned storage. See `HnswEmbedderIndex::remove()` for details.
     pub(crate) fn remove_from_indexes(&self, id: Uuid) -> Result<(), IndexError> {
         // DATA-5 FIX: Acquire read lock — concurrent with other store/delete,
         // but blocked during rebuild (write lock).

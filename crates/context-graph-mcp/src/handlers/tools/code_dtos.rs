@@ -132,8 +132,7 @@ pub struct DetectedLanguageInfo {
 ///   "blendWithSemantic": 0.4,
 ///   "searchMode": "hybrid",
 ///   "languageHint": "rust",
-///   "includeContent": true,
-///   "includeAstContext": false
+///   "includeContent": true
 /// }
 /// ```
 #[derive(Debug, Clone, Deserialize)]
@@ -160,7 +159,6 @@ pub struct SearchCodeRequest {
     /// - "hybrid": Blend E1 and E7 scores
     /// - "e7Only": Pure E7 code search
     /// - "e1WithE7Rerank": E1 retrieval with E7 reranking
-    /// - "pipeline": Full E13→E1→E7→E12 pipeline
     #[serde(rename = "searchMode", default)]
     pub search_mode: CodeSearchMode,
 
@@ -203,13 +201,16 @@ impl Default for SearchCodeRequest {
 impl SearchCodeRequest {
     /// Parse the search mode into SearchStrategy enum.
     ///
-    /// Strategy selection priority:
-    /// 1. User-specified Pipeline mode takes precedence
-    /// 2. Default to MultiSpace for E7 enhancement (ARCH-21)
+    /// TST-M2: Maps each CodeSearchMode variant to the correct SearchStrategy:
+    /// - Hybrid -> MultiSpace (blended E1+E7 fusion per ARCH-21)
+    /// - E7Only -> E1Only (single-embedder mode; E7 weighting handled by caller)
+    /// - E1WithE7Rerank -> MultiSpace (E1 primary with E7 tiebreaker per ARCH-12)
     pub fn parse_strategy(&self) -> SearchStrategy {
-        // MED-17: Pipeline variant removed (was identical to Hybrid).
-        // Code search always uses MultiSpace for E7 enhancement per ARCH-21.
-        SearchStrategy::MultiSpace
+        match self.search_mode {
+            CodeSearchMode::Hybrid => SearchStrategy::MultiSpace,
+            CodeSearchMode::E7Only => SearchStrategy::E1Only,
+            CodeSearchMode::E1WithE7Rerank => SearchStrategy::MultiSpace,
+        }
     }
 
     /// Validate the request parameters.
@@ -437,6 +438,31 @@ mod tests {
         assert!(bad_blend.validate().is_err());
         let bad_k = SearchCodeRequest { query: "test".to_string(), top_k: 100, ..Default::default() };
         assert!(bad_k.validate().is_err());
+    }
+
+    #[test]
+    fn test_parse_strategy_respects_search_mode() {
+        // TST-M2: parse_strategy must respect search_mode, not always return MultiSpace
+        let hybrid = SearchCodeRequest {
+            query: "test".to_string(),
+            search_mode: CodeSearchMode::Hybrid,
+            ..Default::default()
+        };
+        assert_eq!(hybrid.parse_strategy(), SearchStrategy::MultiSpace);
+
+        let e7_only = SearchCodeRequest {
+            query: "test".to_string(),
+            search_mode: CodeSearchMode::E7Only,
+            ..Default::default()
+        };
+        assert_eq!(e7_only.parse_strategy(), SearchStrategy::E1Only);
+
+        let rerank = SearchCodeRequest {
+            query: "test".to_string(),
+            search_mode: CodeSearchMode::E1WithE7Rerank,
+            ..Default::default()
+        };
+        assert_eq!(rerank.parse_strategy(), SearchStrategy::MultiSpace);
     }
 
     #[test]

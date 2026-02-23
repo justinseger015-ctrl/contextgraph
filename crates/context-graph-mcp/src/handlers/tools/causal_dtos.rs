@@ -524,8 +524,11 @@ impl super::validate::ValidateInto for GetCausalChainRequest {
 /// A single cause result from search_causes.
 #[derive(Debug, Clone, Serialize)]
 pub struct CauseSearchResult {
-    /// UUID of the candidate cause memory.
-    pub cause_id: Uuid,
+    /// UUID of the source memory this result references.
+    /// For fingerprint results, this is the candidate memory itself.
+    /// For causal_relationship results, this is the memory the relationship was extracted from.
+    #[serde(rename = "sourceMemoryId")]
+    pub source_memory_id: Uuid,
 
     /// Abductive score (with 0.8x dampening applied).
     /// Higher scores indicate more likely causes.
@@ -630,8 +633,11 @@ pub struct CauseSearchMetadata {
 /// A single effect result from search_effects.
 #[derive(Debug, Clone, Serialize)]
 pub struct EffectSearchResult {
-    /// UUID of the candidate effect memory.
-    pub effect_id: Uuid,
+    /// UUID of the source memory this result references.
+    /// For fingerprint results, this is the candidate memory itself.
+    /// For causal_relationship results, this is the memory the relationship was extracted from.
+    #[serde(rename = "sourceMemoryId")]
+    pub source_memory_id: Uuid,
 
     /// Predictive score (with 1.2x boost applied).
     /// Higher scores indicate more likely effects.
@@ -1164,7 +1170,7 @@ mod tests {
         let response = SearchCausesResponse {
             query: "test query".to_string(),
             causes: vec![CauseSearchResult {
-                cause_id: Uuid::nil(),
+                source_memory_id: Uuid::nil(),
                 score: 0.64,
                 raw_similarity: 0.8,
                 causal_direction: Some("cause".to_string()),

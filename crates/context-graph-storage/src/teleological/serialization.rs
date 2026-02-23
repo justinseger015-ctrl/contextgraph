@@ -3,6 +3,14 @@
 //! Uses bincode 1.3 for efficient binary serialization.
 //! Expected serialized size: ~30KB per fingerprint (based on SemanticFingerprint with 7,424 dense dims).
 //!
+//! # WARNING: bincode + skip_serializing_if = SILENT DATA CORRUPTION
+//!
+//! bincode is a positional format — it does NOT encode field names. If any field
+//! uses `#[serde(skip_serializing_if = "...")]`, the field count changes between
+//! serialization and deserialization, silently corrupting all subsequent fields.
+//! All optional/provenance fields MUST use JSON column families, not bincode.
+//! See constitution rule #2 and MEMORY.md lesson on bincode.
+//!
 //! # Error Handling Policy (STG-01)
 //!
 //! Serialization functions (write path) panic on error because the data originates

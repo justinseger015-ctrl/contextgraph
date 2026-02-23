@@ -183,6 +183,11 @@ impl ModelId {
     ///
     /// Order matches the E1-E13 specification in constitution.yaml,
     /// plus Kepler (production E11 replacement for legacy Entity).
+    ///
+    /// **NOTE**: This returns 14 variants because both `Entity` (legacy 384D MiniLM)
+    /// and `Kepler` (production 768D RoBERTa+TransE) occupy the E11 weight slot.
+    /// Use [`ModelId::production()`] for the 13 production models (excludes legacy `Entity`).
+    /// Use `NUM_EMBEDDERS` (= 13) for array sizing, NOT `ModelId::all().len()` (= 14).
     #[must_use]
     pub const fn all() -> &'static [ModelId] {
         &[
@@ -197,6 +202,38 @@ impl ModelId {
             Self::Hdc,                // E9
             Self::Contextual,         // E10
             Self::Entity,             // E11 (legacy 384D)
+            Self::LateInteraction,    // E12
+            Self::Splade,             // E13
+            Self::Kepler,             // E11 production (768D KEPLER)
+        ]
+    }
+
+    /// Returns the 13 production model variants (excludes legacy `Entity`).
+    ///
+    /// `Entity` (384D MiniLM) is the deprecated E11 variant, replaced by `Kepler`
+    /// (768D RoBERTa+TransE). This method returns exactly `NUM_EMBEDDERS` (13)
+    /// models, which is the correct count for array sizing, weight vectors,
+    /// and iteration over active production models.
+    ///
+    /// # Difference from `all()`
+    ///
+    /// | Method | Count | Includes Entity | Includes Kepler |
+    /// |--------|-------|-----------------|-----------------|
+    /// | `all()` | 14 | Yes (legacy) | Yes |
+    /// | `production()` | 13 | No | Yes |
+    #[must_use]
+    pub const fn production() -> &'static [ModelId] {
+        &[
+            Self::Semantic,           // E1
+            Self::TemporalRecent,     // E2
+            Self::TemporalPeriodic,   // E3
+            Self::TemporalPositional, // E4
+            Self::Causal,             // E5
+            Self::Sparse,             // E6
+            Self::Code,               // E7
+            Self::Graph,              // E8
+            Self::Hdc,                // E9
+            Self::Contextual,         // E10
             Self::LateInteraction,    // E12
             Self::Splade,             // E13
             Self::Kepler,             // E11 production (768D KEPLER)

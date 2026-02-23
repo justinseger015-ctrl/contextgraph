@@ -98,7 +98,15 @@ pub async fn read_line_bounded<R: tokio::io::AsyncBufRead + Unpin>(
     // Convert to UTF-8
     match String::from_utf8(raw) {
         Ok(s) => buf.push_str(&s),
-        Err(e) => buf.push_str(&String::from_utf8_lossy(e.as_bytes())),
+        Err(e) => {
+            // INFRA-L4: Log when lossy conversion occurs so non-UTF-8 input is visible
+            // in diagnostics rather than silently mangled.
+            warn!(
+                "Non-UTF-8 input detected, using lossy conversion: {} bytes affected",
+                e.as_bytes().len()
+            );
+            buf.push_str(&String::from_utf8_lossy(e.as_bytes()));
+        }
     }
 
     Ok(total)
@@ -276,6 +284,145 @@ impl McpServer {
 
             let trimmed = line.trim();
             if trimmed.is_empty() {
+                continue;
+            }
+
+            // INFRA-H3 FIX: JSON-RPC 2.0 batch request support.
+            // A JSON array `[{...},{...}]` is a batch request per spec section 6.
+            // Must be handled before the single-request code path.
+            if trimmed.starts_with('[') {
+                let batch_values: Vec<serde_json::Value> = match serde_json::from_str(trimmed) {
+                    Ok(reqs) => reqs,
+                    Err(e) => {
+                        warn!(
+                            "[{}] {} sent invalid batch JSON: {}",
+                            conn_tag, peer_addr, e
+                        );
+                        let error_response = JsonRpcResponse::error(
+                            None,
+                            crate::protocol::error_codes::PARSE_ERROR,
+                            format!("Batch parse error: {}", e),
+                        );
+                        let response_json = serde_json::to_string(&error_response)?;
+                        writer.write_all(response_json.as_bytes()).await?;
+                        writer.write_all(b"\n").await?;
+                        writer.flush().await?;
+                        // Unlike single parse errors, batch parse errors don't disconnect.
+                        // The framing is still valid (we got a complete NDJSON line).
+                        continue;
+                    }
+                };
+
+                // JSON-RPC 2.0 spec: empty batch array is an invalid request
+                if batch_values.is_empty() {
+                    let error_response = JsonRpcResponse::error(
+                        None,
+                        crate::protocol::error_codes::INVALID_REQUEST,
+                        "Empty batch request",
+                    );
+                    let response_json = serde_json::to_string(&error_response)?;
+                    writer.write_all(response_json.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                    continue;
+                }
+
+                debug!(
+                    "[{}] {} processing batch request with {} items",
+                    conn_tag,
+                    peer_addr,
+                    batch_values.len()
+                );
+
+                let mut batch_responses: Vec<JsonRpcResponse> =
+                    Vec::with_capacity(batch_values.len());
+
+                for req_value in &batch_values {
+                    // Parse individual request from the batch element
+                    let request: JsonRpcRequest = match serde_json::from_value(req_value.clone()) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            warn!(
+                                "[{}] {} batch element parse error: {}",
+                                conn_tag, peer_addr, e
+                            );
+                            // Per JSON-RPC 2.0 spec, individual parse errors get individual
+                            // error responses within the batch response array.
+                            batch_responses.push(JsonRpcResponse::error(
+                                None,
+                                crate::protocol::error_codes::INVALID_REQUEST,
+                                format!("Invalid request in batch: {}", e),
+                            ));
+                            continue;
+                        }
+                    };
+
+                    // Validate JSON-RPC version
+                    if request.jsonrpc != "2.0" {
+                        batch_responses.push(JsonRpcResponse::error(
+                            request.id.clone(),
+                            crate::protocol::error_codes::INVALID_REQUEST,
+                            "Invalid JSON-RPC version. Expected '2.0'.",
+                        ));
+                        continue;
+                    }
+
+                    // Apply per-request timeout
+                    let request_id = request.id.clone();
+                    let is_notification = request_id.is_none();
+                    let response = match tokio::time::timeout(
+                        Duration::from_secs(request_timeout),
+                        handlers.dispatch(request),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(_) => {
+                            error!(
+                                "[{}] Batch sub-request timed out after {}s for {}",
+                                conn_tag, request_timeout, peer_addr
+                            );
+                            if is_notification {
+                                warn!(
+                                    "[{}] {} batch notification timed out -- suppressing (JSON-RPC 2.0)",
+                                    conn_tag, peer_addr
+                                );
+                                continue;
+                            }
+                            JsonRpcResponse::error(
+                                request_id,
+                                crate::protocol::error_codes::TCP_CLIENT_TIMEOUT,
+                                format!(
+                                    "Batch sub-request timed out after {}s",
+                                    request_timeout
+                                ),
+                            )
+                        }
+                    };
+
+                    // Skip notification responses (no id, no result, no error)
+                    if response.id.is_none()
+                        && response.result.is_none()
+                        && response.error.is_none()
+                    {
+                        continue;
+                    }
+                    batch_responses.push(response);
+                }
+
+                // JSON-RPC 2.0 spec: if all requests are notifications, send nothing
+                if !batch_responses.is_empty() {
+                    let response_json = serde_json::to_string(&batch_responses)?;
+                    debug!(
+                        "[{}] {} sending batch response with {} items",
+                        conn_tag,
+                        peer_addr,
+                        batch_responses.len()
+                    );
+                    writer.write_all(response_json.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                }
                 continue;
             }
 

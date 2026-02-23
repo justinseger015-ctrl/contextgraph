@@ -11,7 +11,6 @@ use tracing::debug;
 
 use super::super::super::indexes::{EmbedderIndex, EmbedderIndexRegistry};
 use super::super::error::SearchError;
-use super::super::multi::MultiEmbedderSearch;
 use super::super::single::SingleEmbedderSearch;
 use super::stages::StageExecutor;
 use super::traits::{InMemorySpladeIndex, InMemoryTokenStorage, SpladeIndex, TokenStorage};
@@ -28,10 +27,6 @@ use crate::graph_edges::EdgeRepository;
 pub struct RetrievalPipeline {
     /// Single embedder search (for Stage 2).
     single_search: SingleEmbedderSearch,
-    /// Multi embedder search (for Stage 3).
-    /// Currently unused - reserved for enhanced RRF with multiple embedders.
-    #[allow(dead_code)]
-    multi_search: MultiEmbedderSearch,
     /// SPLADE inverted index (for Stage 1).
     splade_index: Arc<dyn SpladeIndex>,
     /// Token storage (for Stage 4 MaxSim).
@@ -55,8 +50,7 @@ impl RetrievalPipeline {
         token_storage: Option<Arc<dyn TokenStorage>>,
     ) -> Self {
         Self {
-            single_search: SingleEmbedderSearch::new(Arc::clone(&registry)),
-            multi_search: MultiEmbedderSearch::new(registry),
+            single_search: SingleEmbedderSearch::new(registry),
             splade_index: splade_index.unwrap_or_else(|| Arc::new(InMemorySpladeIndex::new())),
             token_storage: token_storage.unwrap_or_else(|| Arc::new(InMemoryTokenStorage::new())),
             edge_repository: None,
@@ -72,8 +66,7 @@ impl RetrievalPipeline {
         token_storage: Option<Arc<dyn TokenStorage>>,
     ) -> Self {
         Self {
-            single_search: SingleEmbedderSearch::new(Arc::clone(&registry)),
-            multi_search: MultiEmbedderSearch::new(registry),
+            single_search: SingleEmbedderSearch::new(registry),
             splade_index: splade_index.unwrap_or_else(|| Arc::new(InMemorySpladeIndex::new())),
             token_storage: token_storage.unwrap_or_else(|| Arc::new(InMemoryTokenStorage::new())),
             edge_repository: None,

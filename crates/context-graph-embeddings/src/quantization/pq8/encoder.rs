@@ -67,6 +67,14 @@ impl PQ8Encoder {
 
     /// Create a default codebook with pseudo-random centroids.
     ///
+    /// **WARNING: UNTRAINED CENTROIDS.** This codebook uses deterministic
+    /// pseudo-random values from an LCG (Linear Congruential Generator) and
+    /// does NOT reflect the actual distribution of any embedding model's output.
+    /// Quantization recall will be significantly worse than a codebook trained
+    /// via k-means on real embedding data. For production use, call
+    /// `PQ8Encoder::with_codebook()` with a codebook trained on representative
+    /// embeddings from the target model.
+    ///
     /// Centroids are initialized using deterministic pseudo-random values
     /// covering the typical embedding range. This provides reasonable compression
     /// for general use, but should be replaced with a trained codebook for

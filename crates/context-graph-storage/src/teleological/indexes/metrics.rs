@@ -158,7 +158,12 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
     let denominator = norm_a.sqrt() * norm_b.sqrt();
     if denominator < f32::EPSILON {
-        return 0.0; // Zero similarity for zero vectors
+        // STOR-L6: Zero-norm vectors should be rejected at insertion time (STOR-M1).
+        // If we reach here, something bypassed validation — log for diagnostics.
+        tracing::warn!(
+            "Zero-norm vector detected in similarity computation — should have been rejected at insertion"
+        );
+        return 0.0;
     }
 
     dot / denominator

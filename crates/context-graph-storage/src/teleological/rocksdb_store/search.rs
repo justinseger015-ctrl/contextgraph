@@ -261,7 +261,16 @@ fn search_filtered_multi_space_sync(
             continue;
         }
 
-        // Direction-aware E5 routing (Gap 1 fix): use directional index when causal direction known
+        // Direction-aware E5 routing (Gap 1 fix): use directional index when causal direction known.
+        //
+        // STOR-L5: E5 uses CROSS-PAIR retrieval — the query vector and index are deliberately
+        // swapped because asymmetric causal embeddings encode direction:
+        //   - Cause-seeking: query with cause vector against E5CausalEffect index
+        //     (find stored memories whose EFFECT matches our cause — "what did this cause?")
+        //   - Effect-seeking: query with effect vector against E5CausalCause index
+        //     (find stored memories whose CAUSE matches our effect — "what caused this?")
+        // This cross-pairing is what makes E5 direction-aware. Without it, cause and effect
+        // vectors would be compared against the same index, losing directional signal.
         let (embedder, query_vec) = if idx == 4 {
             match options.causal_direction {
                 CausalDirection::Cause => (EmbedderIndex::E5CausalEffect, query.get_e5_as_cause()),
@@ -847,7 +856,9 @@ fn search_pipeline_sync(
         return Err(CoreError::IndexError("E1 Semantic index not found".into()));
     }
 
-    // E5 Causal — direction-aware HNSW retrieval for pipeline search (Gap 1 fix)
+    // E5 Causal — direction-aware HNSW retrieval for pipeline search (Gap 1 fix).
+    // STOR-L5: Cross-pair retrieval — cause vector queries effect index and vice versa.
+    // See multi-space search comment above for full explanation of why this is intentional.
     let (e5_pipeline_idx, e5_pipeline_vec) = match options.causal_direction {
         CausalDirection::Cause => (EmbedderIndex::E5CausalEffect, query.get_e5_as_cause()),
         CausalDirection::Effect => (EmbedderIndex::E5CausalCause, query.get_e5_as_effect()),

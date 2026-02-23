@@ -232,9 +232,17 @@ pub struct LayerInfo {
     pub name: String,
     /// Current status of the layer
     pub status: LayerStatus,
-    /// Optional latency of last operation in microseconds
+    /// Optional latency of last operation in microseconds.
+    ///
+    /// TODO(INFRA-L5): Currently always None. To populate, instrument each layer's
+    /// health check with `Instant::now()` elapsed timing and pass it through
+    /// `LayerStatusProvider::all_layer_info()`.
     pub last_latency_us: Option<u64>,
-    /// Optional error count in current session
+    /// Optional error count in current session.
+    ///
+    /// TODO(INFRA-L5): Currently always None. To populate, add an `AtomicU64`
+    /// error counter per layer in `LiveLayerStatusProvider` and increment on
+    /// each failed health check or handler error.
     pub error_count: Option<u64>,
     /// Whether health check passed
     pub health_check_passed: Option<bool>,

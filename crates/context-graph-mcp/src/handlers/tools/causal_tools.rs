@@ -193,7 +193,7 @@ impl Handlers {
                         return None;
                     }
                     Some(CauseSearchResult {
-                        cause_id: result.cause_id,
+                        source_memory_id: result.cause_id,
                         score,
                         raw_similarity: result.raw_similarity,
                         causal_direction: None,
@@ -251,7 +251,7 @@ impl Handlers {
                     }
                 };
                 all_causes.push(CauseSearchResult {
-                    cause_id: rel.source_fingerprint_id,
+                    source_memory_id: rel.source_fingerprint_id,
                     score,
                     raw_similarity: *similarity,
                     causal_direction: Some(rel.mechanism_type.clone()),
@@ -270,16 +270,16 @@ impl Handlers {
         // Sort by score descending
         all_causes.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Deduplicate by cause_id (keep highest scoring)
+        // Deduplicate by source_memory_id (keep highest scoring)
         let mut seen_ids = HashSet::new();
         let causes: Vec<CauseSearchResult> = all_causes
             .into_iter()
-            .filter(|c| seen_ids.insert(c.cause_id))
+            .filter(|c| seen_ids.insert(c.source_memory_id))
             .take(top_k)
             .collect();
 
         // Step 5: Optionally filter by causal direction and hydrate content
-        let cause_ids: Vec<Uuid> = causes.iter().map(|c| c.cause_id).collect();
+        let cause_ids: Vec<Uuid> = causes.iter().map(|c| c.source_memory_id).collect();
 
         // Get source metadata for causal direction and provenance
         // FAIL FAST: If metadata retrieval fails, the entire operation fails
@@ -555,7 +555,7 @@ impl Handlers {
                         return None;
                     }
                     Some(EffectSearchResult {
-                        effect_id: result.effect_id,
+                        source_memory_id: result.effect_id,
                         score,
                         raw_similarity: result.raw_similarity,
                         causal_direction: None,
@@ -611,7 +611,7 @@ impl Handlers {
                     }
                 };
                 all_effects.push(EffectSearchResult {
-                    effect_id: rel.source_fingerprint_id,
+                    source_memory_id: rel.source_fingerprint_id,
                     score,
                     raw_similarity: *similarity,
                     causal_direction: Some(rel.mechanism_type.clone()),
@@ -632,11 +632,11 @@ impl Handlers {
         let mut seen_ids = HashSet::new();
         let effects: Vec<EffectSearchResult> = all_effects
             .into_iter()
-            .filter(|e| seen_ids.insert(e.effect_id))
+            .filter(|e| seen_ids.insert(e.source_memory_id))
             .take(top_k)
             .collect();
 
-        let effect_ids: Vec<Uuid> = effects.iter().map(|e| e.effect_id).collect();
+        let effect_ids: Vec<Uuid> = effects.iter().map(|e| e.source_memory_id).collect();
 
         // Get source metadata - FAIL FAST on error
         let source_metadata = match self

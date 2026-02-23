@@ -230,17 +230,11 @@ pub fn anisotropy_measure(vectors: &[Vec<f32>]) -> f32 {
     }
 }
 
-/// Cosine similarity between two vectors.
+/// Cosine similarity between two vectors (raw [-1, 1] range).
+///
+/// Delegates to the canonical implementation in `crate::util`.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let denom = norm_a * norm_b;
-    if denom < 1e-8 {
-        0.0
-    } else {
-        (dot / denom).clamp(-1.0, 1.0)
-    }
+    crate::util::cosine_similarity_raw(a, b)
 }
 
 // ============================================================================

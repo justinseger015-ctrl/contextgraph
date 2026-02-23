@@ -1116,26 +1116,7 @@ fn run_e4_contribution_analysis(
 // ============================================================================
 
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.is_empty() || b.is_empty() || a.len() != b.len() {
-        return 0.0;
-    }
-
-    let mut dot = 0.0f32;
-    let mut norm_a = 0.0f32;
-    let mut norm_b = 0.0f32;
-
-    for (x, y) in a.iter().zip(b.iter()) {
-        dot += x * y;
-        norm_a += x * x;
-        norm_b += y * y;
-    }
-
-    let norm_product = (norm_a * norm_b).sqrt();
-    if norm_product < f32::EPSILON {
-        0.0
-    } else {
-        (dot / norm_product).clamp(-1.0, 1.0)
-    }
+    context_graph_benchmark::util::cosine_similarity_raw(a, b)
 }
 
 fn compute_kendalls_tau(vectors: &[(usize, &[f32])]) -> f64 {

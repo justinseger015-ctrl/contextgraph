@@ -5,8 +5,8 @@
 //! | Code | Meaning | Description |
 //! |------|---------|-------------|
 //! | 0 | Success | Hook executed successfully |
-//! | 1 | General Error | Unspecified error |
-//! | 2 | Timeout | Operation exceeded timeout |
+//! | 1 | General Error / Timeout | Unspecified error or transient timeout |
+//! | 2 | Corruption | Database corruption detected (AP-26 BLOCKING) |
 //! | 3 | Database Error | Storage operation failed |
 //! | 4 | Invalid Input | Malformed input data |
 //! | 5 | Session Not Found | Referenced session doesn't exist |
@@ -26,7 +26,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum HookError {
     /// Hook execution timed out
-    /// Exit code: 2
+    /// Exit code: 1 (transient/recoverable, NOT corruption)
     #[error("Hook timeout after {0}ms")]
     Timeout(u64),
 
@@ -81,8 +81,8 @@ impl HookError {
     ///
     /// # Exit Codes
     /// - 0: Success (not an error)
-    /// - 1: General Error
-    /// - 2: Timeout
+    /// - 1: General Error / Timeout
+    /// - 2: Corruption (AP-26 BLOCKING)
     /// - 3: Database Error
     /// - 4: Invalid Input
     /// - 5: Session Not Found
@@ -91,7 +91,7 @@ impl HookError {
     pub fn exit_code(&self) -> i32 {
         match self {
             Self::Corruption(_) => 2, // AP-26: corruption = exit code 2
-            Self::Timeout(_) => 2,    // Legacy: also mapped to 2
+            Self::Timeout(_) => 1,    // Transient/recoverable, same as General
             Self::Storage(_) => 3,
             Self::InvalidInput(_) | Self::Serialization(_) => 4,
             Self::SessionNotFound(_) => 5,
@@ -269,8 +269,8 @@ mod tests {
         // Verify exit codes match TECH-HOOKS.md section 3.2 EXACTLY
         assert_eq!(
             HookError::timeout(100).exit_code(),
-            2,
-            "Timeout must be exit code 2"
+            1,
+            "Timeout must be exit code 1 (transient, not corruption)"
         );
         assert_eq!(
             HookError::storage("db error").exit_code(),
@@ -437,7 +437,7 @@ mod tests {
 
         assert_eq!(json["error"], true);
         assert_eq!(json["code"], "ERR_TIMEOUT");
-        assert_eq!(json["exit_code"], 2);
+        assert_eq!(json["exit_code"], 1);
         assert_eq!(json["message"], "Hook timeout after 100ms");
         assert_eq!(json["recoverable"], true);
         assert_eq!(json["crisis"], false);
@@ -509,7 +509,7 @@ mod tests {
     #[test]
     fn test_timeout_zero() {
         let err = HookError::timeout(0);
-        assert_eq!(err.exit_code(), 2);
+        assert_eq!(err.exit_code(), 1);
         assert!(err.is_timeout());
         assert_eq!(err.to_string(), "Hook timeout after 0ms");
     }
@@ -517,7 +517,7 @@ mod tests {
     #[test]
     fn test_timeout_max() {
         let err = HookError::timeout(u64::MAX);
-        assert_eq!(err.exit_code(), 2);
+        assert_eq!(err.exit_code(), 1);
         assert!(err.is_timeout());
     }
 

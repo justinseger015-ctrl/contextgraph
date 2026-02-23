@@ -17,6 +17,12 @@ use super::super::hnsw_config::{DistanceMetric, EmbedderIndex, HnswConfig};
 /// # Panics
 ///
 /// Panics with "METRIC ERROR" if MaxSim is passed (requires token-level computation).
+///
+/// # STOR-L9: Exhaustive match
+///
+/// This match covers all `DistanceMetric` variants exhaustively (no catch-all `_` arm).
+/// If a new variant (e.g. Jaccard) is added to the enum, the compiler will force an
+/// update here. usearch supports `MetricKind::Jaccard` but our system does not use it.
 pub(crate) fn metric_to_usearch(metric: DistanceMetric) -> MetricKind {
     match metric {
         DistanceMetric::Cosine => MetricKind::Cos,
@@ -24,7 +30,7 @@ pub(crate) fn metric_to_usearch(metric: DistanceMetric) -> MetricKind {
         DistanceMetric::Euclidean => MetricKind::L2sq,
         DistanceMetric::AsymmetricCosine => MetricKind::Cos, // Asymmetry handled at query time
         DistanceMetric::MaxSim => {
-            panic!("METRIC ERROR: MaxSim not supported for HNSW - use E12 ColBERT index")
+            panic!("METRIC ERROR: MaxSim not supported for HNSW — use E12 ColBERT index")
         }
     }
 }

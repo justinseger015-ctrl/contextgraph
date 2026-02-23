@@ -46,19 +46,28 @@ pub fn generate_real_sparse_vector(target_nnz: usize) -> SparseVector {
 
 /// Generate a complete `SemanticFingerprint` with correct dimensions for all 13 embedders.
 pub fn generate_real_semantic_fingerprint() -> SemanticFingerprint {
-    let e5_vec = generate_real_unit_vector(768);
+    let e5_cause_vec = generate_real_unit_vector(768);
+    let e5_effect_vec = generate_real_unit_vector(768);
     SemanticFingerprint {
         e1_semantic: generate_real_unit_vector(1024),
         e2_temporal_recent: generate_real_unit_vector(512),
         e3_temporal_periodic: generate_real_unit_vector(512),
         e4_temporal_positional: generate_real_unit_vector(512),
-        e5_causal_as_cause: e5_vec.clone(),
-        e5_causal_as_effect: e5_vec,
+        e5_causal_as_cause: e5_cause_vec,
+        e5_causal_as_effect: e5_effect_vec,
+        // TST-L1: INTENTIONALLY empty. The legacy unified e5_causal field is deprecated;
+        // production uses the dual vectors (e5_causal_as_cause / e5_causal_as_effect).
+        // Empty vectors ensure tests exercise the CORRECT dual-vector path, not
+        // the legacy fallback which would produce zero scores.
         e5_causal: Vec::new(),
         e6_sparse: generate_real_sparse_vector(100),
         e7_code: generate_real_unit_vector(1536),
         e8_graph_as_source: generate_real_unit_vector(1024),
         e8_graph_as_target: generate_real_unit_vector(1024),
+        // TST-L1: INTENTIONALLY empty. The legacy unified e8_graph field is deprecated;
+        // production uses the dual vectors (e8_graph_as_source / e8_graph_as_target).
+        // Empty vectors ensure tests exercise the CORRECT dual-vector path, not
+        // the legacy fallback which would produce zero scores.
         e8_graph: Vec::new(),
         e9_hdc: generate_real_unit_vector(1024),
         e10_multimodal_paraphrase: generate_real_unit_vector(768),
@@ -87,12 +96,12 @@ pub fn create_real_fingerprint_with_id(id: Uuid) -> TeleologicalFingerprint {
     TeleologicalFingerprint::with_id(id, generate_real_semantic_fingerprint(), generate_real_content_hash())
 }
 
-/// Create a `TeleologicalFingerprint` with a random ID and real content hash.
+/// Create a `TeleologicalFingerprint` with the specified UUID and real content hash.
 ///
-/// The `_id` parameter is ignored — `TeleologicalFingerprint::new()` generates
-/// its own UUID. Kept for backward compatibility with callers that pass a UUID.
-pub fn generate_real_teleological_fingerprint(_id: Uuid) -> TeleologicalFingerprint {
-    create_real_fingerprint()
+/// TST-M1 FIX: Now uses the provided `id` via `create_real_fingerprint_with_id()`
+/// instead of ignoring it.
+pub fn generate_real_teleological_fingerprint(id: Uuid) -> TeleologicalFingerprint {
+    create_real_fingerprint_with_id(id)
 }
 
 /// Format bytes as hex string (limited to first 64 bytes for display).

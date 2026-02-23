@@ -620,21 +620,11 @@ fn compute_e4_similarity(fp1: &SemanticFingerprint, fp2: &SemanticFingerprint) -
     cosine_similarity(e4_1, e4_2)
 }
 
-/// Compute cosine similarity between two vectors.
+/// Compute cosine similarity between two vectors (raw [-1, 1] range).
+///
+/// Delegates to the canonical implementation in `crate::util`.
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a < f32::EPSILON || norm_b < f32::EPSILON {
-        0.0
-    } else {
-        (dot / (norm_a * norm_b)).clamp(-1.0, 1.0)
-    }
+    crate::util::cosine_similarity_raw(a, b)
 }
 
 impl TemporalRealdataBenchmarkResults {

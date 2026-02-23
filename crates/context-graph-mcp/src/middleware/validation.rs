@@ -20,8 +20,6 @@
 //! }
 //! ```
 
-#![allow(dead_code)]
-
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 use uuid::Uuid;
@@ -29,6 +27,11 @@ use uuid::Uuid;
 /// Validation error with field information.
 ///
 /// Error messages MUST include the field name for debugging.
+///
+/// Part of the SEC-01 validation library. Currently unused because handlers
+/// parse params via serde directly, but retained for handler migration to
+/// field-level validation (AP-14 compliance).
+#[allow(dead_code)]
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("Field '{field}' validation failed: {message}")]
@@ -52,6 +55,7 @@ pub enum ValidationError {
     SchemaViolation { field: String, details: String },
 }
 
+#[allow(dead_code)]
 impl ValidationError {
     /// Get the field name that failed validation.
     pub fn field_name(&self) -> &str {
@@ -70,6 +74,10 @@ impl ValidationError {
     }
 }
 
+// SEC-01 validation library: These validators are retained for migration from
+// raw serde_json::Value parsing to typed field-level validation in handlers.
+// Each function is tested and ready for incremental adoption.
+
 /// Validate a required string field is present and non-empty.
 ///
 /// # Arguments
@@ -79,6 +87,7 @@ impl ValidationError {
 /// # Returns
 /// * `Ok(String)` - Trimmed, non-empty string
 /// * `Err(ValidationError::MissingRequired)` - If None or empty
+#[allow(dead_code)]
 pub fn validate_required_string(
     field: &str,
     value: Option<&serde_json::Value>,
@@ -98,13 +107,14 @@ pub fn validate_required_string(
 /// * `value` - String to validate
 /// * `min` - Minimum length (inclusive)
 /// * `max` - Maximum length (inclusive)
+#[allow(dead_code)]
 pub fn validate_string_length(
     field: &str,
     value: &str,
     min: usize,
     max: usize,
 ) -> Result<(), ValidationError> {
-    let len = value.len();
+    let len = value.chars().count();
     if len < min || len > max {
         return Err(ValidationError::OutOfRange {
             field: field.to_string(),
@@ -123,6 +133,7 @@ pub fn validate_string_length(
 /// * `value` - Numeric value to validate
 /// * `min` - Minimum value (inclusive)
 /// * `max` - Maximum value (inclusive)
+#[allow(dead_code)]
 pub fn validate_range<N: PartialOrd + std::fmt::Display>(
     field: &str,
     value: N,
@@ -149,6 +160,7 @@ pub fn validate_range<N: PartialOrd + std::fmt::Display>(
 /// # Returns
 /// * `Ok(Uuid)` - Parsed UUID
 /// * `Err(ValidationError::InvalidFormat)` - If not valid UUID
+#[allow(dead_code)]
 pub fn validate_uuid(field: &str, value: &str) -> Result<Uuid, ValidationError> {
     Uuid::parse_str(value).map_err(|e| ValidationError::InvalidFormat {
         field: field.to_string(),
@@ -159,6 +171,7 @@ pub fn validate_uuid(field: &str, value: &str) -> Result<Uuid, ValidationError> 
 /// Validate optional integer within range.
 ///
 /// Returns default if value is None.
+#[allow(dead_code)]
 pub fn validate_optional_int(
     field: &str,
     value: Option<&serde_json::Value>,
@@ -187,6 +200,7 @@ pub fn validate_optional_int(
 /// Validate optional float within range.
 ///
 /// Returns default if value is None.
+#[allow(dead_code)]
 pub fn validate_optional_float(
     field: &str,
     value: Option<&serde_json::Value>,
@@ -221,6 +235,7 @@ pub fn validate_optional_float(
 /// Validate 13-element array (embedder weights/purpose vector).
 ///
 /// Constitution ARCH-01: "TeleologicalArray is atomic - store all 13 embeddings or nothing"
+#[allow(dead_code)]
 pub fn validate_13_element_array(
     field: &str,
     value: Option<&serde_json::Value>,
@@ -252,6 +267,7 @@ pub fn validate_13_element_array(
 /// Validate embedder index (0-12 per constitution).
 ///
 /// Constitution: 13 embedders E1-E13, indices 0-12.
+#[allow(dead_code)]
 pub fn validate_embedder_index(field: &str, value: usize) -> Result<(), ValidationError> {
     if value > 12 {
         return Err(ValidationError::OutOfRange {
@@ -265,23 +281,25 @@ pub fn validate_embedder_index(field: &str, value: usize) -> Result<(), Validati
 }
 
 // ============================================================================
-// SCHEMARS INTEGRATION (JsonSchema validation)
+// SCHEMARS INTEGRATION (typed deserialization)
 // ============================================================================
 
-/// Validate tool input against JsonSchema using schemars.
+/// Deserialize and type-check tool input parameters.
 ///
-/// Deserializes and validates params against T's JsonSchema.
-/// Returns strongly-typed T on success.
+/// Deserializes JSON params into strongly-typed T using serde.
+/// Type safety is enforced by T's Deserialize implementation:
+/// missing required fields, wrong types, and invalid values all
+/// produce descriptive errors.
 ///
 /// # Type Requirements
 /// T must implement:
-/// - `schemars::JsonSchema` - For schema generation
-/// - `serde::de::DeserializeOwned` - For deserialization
-pub fn validate_input<T>(params: serde_json::Value) -> Result<T, ValidationError>
+/// - `schemars::JsonSchema` - For MCP schema generation
+/// - `serde::de::DeserializeOwned` - For deserialization and type-checking
+#[allow(dead_code)]
+pub fn deserialize_input<T>(params: serde_json::Value) -> Result<T, ValidationError>
 where
     T: schemars::JsonSchema + DeserializeOwned,
 {
-    // First attempt deserialization
     serde_json::from_value::<T>(params.clone()).map_err(|e| ValidationError::SchemaViolation {
         field: "params".to_string(),
         details: e.to_string(),
@@ -502,7 +520,7 @@ mod tests {
     }
 
     // ========================================================================
-    // SCHEMARS INTEGRATION TEST
+    // DESERIALIZE_INPUT TEST
     // ========================================================================
 
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -512,9 +530,9 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_valid() {
+    fn test_deserialize_input_valid() {
         let params = json!({"name": "test", "count": 42});
-        let result: Result<TestInput, _> = validate_input(params);
+        let result: Result<TestInput, _> = deserialize_input(params);
         assert!(result.is_ok());
         let input = result.unwrap();
         assert_eq!(input.name, "test");
@@ -522,9 +540,9 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_invalid() {
+    fn test_deserialize_input_invalid() {
         let params = json!({"name": "test"}); // missing count
-        let result: Result<TestInput, _> = validate_input(params);
+        let result: Result<TestInput, _> = deserialize_input(params);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, ValidationError::SchemaViolation { .. }));

@@ -265,6 +265,41 @@ impl SemanticFingerprint {
         }
     }
 
+    /// Create a non-zero stub fingerprint for testing.
+    ///
+    /// Uses `0.1` for all dense vector components, which is valid for HNSW
+    /// insertion (non-zero norm). Prefer this over `zeroed()` when the test
+    /// stores the fingerprint via the teleological store (which validates
+    /// vectors before HNSW insertion).
+    ///
+    /// STOR-M1: `zeroed()` produces all-zero vectors that are now correctly
+    /// rejected by `validate_vector()` (cosine similarity is undefined for
+    /// zero-norm vectors).
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use]
+    pub fn stub() -> Self {
+        Self {
+            e1_semantic: vec![0.1; E1_DIM],
+            e2_temporal_recent: vec![0.1; E2_DIM],
+            e3_temporal_periodic: vec![0.1; E3_DIM],
+            e4_temporal_positional: vec![0.1; E4_DIM],
+            e5_causal_as_cause: vec![0.1; E5_DIM],
+            e5_causal_as_effect: vec![0.1; E5_DIM],
+            e5_causal: Vec::new(),
+            e6_sparse: SparseVector::empty(),
+            e7_code: vec![0.1; E7_DIM],
+            e8_graph_as_source: vec![0.1; E8_DIM],
+            e8_graph_as_target: vec![0.1; E8_DIM],
+            e8_graph: Vec::new(),
+            e9_hdc: vec![0.1; E9_DIM],
+            e10_multimodal_paraphrase: vec![0.1; E10_DIM],
+            e10_multimodal_as_context: vec![0.1; E10_DIM],
+            e11_entity: vec![0.1; E11_DIM],
+            e12_late_interaction: Vec::new(),
+            e13_splade: SparseVector::empty(),
+        }
+    }
+
     /// Get embedding by index (0-12).
     ///
     /// For E5 (index 4), returns the `e5_causal_as_cause` vector by default.
@@ -432,6 +467,13 @@ impl SemanticFingerprint {
     ///
     /// Returns `e10_multimodal_paraphrase` if populated, otherwise falls back to
     /// the `e10_multimodal_as_context` field for backward compatibility.
+    ///
+    /// STOR-L10: Unlike E5 and E8, E10 falls back to `e10_multimodal_as_context`
+    /// (the context-side dual vector) rather than a legacy unified field. This is
+    /// because E10 was introduced WITH dual vectors from the start — there was
+    /// never a legacy `e10_multimodal` unified field. E5 falls back to `e5_causal`
+    /// and E8 falls back to `e8_graph` because those fields existed before the
+    /// dual-vector migration.
     ///
     /// This is the default E10 vector used for symmetric similarity comparisons
     /// (when paraphrase/context direction is unknown or not relevant).

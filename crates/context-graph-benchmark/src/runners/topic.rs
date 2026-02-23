@@ -310,21 +310,11 @@ fn multi_space_clustering(
     ids.into_iter().zip(assignments).collect()
 }
 
-/// Compute cosine similarity.
+/// Compute cosine similarity (raw [-1, 1] range).
+///
+/// Delegates to the canonical implementation in `crate::util`.
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a < f32::EPSILON || norm_b < f32::EPSILON {
-        0.0
-    } else {
-        dot / (norm_a * norm_b)
-    }
+    crate::util::cosine_similarity_raw(a, b)
 }
 
 #[cfg(all(test, feature = "benchmark-tests"))]

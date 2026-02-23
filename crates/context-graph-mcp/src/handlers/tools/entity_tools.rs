@@ -740,7 +740,16 @@ impl Handlers {
                         .all(|q| cand_canonical_ids.contains(*q))
                 }
                 _ => {
-                    // "any" - at least one signal must be positive
+                    // "any" mode: at least one signal must be positive.
+                    // ET-L2: Results with e11_sim == 0.0 have no entity signal and rely
+                    // purely on E1 semantic similarity. This is by design — "any" mode
+                    // prioritizes recall over entity precision. Use "all" mode to require
+                    // entity signal in every result.
+                    if *e11_sim == 0.0 && entity_jaccard == 0.0 {
+                        tracing::debug!(
+                            "search_by_entities: 'any' mode candidate has no entity signal (E11=0.0, Jaccard=0.0), relying on E1 only"
+                        );
+                    }
                     entity_jaccard > 0.0 || *e1_sim > 0.3 || *e11_sim > 0.3
                 }
             };
@@ -1387,9 +1396,15 @@ impl Handlers {
                 {
                     // Compute E11 TransE score to determine if supporting or contradicting
                     // Per KEPLER paper: valid triples score > -5.0, invalid < -10.0
-                    let cand_e11 = &candidate.fingerprint.semantic.e11_entity;
+                    //
+                    // ET-L1: Using e11_entity as the tail entity vector is semantically correct.
+                    // In TransE, h + r ≈ t where t is the tail entity embedding. Each memory's
+                    // e11_entity IS its entity embedding (768D Kepler space), so for a candidate
+                    // memory representing an entity/concept, its e11_entity vector IS the correct
+                    // tail vector for scoring that triple.
+                    let tail_entity_vec = &candidate.fingerprint.semantic.e11_entity;
                     let cand_score =
-                        KeplerModel::transe_score(h, r, cand_e11);
+                        KeplerModel::transe_score(h, r, tail_entity_vec);
 
                     if cand_score > VALID_THRESHOLD {
                         // Good TransE alignment (> -5.0) - supporting
@@ -1413,10 +1428,14 @@ impl Handlers {
         let (hybrid_confidence, hybrid_validation, evidence_adjusted) = if no_evidence && confidence > 0.33 {
             // TransE says valid/uncertain but no memory support — can't verify
             (confidence * 0.5, "unverified".to_string(), true)
-        } else if contradict_count > support_count {
-            // More contradictions than support — evidence disagrees with TransE
+        } else if contradict_count > support_count && contradict_count >= 3 {
+            // Strong contradiction: 3+ contradictions AND more than support
             let evidence_factor = (support_count as f32) / (support_count as f32 + contradict_count as f32);
             (confidence * 0.6 + evidence_factor * 0.4, "contradicted_by_evidence".to_string(), true)
+        } else if contradict_count > support_count {
+            // Weak contradiction: more contradictions but not overwhelming (1-2 contradictions)
+            let evidence_factor = (support_count as f32) / (support_count as f32 + contradict_count as f32);
+            (confidence * 0.6 + evidence_factor * 0.4, "weakly_contradicted".to_string(), true)
         } else if !no_evidence {
             // Blend: 60% TransE + 40% evidence
             let evidence_score = (support_count as f32 - contradict_count as f32)

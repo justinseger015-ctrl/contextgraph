@@ -251,17 +251,18 @@ fn test_threshold_filters_all() {
         index.insert(Uuid::new_v4(), &vec).unwrap();
     }
 
-    // Use completely different query with threshold 0.99
-    let query = vec![0.0f32; 1024];
+    // STOR-M1: Use negative vector instead of zero-norm (which is now rejected).
+    // Negative vector is dissimilar to the positive inserted vectors.
+    let query = vec![-1.0f32; 1024];
     let result = search
         .search(EmbedderIndex::E8Graph, &query, 10, Some(0.99))
         .unwrap();
 
     println!(
-        "With threshold 0.99 on orthogonal vectors: {} results",
+        "With threshold 0.99 on dissimilar vectors: {} results",
         result.len()
     );
-    // All should be filtered because query is [0,0,0...] which is orthogonal
+    // All should be filtered because query is very dissimilar to inserted vectors
     assert!(result.is_empty());
 
     println!("RESULT: PASS");

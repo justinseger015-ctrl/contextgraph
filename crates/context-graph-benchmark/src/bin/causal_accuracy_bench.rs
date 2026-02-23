@@ -497,13 +497,7 @@ fn mechanism_examples() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)
 #[cfg(feature = "real-embeddings")]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     assert_eq!(a.len(), b.len(), "Vector dimensions must match");
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a < f32::EPSILON || norm_b < f32::EPSILON {
-        return 0.0;
-    }
-    (dot / (norm_a * norm_b)).clamp(-1.0, 1.0)
+    context_graph_benchmark::util::cosine_similarity_raw(a, b)
 }
 
 fn write_json_result<T: Serialize>(dir: &str, filename: &str, data: &T) -> Result<()> {

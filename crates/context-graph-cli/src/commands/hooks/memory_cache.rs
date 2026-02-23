@@ -208,37 +208,6 @@ pub fn clear_session_cache(session_id: &str) {
     }
 }
 
-/// Clean up all expired cache files.
-///
-/// Can be called periodically or at startup.
-#[allow(dead_code)]
-pub fn clear_expired_caches() {
-    let dir = std::env::temp_dir().join("cg-memory-cache");
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-
-    let mut removed = 0usize;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
-        }
-        if let Ok(data) = std::fs::read(&path) {
-            if let Ok(cache_file) = serde_json::from_slice::<CacheFile>(&data) {
-                if cache_file.is_expired() {
-                    let _ = std::fs::remove_file(&path);
-                    removed += 1;
-                }
-            }
-        }
-    }
-    if removed > 0 {
-        tracing::debug!(removed, "MEMORY_CACHE: Cleaned up expired cache files");
-    }
-}
-
 // =============================================================================
 // Tests
 // =============================================================================

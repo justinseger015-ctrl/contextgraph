@@ -106,15 +106,11 @@ pub fn mcp_error_to_exit_code(e: &McpClientError) -> i32 {
 /// Used to determine if an MCP error should be treated as blocking (exit 2).
 /// Only matches RocksDB-specific corruption patterns — NOT common error words
 /// like "not found" (normal for missing memories) or "invalid" (normal for bad input).
+///
+/// TST-H3 FIX: Delegates to shared `CORRUPTION_INDICATORS` in error.rs
+/// instead of maintaining a separate, divergent indicator list.
 fn is_corruption_message(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    lower.contains("corruption")
-        || lower.contains("corrupted")
-        || lower.contains("stale index")
-        || lower.contains("checksum mismatch")
-        || lower.contains("bad magic")
-        || lower.contains("crc error")
-        || lower.contains("truncated block")
+    crate::error::is_corruption_indicator(message)
 }
 
 // =============================================================================

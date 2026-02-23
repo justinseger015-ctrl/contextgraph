@@ -74,10 +74,17 @@ pub const E13_SPLADE_VOCAB: usize = 30_522;
 /// Updated from 12 to 13 with addition of E13 SPLADE.
 pub const NUM_EMBEDDERS: usize = 13;
 
-/// Total dense dimensions (excluding E6 sparse, E12 variable-length, and E13 sparse).
+/// Total dense dimensions for single-vector storage (excludes E6 sparse, E12 variable-length, and E13 sparse).
 ///
 /// Calculated as: E1 + E2 + E3 + E4 + E5 + E7 + E8 + E9 + E10 + E11
 /// = 1024 + 512 + 512 + 512 + 768 + 1536 + 1024 + 1024 + 768 + 768 = 8448
 /// (E8 upgraded from 384 to 1024)
+///
+/// STOR-L2: This is the SINGLE-VECTOR total. Actual storage is larger because
+/// E5, E8, and E10 store dual asymmetric vectors (cause/effect, source/target,
+/// paraphrase/context). With dual vectors the total is:
+///   8448 + E5_DIM(768) + E8_DIM(1024) + E10_DIM(768) = 11,008 dense dimensions.
+/// This constant is used for validation and sizing of the primary embedding array,
+/// not for total allocation. HNSW indexes handle dual vectors separately.
 pub const TOTAL_DENSE_DIMS: usize =
     E1_DIM + E2_DIM + E3_DIM + E4_DIM + E5_DIM + E7_DIM + E8_DIM + E9_DIM + E10_DIM + E11_DIM;

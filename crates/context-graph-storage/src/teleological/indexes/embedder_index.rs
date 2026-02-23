@@ -184,6 +184,17 @@ pub fn validate_vector(
         }
     }
 
+    // STOR-M1: Check for zero-norm vector (cosine similarity is undefined)
+    let norm_sq: f32 = vector.iter().map(|v| v * v).sum();
+    if norm_sq == 0.0 {
+        return Err(IndexError::InvalidVector {
+            message: format!(
+                "Zero-norm vector for embedder {:?} — cosine similarity undefined",
+                embedder
+            ),
+        });
+    }
+
     Ok(())
 }
 
@@ -314,6 +325,27 @@ mod tests {
             IndexError::InvalidVector { message } => {
                 assert!(message.contains("Non-finite"));
                 assert!(message.contains("index 50"));
+            }
+            _ => panic!("Wrong error type"),
+        }
+        println!("RESULT: PASS");
+    }
+
+    #[test]
+    fn test_validate_vector_zero_norm() {
+        println!("=== TEST: validate_vector rejects zero-norm vector (STOR-M1) ===");
+        println!("BEFORE: vector = all zeros, len=1024");
+
+        let vector = vec![0.0; 1024];
+        let result = validate_vector(&vector, 1024, EmbedderIndex::E1Semantic);
+
+        println!("AFTER: result={:?}", result);
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            IndexError::InvalidVector { message } => {
+                assert!(message.contains("Zero-norm"));
+                assert!(message.contains("E1Semantic"));
             }
             _ => panic!("Wrong error type"),
         }

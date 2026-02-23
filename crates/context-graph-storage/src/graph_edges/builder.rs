@@ -160,10 +160,6 @@ pub struct BackgroundGraphBuilder {
     /// Teleological memory store for retrieving fingerprints.
     teleological_store: Arc<dyn TeleologicalMemoryStore>,
 
-    /// Multi-array embedding provider for similarity computation.
-    #[allow(dead_code)]
-    multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
-
     /// Configuration.
     config: GraphBuilderConfig,
 
@@ -201,12 +197,12 @@ impl BackgroundGraphBuilder {
     ///
     /// * `edge_repository` - Repository for storing K-NN and typed edges
     /// * `teleological_store` - Store for retrieving fingerprints
-    /// * `multi_array_provider` - Provider for computing embeddings
+    /// * `_multi_array_provider` - Previously used for computing embeddings (kept for API compat)
     /// * `config` - Builder configuration
     pub fn new(
         edge_repository: EdgeRepository,
         teleological_store: Arc<dyn TeleologicalMemoryStore>,
-        multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
+        _multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
         config: GraphBuilderConfig,
     ) -> Self {
         info!(
@@ -217,7 +213,6 @@ impl BackgroundGraphBuilder {
         Self {
             edge_repository,
             teleological_store,
-            multi_array_provider,
             config,
             pending_queue: Arc::new(Mutex::new(VecDeque::new())),
             running: Arc::new(AtomicBool::new(false)),

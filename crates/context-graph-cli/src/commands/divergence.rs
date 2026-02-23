@@ -119,29 +119,34 @@ async fn handle_check(args: CheckArgs) -> i32 {
     }
 }
 
-/// Print divergence alerts in human-readable format.
-fn print_divergence(result: &serde_json::Value, verbose: bool) {
-    println!("Divergence Analysis");
-    println!("===================\n");
+/// Format divergence alerts as human-readable string.
+///
+/// TST-M4 FIX: Extracted from `print_divergence` so tests can assert on content.
+fn format_divergence(result: &serde_json::Value, verbose: bool) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+
+    writeln!(out, "Divergence Analysis").unwrap();
+    writeln!(out, "===================\n").unwrap();
 
     // Get overall divergence status
     let is_divergent = result.get("is_divergent").and_then(|d| d.as_bool()).unwrap_or(false);
     let divergence_score = result.get("divergence_score").and_then(|s| s.as_f64()).unwrap_or(0.0);
     let lookback_hours = result.get("lookback_hours").and_then(|h| h.as_u64()).unwrap_or(2);
 
-    println!("Lookback Period: {} hours", lookback_hours);
-    println!("Divergence Score: {:.2}", divergence_score);
-    println!();
+    writeln!(out, "Lookback Period: {} hours", lookback_hours).unwrap();
+    writeln!(out, "Divergence Score: {:.2}", divergence_score).unwrap();
+    writeln!(out).unwrap();
 
     if is_divergent {
-        println!("STATUS: DIVERGENT");
-        println!("Current activity differs from recent patterns.");
-        println!();
+        writeln!(out, "STATUS: DIVERGENT").unwrap();
+        writeln!(out, "Current activity differs from recent patterns.").unwrap();
+        writeln!(out).unwrap();
 
         // Show alerts if any
         if let Some(alerts) = result.get("alerts").and_then(|a| a.as_array()) {
             if !alerts.is_empty() {
-                println!("Alerts:");
+                writeln!(out, "Alerts:").unwrap();
                 for alert in alerts {
                     let msg = alert.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown alert");
                     let severity = alert.get("severity").and_then(|s| s.as_str()).unwrap_or("info");
@@ -150,16 +155,16 @@ fn print_divergence(result: &serde_json::Value, verbose: bool) {
                         "medium" | "warning" => "!",
                         _ => "-",
                     };
-                    println!("  {} {}", icon, msg);
+                    writeln!(out, "  {} {}", icon, msg).unwrap();
                 }
-                println!();
+                writeln!(out).unwrap();
             }
         }
 
         // Verbose: show per-embedder scores
         if verbose {
             if let Some(scores) = result.get("embedder_divergences").and_then(|s| s.as_object()) {
-                println!("Embedder-Level Divergence (SEMANTIC only):");
+                writeln!(out, "Embedder-Level Divergence (SEMANTIC only):").unwrap();
                 // Sort by divergence score descending
                 let mut score_vec: Vec<_> = scores.iter().collect();
                 score_vec.sort_by(|a, b| {
@@ -172,33 +177,40 @@ fn print_divergence(result: &serde_json::Value, verbose: bool) {
                     let val = score.as_f64().unwrap_or(0.0);
                     let bar_len = (val * 20.0) as usize;
                     let bar = "#".repeat(bar_len.min(20));
-                    println!("  {:15} {:.3} |{}|", embedder, val, bar);
+                    writeln!(out, "  {:15} {:.3} |{}|", embedder, val, bar).unwrap();
                 }
-                println!();
+                writeln!(out).unwrap();
             }
         }
 
-        println!("Note: Divergence may be intentional (new topic exploration)");
-        println!("      or indicate context switch that should be captured.");
+        writeln!(out, "Note: Divergence may be intentional (new topic exploration)").unwrap();
+        writeln!(out, "      or indicate context switch that should be captured.").unwrap();
     } else {
-        println!("STATUS: ALIGNED");
-        println!("Current activity aligns with recent patterns.");
+        writeln!(out, "STATUS: ALIGNED").unwrap();
+        writeln!(out, "Current activity aligns with recent patterns.").unwrap();
 
         if verbose {
             // Show per-embedder scores even when aligned
             if let Some(scores) = result.get("embedder_divergences").and_then(|s| s.as_object()) {
-                println!("\nEmbedder-Level Divergence (SEMANTIC only):");
+                writeln!(out, "\nEmbedder-Level Divergence (SEMANTIC only):").unwrap();
                 for (embedder, score) in scores {
                     let val = score.as_f64().unwrap_or(0.0);
-                    println!("  {:15} {:.3}", embedder, val);
+                    writeln!(out, "  {:15} {:.3}", embedder, val).unwrap();
                 }
             }
         }
     }
 
     // Note about temporal exclusion
-    println!();
-    println!("(Temporal embedders E2-E4 excluded per AP-62, AP-63)");
+    writeln!(out).unwrap();
+    writeln!(out, "(Temporal embedders E2-E4 excluded per AP-62, AP-63)").unwrap();
+
+    out
+}
+
+/// Print divergence alerts in human-readable format.
+fn print_divergence(result: &serde_json::Value, verbose: bool) {
+    print!("{}", format_divergence(result, verbose));
 }
 
 #[cfg(test)]
@@ -218,19 +230,24 @@ mod tests {
     }
 
     #[test]
-    fn test_print_divergence_aligned() {
+    fn test_format_divergence_aligned() {
         let result = serde_json::json!({
             "is_divergent": false,
             "divergence_score": 0.15,
             "lookback_hours": 2,
             "alerts": []
         });
-        // Just ensure it doesn't panic
-        print_divergence(&result, false);
+        let output = format_divergence(&result, false);
+        assert!(output.contains("Divergence Analysis"));
+        assert!(output.contains("Lookback Period: 2 hours"));
+        assert!(output.contains("Divergence Score: 0.15"));
+        assert!(output.contains("STATUS: ALIGNED"));
+        assert!(output.contains("Current activity aligns with recent patterns."));
+        assert!(output.contains("Temporal embedders E2-E4 excluded"));
     }
 
     #[test]
-    fn test_print_divergence_divergent_verbose() {
+    fn test_format_divergence_divergent_verbose() {
         let result = serde_json::json!({
             "is_divergent": true,
             "divergence_score": 0.75,
@@ -246,7 +263,36 @@ mod tests {
                 "E10_multimodal": 0.30
             }
         });
-        // Just ensure it doesn't panic
-        print_divergence(&result, true);
+        let output = format_divergence(&result, true);
+        assert!(output.contains("STATUS: DIVERGENT"));
+        assert!(output.contains("Divergence Score: 0.75"));
+        assert!(output.contains("Alerts:"));
+        // High severity gets "!!" prefix
+        assert!(output.contains("!! Significant topic shift detected"));
+        // Medium severity gets "!" prefix
+        assert!(output.contains("! Code patterns differ from recent work"));
+        // Verbose shows per-embedder scores
+        assert!(output.contains("Embedder-Level Divergence (SEMANTIC only):"));
+        assert!(output.contains("E7_code"));
+        assert!(output.contains("0.850"));
+        assert!(output.contains("E1_semantic"));
+        assert!(output.contains("0.650"));
+    }
+
+    #[test]
+    fn test_format_divergence_non_verbose_hides_embedders() {
+        let result = serde_json::json!({
+            "is_divergent": true,
+            "divergence_score": 0.75,
+            "lookback_hours": 4,
+            "alerts": [],
+            "embedder_divergences": {
+                "E1_semantic": 0.65
+            }
+        });
+        let output = format_divergence(&result, false);
+        assert!(output.contains("STATUS: DIVERGENT"));
+        // Non-verbose should NOT show embedder-level scores
+        assert!(!output.contains("Embedder-Level Divergence"));
     }
 }

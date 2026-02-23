@@ -272,16 +272,21 @@ async fn handle_detect(args: DetectArgs) -> i32 {
     }
 }
 
-/// Print portfolio in human-readable format.
-fn print_portfolio(result: &serde_json::Value, format: TopicFormat) {
-    println!("Topic Portfolio");
-    println!("===============\n");
+/// Format portfolio as human-readable string.
+///
+/// TST-M4 FIX: Extracted from `print_portfolio` so tests can assert on content.
+fn format_portfolio(result: &serde_json::Value, format: TopicFormat) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+
+    writeln!(out, "Topic Portfolio").unwrap();
+    writeln!(out, "===============\n").unwrap();
 
     if let Some(topics) = result.get("topics").and_then(|t| t.as_array()) {
         if topics.is_empty() {
-            println!("No topics discovered yet.");
-            println!("Tip: Topics emerge when weighted_agreement >= 2.5");
-            return;
+            writeln!(out, "No topics discovered yet.").unwrap();
+            writeln!(out, "Tip: Topics emerge when weighted_agreement >= 2.5").unwrap();
+            return out;
         }
 
         for topic in topics {
@@ -291,56 +296,68 @@ fn print_portfolio(result: &serde_json::Value, format: TopicFormat) {
 
             match format {
                 TopicFormat::Brief => {
-                    println!("  - {} (confidence: {:.2})", name, confidence);
+                    writeln!(out, "  - {} (confidence: {:.2})", name, confidence).unwrap();
                 }
                 TopicFormat::Standard => {
-                    println!("Topic: {}", name);
-                    println!("  Confidence: {:.2}", confidence);
-                    println!("  Weighted Agreement: {:.2}", weighted_agreement);
+                    writeln!(out, "Topic: {}", name).unwrap();
+                    writeln!(out, "  Confidence: {:.2}", confidence).unwrap();
+                    writeln!(out, "  Weighted Agreement: {:.2}", weighted_agreement).unwrap();
                     if let Some(spaces) = topic.get("contributing_spaces").and_then(|s| s.as_array()) {
                         let space_names: Vec<&str> = spaces
                             .iter()
                             .filter_map(|s| s.as_str())
                             .collect();
-                        println!("  Contributing Spaces: {}", space_names.join(", "));
+                        writeln!(out, "  Contributing Spaces: {}", space_names.join(", ")).unwrap();
                     }
-                    println!();
+                    writeln!(out).unwrap();
                 }
                 TopicFormat::Verbose => {
-                    println!("Topic: {}", name);
-                    println!("  Confidence: {:.2}", confidence);
-                    println!("  Weighted Agreement: {:.2}", weighted_agreement);
+                    writeln!(out, "Topic: {}", name).unwrap();
+                    writeln!(out, "  Confidence: {:.2}", confidence).unwrap();
+                    writeln!(out, "  Weighted Agreement: {:.2}", weighted_agreement).unwrap();
                     if let Some(spaces) = topic.get("contributing_spaces").and_then(|s| s.as_array()) {
                         let space_names: Vec<&str> = spaces
                             .iter()
                             .filter_map(|s| s.as_str())
                             .collect();
-                        println!("  Contributing Spaces: {}", space_names.join(", "));
+                        writeln!(out, "  Contributing Spaces: {}", space_names.join(", ")).unwrap();
                     }
                     if let Some(strengths) = topic.get("embedder_strengths").and_then(|s| s.as_object()) {
-                        println!("  Embedder Strengths:");
+                        writeln!(out, "  Embedder Strengths:").unwrap();
                         for (embedder, strength) in strengths {
                             let val = strength.as_f64().unwrap_or(0.0);
                             if val > 0.0 {
-                                println!("    {}: {:.3}", embedder, val);
+                                writeln!(out, "    {}: {:.3}", embedder, val).unwrap();
                             }
                         }
                     }
-                    println!();
+                    writeln!(out).unwrap();
                 }
             }
         }
 
-        println!("Total: {} topics", topics.len());
+        writeln!(out, "Total: {} topics", topics.len()).unwrap();
     } else {
-        println!("No topic data available.");
+        writeln!(out, "No topic data available.").unwrap();
     }
+
+    out
 }
 
-/// Print stability metrics in human-readable format.
-fn print_stability(result: &serde_json::Value) {
-    println!("Topic Stability Metrics");
-    println!("=======================\n");
+/// Print portfolio in human-readable format.
+fn print_portfolio(result: &serde_json::Value, format: TopicFormat) {
+    print!("{}", format_portfolio(result, format));
+}
+
+/// Format stability metrics as human-readable string.
+///
+/// TST-M4 FIX: Extracted from `print_stability` so tests can assert on content.
+fn format_stability(result: &serde_json::Value) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+
+    writeln!(out, "Topic Stability Metrics").unwrap();
+    writeln!(out, "=======================\n").unwrap();
 
     let churn_rate = result.get("churn_rate").and_then(|c| c.as_f64()).unwrap_or(0.0);
     let entropy = result.get("entropy").and_then(|e| e.as_f64()).unwrap_or(0.0);
@@ -354,7 +371,7 @@ fn print_stability(result: &serde_json::Value) {
     } else {
         "Unstable"
     };
-    println!("Churn Rate: {:.2} ({})", churn_rate, churn_status);
+    writeln!(out, "Churn Rate: {:.2} ({})", churn_rate, churn_status).unwrap();
 
     // Entropy with status
     let entropy_status = if entropy < 0.5 {
@@ -364,27 +381,34 @@ fn print_stability(result: &serde_json::Value) {
     } else {
         "High"
     };
-    println!("Entropy: {:.2} ({})", entropy, entropy_status);
+    writeln!(out, "Entropy: {:.2} ({})", entropy, entropy_status).unwrap();
 
     // Phase breakdown
     if let Some(phases) = result.get("phases").and_then(|p| p.as_object()) {
-        println!("\nPhase Breakdown:");
+        writeln!(out, "\nPhase Breakdown:").unwrap();
         for (phase, count) in phases {
             let count_val = count.as_u64().unwrap_or(0);
             if count_val > 0 {
-                println!("  {}: {}", phase, count_val);
+                writeln!(out, "  {}: {}", phase, count_val).unwrap();
             }
         }
     }
 
     // Status
-    println!();
+    writeln!(out).unwrap();
     if dream_recommended {
-        println!("! High entropy/churn detected");
-        println!("  (entropy > 0.7 AND churn > 0.5)");
+        writeln!(out, "! High entropy/churn detected").unwrap();
+        writeln!(out, "  (entropy > 0.7 AND churn > 0.5)").unwrap();
     } else {
-        println!("Topic structure is stable.");
+        writeln!(out, "Topic structure is stable.").unwrap();
     }
+
+    out
+}
+
+/// Print stability metrics in human-readable format.
+fn print_stability(result: &serde_json::Value) {
+    print!("{}", format_stability(result));
 }
 
 /// Print detection result in human-readable format.
@@ -448,16 +472,47 @@ mod tests {
     }
 
     #[test]
-    fn test_print_portfolio_empty() {
+    fn test_format_portfolio_empty() {
         let result = serde_json::json!({
             "topics": []
         });
-        // Just ensure it doesn't panic
-        print_portfolio(&result, TopicFormat::Standard);
+        let output = format_portfolio(&result, TopicFormat::Standard);
+        assert!(output.contains("Topic Portfolio"));
+        assert!(output.contains("No topics discovered yet."));
+        assert!(output.contains("weighted_agreement >= 2.5"));
     }
 
     #[test]
-    fn test_print_stability_dream_recommended() {
+    fn test_format_portfolio_with_topics() {
+        let result = serde_json::json!({
+            "topics": [
+                {
+                    "name": "Authentication",
+                    "confidence": 0.85,
+                    "weighted_agreement": 3.2,
+                    "contributing_spaces": ["E1", "E7"]
+                }
+            ]
+        });
+        let output = format_portfolio(&result, TopicFormat::Standard);
+        assert!(output.contains("Topic: Authentication"));
+        assert!(output.contains("Confidence: 0.85"));
+        assert!(output.contains("Weighted Agreement: 3.20"));
+        assert!(output.contains("E1, E7"));
+        assert!(output.contains("Total: 1 topics"));
+    }
+
+    #[test]
+    fn test_format_portfolio_brief() {
+        let result = serde_json::json!({
+            "topics": [{"name": "Auth", "confidence": 0.9}]
+        });
+        let output = format_portfolio(&result, TopicFormat::Brief);
+        assert!(output.contains("Auth (confidence: 0.90)"));
+    }
+
+    #[test]
+    fn test_format_stability_dream_recommended() {
         let result = serde_json::json!({
             "churn_rate": 0.6,
             "entropy": 0.8,
@@ -468,7 +523,26 @@ mod tests {
                 "declining": 1
             }
         });
-        // Just ensure it doesn't panic
-        print_stability(&result);
+        let output = format_stability(&result);
+        assert!(output.contains("Topic Stability Metrics"));
+        assert!(output.contains("Churn Rate: 0.60 (Unstable)"));
+        assert!(output.contains("Entropy: 0.80 (High)"));
+        assert!(output.contains("! High entropy/churn detected"));
+        assert!(output.contains("Phase Breakdown:"));
+        assert!(output.contains("stable: 3"));
+        assert!(output.contains("emerging: 2"));
+    }
+
+    #[test]
+    fn test_format_stability_healthy() {
+        let result = serde_json::json!({
+            "churn_rate": 0.1,
+            "entropy": 0.3,
+            "dream_recommended": false
+        });
+        let output = format_stability(&result);
+        assert!(output.contains("Churn Rate: 0.10 (Healthy)"));
+        assert!(output.contains("Entropy: 0.30 (Low)"));
+        assert!(output.contains("Topic structure is stable."));
     }
 }

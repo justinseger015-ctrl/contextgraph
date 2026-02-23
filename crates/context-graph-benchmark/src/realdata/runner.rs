@@ -488,20 +488,11 @@ fn multi_space_similarity(a: &SemanticFingerprint, b: &SemanticFingerprint) -> f
     0.4 * e1_sim + 0.3 * e5_sim + 0.2 * e7_sim + 0.1 * e10_sim
 }
 
+/// Compute cosine similarity between two vectors (raw [-1, 1] range).
+///
+/// Delegates to the canonical implementation in `crate::util`.
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 0.0;
-    }
-
-    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a < f32::EPSILON || norm_b < f32::EPSILON {
-        return 0.0;
-    }
-
-    dot / (norm_a * norm_b)
+    crate::util::cosine_similarity_raw(a, b)
 }
 
 fn combine_embeddings(fp: &SemanticFingerprint) -> Vec<f32> {

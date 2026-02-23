@@ -244,3 +244,38 @@ pub(crate) fn component_variance_f32(v: &[f32]) -> f32 {
     let mean = v.iter().sum::<f32>() / n;
     v.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / n
 }
+
+/// Compute human-readable position label for sequence numbers.
+///
+/// MT-L1: Deduplicated from memory_tools.rs and sequence_tools.rs.
+///
+/// Returns labels like:
+/// - "current turn" (same sequence)
+/// - "previous turn" (1 turn ago)
+/// - "2 turns ago" (2 turns ago)
+/// - "N turns ago" (N turns ago)
+/// - "next turn" / "N turns ahead" (if result_seq > current_seq)
+///
+/// # Arguments
+/// * `result_seq` - The session sequence of the result
+/// * `current_seq` - The current session sequence
+pub(crate) fn compute_position_label(result_seq: u64, current_seq: u64) -> String {
+    if result_seq == current_seq {
+        "current turn".to_string()
+    } else if result_seq < current_seq {
+        let turns_ago = current_seq - result_seq;
+        if turns_ago == 1 {
+            "previous turn".to_string()
+        } else {
+            format!("{} turns ago", turns_ago)
+        }
+    } else {
+        // Future turn (shouldn't normally happen, but handle gracefully)
+        let turns_ahead = result_seq - current_seq;
+        if turns_ahead == 1 {
+            "next turn".to_string()
+        } else {
+            format!("{} turns ahead", turns_ahead)
+        }
+    }
+}

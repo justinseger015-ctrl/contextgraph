@@ -18,7 +18,7 @@
 //! - `indexes`: Secondary index operations (tags, temporal, sources)
 //! - `code`: Code entity and E7 embedding storage (separate from text)
 //!
-//! # Column Families (50 total)
+//! # Column Families (51 total)
 //!
 //! Base (11): nodes, edges, embeddings, metadata, temporal, tags, sources, system,
 //!            embedder_edges, typed_edges, typed_edges_by_type

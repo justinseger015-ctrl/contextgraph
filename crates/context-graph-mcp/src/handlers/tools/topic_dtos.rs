@@ -429,13 +429,6 @@ pub struct PhaseBreakdown {
     pub merging: u32,
 }
 
-impl PhaseBreakdown {
-    /// Total count of all topics.
-    #[allow(dead_code)] // Used when full clustering integration is complete
-    pub fn total(&self) -> u32 {
-        self.emerging + self.stable + self.declining + self.merging
-    }
-}
 
 /// Response for detect_topics tool.
 #[derive(Debug, Clone, Serialize)]
@@ -776,7 +769,7 @@ mod tests {
         let json = serde_json::to_string(&phases).unwrap();
         assert!(json.contains("\"emerging\":2"));
         assert!(json.contains("\"stable\":8"));
-        assert_eq!(phases.total(), 11);
+        assert_eq!(phases.emerging + phases.stable + phases.declining + phases.merging, 11);
         println!("[PASS] PhaseBreakdown serializes correctly");
     }
 

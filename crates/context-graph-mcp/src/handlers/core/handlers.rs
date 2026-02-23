@@ -14,7 +14,7 @@ use parking_lot::RwLock;
 use serde_json::json;
 use tracing::{info, warn};
 
-use context_graph_core::clustering::MultiSpaceClusterManager;
+use context_graph_core::clustering::{ClusterError, MultiSpaceClusterManager};
 use context_graph_core::memory::{CodeEmbeddingProvider, CodeStorage};
 use context_graph_core::monitoring::LayerStatusProvider;
 use context_graph_core::traits::{MultiArrayEmbeddingProvider, TeleologicalMemoryStore};
@@ -141,6 +141,10 @@ pub struct Handlers {
 
 impl Handlers {
     /// Create handlers with default clustering components.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ClusterError` if default cluster manager initialization fails.
     #[cfg(feature = "llm")]
     #[allow(dead_code)]
     pub fn with_defaults(
@@ -148,13 +152,12 @@ impl Handlers {
         multi_array_provider: Arc<dyn MultiArrayEmbeddingProvider>,
         layer_status_provider: Arc<dyn LayerStatusProvider>,
         graph_discovery_service: Arc<GraphDiscoveryService>,
-    ) -> Self {
+    ) -> Result<Self, ClusterError> {
         info!("Creating Handlers with_defaults");
 
-        let cluster_manager = MultiSpaceClusterManager::with_defaults()
-            .expect("Default cluster manager should always succeed");
+        let cluster_manager = MultiSpaceClusterManager::with_defaults()?;
 
-        Self {
+        Ok(Self {
             teleological_store,
             multi_array_provider,
             layer_status_provider,
@@ -171,7 +174,7 @@ impl Handlers {
             causal_discovery_llm: None,
             causal_model: None,
             daemon_state: None,
-        }
+        })
     }
 
     /// Create handlers with graph discovery and inline causal extraction enabled.
@@ -201,13 +204,12 @@ impl Handlers {
         causal_hint_provider: Arc<dyn context_graph_embeddings::provider::CausalHintProvider>,
         causal_discovery_llm: Arc<context_graph_causal_agent::CausalDiscoveryLLM>,
         causal_model: Arc<CausalModel>,
-    ) -> Self {
+    ) -> Result<Self, ClusterError> {
         info!("Creating Handlers with graph discovery, causal hints, and inline causal extraction - NO FALLBACKS");
 
-        let cluster_manager = MultiSpaceClusterManager::with_defaults()
-            .expect("Default cluster manager should always succeed");
+        let cluster_manager = MultiSpaceClusterManager::with_defaults()?;
 
-        Self {
+        Ok(Self {
             teleological_store,
             multi_array_provider,
             layer_status_provider,
@@ -224,7 +226,7 @@ impl Handlers {
             causal_discovery_llm: Some(causal_discovery_llm),
             causal_model: Some(causal_model),
             daemon_state: None,
-        }
+        })
     }
 
     /// Create handlers without LLM features.
@@ -240,13 +242,12 @@ impl Handlers {
         edge_repository: EdgeRepository,
         graph_builder: Arc<BackgroundGraphBuilder>,
         causal_hint_provider: Arc<dyn context_graph_embeddings::provider::CausalHintProvider>,
-    ) -> Self {
+    ) -> Result<Self, ClusterError> {
         info!("Creating Handlers without LLM (graph/causal discovery tools unavailable)");
 
-        let cluster_manager = MultiSpaceClusterManager::with_defaults()
-            .expect("Default cluster manager should always succeed");
+        let cluster_manager = MultiSpaceClusterManager::with_defaults()?;
 
-        Self {
+        Ok(Self {
             teleological_store,
             multi_array_provider,
             layer_status_provider,
@@ -266,7 +267,7 @@ impl Handlers {
             #[cfg(feature = "llm")]
             causal_model: None,
             daemon_state: None,
-        }
+        })
     }
 
     // =========================================================================
@@ -294,14 +295,6 @@ impl Handlers {
     // Graph Linking Pipeline Accessors (TASK-GRAPHLINK)
     // =========================================================================
 
-    /// Check if the graph linking pipeline is available.
-    ///
-    /// Returns true if edge_repository is configured.
-    #[allow(dead_code)]
-    pub fn has_graph_linking(&self) -> bool {
-        self.edge_repository.is_some()
-    }
-
     /// Get the edge repository if available.
     #[allow(dead_code)]
     pub fn edge_repository(&self) -> Option<&EdgeRepository> {
@@ -313,15 +306,6 @@ impl Handlers {
     /// The graph builder queues fingerprints on store_memory and builds K-NN edges in batches.
     pub fn graph_builder(&self) -> Option<&Arc<BackgroundGraphBuilder>> {
         self.graph_builder.as_ref()
-    }
-
-    /// Check if the background graph builder is available and running.
-    #[allow(dead_code)]
-    pub fn has_graph_builder(&self) -> bool {
-        self.graph_builder
-            .as_ref()
-            .map(|b| b.is_running())
-            .unwrap_or(false)
     }
 
     // =========================================================================

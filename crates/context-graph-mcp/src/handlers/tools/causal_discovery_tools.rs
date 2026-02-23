@@ -109,6 +109,11 @@ impl Handlers {
             .get("dryRun")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        // CD-M1 FIX: Accept optional session_id for actual session filtering
+        let session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         // Validate parameters
         if !(1..=200).contains(&max_memories) {
@@ -126,6 +131,7 @@ impl Handlers {
             max_memories = max_memories,
             min_confidence = min_confidence,
             session_scope = session_scope,
+            session_id = ?session_id,
             dry_run = dry_run,
             "trigger_causal_discovery: Starting"
         );
@@ -148,61 +154,111 @@ impl Handlers {
             }
         };
 
-        // For now, we'll get recent fingerprints from the store and run discovery
-        // In the future, this could be optimized with a dedicated candidate finder
-
-        // Get list of indexed files as a proxy for available content
-        let indexed_files = match self.teleological_store.list_indexed_files().await {
-            Ok(files) => files,
-            Err(e) => {
-                warn!(error = %e, "trigger_causal_discovery: Could not list indexed files");
-                Vec::new()
-            }
-        };
-
-        // MCP-01 FIX: Apply sessionScope filter to indexed files.
-        // "current" = last 10 files, "recent" = last 50 files, "all" = no filter.
-        if indexed_files.is_empty() {
-            return self.tool_error(
-                id,
-                "No files are indexed - cannot perform causal discovery. Store some memories first.",
-            );
-        }
-
-        let scoped_files: Vec<_> = match session_scope {
-            "current" => indexed_files.into_iter().rev().take(10).collect(),
-            "recent" => indexed_files.into_iter().rev().take(50).collect(),
-            _ => indexed_files, // "all"
-        };
-
-        // Collect memory IDs from indexed files (up to max_memories * 2 to have enough pairs)
+        // CD-M1 FIX: When sessionScope="current" and session_id is provided,
+        // filter by actual session_id from source_metadata instead of file-count proxy.
         let mut memory_ids: Vec<uuid::Uuid> = Vec::new();
         let mut file_read_errors: Vec<String> = Vec::new();
-        for file in scoped_files.iter().take(max_memories * 2) {
-            match self
+        let mut used_session_filter = false;
+
+        if let (true, Some(sid)) = (session_scope == "current", session_id.as_ref()) {
+            // Actual session_id filtering via source_metadata
+            info!(
+                session_id = %sid,
+                "trigger_causal_discovery: Using actual session_id filter (not file-count proxy)"
+            );
+
+            // Get all fingerprint IDs, then filter by session_id in source_metadata
+            let all_fingerprints = match self
                 .teleological_store
-                .get_fingerprints_for_file(&file.file_path)
+                .scan_fingerprints_for_clustering(Some(max_memories * 4))
                 .await
             {
-                Ok(ids) => {
-                    memory_ids.extend(ids);
-                    if memory_ids.len() >= max_memories * 2 {
-                        break;
+                Ok(fps) => fps,
+                Err(e) => {
+                    error!(error = %e, "trigger_causal_discovery: Failed to scan fingerprints");
+                    return self.tool_error(
+                        id,
+                        &format!("Failed to scan fingerprints: {}", e),
+                    );
+                }
+            };
+
+            for (fp_id, _) in &all_fingerprints {
+                match self.teleological_store.get_source_metadata(*fp_id).await {
+                    Ok(Some(meta)) if meta.session_id.as_deref() == Some(sid.as_str()) => {
+                        memory_ids.push(*fp_id);
+                        if memory_ids.len() >= max_memories * 2 {
+                            break;
+                        }
+                    }
+                    Ok(_) => {} // No metadata or different session
+                    Err(e) => {
+                        debug!(
+                            error = %e,
+                            fp_id = %fp_id,
+                            "trigger_causal_discovery: Failed to read source_metadata for session filter"
+                        );
                     }
                 }
+            }
+            used_session_filter = true;
+        } else {
+            // File-count proxy fallback (original behavior)
+            if session_scope == "current" && session_id.is_none() {
+                warn!(
+                    "trigger_causal_discovery: sessionScope='current' but no session_id provided. \
+                     Using approximate file-count proxy (last 10 files). Pass session_id for precise filtering."
+                );
+            }
+
+            let indexed_files = match self.teleological_store.list_indexed_files().await {
+                Ok(files) => files,
                 Err(e) => {
-                    error!(
-                        error = %e,
-                        file_path = %file.file_path,
-                        "trigger_causal_discovery: Failed to read fingerprints for file"
-                    );
-                    file_read_errors.push(format!("{}: {}", file.file_path, e));
+                    warn!(error = %e, "trigger_causal_discovery: Could not list indexed files");
+                    Vec::new()
+                }
+            };
+
+            if indexed_files.is_empty() {
+                return self.tool_error(
+                    id,
+                    "No files are indexed - cannot perform causal discovery. Store some memories first.",
+                );
+            }
+
+            let scoped_files: Vec<_> = match session_scope {
+                "current" => indexed_files.into_iter().rev().take(10).collect(),
+                "recent" => indexed_files.into_iter().rev().take(50).collect(),
+                _ => indexed_files, // "all"
+            };
+
+            for file in scoped_files.iter().take(max_memories * 2) {
+                match self
+                    .teleological_store
+                    .get_fingerprints_for_file(&file.file_path)
+                    .await
+                {
+                    Ok(ids) => {
+                        memory_ids.extend(ids);
+                        if memory_ids.len() >= max_memories * 2 {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            error = %e,
+                            file_path = %file.file_path,
+                            "trigger_causal_discovery: Failed to read fingerprints for file"
+                        );
+                        file_read_errors.push(format!("{}: {}", file.file_path, e));
+                    }
                 }
             }
         }
 
         debug!(
             memory_ids_count = memory_ids.len(),
+            used_session_filter = used_session_filter,
             "trigger_causal_discovery: Collected memory IDs"
         );
 
@@ -210,6 +266,9 @@ impl Handlers {
         if memory_ids.len() < 2 {
             info!("trigger_causal_discovery: Not enough memories for analysis (need at least 2)");
             let mut msg = "Not enough memories for causal analysis (need at least 2)".to_string();
+            if used_session_filter {
+                msg = format!("{}. Filtered by session_id='{}'", msg, session_id.as_deref().unwrap_or("?"));
+            }
             if !file_read_errors.is_empty() {
                 msg = format!("{}. {} file(s) could not be read: {}", msg, file_read_errors.len(), file_read_errors.join("; "));
             }
@@ -222,6 +281,7 @@ impl Handlers {
                     "message": msg,
                     "fileReadErrors": file_read_errors,
                     "sessionScope": session_scope,
+                    "usedSessionFilter": used_session_filter,
                     "dryRun": dry_run
                 }),
             );

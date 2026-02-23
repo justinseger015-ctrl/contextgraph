@@ -629,6 +629,10 @@ impl HDBSCANClusterer {
         let min_w = weights[0];
         let max_w = weights[n - 1];
         let mid = n / 2;
+        // CUDA-L1: When n==1, mid==0 and n%2==1, so we take weights[0] directly.
+        // When n is even and n>1, we average the two middle elements. The n==0
+        // case is already handled by the early return above. For n==1, the median
+        // is simply the single element — no averaging needed, no edge case.
         let median = if n % 2 == 0 && n > 1 {
             (weights[mid - 1] + weights[mid]) / 2.0
         } else {

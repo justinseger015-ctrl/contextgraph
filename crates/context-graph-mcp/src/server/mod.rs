@@ -635,7 +635,7 @@ impl McpServer {
                         causal_hint_provider,
                         causal_llm_for_inline,
                         causal_model,
-                    )
+                    )?
                 }
                 Err(e) => {
                     warn!(
@@ -651,7 +651,7 @@ impl McpServer {
                         edge_repository,
                         Arc::clone(&graph_builder),
                         Arc::new(context_graph_embeddings::provider::NoOpCausalHintProvider),
-                    )
+                    )?
                 }
             }
         };
@@ -666,7 +666,7 @@ impl McpServer {
                 edge_repository,
                 Arc::clone(&graph_builder),
                 Arc::new(context_graph_embeddings::provider::NoOpCausalHintProvider),
-            )
+            )?
         };
 
         info!(
@@ -812,6 +812,122 @@ impl McpServer {
                 continue;
             }
 
+            // INFRA-H3 FIX: JSON-RPC 2.0 batch request support.
+            // A JSON array `[{...},{...}]` is a batch request per spec section 6.
+            // Must be handled before the single-request code path.
+            if trimmed.starts_with('[') {
+                let batch_values: Vec<serde_json::Value> = match serde_json::from_str(trimmed) {
+                    Ok(reqs) => reqs,
+                    Err(e) => {
+                        warn!("Failed to parse batch request: {}", e);
+                        let error_response = JsonRpcResponse::error(
+                            None,
+                            crate::protocol::error_codes::PARSE_ERROR,
+                            format!("Batch parse error: {}", e),
+                        );
+                        let response_json = serde_json::to_string(&error_response)?;
+                        writer.write_all(response_json.as_bytes()).await?;
+                        writer.write_all(b"\n").await?;
+                        writer.flush().await?;
+                        continue;
+                    }
+                };
+
+                // JSON-RPC 2.0 spec: empty batch array is an invalid request
+                if batch_values.is_empty() {
+                    let error_response = JsonRpcResponse::error(
+                        None,
+                        crate::protocol::error_codes::INVALID_REQUEST,
+                        "Empty batch request",
+                    );
+                    let response_json = serde_json::to_string(&error_response)?;
+                    writer.write_all(response_json.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                    continue;
+                }
+
+                debug!("Processing batch request with {} items", batch_values.len());
+
+                let request_timeout = self.config.mcp.request_timeout;
+                let mut batch_responses: Vec<JsonRpcResponse> =
+                    Vec::with_capacity(batch_values.len());
+
+                for req_value in &batch_values {
+                    let req_str = match serde_json::to_string(req_value) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            // Should never happen since we just deserialized, but be safe
+                            warn!("Failed to re-serialize batch element: {}", e);
+                            batch_responses.push(JsonRpcResponse::error(
+                                None,
+                                crate::protocol::error_codes::PARSE_ERROR,
+                                format!("Batch element serialization error: {}", e),
+                            ));
+                            continue;
+                        }
+                    };
+
+                    // Apply per-request timeout (same as single-request path)
+                    let response = match tokio::time::timeout(
+                        std::time::Duration::from_secs(request_timeout),
+                        self.handle_request(&req_str),
+                    )
+                    .await
+                    {
+                        Ok(result) => result,
+                        Err(_) => {
+                            error!(
+                                "Batch sub-request timed out after {}s",
+                                request_timeout
+                            );
+                            // Extract request id for the timeout error response
+                            let request_id: Option<crate::protocol::JsonRpcId> = req_value
+                                .get("id")
+                                .cloned()
+                                .and_then(|id_val| serde_json::from_value(id_val).ok());
+                            // Check if this is a notification (no "id" field)
+                            let is_notification = !req_value
+                                .as_object()
+                                .is_some_and(|o| o.contains_key("id"));
+                            if is_notification {
+                                warn!(
+                                    "Batch notification timed out -- suppressing (JSON-RPC 2.0)"
+                                );
+                                continue;
+                            }
+                            JsonRpcResponse::error(
+                                request_id,
+                                crate::protocol::error_codes::LAYER_TIMEOUT,
+                                format!(
+                                    "Batch sub-request timed out after {}s",
+                                    request_timeout
+                                ),
+                            )
+                        }
+                    };
+
+                    // Skip notification responses (no id, no result, no error)
+                    if response.id.is_none()
+                        && response.result.is_none()
+                        && response.error.is_none()
+                    {
+                        continue;
+                    }
+                    batch_responses.push(response);
+                }
+
+                // JSON-RPC 2.0 spec: if all requests are notifications, send nothing
+                if !batch_responses.is_empty() {
+                    let response_json = serde_json::to_string(&batch_responses)?;
+                    debug!("Sending batch response with {} items", batch_responses.len());
+                    writer.write_all(response_json.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                }
+                continue;
+            }
+
             debug!("Received: {}", trimmed);
 
             // Apply request timeout to prevent a hung handler from blocking the entire
@@ -831,6 +947,11 @@ impl McpServer {
                 .and_then(|v| v.get("id").cloned())
                 .and_then(|id_val| serde_json::from_value(id_val).ok());
 
+            // INFRA-L3: Stdio continues on parse errors (unlike TCP which disconnects).
+            // This is correct: stdio uses newline-delimited JSON (NDJSON), so each line is
+            // independently framed. A malformed line cannot cause byte-stream misalignment
+            // because the next newline always starts a fresh message boundary. TCP streams
+            // lack this guarantee, so a parse error may indicate irrecoverable misalignment.
             let response = match tokio::time::timeout(
                 std::time::Duration::from_secs(request_timeout),
                 self.handle_request(trimmed),

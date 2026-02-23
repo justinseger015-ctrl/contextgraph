@@ -1227,6 +1227,11 @@ impl Handlers {
         };
 
         // Step 2: Search in the HIGH embedder's space (get more candidates than topK for filtering)
+        //
+        // EB-L1: E1Only strategy intentionally populates only E1 scores in results.
+        // Cross-embedder anomaly detection compares HIGH vs LOW embedder scores, which
+        // are computed post-retrieval below (not from the search strategy's score map).
+        // Full anomaly detection across all 13 embedders requires MultiSpace strategy.
         let search_k = (request.top_k * 5).min(100);
         let mut options = TeleologicalSearchOptions::quick(search_k)
             .with_strategy(SearchStrategy::E1Only)

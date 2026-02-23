@@ -83,12 +83,15 @@ pub fn is_corruption_indicator(msg: &str) -> bool {
 }
 
 /// Corruption indicator strings (lowercase).
+/// SINGLE SOURCE OF TRUTH for all corruption detection across the crate.
 /// H4/M9 FIX: Only RocksDB-specific corruption terms.
 /// "invalid" and "malformed" removed — they match normal JSON-RPC errors.
 /// "not found" never belonged here — it's a normal condition.
-const CORRUPTION_INDICATORS: &[&str] = &[
+/// TST-H3 FIX: "stale index" added (was only in mcp_helpers, now unified here).
+pub const CORRUPTION_INDICATORS: &[&str] = &[
     "corruption",
     "corrupted",
+    "stale index",
     "checksum mismatch",
     "bad magic",
     "crc error",
@@ -123,12 +126,6 @@ pub fn exit_code_for_error(e: &(dyn std::error::Error + 'static)) -> CliExitCode
     }
 }
 
-/// Helper to convert CliExitCode to i32 (for command handlers).
-#[inline]
-#[allow(dead_code)]
-pub fn to_exit_code_i32(code: CliExitCode) -> i32 {
-    code as i32
-}
 
 #[cfg(test)]
 mod tests {
@@ -219,6 +216,7 @@ mod tests {
 
         let corruption_messages = [
             ("data corruption detected", true),
+            ("stale index found", true), // TST-H3: now in unified CORRUPTION_INDICATORS
             ("checksum mismatch", true),
             ("bad magic number", true),
             ("CRC ERROR in block", true),
@@ -385,19 +383,6 @@ mod tests {
         println!("RESULT: PASS - exit_code_for_error works with generic errors");
     }
 
-    // =========================================================================
-    // Test to_exit_code_i32 helper
-    // =========================================================================
-    #[test]
-    fn test_to_exit_code_i32() {
-        println!("\n=== Test to_exit_code_i32 ===");
-
-        assert_eq!(to_exit_code_i32(CliExitCode::Success), 0);
-        assert_eq!(to_exit_code_i32(CliExitCode::Warning), 1);
-        assert_eq!(to_exit_code_i32(CliExitCode::Blocking), 2);
-
-        println!("RESULT: PASS - to_exit_code_i32 works correctly");
-    }
 
     // =========================================================================
     // Test Serialization with corruption indicator in message
